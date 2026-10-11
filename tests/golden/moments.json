@@ -48,7 +48,7 @@
     },
     {
       "error": "Exit code 1\nPRAGMA journal_mode = WAL failed with SQLITE_BUSY in enableWal",
-      "expect": ["wal-retry"]
+      "expect": ["wal-retry", "busy-timeout"]
     },
     {
       "error": "Exit code 1\nthe test process stayed alive ten seconds after the tests passed: a pending timer from Bun.sleep in Promise.race",
