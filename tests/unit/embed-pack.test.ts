@@ -1,5 +1,13 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, truncateSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  mkdtempSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  truncateSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openPack, writePack } from "../../src/embed/pack.ts";
@@ -164,5 +172,125 @@ describe("embed pack", () => {
       expect(r.pack.idOf(idx)).toBe(i + 5);
     }
     expect(r.pack.find("▁prefix10000")).toBe(-1);
+  });
+
+  test("a pack replaced by rename keeps answering from the content it mapped", () => {
+    const live = make("live.wcpack", pieces);
+    const r = openPack(live);
+    if (!r.ok) throw new Error(r.reason);
+    const other = make("other-content.wcpack", [{ text: "▁else", id: 99, score: -1, row: row(9) }]);
+    renameSync(other, live);
+    expect(r.pack.find("▁hello")).toBeGreaterThanOrEqual(0);
+    expect(r.pack.find("▁else")).toBe(-1);
+    const out = new Float32Array(DIMS);
+    r.pack.addRow(r.pack.find("日本"), out);
+    expect(out.some((x) => x !== 0)).toBe(true);
+    const fresh = openPack(live);
+    expect(fresh.ok && fresh.pack.find("▁else")).toBeGreaterThanOrEqual(0);
+  });
+
+  test("writePack leaves no temporary file behind and replaces an existing pack", () => {
+    const path2 = join(dir, "twice.wcpack");
+    writePack(path2, { header: base, charsmap: new Uint8Array(0), pieces: pieces.slice(0, 1) });
+    writePack(path2, { header: base, charsmap: new Uint8Array(0), pieces });
+    const r = openPack(path2);
+    expect(r.ok && r.pack.header.count).toBe(4);
+    expect(() => readFileSync(`${path2}.tmp`)).toThrow();
+  });
+
+  test("nothing the pack exposes can change the file on disk", () => {
+    const path2 = make("immutable.wcpack", pieces);
+    const before = readFileSync(path2);
+    const r = openPack(path2);
+    if (!r.ok) throw new Error(r.reason);
+    r.pack.charsmap.fill(0xff);
+    r.pack.header.dims = 1;
+    expect(readFileSync(path2).equals(before)).toBe(true);
+    expect(Array.from(openPack(path2).ok ? (openPack(path2) as any).pack.charsmap : [])).toEqual([
+      1, 2, 3, 4, 5,
+    ]);
+  });
+
+  test("without a mapping the whole file is read into memory and answers the same", () => {
+    const failing = () => {
+      throw new Error("no mmap here");
+    };
+    for (const mmap of [failing, () => undefined as unknown as Uint8Array]) {
+      const r = openPack(path, { mmap });
+      if (!r.ok) throw new Error(r.reason);
+      expect(r.pack.header.count).toBe(4);
+      expect(Array.from(r.pack.charsmap)).toEqual([1, 2, 3, 4, 5]);
+      const i = r.pack.find("wörld");
+      expect(r.pack.idOf(i)).toBe(11);
+      const out = new Float32Array(DIMS);
+      r.pack.addRow(i, out);
+      expect(out.some((x) => x !== 0)).toBe(true);
+    }
+    expect(openPack(join(dir, "missing.wcpack"), { mmap: failing }).ok).toBe(false);
+  });
+
+  describe("header validation", () => {
+    const good = readFileSync(path);
+    /** The same file with its header JSON edited by `edit`, everything after it untouched. */
+    const lying = (name: string, edit: (json: string) => string): string => {
+      const hlen = good.readUInt32LE(8);
+      const json = edit(good.subarray(12, 12 + hlen).toString("utf8"));
+      const head = Buffer.concat([Buffer.from("WCMEMEMB"), Buffer.alloc(4), Buffer.from(json)]);
+      head.writeUInt32LE(Buffer.byteLength(json), 8);
+      const pad = Buffer.alloc((8 - (head.length % 8)) % 8);
+      const rest = good.subarray(Math.ceil((12 + hlen) / 8) * 8);
+      const file = join(dir, name);
+      writeFileSync(file, Buffer.concat([head, pad, rest]));
+      return file;
+    };
+    const rejected = (file: string): void => {
+      const r = openPack(file);
+      expect(r.ok).toBe(false);
+    };
+
+    test("a header lying about count or dims is refused", () => {
+      for (const [k, v] of [
+        ["count", 4_000_000_000],
+        ["count", 5],
+        ["count", -1],
+        ["dims", 3_000_000_000],
+        ["dims", 7],
+        ["dims", 1.5],
+      ] as const)
+        rejected(
+          lying(`lie-${k}-${v}.wcpack`, (j) => j.replace(new RegExp(`"${k}":\\d+`), `"${k}":${v}`)),
+        );
+    });
+
+    test("non-finite or impossible numbers are refused", () => {
+      rejected(
+        lying("inf-chars.wcpack", (j) => j.replace(/"maxPieceChars":\d+/, '"maxPieceChars":1e999')),
+      );
+      rejected(
+        lying("zero-chars.wcpack", (j) => j.replace(/"maxPieceChars":\d+/, '"maxPieceChars":0')),
+      );
+      rejected(
+        lying("inf-score.wcpack", (j) => j.replace(/"minScore":-?\d+/, '"minScore":-1e999')),
+      );
+      rejected(lying("str-unk.wcpack", (j) => j.replace(/"unkId":\d+/, '"unkId":"1"')));
+      rejected(lying("neg-vocab.wcpack", (j) => j.replace(/"vocabSize":\d+/, '"vocabSize":-3')));
+    });
+
+    test("a table smaller than twice the count is refused", () => {
+      rejected(lying("small-table.wcpack", (j) => j.replace(/"tableSize":\d+/, '"tableSize":4')));
+      rejected(lying("odd-table.wcpack", (j) => j.replace(/"tableSize":\d+/, '"tableSize":24')));
+    });
+
+    test("a file one byte too long is refused", () => {
+      const long = join(dir, "long.wcpack");
+      writeFileSync(long, good);
+      appendFileSync(long, new Uint8Array([0]));
+      rejected(long);
+    });
+  });
+
+  test("the committed subset opens", () => {
+    const r = openPack(join(import.meta.dir, "../fixtures/embed/subset.wcpack"));
+    expect(r.ok).toBe(true);
   });
 });

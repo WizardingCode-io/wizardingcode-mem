@@ -132,3 +132,9 @@ Latency is not the obstacle: the scan fits in the budget with about 25 ms to spa
 The thresholds are recorded as t = 0.90 and (f, g) = (0.46, 0.24) because the fixed rules give them; neither is used.
 
 The semantic channel in `retrieveForPrompt` (the prompt-time injection) is not built. By the author's decision, semantic ranking goes ahead for on-demand search (part 2, in another plan), where a person or the agent asks and reads the results, so a wrong neighbour costs a line in a list rather than an injected note. The engine (`src/embed/`) and the two spike scripts stay; a different model or rule can be measured against the same gate. The gate itself is unchanged.
+
+## Engine notes
+
+- **How the pack is read.** `openPack` maps the file privately (`Bun.mmap(path, { shared: false })`), so nothing written through the mapping can reach the file. Where `Bun.mmap` is unavailable or throws (the Windows build target is the main doubt), it reads the whole file into memory and parses the same layout; opening still never throws.
+- **A pack is never modified in place.** A mapped file that is truncated or rewritten under a process crashes Bun with an uncatchable bus error, while a rename-over or an unlink leaves the old content valid. `writePack` therefore writes `<path>.tmp` and renames it onto the path. An open `Pack` keeps answering from what it mapped; reopening when the file changes is for the callers in part 2.
+- **Bounds.** The normaliser's per-code-point cache is cleared when it passes 65,536 entries; `tokenize` normalises its whole input, so hot paths use `embed`, which clips first.

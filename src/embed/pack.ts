@@ -8,7 +8,7 @@
  *   strings blob (UTF-8) | u32[count] ids | f32[count] scores | u32[tableSize] slots (index+1, 0 empty) |
  *   f32[count] row scales | i8[count*dims] rows
  */
-import { closeSync, openSync, writeSync } from "node:fs";
+import { closeSync, openSync, readFileSync, renameSync, unlinkSync, writeSync } from "node:fs";
 
 export interface PackHeader {
   format: "wcmem-embed-v1";
@@ -28,7 +28,7 @@ export interface PackHeader {
 
 export interface Pack {
   header: PackHeader;
-  /** SentencePiece precompiled_charsmap bytes, as published. */
+  /** SentencePiece precompiled_charsmap bytes, as published (a copy: writing to it changes nothing). */
   charsmap: Uint8Array;
   /** Index of a piece (by its exact text, "▁" included), or -1. */
   find(piece: string): number;
@@ -49,7 +49,10 @@ export interface Pack {
   score(index: number): number;
   /** Adds row x scale x weight into `into` (length dims). */
   addRow(index: number, into: Float32Array, weight?: number): void;
-  /** Bun offers no unmap: this drops our references and the mapping lives until the process ends. */
+  /**
+   * Drops our references. Bun has no explicit unmap: it releases the mapping when the typed
+   * array is garbage-collected, which happens some time after the last reference is gone.
+   */
   close(): void;
 }
 
@@ -57,7 +60,8 @@ export type PackResult = { ok: true; pack: Pack } | { ok: false; reason: string 
 
 const MAGIC = "WCMEMEMB";
 const FORMAT = "wcmem-embed-v1";
-const align8 = (n: number): number => (n + 7) & ~7;
+/** Rounds up to a multiple of 8 with arithmetic that cannot wrap (no 32-bit bit operations). */
+const align8 = (n: number): number => Math.ceil(n / 8) * 8;
 
 /** FNV-1a, 32 bits, over bytes. */
 function fnv1a(bytes: Uint8Array): number {
@@ -72,9 +76,38 @@ function tableSizeFor(count: number): number {
   return size;
 }
 
-export function openPack(path: string): PackResult {
+/** How to map a file. A seam so the read-into-memory fallback can be tested; not public API. */
+export interface OpenOptions {
+  mmap?: (path: string) => Uint8Array;
+}
+
+/** Private (copy-on-write) mapping: a write through it can never reach the file. */
+const privateMap = (path: string): Uint8Array => Bun.mmap(path, { shared: false }) as Uint8Array;
+
+const isCount = (n: unknown, min = 0): n is number =>
+  typeof n === "number" && Number.isSafeInteger(n) && n >= min && n <= 0x7fffffff;
+
+/**
+ * Opens a pack, memory-mapped (privately) when it can be and read whole into memory when it
+ * cannot (Bun.mmap throws or is unavailable, e.g. on Windows). Never throws.
+ *
+ * Invariant for everyone who writes a pack: a pack file is never modified in place. It is
+ * replaced by writing a temporary file and renaming it over the path, or removed by unlinking.
+ * A mapped file that is truncated or rewritten under us crashes Bun with an uncatchable bus
+ * error; a rename or unlink leaves the old inode, and so this mapping, intact. An open Pack keeps
+ * answering from the content it mapped; noticing a replacement and reopening is the caller's job.
+ */
+export function openPack(path: string, options: OpenOptions = {}): PackResult {
   try {
-    const bytes = Bun.mmap(path) as Uint8Array;
+    let bytes: Uint8Array | undefined;
+    try {
+      const mapped = (options.mmap ?? privateMap)(path);
+      if (mapped instanceof Uint8Array && mapped.length > 0) bytes = mapped;
+    } catch {
+      // Fall through to reading the file.
+    }
+    // A fresh Uint8Array copy is 8-byte aligned, which the typed views below need.
+    bytes ??= new Uint8Array(readFileSync(path));
     if (bytes.length < 16) return { ok: false, reason: "file too short" };
     if (new TextDecoder().decode(bytes.subarray(0, 8)) !== MAGIC)
       return { ok: false, reason: "bad magic" };
@@ -87,14 +120,19 @@ export function openPack(path: string): PackResult {
     ) as PackHeader;
     if (header.format !== FORMAT)
       return { ok: false, reason: `unknown format ${String(header.format)}` };
-    const { dims, count, tableSize } = header;
-    if (!Number.isInteger(dims) || dims <= 0) return { ok: false, reason: "bad dims" };
-    if (!Number.isInteger(count) || count < 0) return { ok: false, reason: "bad count" };
+    if (typeof header !== "object" || header === null) return { ok: false, reason: "bad header" };
+    const { dims, count, tableSize, unkId, vocabSize, minScore, maxPieceChars } = header;
+    if (!isCount(dims, 1)) return { ok: false, reason: "bad dims" };
+    if (!isCount(count)) return { ok: false, reason: "bad count" };
+    if (!isCount(unkId)) return { ok: false, reason: "bad unkId" };
+    if (!isCount(vocabSize)) return { ok: false, reason: "bad vocabSize" };
+    if (!isCount(maxPieceChars, 1)) return { ok: false, reason: "bad maxPieceChars" };
+    if (typeof minScore !== "number" || !Number.isFinite(minScore))
+      return { ok: false, reason: "bad minScore" };
     if (
-      !Number.isInteger(tableSize) ||
-      tableSize < 1 ||
-      (tableSize & (tableSize - 1)) !== 0 ||
-      tableSize < count
+      !isCount(tableSize, 2) ||
+      2 ** Math.round(Math.log2(tableSize)) !== tableSize ||
+      tableSize < 2 * count
     ) {
       return { ok: false, reason: "bad table size" };
     }
@@ -103,6 +141,7 @@ export function openPack(path: string): PackResult {
     const clen = view.getUint32(pos, true);
     const csStart = pos + 4;
     pos = align8(csStart + clen);
+    if (pos > bytes.length) return { ok: false, reason: "truncated" };
     const offStart = pos;
     pos = align8(offStart + (count + 1) * 4);
     if (pos > bytes.length) return { ok: false, reason: "truncated" };
@@ -110,14 +149,19 @@ export function openPack(path: string): PackResult {
     const blobLen = offsets[count]!;
     const blobStart = pos;
     pos = align8(blobStart + blobLen);
+    if (pos > bytes.length) return { ok: false, reason: "truncated" };
     const idsStart = pos;
     pos = align8(idsStart + count * 4);
+    if (pos > bytes.length) return { ok: false, reason: "truncated" };
     const scoresStart = pos;
     pos = align8(scoresStart + count * 4);
+    if (pos > bytes.length) return { ok: false, reason: "truncated" };
     const slotsStart = pos;
     pos = align8(slotsStart + tableSize * 4);
+    if (pos > bytes.length) return { ok: false, reason: "truncated" };
     const scalesStart = pos;
     pos = align8(scalesStart + count * 4);
+    if (pos > bytes.length) return { ok: false, reason: "truncated" };
     const rowsStart = pos;
     const expected = rowsStart + count * dims;
     if (bytes.length !== expected)
@@ -130,7 +174,7 @@ export function openPack(path: string): PackResult {
     const scales = new Float32Array(bytes.buffer, at + scalesStart, count);
     const rows = new Int8Array(bytes.buffer, at + rowsStart, count * dims);
     const blob = bytes.subarray(blobStart, blobStart + blobLen);
-    const charsmap = bytes.subarray(csStart, csStart + clen);
+    const charsmap = bytes.slice(csStart, csStart + clen);
     const encoder = new TextEncoder();
     const mask = tableSize - 1;
 
@@ -193,6 +237,14 @@ export function openPack(path: string): PackResult {
   }
 }
 
+function rmQuietly(path: string): void {
+  try {
+    unlinkSync(path);
+  } catch {
+    // Already gone.
+  }
+}
+
 function rowScale(row: Float32Array): number {
   let max = 0;
   for (let i = 0; i < row.length; i++) {
@@ -237,7 +289,9 @@ export function writePack(
     scales[i] = rowScale(pieces[i]!.row);
   }
 
-  const fd = openSync(path, "w");
+  // Never write the pack in place: an open mapping of the old file must stay valid (see openPack).
+  const tmp = `${path}.tmp`;
+  const fd = openSync(tmp, "w");
   let written = 0;
   const put = (data: Uint8Array): void => {
     let off = 0;
@@ -255,6 +309,7 @@ export function writePack(
   };
   const typed = (a: Uint32Array | Float32Array): Uint8Array =>
     new Uint8Array(a.buffer, a.byteOffset, a.byteLength);
+  let done = false;
   try {
     put(encoder.encode(MAGIC));
     const json = encoder.encode(JSON.stringify(header));
@@ -303,7 +358,10 @@ export function writePack(
       }
       put(new Uint8Array(q.buffer, 0, (end - start) * dims));
     }
+    done = true;
   } finally {
     closeSync(fd);
+    if (!done) rmQuietly(tmp);
   }
+  renameSync(tmp, path);
 }
