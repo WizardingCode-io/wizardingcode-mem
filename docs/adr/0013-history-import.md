@@ -35,4 +35,28 @@ No import was spared as confirmed in this run: with the heuristic judge no histo
 ## Not yet decided
 
 - The span is per project, from its first to its last history turn, so sparse history still covers a wide period: replacement archived 57% of the active imports. A per-session overlap rule would be narrower, but imports do not record their source session.
-- The raw history index and history search (parts 2 and 3 of the design).
+- History search for the memory tools beyond `history_search` (part 3 of the design).
+
+## Part 2: the raw history index
+
+Distilled memories lose detail, so part 2 keeps the conversation itself, searchable and separate.
+
+- **A separate file.** `history.db` lives in the store directory (mode 0600), next to the main database but not in it. It is rebuildable from the transcripts, so it is never part of backups, never migrates with the main schema, and deleting it loses nothing that cannot be rebuilt. It is also the opt-in: the session-end hook indexes the finished session only when the file already exists.
+- **What is stored.** Per finished turn, the redacted prompt (clipped to 8 KiB) and the redacted final answer (16 KiB), plus agent, project, session and time, in an FTS index. Redaction runs first, then the clip. Nothing else (tool calls, thinking, tool output) is kept.
+- **What is skipped.** The same rules as the import: host notifications, sidechain (subagent) lines, `isMeta` lines and compact summaries, claude-mem observer sessions, and projects with memory disabled.
+- **How it stays current.** A manifest records each transcript's size and mtime; `history index` re-reads only files that changed and drops rows of files that disappeared. `history import` also indexes. The session-end hook spawns a detached `history index --transcript <file> --agent <agent>`; `WIZARDINGCODE_MEM_DISTILL=off` turns that off. `--max-seconds` bounds a run.
+- **How it is read.** `history search <words> [--project] [--limit]` and the MCP tool `history_search` (read-only open, no write lock; a busy database answers with a sentence instead of failing). Raw history is never injected into a prompt or a session start.
+- **How it is removed.** `history forget` deletes `history.db` and its sidecars; the next `history index` rebuilds it.
+
+### Measured
+
+On the author's machine, the main database copied read-only to a temporary store directory (the real one untouched), TypeSafe and distilling off, 5,186 transcripts from the last 180 days:
+
+| | |
+|---|---|
+| First `history index` | 5,186 files indexed, 3,716 turns, 12.7 s wall time |
+| Second `history index` | 5,186 unchanged, 0 turns, 0.07 s |
+| `history.db` size | 15.6 MB (the main database copy: 220 MB) |
+| `history search` (three generic words) | 0.02 s each, process start included |
+
+After the index process exited, `history.db-wal` (0 bytes) and `history.db-shm` (32 KiB) were still on disk, as they were after the later searches. A `history search` with no other process open returned results, not the busy sentence. The leftover sidecars are harmless (empty WAL) but are not cleaned up on close.
