@@ -60,3 +60,14 @@ On the author's machine, the main database copied read-only to a temporary store
 | `history search` (three generic words) | 0.02 s each, process start included |
 
 After the index process exited, `history.db-wal` (0 bytes) and `history.db-shm` (32 KiB) were still on disk, as they were after the later searches. A `history search` with no other process open returned results, not the busy sentence. The leftover sidecars are harmless (empty WAL) but are not cleaned up on close.
+
+### After review
+
+- **Sidecars and the read-only open.** macOS's system SQLite (which Bun uses there) keeps `history.db-wal` and `-shm` after the last connection closes; Bun's bundled SQLite on Linux and Windows deletes them, and a copy, a move or another client's checkpoint loses them on any system. A read-only connection cannot create them, so its open fails with `SQLITE_CANTOPEN`. The reader catches that code and opens read-write instead, still running no schema, no writing pragma and no chmod; with the sidecars present it stays read-only and takes no write lock. Only `SQLITE_BUSY` answers "busy"; any other failure says to run `history forget` then `history index` (the CLI exits 1).
+- **The hook never creates the index.** `history index --transcript` opens an existing index for writing and exits 0 silently when there is none, so `history forget` is not undone by the next session end.
+- **Restore removes the index.** `backup --restore` (and the viewer's restore) deletes `history.db` and its sidecars: the copy may give the stored project ids to other projects. Both say to run `history index`.
+- **Failures are retried.** A file whose turns cannot be resolved to a project stays out of the manifest and is counted as `failed`; the next pass reads it again.
+- **Disabled projects.** Each pass first deletes the turns of projects disabled in the main database. Their files stay in the manifest, so turning a project back on brings its turns back only when the transcript changes or the index is rebuilt.
+- **Sessions with no session-end hook** (a crash, a killed terminal, Codex without `transcript_path`) are indexed by the next `history index` or `history import`.
+- **Whole-file re-reads.** A changed transcript is read again whole; there is no bytes-read offset, a departure from the plan. The measured full pass (12.7 s for 5,186 files) and the unchanged pass (0.07 s) did not justify the extra state.
+- **Coverage.** Prompts whose content is an array (an image plus text; about 94 in six months on the author's machine) are not indexed. A renamed project keeps its old name on turns already indexed, so `--project` matches it by that name until those transcripts are indexed again.
