@@ -14,6 +14,7 @@ import { claudeCodeContext } from "../../install/context.ts";
 import { cursorContext, installCursor } from "../../install/cursor.ts";
 import { AGENT_ORDER, detectAgents } from "../../install/detect.ts";
 import { geminiContext, installGemini } from "../../install/gemini.ts";
+import { offerHistoryImportHere } from "../../install/history-offer.ts";
 import type { InstallResult } from "../../install/hooks-file.ts";
 import { findLegacyPlugins } from "../../install/legacy-plugins.ts";
 import { installOpenCode, opencodePluginPath } from "../../install/opencode.ts";
@@ -46,13 +47,15 @@ export const AGENT_NAMES: Record<string, string> = {
   opencode: "OpenCode",
 };
 
-const USAGE = `Usage: wizardingcode-mem install [<agent>] [--binary <path>] [--yes] [--keep-claude-mem] [--no-import]
+const USAGE = `Usage: wizardingcode-mem install [<agent>] [--binary <path>] [--yes] [--keep-claude-mem] [--no-import] [--import-history | --no-import-history]
 
   <agent>             claude-code | claude-desktop | codex | cursor | gemini | opencode; none installs for every one found
   --binary <path>     The wizardingcode-mem binary the hooks will run (needed when running from source)
   --yes               Retire claude-mem and shibaox-mem without asking (disable or uninstall their plugins)
   --keep-claude-mem   Leave claude-mem installed and running
   --no-import         Do not import claude-mem's memories
+  --import-history    Learn from past Claude Code and Codex sessions without asking
+  --no-import-history Do not offer to learn from past sessions
 `;
 
 /** The lines every install ends with: where the hooks went, which binary, how MCP stands. */
@@ -156,7 +159,10 @@ export function run(argv: string[]): number {
       return 1;
     }
     let code = 0;
-    for (const each of found) code = Math.max(code, installOne(each, rest));
+    for (const each of found) code = Math.max(code, installOne(each, rest, false));
+    // Once per run, not once per agent, and only when an agent whose transcripts are read was installed.
+    if (code === 0 && (found.includes("claude-code") || found.includes("codex")))
+      offerHistory(rest);
     const missing = [...AGENT_ORDER, "claude-desktop" as const]
       .filter((each) => !found.includes(each))
       .map((each) => AGENT_NAMES[each]);
@@ -167,7 +173,16 @@ export function run(argv: string[]): number {
   return installOne(agent, rest);
 }
 
-function installOne(agent: string, rest: string[]): number {
+function offerHistory(rest: string[]): void {
+  try {
+    const lines = offerHistoryImportHere(rest, confirm);
+    if (lines.length > 0) process.stdout.write(`${lines.join("\n")}\n`);
+  } catch {
+    // The offer is a courtesy: a store that cannot be read must not fail the install.
+  }
+}
+
+function installOne(agent: string, rest: string[], offer = true): number {
   const flag = rest.indexOf("--binary");
   const explicit = flag === -1 ? undefined : rest[flag + 1];
   let binaryPath: string;
@@ -207,6 +222,7 @@ function installOne(agent: string, rest: string[]): number {
       process.stdout.write(
         describeInstall(agent, installCodex(codexContext(binaryPath)), binaryPath, lines),
       );
+      if (offer) offerHistory(rest);
       return 0;
     }
     if (agent === "opencode") {
@@ -269,6 +285,7 @@ function installOne(agent: string, rest: string[]): number {
     }
 
     process.stdout.write(describeInstall(agent, installClaudeCode(hostContext), binaryPath, lines));
+    if (offer) offerHistory(rest);
     return 0;
   } catch (error) {
     process.stderr.write(
