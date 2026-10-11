@@ -1,3 +1,4 @@
+import { antigravity } from "./antigravity/adapter.ts";
 import { claudeCode } from "./claude-code/adapter.ts";
 import { codex } from "./codex/adapter.ts";
 import { copilot } from "./copilot/adapter.ts";
@@ -17,4 +18,5 @@ export const ADAPTERS: Partial<Record<string, AgentAdapter>> = {
   [qwen.id]: qwen,
   [droid.id]: droid,
   [copilot.id]: copilot,
+  [antigravity.id]: antigravity,
 };

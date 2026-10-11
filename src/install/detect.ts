@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { AgentId } from "../core/types.ts";
+import { antigravityContext } from "./antigravity.ts";
 import { codexContext } from "./codex.ts";
 import { copilotContext } from "./copilot.ts";
 import { cursorContext } from "./cursor.ts";
@@ -22,6 +23,7 @@ export const AGENT_ORDER: readonly AgentId[] = [
   "qwen",
   "droid",
   "copilot",
+  "antigravity",
 ];
 
 export function detectAgents(options: {
@@ -30,7 +32,9 @@ export function detectAgents(options: {
 }): AgentId[] {
   const { env, which } = options;
   const home = env.HOME || homedir();
-  const configDir: Record<AgentId, string> = {
+  const antigravity = antigravityContext("", env);
+  // Antigravity has no directory of its own: its CLI, 2.0 app and IDE each keep one under ~/.gemini.
+  const configDir: Record<AgentId, string | string[]> = {
     "claude-code": env.CLAUDE_CONFIG_DIR || join(home, ".claude"),
     codex: codexContext("", env).configDir,
     cursor: cursorContext("", env).configDir,
@@ -39,6 +43,7 @@ export function detectAgents(options: {
     qwen: qwenContext("", env).configDir,
     droid: droidContext("", env).configDir,
     copilot: copilotContext("", env).configDir,
+    antigravity: [antigravity.configDir, ...antigravity.appDirs],
   };
   const command: Record<AgentId, string> = {
     "claude-code": "claude",
@@ -49,8 +54,10 @@ export function detectAgents(options: {
     qwen: "qwen",
     droid: "droid",
     copilot: "copilot",
+    antigravity: "agy",
   };
   return AGENT_ORDER.filter(
-    (agent) => which(command[agent]) !== null || existsSync(configDir[agent]),
+    (agent) =>
+      which(command[agent]) !== null || [configDir[agent]].flat().some((dir) => existsSync(dir)),
   );
 }

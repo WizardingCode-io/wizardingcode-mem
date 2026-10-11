@@ -191,6 +191,70 @@ describe("wizardingcode-mem hook", () => {
     ).toEqual(SILENT_SUCCESS);
   });
 
+  test("an Antigravity conversation gets the brief before its first model call only", async () => {
+    const project = join(dir, "antigravity-project");
+    mkdirSync(project);
+    const db = openDb({ dataDir: dir, busyTimeoutMs: 5000 });
+    insertMemory(db, {
+      projectId: resolveProject(db, project, Date.now()).id,
+      kind: "gotcha",
+      title: "Run the pinned bun",
+      body: "The global one hangs on gzip streams." as Redacted,
+      terms: "",
+      importance: 4,
+      branch: null,
+      commit: null,
+      origin: "manual",
+      judge: "heuristic",
+      judgeVersion: "1",
+      sourceTurnId: null,
+      files: [],
+      now: Date.now(),
+    });
+    db.close();
+    const at = (name: string, change: Record<string, unknown> = {}) =>
+      JSON.stringify({
+        ...JSON.parse(payload(name, "antigravity")),
+        workspacePaths: [project],
+        ...change,
+      });
+
+    const first = await hook(at("pre-invocation.first"), "antigravity", "session-start");
+    expect(first.exitCode).toBe(0);
+    expect(first.stderr).toBe("");
+    const out = JSON.parse(first.stdout);
+    expect(Object.keys(out)).toEqual(["injectSteps"]);
+    expect(out.injectSteps).toHaveLength(1);
+    expect(Object.keys(out.injectSteps[0])).toEqual(["ephemeralMessage"]);
+    expect(out.injectSteps[0].ephemeralMessage).toContain("Run the pinned bun");
+
+    // Every later model call of the conversation, in this turn or the next, is silent.
+    for (const invocationNum of [1, 2, 7]) {
+      expect(
+        await hook(at("pre-invocation.first", { invocationNum }), "antigravity", "session-start"),
+      ).toEqual(SILENT_SUCCESS);
+    }
+    expect(await hook(at("stop"), "antigravity", "turn-end")).toEqual(SILENT_SUCCESS);
+    expect(rows("SELECT agent FROM sessions")).toEqual([{ agent: "antigravity" }]);
+    // Nothing of the turn reaches us, so nothing is queued to distil.
+    expect(rows("SELECT id FROM turns")).toEqual([]);
+  });
+
+  test("an Antigravity payload missing what is needed is silent success", async () => {
+    for (const event of ["session-start", "prompt", "turn-end", "session-end"]) {
+      expect(await hook('{"invocationNum":0,"extra":1}', "antigravity", event)).toEqual(
+        SILENT_SUCCESS,
+      );
+      expect(
+        await hook(
+          '{"conversationId":"c","workspacePaths":[],"invocationNum":0}',
+          "antigravity",
+          event,
+        ),
+      ).toEqual(SILENT_SUCCESS);
+    }
+  });
+
   test("a GitHub Copilot payload missing what is needed is silent success", async () => {
     for (const event of ["session-start", "prompt", "turn-end", "session-end"]) {
       expect(await hook('{"prompt":"x","extra":1}', "copilot", event)).toEqual(SILENT_SUCCESS);

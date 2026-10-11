@@ -221,6 +221,7 @@ const AGENT_NAMES: Record<string, string> = {
   qwen: "Qwen Code",
   droid: "Factory Droid",
   copilot: "GitHub Copilot",
+  antigravity: "Antigravity",
 };
 export const agentName = (agent: string): string => AGENT_NAMES[agent] ?? agent;
 

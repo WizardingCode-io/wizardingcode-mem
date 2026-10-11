@@ -6,7 +6,8 @@ export type AgentId =
   | "opencode"
   | "qwen"
   | "droid"
-  | "copilot";
+  | "copilot"
+  | "antigravity";
 
 /** The four moments wizardingcode-mem acts on, whatever each host agent calls them. */
 export type HookEvent =

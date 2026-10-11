@@ -1,3 +1,4 @@
+import { antigravityContext, uninstallAntigravity } from "../../install/antigravity.ts";
 import { uninstallClaudeCode } from "../../install/claude-code.ts";
 import { claudeDesktopConfigPath, uninstallClaudeDesktop } from "../../install/claude-desktop.ts";
 import { codexContext, uninstallCodex } from "../../install/codex.ts";
@@ -73,7 +74,9 @@ export function run(argv: string[]): number {
                 ? uninstallDroid(droidContext(""))
                 : agent === "copilot"
                   ? uninstallCopilot(copilotContext(""))
-                  : uninstallClaudeCode(claudeCodeContext(""));
+                  : agent === "antigravity"
+                    ? uninstallAntigravity(antigravityContext(""))
+                    : uninstallClaudeCode(claudeCodeContext(""));
     process.stdout.write(
       [
         `Removed wizardingcode-mem from ${AGENT_NAMES[agent]}.`,

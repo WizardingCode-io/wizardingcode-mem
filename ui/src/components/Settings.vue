@@ -27,7 +27,7 @@ onMounted(() => {
   if (settingsState.view === null) void loadSettings();
   void loadChecks();
 });
-const AGENT_CHECKS = ["Claude Code", "Claude Desktop", "Codex", "Cursor", "Gemini CLI", "OpenCode", "Qwen Code", "Factory Droid", "GitHub Copilot"];
+const AGENT_CHECKS = ["Claude Code", "Claude Desktop", "Codex", "Cursor", "Gemini CLI", "OpenCode", "Qwen Code", "Factory Droid", "GitHub Copilot", "Antigravity"];
 const agentChecks = computed(() => (checks.value ?? []).filter((c) => AGENT_CHECKS.includes(c.name)));
 const healthChecks = computed(() => (checks.value ?? []).filter((c) => !AGENT_CHECKS.includes(c.name)));
 

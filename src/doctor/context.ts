@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { antigravityContext } from "../install/antigravity.ts";
 import { claudeDesktopConfigPath } from "../install/claude-desktop.ts";
 import { codexContext } from "../install/codex.ts";
 import { copilotContext } from "../install/copilot.ts";
@@ -27,6 +28,7 @@ export function doctorContext(dataDir: string, now = Date.now()): DoctorContext 
     qwenSettingsPath: qwenContext("").settingsPath,
     droidSettingsPath: droidContext("").settingsPath,
     copilotHooksPath: copilotContext("").settingsPath,
+    antigravityHooksPath: antigravityContext("").settingsPath,
     claudeDesktopConfigPath: claudeDesktopConfigPath(),
     which: (command) => Bun.which(command),
     now,

@@ -48,6 +48,11 @@ export interface HostSpec {
   layout?: "grouped" | "flat";
   /** The file is the event map itself, with no `hooks` key around it (Factory Droid's hooks.json). */
   unwrapped?: boolean;
+  /**
+   * The file maps hook names to their event maps (Antigravity's hooks.json): ours is the one
+   * under this name, and every other name in the file is the user's.
+   */
+  definition?: string;
   /** Keys the file must hold besides `hooks`, such as Cursor's `version`. */
   topLevel?: Json;
   /** Anything the user still has to do by hand after installing. */
@@ -96,6 +101,8 @@ interface Receipt {
 }
 
 type Json = Record<string, unknown>;
+/** Where a file of named definitions is kept, whole, while ours is worked on as `hooks`; nothing else is at that level. */
+const DEFINITIONS = "definitions";
 
 const isObject = (value: unknown): value is Json =>
   value !== null && typeof value === "object" && !Array.isArray(value);
@@ -125,6 +132,16 @@ function parseSettings(path: string, text: string | null, spec?: HostSpec): Json
   if (!isObject(parsed)) throw new Error(`${path} does not hold a JSON object`);
   // An unwrapped file is the event map: seen from here, it is what sits under `hooks`.
   if (spec?.unwrapped) return { hooks: parsed };
+  // A file of named definitions: ours is seen as `hooks`, the whole file is kept beside it.
+  if (spec?.definition !== undefined) {
+    const ours = parsed[spec.definition];
+    if (ours !== undefined && !isObject(ours)) {
+      throw new Error(
+        `"${spec.definition}" in ${path} is not an object; fix it and run this again`,
+      );
+    }
+    return { hooks: ours ?? {}, [DEFINITIONS]: parsed };
+  }
   if (parsed.hooks !== undefined && !isObject(parsed.hooks)) {
     throw new Error(`"hooks" in ${path} is not an object; fix it and run this again`);
   }
@@ -197,10 +214,16 @@ function withOurs(spec: HostSpec, settings: Json, binaryPath: string): Json {
 
 /** The text of a hooks file: the settings as they are, or for an unwrapped file its event map. */
 function render(spec: HostSpec, settings: Json, previous: string | null): string {
-  return serialise(
-    spec.unwrapped ? (isObject(settings.hooks) ? settings.hooks : {}) : settings,
-    previous,
-  );
+  const hooks = isObject(settings.hooks) ? settings.hooks : {};
+  if (spec.definition !== undefined) {
+    // Our definition keeps its place in the file; one with no hook left in it goes.
+    const file: Json = { ...(settings[DEFINITIONS] as Json), [spec.definition]: hooks };
+    if (!Object.values(hooks).some((handlers) => Array.isArray(handlers) && handlers.length > 0)) {
+      delete file[spec.definition];
+    }
+    return serialise(file, previous);
+  }
+  return serialise(spec.unwrapped ? hooks : settings, previous);
 }
 
 /** Serialises in the file's own style: its indentation, and its final newline or lack of one. */

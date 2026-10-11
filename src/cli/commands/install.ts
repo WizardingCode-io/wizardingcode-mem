@@ -2,6 +2,7 @@ import { existsSync, readSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { doctorContext } from "../../doctor/context.ts";
+import { antigravityContext, installAntigravity } from "../../install/antigravity.ts";
 import { stageBinary } from "../../install/binary.ts";
 import { installClaudeCode } from "../../install/claude-code.ts";
 import {
@@ -43,6 +44,7 @@ export const SUPPORTED_AGENTS = [
   "qwen",
   "droid",
   "copilot",
+  "antigravity",
 ];
 export const AGENT_NAMES: Record<string, string> = {
   "claude-code": "Claude Code",
@@ -54,11 +56,12 @@ export const AGENT_NAMES: Record<string, string> = {
   qwen: "Qwen Code",
   droid: "Factory Droid",
   copilot: "GitHub Copilot",
+  antigravity: "Antigravity",
 };
 
 const USAGE = `Usage: wizardingcode-mem install [<agent>] [--binary <path>] [--yes] [--keep-claude-mem] [--no-import] [--import-history | --no-import-history]
 
-  <agent>             claude-code | claude-desktop | codex | cursor | gemini | opencode | qwen | droid | copilot; none installs for every one found
+  <agent>             claude-code | claude-desktop | codex | cursor | gemini | opencode | qwen | droid | copilot | antigravity; none installs for every one found
   --binary <path>     The wizardingcode-mem binary the hooks will run (needed when running from source)
   --yes               Retire claude-mem and shibaox-mem without asking (disable or uninstall their plugins)
   --keep-claude-mem   Leave claude-mem installed and running
@@ -252,6 +255,17 @@ function installOne(agent: string, rest: string[], offer = true): number {
     if (agent === "cursor") {
       process.stdout.write(
         describeInstall(agent, installCursor(cursorContext(binaryPath)), binaryPath, lines),
+      );
+      return 0;
+    }
+    if (agent === "antigravity") {
+      process.stdout.write(
+        describeInstall(
+          agent,
+          installAntigravity(antigravityContext(binaryPath)),
+          binaryPath,
+          lines,
+        ),
       );
       return 0;
     }

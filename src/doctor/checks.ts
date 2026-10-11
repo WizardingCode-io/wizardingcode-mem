@@ -2,6 +2,7 @@ import { Database } from "bun:sqlite";
 import { accessSync, constants, existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { lastBackup } from "../backup/schedule.ts";
+import { ANTIGRAVITY } from "../install/antigravity.ts";
 import { CLAUDE_CODE } from "../install/claude-code.ts";
 import { claudeDesktopServer, hasClaudeDesktop } from "../install/claude-desktop.ts";
 import { CODEX } from "../install/codex.ts";
@@ -40,6 +41,7 @@ export interface DoctorContext {
   qwenSettingsPath: string;
   droidSettingsPath: string;
   copilotHooksPath: string;
+  antigravityHooksPath: string;
   /** Whether a host's command is on this machine; null when it is not. */
   which: (command: string) => string | null;
   now: number;
@@ -219,6 +221,7 @@ const NATIVE_INSTALL: Record<string, string> = {
   qwen: "run: wizardingcode-mem install qwen",
   droid: "run: wizardingcode-mem install droid",
   copilot: "run: wizardingcode-mem install copilot",
+  antigravity: "run: wizardingcode-mem install antigravity",
 };
 
 const readText = (path: string): string | null => {
@@ -470,6 +473,7 @@ export function runChecks(context: DoctorContext): Check[] {
       hooksHost("Qwen Code", QWEN, context.qwenSettingsPath, "qwen", context),
       hooksHost("Factory Droid", DROID, context.droidSettingsPath, "droid", context),
       hooksHost("GitHub Copilot", COPILOT, context.copilotHooksPath, "copilot", context),
+      hooksHost("Antigravity", ANTIGRAVITY, context.antigravityHooksPath, "agy", context),
       claudeDesktop(context),
       legacy(context),
     ].filter((check): check is Check => check !== null);
