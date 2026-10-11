@@ -96,10 +96,6 @@ async function standsDownAsPlugin(agent: string, flags: string[]): Promise<boole
           const { CODEX, codexContext } = await import("../../install/codex.ts");
           return { spec: CODEX, path: codexContext("").settingsPath };
         }
-        case "gemini": {
-          const { GEMINI, geminiContext } = await import("../../install/gemini.ts");
-          return { spec: GEMINI, path: geminiContext("").settingsPath };
-        }
         case "cursor": {
           const { CURSOR, cursorContext } = await import("../../install/cursor.ts");
           return { spec: CURSOR, path: cursorContext("").settingsPath };

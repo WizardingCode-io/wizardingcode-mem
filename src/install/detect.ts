@@ -7,7 +7,6 @@ import { codexContext } from "./codex.ts";
 import { copilotContext } from "./copilot.ts";
 import { cursorContext } from "./cursor.ts";
 import { droidContext } from "./droid.ts";
-import { geminiContext } from "./gemini.ts";
 import { opencodePluginPath } from "./opencode.ts";
 import { qwenContext } from "./qwen.ts";
 
@@ -18,7 +17,6 @@ export const AGENT_ORDER: readonly AgentId[] = [
   "claude-code",
   "codex",
   "cursor",
-  "gemini",
   "opencode",
   "qwen",
   "droid",
@@ -38,7 +36,6 @@ export function detectAgents(options: {
     "claude-code": env.CLAUDE_CONFIG_DIR || join(home, ".claude"),
     codex: codexContext("", env).configDir,
     cursor: cursorContext("", env).configDir,
-    gemini: geminiContext("", env).configDir,
     opencode: dirname(dirname(opencodePluginPath(env))),
     qwen: qwenContext("", env).configDir,
     droid: droidContext("", env).configDir,
@@ -49,7 +46,6 @@ export function detectAgents(options: {
     "claude-code": "claude",
     codex: "codex",
     cursor: "cursor",
-    gemini: "gemini",
     opencode: "opencode",
     qwen: "qwen",
     droid: "droid",

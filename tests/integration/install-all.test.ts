@@ -31,12 +31,22 @@ describe("detectAgents", () => {
   test("an agent counts as present when its command is on PATH or its configuration directory exists", () => {
     mkdirSync(join(home, ".codex"));
     mkdirSync(join(home, "bin"));
-    writeFileSync(join(home, "bin", "gemini"), "", { mode: 0o755 });
+    writeFileSync(join(home, "bin", "qwen"), "", { mode: 0o755 });
     const detected = detectAgents({
       env: env(),
-      which: (command) => (command === "gemini" ? join(home, "bin", "gemini") : null),
+      which: (command) => (command === "qwen" ? join(home, "bin", "qwen") : null),
     });
-    expect(detected).toEqual(["codex", "gemini"]);
+    expect(detected).toEqual(["codex", "qwen"]);
+  });
+
+  test("Gemini CLI is no longer looked for: neither its command nor its directory counts", () => {
+    mkdirSync(join(home, ".gemini"));
+    expect(
+      detectAgents({
+        env: env(),
+        which: (command) => (command === "gemini" ? "/bin/gemini" : null),
+      }),
+    ).toEqual([]);
   });
 
   test("with nothing on the machine, nothing is detected", () => {
@@ -53,7 +63,7 @@ describe("wizardingcode-mem install (no agent)", () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("Installed wizardingcode-mem for Codex.");
     expect(result.stdout).toContain("Installed wizardingcode-mem for OpenCode.");
-    expect(result.stdout).toContain("Not found on this machine: Claude Code, Cursor, Gemini CLI");
+    expect(result.stdout).toContain("Not found on this machine: Claude Code, Cursor, Qwen Code");
     expect(existsSync(join(home, ".codex", "hooks.json"))).toBe(true);
     expect(existsSync(join(home, ".config", "opencode", "plugins", "wizardingcode-mem.ts"))).toBe(
       true,

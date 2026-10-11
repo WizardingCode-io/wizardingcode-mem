@@ -13,7 +13,6 @@ beforeEach(() => {
   paths = {
     settingsPath: join(home, ".claude", "settings.json"),
     codexHooksPath: join(home, ".codex", "hooks.json"),
-    geminiSettingsPath: join(home, ".gemini", "settings.json"),
     opencodePluginPath: join(home, ".config", "opencode", "plugins", "wizardingcode-mem.ts"),
   };
 });
@@ -52,18 +51,6 @@ describe("findLegacyPlugins", () => {
       JSON.stringify({ enabledPlugins: { "shibaox-mem@shibaox-plugins": false } }),
     );
     expect(findLegacyPlugins(paths)).toEqual([]);
-  });
-
-  test("finds the Gemini CLI extension", () => {
-    write(join(home, ".gemini", "extensions", "shibaox-mem", "gemini-extension.json"), "{}");
-    expect(findLegacyPlugins(paths)).toEqual([
-      {
-        agent: "gemini",
-        name: "shibaox-mem",
-        command: ["gemini", "extensions", "uninstall", "shibaox-mem"],
-        hint: "gemini extensions uninstall shibaox-mem",
-      },
-    ]);
   });
 
   test("finds the enabled Codex plugin and how to remove it", () => {

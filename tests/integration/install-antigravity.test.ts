@@ -18,7 +18,11 @@ import {
   uninstallAntigravity,
 } from "../../src/install/antigravity.ts";
 import { detectAgents } from "../../src/install/detect.ts";
-import { geminiContext, installGemini, uninstallGemini } from "../../src/install/gemini.ts";
+import {
+  findGeminiLeftover,
+  geminiLeftoverContext,
+  removeGeminiLeftover,
+} from "../../src/install/gemini-leftover.ts";
 import { runCliWith } from "../helpers/cli.ts";
 
 let home: string;
@@ -221,42 +225,58 @@ describe("uninstall antigravity", () => {
   });
 });
 
-// Antigravity and the Gemini CLI share ~/.gemini: each keeps to its own files and entries.
-describe("Antigravity beside the Gemini CLI in one ~/.gemini", () => {
+// Antigravity shares ~/.gemini with the old Gemini CLI install, which is no longer supported:
+// each keeps to its own files and entries.
+describe("Antigravity beside an old Gemini CLI install in one ~/.gemini", () => {
   const geminiSettings = () => join(gemini, "settings.json");
-  const geminiCtx = () => ({ ...geminiContext(BIN, { HOME: home }), dataDir, run });
-  const THEIR_GEMINI = '{\n  "theme": "dark",\n  "hooks": { "SessionStart": [] }\n}\n';
+  const geminiCtx = () => ({ ...geminiLeftoverContext({ HOME: home }), dataDir, run });
+  const OLD_GEMINI = `${JSON.stringify(
+    {
+      theme: "dark",
+      hooks: {
+        SessionStart: [
+          {
+            hooks: [
+              {
+                name: "wizardingcode-mem",
+                type: "command",
+                command: `'${BIN}' hook gemini session-start`,
+                timeout: 5000,
+              },
+            ],
+          },
+        ],
+      },
+    },
+    null,
+    2,
+  )}\n`;
 
   test("installing and uninstalling Antigravity leaves Gemini's settings and hooks alone", () => {
     mkdirSync(gemini, { recursive: true });
-    writeFileSync(geminiSettings(), THEIR_GEMINI);
-    installGemini(geminiCtx());
-    const withGemini = readFileSync(geminiSettings(), "utf8");
-    expect(withGemini).toContain("hook gemini session-start");
+    writeFileSync(geminiSettings(), OLD_GEMINI);
 
     installAntigravity(context());
-    expect(readFileSync(geminiSettings(), "utf8")).toBe(withGemini);
+    expect(readFileSync(geminiSettings(), "utf8")).toBe(OLD_GEMINI);
     expect(readFileSync(hooksPath, "utf8")).not.toContain("hook gemini");
     uninstallAntigravity(context());
-    expect(readFileSync(geminiSettings(), "utf8")).toBe(withGemini);
-
-    expect(uninstallGemini(geminiCtx()).settings).toBe("restored");
-    expect(readFileSync(geminiSettings(), "utf8")).toBe(THEIR_GEMINI);
+    expect(readFileSync(geminiSettings(), "utf8")).toBe(OLD_GEMINI);
+    expect(findGeminiLeftover(geminiSettings())?.hooks).toEqual(["SessionStart"]);
   });
 
-  test("installing and uninstalling Gemini leaves Antigravity's hooks and server alone", () => {
+  test("removing the old Gemini install leaves Antigravity's hooks and server alone", () => {
     seedUser();
     installAntigravity(context());
     const hooksText = readFileSync(hooksPath, "utf8");
     const mcpText = readFileSync(mcpPath, "utf8");
+    writeFileSync(geminiSettings(), OLD_GEMINI);
 
-    installGemini(geminiCtx());
+    expect(findGeminiLeftover(geminiSettings())).not.toBeNull();
+    removeGeminiLeftover(geminiCtx());
+    expect(findGeminiLeftover(geminiSettings())).toBeNull();
     expect(readFileSync(hooksPath, "utf8")).toBe(hooksText);
     expect(readFileSync(mcpPath, "utf8")).toBe(mcpText);
     expect(readFileSync(geminiSettings(), "utf8")).not.toContain("hook antigravity");
-    uninstallGemini(geminiCtx());
-    expect(readFileSync(hooksPath, "utf8")).toBe(hooksText);
-    expect(readFileSync(mcpPath, "utf8")).toBe(mcpText);
 
     expect(uninstallAntigravity(context()).settings).toBe("restored");
   });

@@ -275,16 +275,6 @@ describe("wizardingcode-mem hook", () => {
     }
   });
 
-  test("a whole turn from Gemini CLI, which names no turn, closes the session's open one", async () => {
-    await hook(payload("before-agent", "gemini"), "gemini", "prompt");
-    expect(await hook(payload("after-agent", "gemini"), "gemini", "turn-end")).toEqual(
-      SILENT_SUCCESS,
-    );
-    expect(rows("SELECT agent_turn_id, state, completeness, final_text FROM turns")).toEqual([
-      { agent_turn_id: null, state: "pending", completeness: "full", final_text: "done" },
-    ]);
-  });
-
   test("a whole turn from Cursor: the prompt is let through, the response closes the turn", async () => {
     const common = { conversation_id: "conv-1", generation_id: "g1", workspace_roots: [dir] };
     const before = await hook(
@@ -354,7 +344,6 @@ describe("wizardingcode-mem hook", () => {
 
   test.each([
     ["codex", { CODEX_HOME: "codex" }, "codex/hooks.json", "user-prompt-submit"],
-    ["gemini", { GEMINI_CLI_HOME: "gemini" }, "gemini/settings.json", "before-agent"],
   ] as const)(
     "%s: run through its plugin while the direct install is also there, it stands down",
     async (agent, homes, file, fixture) => {

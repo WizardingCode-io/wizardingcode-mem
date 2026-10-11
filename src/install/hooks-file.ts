@@ -12,7 +12,7 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 
-import type { AgentId, HookEvent } from "../core/types.ts";
+import type { AgentId, HookEvent, RetiredAgentId } from "../core/types.ts";
 
 // Installs wizardingcode-mem into a host's hooks file and removes it again. Claude Code and
 // Codex share the file's shape (event → groups → hooks); a HostSpec says what differs.
@@ -23,7 +23,8 @@ import type { AgentId, HookEvent } from "../core/types.ts";
 
 /** What differs between hosts that keep hooks in a JSON file of the same shape. */
 export interface HostSpec {
-  agent: AgentId;
+  /** A retired id only for recognising and removing what an old install left. */
+  agent: AgentId | RetiredAgentId;
   /** The host's event names and ours; the optional third item is the host's tool matcher. */
   events: readonly (readonly [string, HookEvent, string?])[];
   /** The entry, inside a group's `hooks` array, that runs our binary for an event. */
@@ -44,7 +45,7 @@ export interface HostSpec {
    * write as the hooks, so that the receipt still describes the whole file.
    */
   mcpInSettings?: boolean;
-  /** grouped: event → [{ hooks: [entry] }] (Claude Code, Codex, Gemini). flat: event → [entry] (Cursor). */
+  /** grouped: event → [{ hooks: [entry] }] (Claude Code, Codex, Qwen Code). flat: event → [entry] (Cursor). */
   layout?: "grouped" | "flat";
   /** The file is the event map itself, with no `hooks` key around it (Factory Droid's hooks.json). */
   unwrapped?: boolean;
@@ -90,7 +91,7 @@ export interface UninstallResult {
 }
 
 interface Receipt {
-  agent: AgentId;
+  agent: AgentId | RetiredAgentId;
   installedAt: number;
   binaryPath: string;
   settingsPath: string;
@@ -109,7 +110,7 @@ const isObject = (value: unknown): value is Json =>
 const sha256 = (text: string) => new Bun.CryptoHasher("sha256").update(text).digest("hex");
 // One receipt per settings file: several Claude Code profiles may share a data directory.
 const profileKey = (settingsPath: string) => sha256(settingsPath).slice(0, 12);
-const receiptPath = (dataDir: string, agent: AgentId, settingsPath: string) =>
+const receiptPath = (dataDir: string, agent: HostSpec["agent"], settingsPath: string) =>
   join(dataDir, "install", `${agent}-${profileKey(settingsPath)}.json`);
 
 /** The file to read and write: the target, when the settings file is a symlink into dotfiles. */
@@ -240,7 +241,11 @@ function writeAtomically(path: string, text: string): void {
   renameSync(temporary, path);
 }
 
-function readReceipt(dataDir: string, agent: AgentId, settingsPath: string): Receipt | null {
+function readReceipt(
+  dataDir: string,
+  agent: HostSpec["agent"],
+  settingsPath: string,
+): Receipt | null {
   try {
     const receipt = JSON.parse(
       readFileSync(receiptPath(dataDir, agent, settingsPath), "utf8"),

@@ -98,6 +98,7 @@ export const AGENT_TILE: Record<string, { letter: string; bg: string }> = {
   "claude-desktop": { letter: "D", bg: "#FF3DCB" },
   codex: { letter: "X", bg: "#2E7BFF" },
   cursor: { letter: "U", bg: "#9B5CFF" },
+  // Gemini CLI is no longer supported; its sessions stay in the store and keep their tile.
   gemini: { letter: "G", bg: "#2EE6C8" },
   opencode: { letter: "O", bg: "#FFC53D" },
 };

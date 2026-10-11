@@ -9,7 +9,7 @@
 
 <p align="center">
   <strong>Memory for coding agents.</strong><br>
-  What one session learns, the next one is told — in Claude Code, Claude Desktop, Codex, Gemini CLI, OpenCode and Cursor, from the same memory.
+  What one session learns, the next one is told — in Claude Code, Claude Desktop, Codex, OpenCode and Cursor, from the same memory.
 </p>
 
 <p align="center">
@@ -108,13 +108,9 @@ Codex reviews a plugin's hooks before running them: open `/hooks` once and accep
 
 </td></tr>
 
-<tr><td><strong>Gemini CLI</strong></td><td>
+<tr><td><strong>Gemini CLI</strong><br><sub>no longer supported</sub></td><td>
 
-```sh
-gemini extensions install https://github.com/WizardingCode-io/wizardingcode-mem
-```
-
-It is also listed in the [Gemini CLI extensions gallery](https://geminicli.com/extensions/browse/).
+Google moved Gemini CLI's users to Antigravity CLI, and wizardingcode-mem followed: `wizardingcode-mem install antigravity`. An old Gemini CLI install of wizardingcode-mem keeps running silently until removed; `wizardingcode-mem uninstall gemini` removes it (`install` and `doctor` point it out). Memories from Gemini sessions stay.
 
 </td></tr>
 
@@ -171,7 +167,7 @@ needs Node.js 18 or later; or download `wizardingcode-mem-windows-x64.exe` from 
 </td></tr>
 </table>
 
-Each of these checks the binary's SHA-256 against the release before using it. The curl script and `npx … install` also set up every supported agent and app they find; `wizardingcode-mem install <name>` does one (`claude-code`, `claude-desktop`, `codex`, `cursor`, `gemini`, `opencode`). Configuration files are backed up first, and `wizardingcode-mem uninstall <name>` puts them back. Where an agent has both the plugin and this direct install, the plugin stands down, so nothing is said twice.
+Each of these checks the binary's SHA-256 against the release before using it. The curl script and `npx … install` also set up every supported agent and app they find; `wizardingcode-mem install <name>` does one (`claude-code`, `claude-desktop`, `codex`, `cursor`, `opencode`). Configuration files are backed up first, and `wizardingcode-mem uninstall <name>` puts them back. Where an agent has both the plugin and this direct install, the plugin stands down, so nothing is said twice.
 
 ### Check it
 
@@ -324,7 +320,7 @@ The binary is at `~/.wizardingcode/mem/bin/wizardingcode-mem`; put that director
 | `wizardingcode-mem import claude-mem` | Brings memories over from claude-mem |
 | `wizardingcode-mem history import` · `index` · `search` · `forget` · `replace-imports` · `restore-imports` | Learn from past sessions (see above) |
 | `wizardingcode-mem rejudge` | Asks TypeSafe to judge imported memories properly |
-| `wizardingcode-mem install [<name>]` · `uninstall <name>` | The direct install: every agent and app found, or one (`claude-code`, `claude-desktop`, `codex`, `cursor`, `gemini`, `opencode`) |
+| `wizardingcode-mem install [<name>]` · `uninstall <name>` | The direct install: every agent and app found, or one (`claude-code`, `claude-desktop`, `codex`, `cursor`, `opencode`) |
 
 ## TypeSafe, if you want it
 
@@ -364,7 +360,6 @@ The importer can only map claude-mem's types onto ours and give every memory of 
 | Claude Desktop, Cowork and Code tab | plugin, added in the app | hooks | session start, every prompt | Code tab in use; Cowork from the documentation |
 | Claude Desktop, chat | MCP server in its config, across every project | `memory_save` when Claude saves | `memory_search` when Claude asks | in use |
 | Codex | plugin, from the marketplace | hooks + rollout | session start, every prompt | verified up to the prompt; turn end as documented |
-| Gemini CLI | extension, from the release | hooks | session start, every prompt | verified at session start; turns as documented |
 | OpenCode | npm plugin | the plugin API | the system prompt | verified up to the prompt |
 | Cursor | plugin | hooks | session start | from the documentation; not yet run |
 

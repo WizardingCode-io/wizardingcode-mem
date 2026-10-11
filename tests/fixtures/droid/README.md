@@ -25,8 +25,8 @@ with captured payloads once one is recorded, and note what differed.
 ## What the documentation does not say, and the choice made
 
 - **A turn id.** Only an optional common `message_id` is documented, with no statement that
-  `UserPromptSubmit` and `Stop` share it. The adapter names no turn (`turnId: null`), like Gemini
-  CLI: a turn is the session's open one.
+  `UserPromptSubmit` and `Stop` share it. The adapter names no turn (`turnId: null`): a turn is the
+  session's open one.
 - **The final message.** `Stop` documents no assistant text, so `finalMessageInPayload: false`.
 - **`transcript_path`.** The name is documented, the format is not: no transcript reader and no
   history reader (`transcript: false`).

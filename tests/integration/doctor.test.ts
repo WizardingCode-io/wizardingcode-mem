@@ -159,7 +159,6 @@ describe("wizardingcode-mem doctor", () => {
     for (const name of [
       "Codex",
       "Cursor",
-      "Gemini CLI",
       "OpenCode",
       "Qwen Code",
       "Factory Droid",
@@ -180,7 +179,7 @@ describe("wizardingcode-mem doctor", () => {
     expect(line(result.stdout, "Codex")).toContain(
       "codex plugin add wizardingcode-mem@wizardingcode-plugins",
     );
-    expect(line(result.stdout, "Gemini CLI")).toStartWith("skip");
+    expect(result.stdout).not.toContain("Gemini");
   });
 
   test("an agent that has wizardingcode-mem as its own plugin or extension is installed, and says how", async () => {
@@ -195,15 +194,6 @@ describe("wizardingcode-mem doctor", () => {
       join(home, ".codex", "config.toml"),
       'model = "x"\n\n[plugins."other@x"]\nenabled = true\n\n[plugins."wizardingcode-mem@wizardingcode-plugins"]\nenabled = true\n',
     );
-    mkdirSync(join(home, ".gemini", "extensions", "wizardingcode-mem", "bin"), { recursive: true });
-    writeFileSync(
-      join(home, ".gemini", "extensions", "wizardingcode-mem", "gemini-extension.json"),
-      JSON.stringify({ name: "wizardingcode-mem", version: "9.9.9" }),
-    );
-    writeFileSync(
-      join(home, ".gemini", "extensions", "wizardingcode-mem", "bin", "wizardingcode-mem"),
-      "",
-    );
     mkdirSync(join(home, ".config", "opencode"), { recursive: true });
     writeFileSync(
       join(home, ".config", "opencode", "opencode.jsonc"),
@@ -211,7 +201,6 @@ describe("wizardingcode-mem doctor", () => {
     );
     const nativeEnv = {
       CODEX_HOME: join(home, ".codex"),
-      GEMINI_CLI_HOME: join(home, ".gemini"),
       XDG_CONFIG_HOME: join(home, ".config"),
     };
     const result = await cliWith(nativeEnv, "doctor");
@@ -220,9 +209,6 @@ describe("wizardingcode-mem doctor", () => {
     );
     expect(line(result.stdout, "Codex")).toBe(
       "ok    Codex: installed as a plugin (wizardingcode-mem@wizardingcode-plugins)",
-    );
-    expect(line(result.stdout, "Gemini CLI")).toBe(
-      "ok    Gemini CLI: installed as an extension (9.9.9)",
     );
     expect(line(result.stdout, "OpenCode")).toBe(
       "ok    OpenCode: installed as an npm plugin (wizardingcode-mem-opencode)",
@@ -247,7 +233,6 @@ describe("wizardingcode-mem doctor", () => {
     writeFileSync(binary, "");
     const codexEnv = {
       CODEX_HOME: join(home, ".codex"),
-      GEMINI_CLI_HOME: join(home, ".gemini"),
       QWEN_HOME: join(home, ".qwen"),
       COPILOT_HOME: join(home, ".copilot"),
       XDG_CONFIG_HOME: join(home, ".config"),
@@ -255,7 +240,6 @@ describe("wizardingcode-mem doctor", () => {
     for (const agent of [
       "codex",
       "cursor",
-      "gemini",
       "opencode",
       "qwen",
       "droid",
@@ -269,7 +253,6 @@ describe("wizardingcode-mem doctor", () => {
     for (const name of [
       "Codex",
       "Cursor",
-      "Gemini CLI",
       "OpenCode",
       "Qwen Code",
       "Factory Droid",
@@ -284,7 +267,6 @@ describe("wizardingcode-mem doctor", () => {
     for (const name of [
       "Codex",
       "Cursor",
-      "Gemini CLI",
       "OpenCode",
       "Qwen Code",
       "Factory Droid",
