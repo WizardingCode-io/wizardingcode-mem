@@ -5,13 +5,21 @@ import {
   mkdtempSync,
   renameSync,
   rmSync,
+  statSync,
   truncateSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { embed } from "../../src/embed/embed.ts";
-import { loadModel, MODEL_FILE, modelPath, modelState } from "../../src/embed/model.ts";
+import {
+  ID_SAMPLE_BYTES,
+  loadModel,
+  MODEL_FILE,
+  modelIdSample,
+  modelPath,
+  modelState,
+} from "../../src/embed/model.ts";
 import { openPack, writePack } from "../../src/embed/pack.ts";
 
 const fixture = join(import.meta.dir, "../fixtures/embed/subset.wcpack");
@@ -111,5 +119,64 @@ describe("model", () => {
     expect(state.present).toBe(true);
     expect(state.bytes).toBe(100);
     expect(state.reason).toBeTruthy();
+  });
+
+  describe("the id", () => {
+    const header = {
+      model: "m",
+      revision: "r",
+      dims: 4,
+      vocabSize: 10,
+      unkId: 0,
+      minScore: -10,
+      maxPieceChars: 5,
+    };
+    const pieces = [
+      { text: "▁hello", id: 1, score: -1, row: Float32Array.from([1, 2, 3, 4]) },
+      { text: "[UNK]", id: 0, score: -5, row: Float32Array.from([4, 3, 2, 1]) },
+    ];
+    const put = (dir: string, h: typeof header, charsmap: number[]) => {
+      mkdirSync(join(dir, "models"), { recursive: true });
+      writePack(modelPath(dir), { header: h, charsmap: new Uint8Array(charsmap), pieces });
+    };
+
+    test("differs when only the header bytes, or only the charsmap, differ at the same size", () => {
+      const ids = [
+        [header, [1, 2]],
+        [{ ...header, revision: "q" }, [1, 2]],
+        [header, [1, 3]],
+      ].map(([h, cm]) => {
+        const dir = mkdtempSync(join(tmpdir(), "wcmem-id-"));
+        roots.push(dir);
+        put(dir, h as typeof header, cm as number[]);
+        return loadModel({ dataDir: dir, env: {} })?.id;
+      });
+      expect(new Set(ids).size).toBe(3);
+    });
+
+    test("looks at no more than ID_SAMPLE_BYTES of a much larger pack", () => {
+      const dir = mkdtempSync(join(tmpdir(), "wcmem-big-"));
+      roots.push(dir);
+      const dims = 4096;
+      const big = Array.from({ length: 1200 }, (_, i) => ({
+        text: `▁w${i}`,
+        id: i,
+        score: -1,
+        row: new Float32Array(dims).fill(i + 1),
+      }));
+      mkdirSync(join(dir, "models"));
+      writePack(modelPath(dir), {
+        header: { ...header, dims },
+        charsmap: new Uint8Array(2),
+        pieces: big,
+      });
+      expect(statSync(modelPath(dir)).size).toBeGreaterThan(4 * ID_SAMPLE_BYTES);
+      expect(modelIdSample(modelPath(dir)).length).toBeLessThanOrEqual(ID_SAMPLE_BYTES);
+      expect(loadModel({ dataDir: dir, env: {} })?.id).toMatch(/@[0-9a-f]{12}$/);
+    });
+  });
+
+  test("modelState never throws", () => {
+    expect(modelState("\0bad").present).toBe(false);
   });
 });

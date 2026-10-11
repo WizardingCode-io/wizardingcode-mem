@@ -48,20 +48,29 @@ interface Opened {
 
 let cached: Opened | null = null;
 
-function sha256Prefix(path: string): string {
-  const hash = createHash("sha256");
+/** The most of the file the id looks at: the header and charsmap sit well inside it. */
+export const ID_SAMPLE_BYTES = 1 << 20;
+
+/** The first bytes of the file, at most ID_SAMPLE_BYTES; never the whole 146 MB pack. */
+export function modelIdSample(path: string): Buffer {
   const fd = openSync(path, "r");
   try {
-    const buffer = Buffer.allocUnsafe(1 << 20);
-    for (;;) {
-      const n = readSync(fd, buffer, 0, buffer.length, null);
-      if (n === 0) break;
-      hash.update(buffer.subarray(0, n));
-    }
+    const buffer = Buffer.allocUnsafe(ID_SAMPLE_BYTES);
+    const n = readSync(fd, buffer, 0, buffer.length, 0);
+    return buffer.subarray(0, n);
   } finally {
     closeSync(fd);
   }
-  return hash.digest("hex").slice(0, 12);
+}
+
+/**
+ * Changes when the header (model, revision, counts), the charsmap or the file size change, which
+ * is what a different pack build does. A same-size edit confined to the rows would not change it;
+ * packs are only ever replaced whole, and the download verifies the full sha256.
+ */
+function idOf(path: string, size: number): string {
+  const hash = createHash("sha256").update(modelIdSample(path)).update(String(size));
+  return `${MODEL_NAME}@${hash.digest("hex").slice(0, 12)}`;
 }
 
 function open(path: string, signature: Signature): Opened {
@@ -75,10 +84,11 @@ function open(path: string, signature: Signature): Opened {
     const model: Model = {
       pack,
       embed: (text) => embed(pack, text),
-      id: `${MODEL_NAME}@${sha256Prefix(path)}`,
+      id: idOf(path, signature.size),
     };
     return { path, signature, model, reason: null };
   } catch (error) {
+    result.pack.close();
     const reason = error instanceof Error ? error.message : String(error);
     return { path, signature, model: null, reason };
   }
@@ -118,12 +128,19 @@ export function loadModel(options: {
   }
 }
 
-export function modelState(dataDir: string): {
-  present: boolean;
-  bytes: number;
-  enabled: boolean;
-  reason: string | null;
-} {
+type ModelState = { present: boolean; bytes: number; enabled: boolean; reason: string | null };
+
+/** Never throws: a failure is reported as the reason. */
+export function modelState(dataDir: string): ModelState {
+  try {
+    return stateOf(dataDir);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    return { present: false, bytes: 0, enabled: false, reason };
+  }
+}
+
+function stateOf(dataDir: string): ModelState {
   const enabled = loadSettings(process.env, dataDir).semantic === "on";
   const path = modelPath(dataDir);
   const signature = statOf(path);
