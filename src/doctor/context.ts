@@ -2,6 +2,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { claudeDesktopConfigPath } from "../install/claude-desktop.ts";
 import { codexContext } from "../install/codex.ts";
+import { copilotContext } from "../install/copilot.ts";
 import { cursorContext } from "../install/cursor.ts";
 import { droidContext } from "../install/droid.ts";
 import { geminiContext } from "../install/gemini.ts";
@@ -25,6 +26,7 @@ export function doctorContext(dataDir: string, now = Date.now()): DoctorContext 
     opencodePluginPath: opencodePluginPath(),
     qwenSettingsPath: qwenContext("").settingsPath,
     droidSettingsPath: droidContext("").settingsPath,
+    copilotHooksPath: copilotContext("").settingsPath,
     claudeDesktopConfigPath: claudeDesktopConfigPath(),
     which: (command) => Bun.which(command),
     now,

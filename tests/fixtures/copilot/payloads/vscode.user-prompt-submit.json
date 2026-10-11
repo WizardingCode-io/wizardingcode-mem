@@ -1,0 +1,1 @@
+{"hook_event_name":"UserPromptSubmit","session_id":"7c2e9a41-5d3b-4f6e-9a18-2b4c6d8e0f13","timestamp":"2026-10-11T22:00:05.000Z","cwd":"/Users/dev/project","transcript_path":"/Users/dev/transcripts/7c2e9a41-5d3b-4f6e-9a18-2b4c6d8e0f13.json","prompt":"Create a file named hello.txt containing the single word hi. Then reply with exactly: done"}

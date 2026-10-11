@@ -1,4 +1,12 @@
-export type AgentId = "claude-code" | "codex" | "cursor" | "gemini" | "opencode" | "qwen" | "droid";
+export type AgentId =
+  | "claude-code"
+  | "codex"
+  | "cursor"
+  | "gemini"
+  | "opencode"
+  | "qwen"
+  | "droid"
+  | "copilot";
 
 /** The four moments wizardingcode-mem acts on, whatever each host agent calls them. */
 export type HookEvent =

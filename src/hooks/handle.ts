@@ -258,5 +258,5 @@ export function handleHook(deps: HookDeps, adapter: AgentAdapter, input: HookInp
       deps.onError?.(error);
     }
   }
-  return adapter.render(input.event, context);
+  return adapter.render(input.event, context, input);
 }

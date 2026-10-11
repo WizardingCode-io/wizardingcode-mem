@@ -37,6 +37,8 @@ export interface HostSpec {
   mcpRemove: string[];
   /** When set, the MCP server is written into this JSON file instead (`mcpServers`). */
   mcpFile?: (context: InstallContext) => string;
+  /** The server's entry in `mcpFile`, when the host wants more than `{ command, args }`. */
+  mcpEntry?: (binaryPath: string) => Json;
   /**
    * The MCP server goes into the hooks file's own `mcpServers` (Qwen Code), in the same
    * write as the hooks, so that the receipt still describes the whole file.
@@ -303,7 +305,7 @@ export function installHooksFile(spec: HostSpec, context: InstallContext): Insta
   }
   if (spec.mcpFile !== undefined) {
     const mcpPath = spec.mcpFile(context);
-    writeMcpServer(mcpPath, binaryPath);
+    writeMcpServer(mcpPath, spec.mcpEntry?.(binaryPath) ?? mcpServerEntry(binaryPath));
     return { settingsPath, changed, mcp: "registered", mcpCommand, mcpPath, notes: spec.notes };
   }
   // Otherwise the MCP server is registered through the host's own command: its config
@@ -318,18 +320,17 @@ export function installHooksFile(spec: HostSpec, context: InstallContext): Insta
 const legacyMcpRemove = (spec: HostSpec): string[] =>
   spec.mcpRemove.map((word) => (word === MCP_NAME ? LEGACY_MCP_NAME : word));
 
+const mcpServerEntry = (binaryPath: string): Json => ({ command: binaryPath, args: ["mcp"] });
+
 /** Adds our server to a host's `mcpServers` file, keeping every other entry. */
-function writeMcpServer(path: string, binaryPath: string): void {
+function writeMcpServer(path: string, entry: Json): void {
   const file = resolved(path);
   const previous = existsSync(file) ? readFileSync(file, "utf8") : null;
   const config = parseSettings(path, previous);
   const { [LEGACY_MCP_NAME]: _legacy, ...servers } = isObject(config.mcpServers)
     ? config.mcpServers
     : {};
-  const next = serialise(
-    { ...config, mcpServers: { ...servers, [MCP_NAME]: { command: binaryPath, args: ["mcp"] } } },
-    previous,
-  );
+  const next = serialise({ ...config, mcpServers: { ...servers, [MCP_NAME]: entry } }, previous);
   if (next === previous) return;
   mkdirSync(dirname(file), { recursive: true });
   writeAtomically(file, next);

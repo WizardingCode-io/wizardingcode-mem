@@ -163,6 +163,7 @@ describe("wizardingcode-mem doctor", () => {
       "OpenCode",
       "Qwen Code",
       "Factory Droid",
+      "GitHub Copilot",
     ]) {
       expect(line(result.stdout, name)).toStartWith("skip");
       expect(line(result.stdout, name)).toContain("not found on this machine");
@@ -247,9 +248,10 @@ describe("wizardingcode-mem doctor", () => {
       CODEX_HOME: join(home, ".codex"),
       GEMINI_CLI_HOME: join(home, ".gemini"),
       QWEN_HOME: join(home, ".qwen"),
+      COPILOT_HOME: join(home, ".copilot"),
       XDG_CONFIG_HOME: join(home, ".config"),
     };
-    for (const agent of ["codex", "cursor", "gemini", "opencode", "qwen", "droid"]) {
+    for (const agent of ["codex", "cursor", "gemini", "opencode", "qwen", "droid", "copilot"]) {
       const installed = await cliWith(codexEnv, "install", agent, "--binary", binary);
       expect(installed.exitCode).toBe(0);
     }
@@ -261,6 +263,7 @@ describe("wizardingcode-mem doctor", () => {
       "OpenCode",
       "Qwen Code",
       "Factory Droid",
+      "GitHub Copilot",
     ]) {
       expect(line(result.stdout, name)).toStartWith("ok");
       expect(line(result.stdout, name)).toContain(binary);
@@ -274,6 +277,7 @@ describe("wizardingcode-mem doctor", () => {
       "OpenCode",
       "Qwen Code",
       "Factory Droid",
+      "GitHub Copilot",
     ]) {
       expect(line(broken.stdout, name)).toStartWith("FAIL");
     }

@@ -5,6 +5,7 @@ import { lastBackup } from "../backup/schedule.ts";
 import { CLAUDE_CODE } from "../install/claude-code.ts";
 import { claudeDesktopServer, hasClaudeDesktop } from "../install/claude-desktop.ts";
 import { CODEX } from "../install/codex.ts";
+import { COPILOT } from "../install/copilot.ts";
 import { CURSOR } from "../install/cursor.ts";
 import { DROID } from "../install/droid.ts";
 import { GEMINI } from "../install/gemini.ts";
@@ -38,6 +39,7 @@ export interface DoctorContext {
   opencodePluginPath: string;
   qwenSettingsPath: string;
   droidSettingsPath: string;
+  copilotHooksPath: string;
   /** Whether a host's command is on this machine; null when it is not. */
   which: (command: string) => string | null;
   now: number;
@@ -216,6 +218,7 @@ const NATIVE_INSTALL: Record<string, string> = {
   opencode: "run: opencode plugin wizardingcode-mem-opencode --global",
   qwen: "run: wizardingcode-mem install qwen",
   droid: "run: wizardingcode-mem install droid",
+  copilot: "run: wizardingcode-mem install copilot",
 };
 
 const readText = (path: string): string | null => {
@@ -466,6 +469,7 @@ export function runChecks(context: DoctorContext): Check[] {
       openCode(context),
       hooksHost("Qwen Code", QWEN, context.qwenSettingsPath, "qwen", context),
       hooksHost("Factory Droid", DROID, context.droidSettingsPath, "droid", context),
+      hooksHost("GitHub Copilot", COPILOT, context.copilotHooksPath, "copilot", context),
       claudeDesktop(context),
       legacy(context),
     ].filter((check): check is Check => check !== null);

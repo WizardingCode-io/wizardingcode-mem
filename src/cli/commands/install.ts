@@ -11,6 +11,7 @@ import {
 } from "../../install/claude-desktop.ts";
 import { codexContext, installCodex } from "../../install/codex.ts";
 import { claudeCodeContext } from "../../install/context.ts";
+import { copilotContext, installCopilot } from "../../install/copilot.ts";
 import { cursorContext, installCursor } from "../../install/cursor.ts";
 import { AGENT_ORDER, detectAgents } from "../../install/detect.ts";
 import { droidContext, installDroid } from "../../install/droid.ts";
@@ -41,6 +42,7 @@ export const SUPPORTED_AGENTS = [
   "opencode",
   "qwen",
   "droid",
+  "copilot",
 ];
 export const AGENT_NAMES: Record<string, string> = {
   "claude-code": "Claude Code",
@@ -51,11 +53,12 @@ export const AGENT_NAMES: Record<string, string> = {
   opencode: "OpenCode",
   qwen: "Qwen Code",
   droid: "Factory Droid",
+  copilot: "GitHub Copilot",
 };
 
 const USAGE = `Usage: wizardingcode-mem install [<agent>] [--binary <path>] [--yes] [--keep-claude-mem] [--no-import] [--import-history | --no-import-history]
 
-  <agent>             claude-code | claude-desktop | codex | cursor | gemini | opencode | qwen | droid; none installs for every one found
+  <agent>             claude-code | claude-desktop | codex | cursor | gemini | opencode | qwen | droid | copilot; none installs for every one found
   --binary <path>     The wizardingcode-mem binary the hooks will run (needed when running from source)
   --yes               Retire claude-mem and shibaox-mem without asking (disable or uninstall their plugins)
   --keep-claude-mem   Leave claude-mem installed and running
@@ -249,6 +252,12 @@ function installOne(agent: string, rest: string[], offer = true): number {
     if (agent === "cursor") {
       process.stdout.write(
         describeInstall(agent, installCursor(cursorContext(binaryPath)), binaryPath, lines),
+      );
+      return 0;
+    }
+    if (agent === "copilot") {
+      process.stdout.write(
+        describeInstall(agent, installCopilot(copilotContext(binaryPath)), binaryPath, lines),
       );
       return 0;
     }

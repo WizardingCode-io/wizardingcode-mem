@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { AgentId } from "../core/types.ts";
 import { codexContext } from "./codex.ts";
+import { copilotContext } from "./copilot.ts";
 import { cursorContext } from "./cursor.ts";
 import { droidContext } from "./droid.ts";
 import { geminiContext } from "./gemini.ts";
@@ -20,6 +21,7 @@ export const AGENT_ORDER: readonly AgentId[] = [
   "opencode",
   "qwen",
   "droid",
+  "copilot",
 ];
 
 export function detectAgents(options: {
@@ -36,6 +38,7 @@ export function detectAgents(options: {
     opencode: dirname(dirname(opencodePluginPath(env))),
     qwen: qwenContext("", env).configDir,
     droid: droidContext("", env).configDir,
+    copilot: copilotContext("", env).configDir,
   };
   const command: Record<AgentId, string> = {
     "claude-code": "claude",
@@ -45,6 +48,7 @@ export function detectAgents(options: {
     opencode: "opencode",
     qwen: "qwen",
     droid: "droid",
+    copilot: "copilot",
   };
   return AGENT_ORDER.filter(
     (agent) => which(command[agent]) !== null || existsSync(configDir[agent]),

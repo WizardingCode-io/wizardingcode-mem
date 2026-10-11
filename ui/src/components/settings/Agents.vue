@@ -8,7 +8,7 @@ import { CHECK_STATUS } from "./status";
 
 defineProps<{ checks: Check[]; loaded: boolean }>();
 const emit = defineEmits<{ refresh: [] }>();
-const ID: Record<string, string> = { "Claude Code": "claude-code", "Claude Desktop": "claude-desktop", Codex: "codex", Cursor: "cursor", "Gemini CLI": "gemini", OpenCode: "opencode", "Qwen Code": "qwen", "Factory Droid": "droid" };
+const ID: Record<string, string> = { "Claude Code": "claude-code", "Claude Desktop": "claude-desktop", Codex: "codex", Cursor: "cursor", "Gemini CLI": "gemini", OpenCode: "opencode", "Qwen Code": "qwen", "Factory Droid": "droid", "GitHub Copilot": "copilot" };
 const COLS = "grid-template-columns: 196px 104px minmax(0, 1fr);";
 </script>
 
