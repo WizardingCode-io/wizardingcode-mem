@@ -141,9 +141,7 @@ describe("enqueueHistory", () => {
 
   test("a session first seen in history is dated by its turn", () => {
     run([history("p1", 30)]);
-    expect(
-      db.query("SELECT started_at, last_seen_at, ended_at FROM sessions").get(),
-    ).toEqual({
+    expect(db.query("SELECT started_at, last_seen_at, ended_at FROM sessions").get()).toEqual({
       started_at: NOW - 30 * DAY,
       last_seen_at: NOW - 30 * DAY + 5000,
       ended_at: NOW - 30 * DAY + 5000,

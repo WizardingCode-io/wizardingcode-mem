@@ -96,7 +96,7 @@ describe("compact", () => {
       finalText: "answer",
       startedAt: at,
       endedAt: at + 5000,
-      transcriptPath: null,
+      transcriptPath: join(base, "h1.jsonl"),
       detail: { filesRead: [], filesChanged: [], commands: [], errors: [], savedMemory: false },
     };
     const options = { sinceMs: NOW - 180 * DAY, now: NOW };

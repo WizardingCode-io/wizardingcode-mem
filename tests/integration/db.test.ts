@@ -97,9 +97,9 @@ describe("store/db", () => {
     expect(version(db)).toBe(4);
     expect(dump(db)).toEqual(was);
     expect(db.query("SELECT DISTINCT origin FROM turns").all()).toEqual([{ origin: "live" }]);
-    expect(db.query("SELECT name FROM sqlite_master WHERE name = 'turns_queue_origin'").all()).toEqual(
-      [],
-    );
+    expect(
+      db.query("SELECT name FROM sqlite_master WHERE name = 'turns_queue_origin'").all(),
+    ).toEqual([]);
     db.close();
   });
 
