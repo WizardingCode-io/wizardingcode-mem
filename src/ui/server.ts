@@ -93,6 +93,31 @@ const FONTS: Record<string, string> = {
   "jetbrains-mono-variable.woff2": jetbrainsMono,
 };
 
+/**
+ * The page's Content-Security-Policy: every load stays on this origin (images and fonts
+ * may also be `data:`), so nothing a transcript contains can reach the network. The two
+ * inline scripts of the single-file build run by their hashes; styles are inline too,
+ * and Vue and Nuxt UI set some at run time.
+ */
+export function pageCsp(html: string): string {
+  const hashes = [...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].map(
+    (match) => `'sha256-${new Bun.CryptoHasher("sha256").update(match[1] ?? "").digest("base64")}'`,
+  );
+  return [
+    "default-src 'self'",
+    `script-src 'self' ${hashes.join(" ")}`.trim(),
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data:",
+    "font-src 'self' data:",
+    "connect-src 'self'",
+    "object-src 'none'",
+    "base-uri 'none'",
+    "form-action 'none'",
+    "frame-ancestors 'none'",
+  ].join("; ");
+}
+const PAGE_CSP = pageCsp(page as unknown as string);
+
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
@@ -201,7 +226,11 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
 
     if (request.method === "GET" && path === "/") {
       return new Response(page as unknown as string, {
-        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+        headers: {
+          "content-type": "text/html; charset=utf-8",
+          "cache-control": "no-store",
+          "content-security-policy": PAGE_CSP,
+        },
       });
     }
     // Presence: who is here, a tab's heartbeat, and whether to open a browser.

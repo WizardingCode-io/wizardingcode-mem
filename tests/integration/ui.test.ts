@@ -118,6 +118,35 @@ describe("wizardingcode-mem ui: the page", () => {
     expect(html).toContain("--primary:");
   });
 
+  test("the page carries a Content-Security-Policy that keeps every load on this origin", async () => {
+    const s = await start();
+    const page = await fetch(s.url);
+    const csp = page.headers.get("content-security-policy") ?? "";
+    const directives = new Map(
+      csp
+        .split(";")
+        .map((part) => part.trim().split(/\s+/))
+        .filter((words) => words[0] !== "")
+        .map((words) => [words[0] as string, words.slice(1)]),
+    );
+    expect(directives.get("default-src")).toEqual(["'self'"]);
+    expect(directives.get("img-src")).toEqual(["'self'", "data:"]);
+    expect(directives.get("connect-src")).toEqual(["'self'"]);
+    expect(directives.get("font-src")).toEqual(["'self'", "data:"]);
+    expect(directives.get("object-src")).toEqual(["'none'"]);
+    // The inline scripts run by their hash; nothing else may.
+    const scriptSrc = directives.get("script-src") ?? [];
+    expect(scriptSrc).not.toContain("'unsafe-inline'");
+    expect(scriptSrc).not.toContain("'unsafe-eval'");
+    const html = await page.text();
+    const inline = [...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1] ?? "");
+    expect(inline.length).toBeGreaterThan(0);
+    for (const body of inline) {
+      const hash = new Bun.CryptoHasher("sha256").update(body).digest("base64");
+      expect(scriptSrc).toContain(`'sha256-${hash}'`);
+    }
+  });
+
   test("without the token, nothing is served", async () => {
     const s = await start();
     expect((await fetch(`${s.origin}/`)).status).toBe(401);

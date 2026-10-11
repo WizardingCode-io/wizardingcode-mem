@@ -26,4 +26,13 @@ describe("renderMarkdown", () => {
     expect(html).toContain('target="_blank"');
     expect(html).toContain('rel="noopener noreferrer"');
   });
+
+  test("never loads an image: a Markdown image becomes its alt text", () => {
+    const html = renderMarkdown(
+      "![build passing](https://img.shields.io/badge/x.svg) and ![](http://x.test/a.png)",
+    );
+    expect(html).not.toContain("<img");
+    expect(html).not.toContain("shields.io");
+    expect(html).toContain("build passing");
+  });
 });
