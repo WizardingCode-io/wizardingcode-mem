@@ -67,6 +67,42 @@ describe("store/db", () => {
     db.close();
   });
 
+  test("migration 4 keeps every turn and memory of a version-3 database, as live, and adds no queue index", () => {
+    const before = open(MIGRATIONS.slice(0, 3));
+    const { projectId } = seed(before);
+    const now = Date.now();
+    before.run(
+      `INSERT INTO sessions (agent, agent_session_id, project_id, cwd, started_at, last_seen_at)
+       VALUES ('claude-code', 's1', ?, '/p', ?, ?)`,
+      [projectId, now, now],
+    );
+    for (const [seq, state] of [
+      [1, "done"],
+      [2, "pending"],
+    ] as const) {
+      before.run(
+        `INSERT INTO turns (session_id, project_id, seq, state, prompt, started_at)
+         VALUES (1, ?, ?, ?, 'q', ?)`,
+        [projectId, seq, state, now],
+      );
+    }
+    const dump = (db: Database) => ({
+      turns: db.query("SELECT id, seq, state, prompt FROM turns ORDER BY id").all(),
+      memories: db.query("SELECT id, title, body FROM memories ORDER BY id").all(),
+    });
+    const was = dump(before);
+    before.close();
+
+    const db = open();
+    expect(version(db)).toBe(4);
+    expect(dump(db)).toEqual(was);
+    expect(db.query("SELECT DISTINCT origin FROM turns").all()).toEqual([{ origin: "live" }]);
+    expect(db.query("SELECT name FROM sqlite_master WHERE name = 'turns_queue_origin'").all()).toEqual(
+      [],
+    );
+    db.close();
+  });
+
   test("a new database ends at the latest schema version, in WAL mode", () => {
     const db = open();
     expect(version(db)).toBe(LATEST_VERSION);
