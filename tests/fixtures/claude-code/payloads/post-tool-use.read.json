@@ -1,0 +1,1 @@
+{"session_id":"abc123","transcript_path":"/tmp/t.jsonl","cwd":"/work/shop","permission_mode":"default","hook_event_name":"PostToolUse","tool_name":"Read","tool_input":{"file_path":"/work/shop/src/store/db.ts"},"tool_response":{"type":"text","file":{"filePath":"/work/shop/src/store/db.ts"}},"tool_use_id":"toolu_01","duration_ms":3}

@@ -33,6 +33,8 @@ function parse(event: HookEvent, stdin: string): HookInput | null {
     prompt: event === "prompt" ? text(raw.prompt) : null,
     finalText: event === "turn-end" ? text(raw.text) : null,
     source: event === "session-start" ? "startup" : null,
+    toolFile: null,
+    toolError: null,
     subagent: raw.is_background_agent === true,
   };
 }

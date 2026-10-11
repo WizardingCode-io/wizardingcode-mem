@@ -79,6 +79,18 @@ const retrieve = (prompt: string, branch: string | null = null) =>
 const ids = (prompt: string) => retrieve(prompt).map((note) => note.id);
 
 describe("retrieveForPrompt", () => {
+  test("a note a file read already gave this context is not repeated on a prompt", () => {
+    const id = memory(
+      "Sessions expire after thirty minutes",
+      "The cookie lifetime is thirty minutes.",
+    );
+    expect(ids("sessions expire thirty minutes")).toEqual([id]);
+    const note = retrieve("sessions expire thirty minutes");
+    recordInjections(db, { sessionId, epoch: 0, event: "file-read", notes: note, now: NOW });
+    expect(ids("sessions expire thirty minutes")).toEqual([]);
+    recordInjections(db, { sessionId, epoch: 0, event: "tool-failed", notes: note, now: NOW });
+  });
+
   test("a memory that shares an exact identifier with the prompt is found", () => {
     const id = memory("The pragma busy_timeout must be the first statement on a connection.");
     memory("Hooks never exit with code two.");

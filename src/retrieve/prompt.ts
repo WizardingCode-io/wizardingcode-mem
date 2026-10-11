@@ -29,15 +29,17 @@ interface Candidate {
  * A condition that leaves out the notes this context has already been given.
  *
  * A note is owed in full once per context. The session brief only names notes, so one
- * it named still counts as unseen, unless its title is all there is to it. The ids are
+ * it named still counts as unseen, unless its title is all there is to it. A note given
+ * on a prompt, a file read or a failure was given in full. Also what the lookups for a
+ * file and for a failure share, so none of them repeats another. The ids are
  * looked up first and inlined: a subquery here would be re-run for every candidate row.
  */
-function notYetShown(db: Db, sessionId: number, epoch: number): string {
+export function notYetShown(db: Db, sessionId: number, epoch: number): string {
   const shown = db
     .query<{ id: number }, [number, number]>(
       `SELECT DISTINCT i.memory_id AS id FROM injections i JOIN memories m ON m.id = i.memory_id
         WHERE i.session_id = ? AND i.context_epoch = ?
-          AND (i.event = 'prompt' OR (i.event = 'session-start' AND m.body = ''))`,
+          AND (i.event IN ('prompt', 'file-read', 'tool-failed') OR (i.event = 'session-start' AND m.body = ''))`,
     )
     .all(sessionId, epoch);
   return shown.length === 0 ? "1" : `m.id NOT IN (${shown.map((row) => row.id).join(", ")})`;

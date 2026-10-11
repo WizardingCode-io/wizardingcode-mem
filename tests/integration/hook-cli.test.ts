@@ -55,6 +55,15 @@ describe("wizardingcode-mem hook", () => {
     ]);
   });
 
+  test.each([
+    ["file-read", "post-tool-use.read"],
+    ["tool-failed", "post-tool-use-failure.bash"],
+  ])("%s is accepted, silent, opens no turn and is recorded", async (event, fixture) => {
+    expect(await hook(payload(fixture), "claude-code", event)).toEqual(SILENT_SUCCESS);
+    expect(rows("SELECT event, outcome FROM hook_runs")).toEqual([{ event, outcome: "ok" }]);
+    expect(rows("SELECT id FROM turns")).toEqual([]);
+  });
+
   test("a whole turn: prompt then turn end leaves one queued turn", async () => {
     await hook(payload("user-prompt-submit"), "claude-code", "prompt");
     expect(await hook(payload("stop"), "claude-code", "turn-end")).toEqual(SILENT_SUCCESS);

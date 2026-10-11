@@ -27,7 +27,14 @@ export interface StatusReport {
   history?: HistoryStatus;
 }
 
-const EVENT_ORDER = ["session-start", "prompt", "turn-end", "session-end"];
+const EVENT_ORDER = [
+  "session-start",
+  "prompt",
+  "file-read",
+  "tool-failed",
+  "turn-end",
+  "session-end",
+];
 
 /** Nearest-rank percentile of an ascending list. */
 export function percentile(sorted: number[], p: number): number {

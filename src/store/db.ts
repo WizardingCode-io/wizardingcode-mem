@@ -6,6 +6,7 @@ import init from "./migrations/0001_init.sql" with { type: "text" };
 import ftsProject from "./migrations/0002_fts_project.sql" with { type: "text" };
 import { dropHostContext } from "./migrations/0003_host_context.ts";
 import history from "./migrations/0004_history.sql" with { type: "text" };
+import moments from "./migrations/0005_moments.sql" with { type: "text" };
 
 export type Db = Database;
 
@@ -23,6 +24,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 2, name: "fts_project", sql: ftsProject },
   { version: 3, name: "host_context", run: dropHostContext },
   { version: 4, name: "history", sql: history },
+  { version: 5, name: "moments", sql: moments },
 ];
 export const LATEST_VERSION = MIGRATIONS.length;
 

@@ -12,6 +12,10 @@ export interface HookJsonShape {
   turnIdField: string;
 }
 
+function toolInput(payload: Record<string, unknown>): Record<string, unknown> | null {
+  return isObject(payload.tool_input) ? payload.tool_input : null;
+}
+
 export function parseHookJson(
   agent: AgentId,
   shape: HookJsonShape,
@@ -47,6 +51,9 @@ export function parseHookJson(
           ? (source as HookInput["source"])
           : "other"
         : null,
+    toolFile: event === "file-read" ? text(toolInput(payload)?.file_path) : null,
+    toolError:
+      event === "tool-failed" && payload.is_interrupt !== true ? text(payload.error) : null,
     subagent: text(payload.agent_id) !== null,
   };
 }
@@ -55,6 +62,8 @@ export function parseHookJson(
 export const CLAUDE_STYLE_EVENTS: Partial<Record<HookEvent, string>> = {
   "session-start": "SessionStart",
   prompt: "UserPromptSubmit",
+  "file-read": "PostToolUse",
+  "tool-failed": "PostToolUseFailure",
 };
 
 /** The JSON these hosts read from a hook's stdout to add context for the model. */

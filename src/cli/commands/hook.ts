@@ -17,6 +17,9 @@ const BUSY_TIMEOUT_MS: Record<HookEvent, number> = {
   prompt: 100,
   "turn-end": 1000,
   "session-end": 1000,
+  // Like a prompt: the agent waits for these before going on.
+  "file-read": 100,
+  "tool-failed": 100,
 };
 
 function isHookEvent(value: string | undefined): value is HookEvent {

@@ -101,6 +101,8 @@ describe("enqueueHistory", () => {
       prompt: "question p1",
       finalText: null,
       source: null,
+      toolFile: null,
+      toolError: null,
       subagent: false,
     });
     expect(run([history("p1", 1)])).toEqual({
@@ -124,6 +126,8 @@ describe("enqueueHistory", () => {
         prompt: "the live question",
         finalText: null,
         source: null,
+        toolFile: null,
+        toolError: null,
         subagent: false,
       });
     hook("prompt", NOW);
@@ -160,6 +164,8 @@ describe("enqueueHistory", () => {
       prompt: null,
       finalText: "answer p1, as the hook saw it",
       source: null,
+      toolFile: null,
+      toolError: null,
       subagent: false,
     });
     expect(rows().map((r) => r.origin)).toEqual(["live"]);

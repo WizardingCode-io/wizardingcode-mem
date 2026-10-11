@@ -16,6 +16,10 @@ export interface HookInput {
   finalText: string | null;
   /** Only on "session-start". "clear" and "compact" mean earlier context is gone. */
   source: "startup" | "resume" | "clear" | "compact" | "other" | null;
+  /** Only on "file-read": the path the tool read, as the host gave it (absolute). */
+  toolFile: string | null;
+  /** Only on "tool-failed": what the host says went wrong. Null when the tool was interrupted. */
+  toolError: string | null;
   /** The event came from inside a subagent, not from the user's own conversation. */
   subagent: boolean;
 }

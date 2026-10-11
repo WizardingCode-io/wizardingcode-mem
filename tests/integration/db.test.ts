@@ -94,13 +94,64 @@ describe("store/db", () => {
     before.close();
 
     const db = open();
-    expect(version(db)).toBe(4);
+    expect(version(db)).toBe(LATEST_VERSION);
     expect(dump(db)).toEqual(was);
     expect(db.query("SELECT DISTINCT origin FROM turns").all()).toEqual([{ origin: "live" }]);
     expect(
       db.query("SELECT name FROM sqlite_master WHERE name = 'turns_queue_origin'").all(),
     ).toEqual([]);
     db.close();
+  });
+
+  test("migration 5 keeps the injections of a version-4 database and accepts the two new events", () => {
+    const before = open(MIGRATIONS.slice(0, 4));
+    const { projectId, memoryId } = seed(before);
+    const now = Date.now();
+    before.run(
+      `INSERT INTO sessions (agent, agent_session_id, project_id, cwd, started_at, last_seen_at)
+       VALUES ('claude-code', 's1', ?, '/p', ?, ?)`,
+      [projectId, now, now],
+    );
+    for (const event of ["session-start", "prompt", "mcp", "mcp"]) {
+      before.run(
+        `INSERT INTO injections (session_id, context_epoch, memory_id, event, tokens, at)
+         VALUES (1, 0, ?, ?, 5, ?)`,
+        [memoryId, event, now],
+      );
+    }
+    const dump = (db: Database) =>
+      db.query("SELECT id, memory_id, event, tokens FROM injections ORDER BY id").all();
+    const was = dump(before);
+    before.close();
+
+    const db = open();
+    expect(version(db)).toBe(LATEST_VERSION);
+    expect(dump(db)).toEqual(was);
+    for (const event of ["file-read", "tool-failed"]) {
+      db.run(
+        `INSERT INTO injections (session_id, context_epoch, memory_id, event, tokens, at)
+         VALUES (1, 0, ?, ?, 5, ?)`,
+        [memoryId, event, now],
+      );
+    }
+    expect(() =>
+      db.run(
+        `INSERT INTO injections (session_id, context_epoch, memory_id, event, tokens, at)
+         VALUES (1, 0, ?, 'bogus', 5, ?)`,
+        [memoryId, now],
+      ),
+    ).toThrow();
+    // The once-per-context rule survives the rebuild.
+    expect(() =>
+      db.run(
+        `INSERT INTO injections (session_id, context_epoch, memory_id, event, tokens, at)
+         VALUES (1, 0, ?, 'file-read', 5, ?)`,
+        [memoryId, now],
+      ),
+    ).toThrow();
+    db.close();
+    open().close();
+    expect(version(open())).toBe(LATEST_VERSION);
   });
 
   test("a new database ends at the latest schema version, in WAL mode", () => {

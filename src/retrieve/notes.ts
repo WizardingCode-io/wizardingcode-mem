@@ -64,7 +64,7 @@ export function recordInjections(
   input: {
     sessionId: number;
     epoch: number;
-    event: "session-start" | "prompt";
+    event: "session-start" | "prompt" | "file-read" | "tool-failed";
     notes: Note[];
     now: number;
   },

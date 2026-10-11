@@ -77,6 +77,8 @@ function hook(
     prompt: null,
     finalText: null,
     source: null,
+    toolFile: null,
+    toolError: null,
     subagent: false,
     ...extra,
   });
@@ -480,6 +482,8 @@ describe("hook: what the agent is told", () => {
         prompt: "why is busy_timeout ignored here?",
         finalText: null,
         source: null,
+        toolFile: null,
+        toolError: null,
         subagent: false,
       },
     );

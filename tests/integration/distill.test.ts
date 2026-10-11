@@ -44,6 +44,8 @@ function hook(event: HookEvent, extra: Partial<HookInput> = {}): string {
     prompt: null,
     finalText: null,
     source: null,
+    toolFile: null,
+    toolError: null,
     subagent: false,
     ...extra,
   });
