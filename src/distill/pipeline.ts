@@ -200,7 +200,9 @@ export async function distillTurn(
   }
 
   const action = await consolidate(deps, turn.projectId, draft, turn.id);
-  const now = deps.now();
+  // A turn read back from history is remembered as of when it happened, so that
+  // recency and supersession treat it as if it had been captured then.
+  const now = turn.origin === "history" && turn.endedAt !== null ? turn.endedAt : deps.now();
   withWrite(db, () => {
     if (action.type === "duplicate") {
       reinforce(db, action.targetId, turn.id, now);

@@ -152,6 +152,16 @@ describe("distill: from a queued turn to a memory", () => {
     });
   });
 
+  test("a turn from history makes a memory dated when the turn ended", async () => {
+    turn("the tests fail with a timeout", FIX);
+    const then = clock - 30 * 86_400_000;
+    db.run("UPDATE turns SET origin = 'history', ended_at = ?", [then]);
+    await drain();
+    expect(
+      db.query<{ created_at: number }, []>("SELECT created_at FROM memories").get()?.created_at,
+    ).toBe(then);
+  });
+
   test("the memory can be found by words from the question that led to it", async () => {
     turn("the tests fail with a timeout", FIX);
     await drain();
