@@ -45,3 +45,13 @@ The documentation's examples write `transcriptPath` and `artifactDirectoryPath` 
 `~`; they are kept so. No payload carries a working directory: the first of `workspacePaths`
 stands for it. No payload carries the user's prompt or the model's final message, and the
 transcript's format is not documented, so neither is read.
+
+## Answers
+
+- `PreInvocation`, first call: `{"injectSteps":[{"ephemeralMessage":"<brief>"}]}`, the documented
+  shape; nothing when there is no brief.
+- `Stop`: `{"decision":"stop"}`. The documentation marks `decision` as required and says only that
+  `"continue"` re-enters the loop and "any other value allows the stop"; it shows no example of an
+  allowing value, so `"stop"` is our choice.
+- When the hook fails (or the payload is unusable), it prints nothing and exits 0, as for every
+  host. Whether Antigravity accepts an empty answer to `Stop` silently is **unconfirmed**.

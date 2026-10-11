@@ -14,7 +14,8 @@ import type { AgentAdapter, HookInput, TurnDetail } from "../types.ts";
 // No payload carries the user's prompt or the model's final message, and the transcript's
 // format is not documented, so nothing of a turn is captured: the brief at the start and
 // the memory tools are what Antigravity gets. `Stop` still ends the turn (it keeps the
-// session alive and lets backups run); there is no session-end event.
+// session alive and lets backups run) and is answered with a decision allowing the stop;
+// there is no session-end event.
 //
 // No payload carries a working directory: the first of `workspacePaths` stands for it.
 
@@ -72,6 +73,9 @@ export const antigravity: AgentAdapter = {
   parse,
   readTurnDetail: () => ({ ...EMPTY }),
   render: (event, context) => {
+    // Stop's `decision` is documented as required; "continue" would send the agent back to
+    // work, any other value allows the stop. A hook that fails still prints nothing.
+    if (event === "turn-end") return JSON.stringify({ decision: "stop" });
     if (event !== "session-start" || context === null || context === "") return "";
     // One transient system message before the first model call: injectSteps' ephemeralMessage.
     return JSON.stringify({

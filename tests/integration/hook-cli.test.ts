@@ -234,7 +234,12 @@ describe("wizardingcode-mem hook", () => {
         await hook(at("pre-invocation.first", { invocationNum }), "antigravity", "session-start"),
       ).toEqual(SILENT_SUCCESS);
     }
-    expect(await hook(at("stop"), "antigravity", "turn-end")).toEqual(SILENT_SUCCESS);
+    // Stop's `decision` is documented as required: ours always allows the stop.
+    expect(await hook(at("stop"), "antigravity", "turn-end")).toEqual({
+      exitCode: 0,
+      stdout: '{"decision":"stop"}',
+      stderr: "",
+    });
     expect(rows("SELECT agent FROM sessions")).toEqual([{ agent: "antigravity" }]);
     // Nothing of the turn reaches us, so nothing is queued to distil.
     expect(rows("SELECT id FROM turns")).toEqual([]);

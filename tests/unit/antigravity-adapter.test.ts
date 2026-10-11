@@ -140,8 +140,13 @@ describe("antigravity render", () => {
     });
   });
 
+  test("Stop is answered with an explicit decision that allows the stop", () => {
+    const stop = antigravity.parse("turn-end", payload("stop")) ?? undefined;
+    expect(JSON.parse(antigravity.render("turn-end", null, stop))).toEqual({ decision: "stop" });
+    expect(JSON.parse(antigravity.render("turn-end", "n", stop))).toEqual({ decision: "stop" });
+  });
+
   test("events that cannot carry context print nothing, and so does empty context", () => {
-    expect(antigravity.render("turn-end", "n")).toBe("");
     expect(antigravity.render("prompt", "n")).toBe("");
     expect(antigravity.render("session-end", "n")).toBe("");
     expect(antigravity.render("file-read", "n")).toBe("");

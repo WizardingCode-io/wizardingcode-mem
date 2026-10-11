@@ -83,10 +83,6 @@ export function interruptOpenTurns(
   ).changes;
 }
 
-/**
- * Queues the turn that just ended, with the assistant's final message. A turn whose
- * prompt was never seen (wizardingcode-mem installed mid-session) is captured from this event alone.
- */
 /** Whether the session has a turn still waiting for its end. */
 export function hasOpenTurn(db: Db, sessionId: number): boolean {
   return (
@@ -98,6 +94,10 @@ export function hasOpenTurn(db: Db, sessionId: number): boolean {
   );
 }
 
+/**
+ * Queues the turn that just ended, with the assistant's final message. A turn whose
+ * prompt was never seen (wizardingcode-mem installed mid-session) is captured from this event alone.
+ */
 export function completeTurn(db: Db, turn: TurnContext, finalText: Redacted | null): void {
   const target =
     turn.agentTurnId === null
