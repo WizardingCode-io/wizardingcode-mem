@@ -137,7 +137,7 @@ export async function run(argv: string[]): Promise<number> {
       if (hdb === null) throw new Error(`${HISTORY_DB_FILE} could not be opened`);
       try {
         const r = indexAll(hdb, db as Db, roots, { now: Date.now(), maxMs: budgetMs, agents });
-        return `history index: ${r.files} files, ${r.indexed} indexed, ${r.unchanged} unchanged, ${r.removed} removed, ${r.turns} turns\n`;
+        return `history index: ${r.files} files, ${r.indexed} indexed, ${r.unchanged} unchanged, ${r.removed} removed, ${r.turns} turns, ${r.failed} failed\n`;
       } finally {
         hdb.close();
       }
@@ -160,7 +160,7 @@ export async function run(argv: string[]): Promise<number> {
               projects: new Map(),
             });
         process.stdout.write(
-          `history index: 1 files, ${unchanged ? 0 : 1} indexed, ${unchanged ? 1 : 0} unchanged, 0 removed, ${turns} turns\n`,
+          `history index: 1 files, ${unchanged ? 0 : 1} indexed, ${unchanged ? 1 : 0} unchanged, 0 removed, ${turns} turns, 0 failed\n`,
         );
       } finally {
         hdb.close();

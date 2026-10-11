@@ -8,12 +8,13 @@ import {
   utimesSync,
   writeFileSync,
 } from "node:fs";
+import { Database } from "bun:sqlite";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HISTORY_DB_FILE, openHistoryDb } from "../../src/history/db.ts";
 import { indexAll } from "../../src/history/index-pass.ts";
 import { searchHistory } from "../../src/history/search.ts";
-import { type Db, openDb } from "../../src/store/db.ts";
+import { DB_FILE, type Db, openDb } from "../../src/store/db.ts";
 
 let dir: string;
 let main: Db;
@@ -89,7 +90,14 @@ const count = () => hdb.query<{ n: number }, []>("SELECT count(*) AS n FROM turn
 describe("the history index", () => {
   test("a pass stores every turn of every transcript, redacted, and finds them by words", () => {
     files();
-    expect(run()).toEqual({ files: 2, indexed: 2, unchanged: 0, removed: 0, turns: 3 });
+    expect(run()).toEqual({
+      files: 2,
+      indexed: 2,
+      unchanged: 0,
+      removed: 0,
+      turns: 3,
+      failed: 0,
+    });
     const prompts = hdb.query<{ prompt: string }, []>("SELECT prompt FROM turns").all();
     expect(prompts).toHaveLength(3);
     expect(prompts.some((row) => row.prompt.includes(key))).toBe(false);
@@ -167,6 +175,25 @@ describe("the history index", () => {
     utimesSync(join(claude, "-shop", "h.jsonl"), later, later);
     run();
     expect(count()).toBe(0);
+  });
+
+  test("a file whose project cannot be resolved is not recorded, so the next pass retries it", () => {
+    files();
+    // A read-only main database: the project lookup cannot insert the new project.
+    const readOnly = new Database(join(dir, "main", DB_FILE), { readonly: true });
+    try {
+      const report = indexAll(
+        hdb,
+        readOnly,
+        { claudeCode: claude, codex },
+        { now: Date.now(), maxMs: 60_000, agents: ["claude-code"] },
+      );
+      expect(report).toMatchObject({ files: 2, indexed: 0, failed: 2, turns: 0 });
+    } finally {
+      readOnly.close();
+    }
+    expect(hdb.query<{ n: number }, []>("SELECT count(*) AS n FROM files").get()?.n).toBe(0);
+    expect(run()).toMatchObject({ indexed: 2, failed: 0, turns: 3 });
   });
 
   test("two passes at once leave one copy of each turn", async () => {

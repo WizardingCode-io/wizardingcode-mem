@@ -19,6 +19,8 @@ export interface IndexReport {
   unchanged: number;
   removed: number;
   turns: number;
+  /** Files that could not be read or resolved; left out of the manifest for the next pass. */
+  failed: number;
 }
 
 /**
@@ -38,14 +40,11 @@ export function indexTranscript(
     agent === "claude-code" ? readClaudeCodeHistory(path) : readCodexHistory(path)
   ).filter((turn) => !isFromTheHost(turn.prompt));
   // Projects resolve outside the transaction: resolveProject writes to the main database.
+  // A failure leaves the file out of the manifest, so the next pass tries it again.
   const rows = turns.flatMap((turn) => {
     let project = options.projects.get(turn.cwd);
     if (project === undefined) {
-      try {
-        project = resolveProject(main, turn.cwd, options.now);
-      } catch {
-        return [];
-      }
+      project = resolveProject(main, turn.cwd, options.now);
       options.projects.set(turn.cwd, project);
     }
     if (project.disabled) return [];
@@ -103,7 +102,14 @@ export function indexAll(
   roots: { claudeCode: string; codex: string },
   options: { now: number; maxMs: number; agents: Agent[] },
 ): IndexReport {
-  const report: IndexReport = { files: 0, indexed: 0, unchanged: 0, removed: 0, turns: 0 };
+  const report: IndexReport = {
+    files: 0,
+    indexed: 0,
+    unchanged: 0,
+    removed: 0,
+    turns: 0,
+    failed: 0,
+  };
   const deadline = Date.now() + options.maxMs;
   const projects = new Map<string, ProjectRef>();
   const known = hdb.query<{ size: number; mtime: number }, [string]>(
@@ -132,6 +138,7 @@ export function indexAll(
         });
         report.indexed++;
       } catch (error) {
+        report.failed++;
         logError("history-index", error);
       }
     }
