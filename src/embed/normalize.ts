@@ -41,20 +41,25 @@ const value = (u: number): number => u & 0x7fffffff;
 const label = (u: number): number => u & 0x800000ff;
 const offset = (u: number): number => (u >>> 10) << ((u & 0x200) >>> 6);
 
-/** The replacement for `bytes` when the trie holds the whole sequence as a key, else null. */
+/**
+ * The replacement for the first (shortest) key that is a prefix of `bytes`, or null. As in the
+ * published tokenizer, the replacement stands for ALL of `bytes` even when the key is shorter:
+ * a grapheme whose base character has a key loses its trailing marks. Keys are whole UTF-8
+ * sequences, so for a single code point this is an exact match.
+ */
 function lookup(map: Charsmap, bytes: Uint8Array): string | null {
   const { units, strings } = map;
   if (units.length === 0) return null;
   let pos = offset(units[0]!);
   let found = -1;
-  for (let i = 0; i < bytes.length; i++) {
+  for (let i = 0; i < bytes.length && found < 0; i++) {
     const b = bytes[i]!;
     pos ^= b;
     if (pos >= units.length) return null;
     const u = units[pos]!;
     if (label(u) !== b) return null;
     pos ^= offset(u);
-    if (hasLeaf(u) && i === bytes.length - 1) found = value(units[pos]!);
+    if (hasLeaf(u)) found = value(units[pos]!);
   }
   if (found < 0 || found >= strings.length) return null;
   let end = found;

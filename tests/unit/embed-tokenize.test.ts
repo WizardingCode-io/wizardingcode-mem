@@ -31,6 +31,14 @@ describe("embed normaliser", () => {
     // Full-width letters and the "fi" ligature are NFKC-folded by the charsmap.
     expect(normalize("ＡＢＣ ﬁle", pack.charsmap)).toBe("ABC file");
   });
+
+  test("a short grapheme takes the first key that prefixes it, trailing marks and all", () => {
+    // Full-width E + combining acute: the key for "Ｅ" replaces the whole grapheme.
+    expect(normalize("Ｅ\u0301", pack.charsmap)).toBe("E");
+    expect(normalize("\ufb01\u0301", pack.charsmap)).toBe("fi");
+    // NBSP + combining acute: NBSP's key (a space) stands for both, then the space is stripped.
+    expect(normalize("x\u00a0\u0301y", pack.charsmap)).toBe("x y");
+  });
 });
 
 describe("embed tokenizer", () => {
