@@ -208,3 +208,28 @@ describe("the history index", () => {
     }
   });
 });
+
+describe("opening without create", () => {
+  test("writes nothing and takes no write lock, so a search answers during an index pass", () => {
+    const path = join(dir, HISTORY_DB_FILE);
+    hdb.run(
+      "INSERT INTO files(path, agent, size, mtime, indexed_at) VALUES ('/t', 'codex', 1, 1, 1)",
+    );
+    hdb.run(
+      `INSERT INTO turns(path, agent, session_id, turn_id, project_id, project_name, cwd, started_at, ended_at, prompt, final_text)
+       VALUES ('/t', 'codex', 's', 't', 1, 'shop', '/x', 1, 1, 'the zebra cache', NULL)`,
+    );
+    hdb.run("BEGIN IMMEDIATE"); // an index pass holds the write lock
+    const before = statSync(path);
+    const reader = openHistoryDb(dir, { create: false, busyTimeoutMs: 50 });
+    if (reader === null) throw new Error("expected the index");
+    try {
+      expect(reader.query("SELECT count(*) AS n FROM turns").get()).toEqual({ n: 1 });
+    } finally {
+      reader.close();
+    }
+    hdb.run("ROLLBACK");
+    const after = statSync(path);
+    expect([after.size, after.mtimeMs]).toEqual([before.size, before.mtimeMs]);
+  });
+});

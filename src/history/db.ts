@@ -44,8 +44,19 @@ export function openHistoryDb(
   options: { create: boolean; busyTimeoutMs?: number },
 ): Database | null {
   const path = historyDbPath(storeDir);
-  if (!options.create && !existsSync(path)) return null;
   const busy = Math.max(0, Math.trunc(options.busyTimeoutMs ?? 5000));
+  if (!options.create) {
+    if (!existsSync(path)) return null;
+    // An index pass made the file (schema, WAL, mode); readers write nothing and take no write lock.
+    const reader = new Database(path, { readonly: true });
+    try {
+      reader.run(`PRAGMA busy_timeout = ${busy}`);
+    } catch (error) {
+      reader.close();
+      throw error;
+    }
+    return reader;
+  }
   mkdirSync(storeDir, { recursive: true, mode: 0o700 });
   const db = new Database(path, { create: true });
   try {

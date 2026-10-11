@@ -175,9 +175,14 @@ describe("the OpenCode plugin", () => {
     expect(calls).toEqual([]);
   });
 
-  test("defines the three memory tools, each running the binary for the session's project", async () => {
+  test("defines the memory tools and history_search, each running the binary for the session's project", async () => {
     const hooks = await load();
-    expect(Object.keys(hooks.tool).sort()).toEqual(["memory_get", "memory_save", "memory_search"]);
+    expect(Object.keys(hooks.tool).sort()).toEqual([
+      "history_search",
+      "memory_get",
+      "memory_save",
+      "memory_search",
+    ]);
     answers.memory_search = "#1 The limit is five.";
     const search = hooks.tool.memory_search;
     if (search === undefined) throw new Error("memory_search missing");
@@ -186,6 +191,13 @@ describe("the OpenCode plugin", () => {
     expect(calls.at(-1)).toEqual({
       args: [BIN, "tool", "memory_search", "--project", "/Users/dev/project"],
       stdin: { query: "limit" },
+    });
+    const past = hooks.tool.history_search;
+    if (past === undefined) throw new Error("history_search missing");
+    await past.definition.execute({ query: "zebra", limit: 3 }, { sessionID: SESSION });
+    expect(calls.at(-1)).toEqual({
+      args: [BIN, "tool", "history_search", "--project", "/Users/dev/project"],
+      stdin: { query: "zebra", limit: 3 },
     });
   });
 });

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveProject } from "../../src/core/project.ts";
@@ -123,6 +123,13 @@ describe("history_search", () => {
     const result = await tool("history_search", { query: "zebra" });
     expect(result.stdout).toContain("zebra cache");
     expect(result.stdout).not.toContain("migration plan");
+  });
+
+  test("an index that cannot be read says it is busy, and the tool still succeeds", async () => {
+    writeFileSync(join(dataDir, "history.db"), "not a database, not at all, not even close");
+    const result = await tool("history_search", { query: "zebra" });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.trim()).toBe("The history index is busy; try again in a moment.");
   });
 
   test("a query that matches nothing says so", async () => {

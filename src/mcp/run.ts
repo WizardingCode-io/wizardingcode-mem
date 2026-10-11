@@ -3,6 +3,7 @@ import { openHistoryDb } from "../history/db.ts";
 import { renderHits, searchHistory } from "../history/search.ts";
 import { makeJudge } from "../judge/index.ts";
 import { openDb } from "../store/db.ts";
+import { logError } from "../util/log.ts";
 import { resolvePaths } from "../util/paths.ts";
 import { globalGet, globalSave, globalSearch, listProjects } from "./global.ts";
 import { getMemories, saveMemory, searchMemories, type ToolContext } from "./tools.ts";
@@ -171,9 +172,10 @@ function searchPast(
   args: { query: string; limit?: number; project?: string },
   projectId?: number,
 ): string {
-  const hdb = openHistoryDb(storeDir, { create: false, busyTimeoutMs: 2000 });
-  if (hdb === null) return NO_HISTORY;
+  let hdb: ReturnType<typeof openHistoryDb> = null;
   try {
+    hdb = openHistoryDb(storeDir, { create: false, busyTimeoutMs: 2000 });
+    if (hdb === null) return NO_HISTORY;
     const hits = searchHistory(hdb, {
       query: args.query,
       limit: args.limit,
@@ -181,8 +183,11 @@ function searchPast(
       projectName: args.project,
     });
     return hits.length === 0 ? "No past conversations match." : renderHits(hits);
+  } catch (error) {
+    logError("mcp history_search", error);
+    return "The history index is busy; try again in a moment.";
   } finally {
-    hdb.close();
+    hdb?.close();
   }
 }
 
