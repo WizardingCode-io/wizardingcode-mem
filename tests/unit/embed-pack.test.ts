@@ -87,6 +87,41 @@ describe("embed pack", () => {
     expect(Array.from(out)).toEqual(new Array(DIMS).fill(0));
   });
 
+  test("prefixes visits every piece that starts at a byte offset, shortest first", () => {
+    const p2 = make("prefixes.wcpack", [
+      { text: "▁日", id: 20, score: -1, row: row(4) },
+      { text: "▁日本", id: 21, score: -1, row: row(5) },
+      { text: "▁日本語x", id: 22, score: -1, row: row(6) },
+      { text: "本", id: 23, score: -1, row: row(7) },
+    ]);
+    const r = openPack(p2);
+    if (!r.ok) throw new Error(r.reason);
+    const bytes = new TextEncoder().encode("a▁日本語x");
+    const seen = (start: number, end: number, maxChars: number) => {
+      const out: [number, number][] = [];
+      r.pack.prefixes(bytes, start, end, maxChars, (stop, index) =>
+        out.push([stop, r.pack.idOf(index)]),
+      );
+      return out;
+    };
+    // "a" is 1 byte, "▁" 3, each kanji 3.
+    expect(seen(1, bytes.length, 10)).toEqual([
+      [7, 20],
+      [10, 21],
+      [14, 22],
+    ]);
+    expect(seen(1, bytes.length, 3)).toEqual([
+      [7, 20],
+      [10, 21],
+    ]);
+    expect(seen(1, 10, 10)).toEqual([
+      [7, 20],
+      [10, 21],
+    ]);
+    expect(seen(7, bytes.length, 10)).toEqual([[10, 23]]);
+    expect(seen(0, bytes.length, 10)).toEqual([]);
+  });
+
   test("bad files fail with a reason, never throw", () => {
     const bytes = readFileSync(path);
     const cut = join(dir, "cut.wcpack");

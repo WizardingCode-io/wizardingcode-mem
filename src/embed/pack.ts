@@ -32,6 +32,18 @@ export interface Pack {
   charsmap: Uint8Array;
   /** Index of a piece (by its exact text, "▁" included), or -1. */
   find(piece: string): number;
+  /**
+   * Visits, shortest first, every piece equal to `bytes[start..stop)` for a code-point boundary
+   * `stop <= end` at most `maxChars` code points past `start`. Hashes incrementally and allocates
+   * nothing: the tokenizer's inner loop.
+   */
+  prefixes(
+    bytes: Uint8Array,
+    start: number,
+    end: number,
+    maxChars: number,
+    visit: (stop: number, index: number) => void,
+  ): void;
   /** The original vocabulary id. */
   idOf(index: number): number;
   score(index: number): number;
@@ -122,31 +134,48 @@ export function openPack(path: string): PackResult {
     const encoder = new TextEncoder();
     const mask = tableSize - 1;
 
+    /** The index of the piece equal to `key[from..to)`, whose FNV-1a hash is `hash`, or -1. */
+    const probe = (hash: number, key: Uint8Array, from: number, to: number): number => {
+      const length = to - from;
+      let slot = hash & mask;
+      for (let probes = 0; probes < tableSize; probes++) {
+        const entry = slots[slot]!;
+        if (entry === 0) return -1;
+        const index = entry - 1;
+        const start = offsets[index]!;
+        if (offsets[index + 1]! - start === length) {
+          let same = true;
+          for (let i = 0; i < length; i++) {
+            if (blob[start + i] !== key[from + i]) {
+              same = false;
+              break;
+            }
+          }
+          if (same) return index;
+        }
+        slot = (slot + 1) & mask;
+      }
+      return -1;
+    };
+
     const pack: Pack = {
       header,
       charsmap,
       find(piece) {
         const key = encoder.encode(piece);
-        let slot = fnv1a(key) & mask;
-        for (let probes = 0; probes < tableSize; probes++) {
-          const entry = slots[slot]!;
-          if (entry === 0) return -1;
-          const index = entry - 1;
-          const start = offsets[index]!;
-          const end = offsets[index + 1]!;
-          if (end - start === key.length) {
-            let same = true;
-            for (let i = 0; i < key.length; i++) {
-              if (blob[start + i] !== key[i]) {
-                same = false;
-                break;
-              }
-            }
-            if (same) return index;
-          }
-          slot = (slot + 1) & mask;
+        return key.length === 0 ? -1 : probe(fnv1a(key), key, 0, key.length);
+      },
+      prefixes(bytes, start, end, maxChars, visit) {
+        let hash = 0x811c9dc5;
+        let chars = 0;
+        for (let i = start; i < end; i++) {
+          hash = Math.imul(hash ^ bytes[i]!, 0x01000193);
+          // A code point ends where the next byte is not a continuation byte (10xxxxxx).
+          if (i + 1 < end && (bytes[i + 1]! & 0xc0) === 0x80) continue;
+          const index = probe(hash >>> 0, bytes, start, i + 1);
+          if (index >= 0) visit(i + 1, index);
+          if (++chars >= maxChars) return;
         }
-        return -1;
       },
       idOf: (index) => ids[index]!,
       score: (index) => scores[index]!,
