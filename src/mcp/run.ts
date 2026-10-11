@@ -200,7 +200,12 @@ export async function runGlobalTool(name: ToolName, args: unknown): Promise<stri
     const now = Date.now();
     switch (name) {
       case "memory_search":
-        return globalSearch(db, now, args as Parameters<typeof globalSearch>[2]);
+        return globalSearch(
+          db,
+          now,
+          args as Parameters<typeof globalSearch>[2],
+          loadModel({ dataDir }),
+        );
       case "memory_get":
         return globalGet(db, now, args as Parameters<typeof globalGet>[2]);
       case "memory_save":
@@ -242,11 +247,15 @@ export async function runTool(name: ToolName, args: unknown, projectDir: string)
     };
     switch (name) {
       case "memory_search":
-        return searchMemories(context, args as Parameters<typeof searchMemories>[1]);
+        // Loaded once per process (cached); without it, search is by words alone.
+        return searchMemories(
+          { ...context, model: loadModel({ dataDir }) },
+          args as Parameters<typeof searchMemories>[1],
+        );
       case "memory_get":
         return getMemories(context, args as Parameters<typeof getMemories>[1]);
       case "memory_save":
-        // Loaded only to save (cached per process): a search or a get does not need it yet.
+        // Cached per process: a get does not need it.
         return await saveMemory(
           { ...context, model: loadModel({ dataDir }) },
           args as Parameters<typeof saveMemory>[1],

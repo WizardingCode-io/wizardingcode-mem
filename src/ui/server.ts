@@ -401,15 +401,19 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
         return value === null ? undefined : Number(value);
       };
       return json(
-        listMemories(db, {
-          projectId,
-          q: url.searchParams.get("q") ?? undefined,
-          kind: url.searchParams.get("kind") ?? undefined,
-          status: url.searchParams.get("status") ?? undefined,
-          minImportance: number("minImportance"),
-          limit: number("limit"),
-          offset: number("offset"),
-        }),
+        listMemories(
+          db,
+          {
+            projectId,
+            q: url.searchParams.get("q") ?? undefined,
+            kind: url.searchParams.get("kind") ?? undefined,
+            status: url.searchParams.get("status") ?? undefined,
+            minImportance: number("minImportance"),
+            limit: number("limit"),
+            offset: number("offset"),
+          },
+          loadModel({ dataDir: options.dataDir, env }),
+        ),
       );
     }
     const one = /^\/api\/memories\/(\d+)$/.exec(path);
@@ -464,7 +468,12 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
     if (path === "/api/search" && request.method === "GET") {
       const limit = Number(url.searchParams.get("limit") ?? 20);
       return json(
-        searchAll(db, url.searchParams.get("q") ?? "", Number.isFinite(limit) ? limit : 20),
+        searchAll(
+          db,
+          url.searchParams.get("q") ?? "",
+          Number.isFinite(limit) ? limit : 20,
+          loadModel({ dataDir: options.dataDir, env }),
+        ),
       );
     }
     if (path === "/api/status" && request.method === "GET") {

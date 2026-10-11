@@ -67,13 +67,14 @@ export function globalSearch(
   db: Db,
   now: number,
   args: { query: string; kind?: MemoryKind; limit?: number; project?: string },
+  model: Model | null = null,
 ): string {
   if (args.project) {
     const project = findProject(db, args.project);
     if (!project) return unknown(db, args.project);
-    return searchMemories(context(db, null, now, project.id), args);
+    return searchMemories({ ...context(db, null, now, project.id), model }, args);
   }
-  return searchMemories(context(db, null, now, null), args);
+  return searchMemories({ ...context(db, null, now, null), model }, args);
 }
 
 export function globalGet(db: Db, now: number, args: { ids: number[] }): string {

@@ -14,6 +14,7 @@ import { resolveProject } from "../../src/core/project.ts";
 import type { Redacted } from "../../src/core/redact.ts";
 import type { MemoryKind } from "../../src/core/types.ts";
 import { loadModel, modelPath } from "../../src/embed/model.ts";
+import { writeMemoryVector } from "../../src/embed/vectors.ts";
 import { openHistoryDb } from "../../src/history/db.ts";
 import { type Db, openDb } from "../../src/store/db.ts";
 import { insertMemory } from "../../src/store/memories.ts";
@@ -333,6 +334,45 @@ describe("wizardingcode-mem ui: the API", () => {
       { memory_id: 1, model: loadModel({ dataDir, env: {} })?.id },
     ]);
     db.close();
+  });
+
+  test("with the semantic model, the list and the palette find by meaning too", async () => {
+    mkdirSync(join(dataDir, "models"), { recursive: true });
+    copyFileSync(join(import.meta.dir, "../fixtures/embed/subset.wcpack"), modelPath(dataDir));
+    const db = openDb({ dataDir, busyTimeoutMs: 2000 });
+    const id = seed(
+      db,
+      "A hook must never exit with code 2.",
+      "Claude Code treats exit code 2 as a request to block the user's action.",
+      { kind: "gotcha" },
+    );
+    writeMemoryVector(
+      db,
+      loadModel({ dataDir, env: {} }),
+      id,
+      "A hook must never exit with code 2.",
+      "Claude Code treats exit code 2 as a request to block the user's action.",
+    );
+    db.close();
+    // Shares no word with the memory.
+    const q = encodeURIComponent(
+      "o agente bloqueia a ação do utilizador quando o nosso script termina mal",
+    );
+    const without = await start({ env: { WIZARDINGCODE_MEM_SEMANTIC: "off" } });
+    const none = (await (
+      await api(without, `/api/memories?project=${projectId}&q=${q}`)
+    ).json()) as {
+      items: { id: number }[];
+    };
+    expect(none.items.map((m) => m.id)).not.toContain(id);
+    await without.stop();
+    const s = await start({ env: {} });
+    const list = (await (await api(s, `/api/memories?project=${projectId}&q=${q}`)).json()) as {
+      items: { id: number }[];
+    };
+    expect(list.items.map((m) => m.id)).toContain(id);
+    const hits = (await (await api(s, `/api/search?q=${q}`)).json()) as { id: number }[];
+    expect(hits.map((hit) => hit.id)).toContain(id);
   });
 
   test("a memory can be edited: title, body, kind and importance; the judge becomes the user", async () => {
