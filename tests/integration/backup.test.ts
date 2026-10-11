@@ -20,8 +20,8 @@ import { resolveProject } from "../../src/core/project.ts";
 import type { Redacted } from "../../src/core/redact.ts";
 import { DB_FILE, type Db, LATEST_VERSION, openDb } from "../../src/store/db.ts";
 import { insertMemory } from "../../src/store/memories.ts";
-import { runCliWith } from "../helpers/cli.ts";
 import { claimLease, leaseActive, releaseLease } from "../../src/store/meta.ts";
+import { runCliWith } from "../helpers/cli.ts";
 
 const NOW = Date.UTC(2026, 9, 6, 10, 30, 15);
 const HOUR = 3_600_000;

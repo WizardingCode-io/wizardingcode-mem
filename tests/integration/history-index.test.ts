@@ -1,3 +1,4 @@
+import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   appendFileSync,
@@ -8,7 +9,6 @@ import {
   utimesSync,
   writeFileSync,
 } from "node:fs";
-import { Database } from "bun:sqlite";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HISTORY_DB_FILE, openHistoryDb } from "../../src/history/db.ts";
