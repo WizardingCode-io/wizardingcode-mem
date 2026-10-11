@@ -101,6 +101,11 @@ export const AGENT_TILE: Record<string, { letter: string; bg: string }> = {
   // Gemini CLI is no longer supported; its sessions stay in the store and keep their tile.
   gemini: { letter: "G", bg: "#2EE6C8" },
   opencode: { letter: "O", bg: "#FFC53D" },
+  // The brand has five agent hues for eight agents, so hues repeat; the letter tells them apart.
+  qwen: { letter: "Q", bg: "#2EE6C8" },
+  droid: { letter: "F", bg: "#FFC53D" },
+  copilot: { letter: "P", bg: "#2E7BFF" },
+  antigravity: { letter: "A", bg: "#9B5CFF" },
 };
 export const compact = (n: number): string =>
   n >= 10_000 ? `${(n / 1000).toFixed(n >= 100_000 ? 0 : 1)}k` : n.toLocaleString("en-GB");

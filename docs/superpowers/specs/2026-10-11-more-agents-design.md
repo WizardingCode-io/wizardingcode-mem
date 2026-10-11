@@ -1,6 +1,6 @@
 # More agents (A6, first wave) — design
 
-Date: 2026-10-11. Status: design approved in conversation; awaiting review of this spec. Roadmap item A6 ("reach").
+Date: 2026-10-11. Status: built (A1 to A6 on `design/more-agents`), from documentation; ADR 0016 records it. The real-session checks wait on the author's yes, agent by agent. Roadmap item A6 ("reach").
 
 ## Why
 
