@@ -5,7 +5,8 @@
  *
  * [UNK] is NOT dropped, although the task brief said to. The published tokenizer is Unigram, which
  * names its unknown by `unk_id`, and model2vec only strips an unknown it finds as `unk_token`, so
- * it strips nothing: the reference vectors include the [UNK] row (cosine 0.93 without it on the
+ * it strips nothing: the reference vectors include the [UNK] row; a text with no known token at
+ * all is still null (cosine 0.93 without it on the
  * item with a stray combining mark, 0.9999 with it).
  */
 import type { Pack } from "./pack.ts";
@@ -31,10 +32,12 @@ function clip(text: string, max: number): string {
 export function embed(pack: Pack, text: string): Float32Array | null {
   try {
     const unk = pack.find("[UNK]");
-    const indexes = tokenizeIndexes(pack, clip(text, MAX_CHARS), MAX_TOKENS)
-      .map((i) => (i < 0 ? unk : i))
-      .filter((i) => i >= 0);
-    if (indexes.length === 0) return null;
+    const found = tokenizeIndexes(pack, clip(text, MAX_CHARS), MAX_TOKENS);
+    // Only unknowns would give every such text the same vector (cosine 1.0 between strangers).
+    // The bare word-start mark "▁" is in the vocabulary but says nothing, so it does not count.
+    const mark = pack.find("▁");
+    if (!found.some((i) => i >= 0 && i !== mark)) return null;
+    const indexes = found.map((i) => (i < 0 ? unk : i)).filter((i) => i >= 0);
     const out = new Float32Array(pack.header.dims);
     for (const i of indexes) pack.addRow(i, out, 1 / indexes.length);
     let sum = 0;

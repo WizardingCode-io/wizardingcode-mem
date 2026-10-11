@@ -39,6 +39,17 @@ describe("embed", () => {
     for (const item of zeros) expect(embed(pack, item.text)).toBeNull();
   });
 
+  test("a text whose every token is unknown gives null, so unrelated ones never tie at 1.0", () => {
+    for (const text of ["😀😀😀", "😀 😀", "\u0000"]) expect(embed(pack, text)).toBeNull();
+  });
+
+  test("a mixed text keeps its [UNK] rows and still matches the reference", () => {
+    const item = items.find((i) => i.text.startsWith("Ｅ"))!;
+    expect(cosine(embed(pack, item.text)!, Float32Array.from(item.vector))).toBeGreaterThanOrEqual(
+      0.99,
+    );
+  });
+
   test("the result is a unit vector", () => {
     const v = embed(pack, "the memory of a deployment")!;
     expect(cosine(v, v)).toBeCloseTo(1, 5);
