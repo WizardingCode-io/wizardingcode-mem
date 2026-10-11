@@ -40,9 +40,11 @@ export function notesForFile(
     (a, b) => a.role.localeCompare(b.role) || prior(b, context) - prior(a, context) || a.id - b.id,
   );
   const chosen: Note[] = [];
-  for (const row of rows.slice(0, MAX_NOTES)) {
+  for (const row of rows) {
+    // All candidates are walked, so that a long note does not hide a short one after it.
+    if (chosen.length === MAX_NOTES) break;
     const next = [...chosen, toNote(db, row)];
-    // `continue`, as on the prompt path: a long note must not hide a short one after it.
+    // `continue`, as on the prompt path: skip what does not fit and try the next.
     if (renderNotes(next).length > BUDGET_CHARS) continue;
     chosen.push(next[next.length - 1] as Note);
   }
