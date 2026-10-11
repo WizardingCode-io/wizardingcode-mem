@@ -215,6 +215,8 @@ interface Unrelated {
   prompt: string;
   lexicalInjects: boolean;
   best: { key: string; score: number } | null;
+  /** The two best memories by cosine, best first (for the relative rule). */
+  top: { key: string; score: number }[];
 }
 
 function evaluate(relevantItems: { prompt: string; expect: string[] }[], unrelatedItems: string[]) {
@@ -232,11 +234,15 @@ function evaluate(relevantItems: { prompt: string; expect: string[] }[], unrelat
       top: order.slice(0, 3),
     };
   });
-  const unrelated: Unrelated[] = unrelatedItems.map((prompt) => ({
-    prompt,
-    lexicalInjects: lexical(prompt).length > 0,
-    best: ranked(prompt)[0] ?? null,
-  }));
+  const unrelated: Unrelated[] = unrelatedItems.map((prompt) => {
+    const order = ranked(prompt);
+    return {
+      prompt,
+      lexicalInjects: lexical(prompt).length > 0,
+      best: order[0] ?? null,
+      top: order.slice(0, 2),
+    };
+  });
   return { relevant, unrelated };
 }
 
@@ -354,6 +360,129 @@ report(
   extended,
   chosen,
 );
+
+// ---------------------------------------------------------------- 3. a relative rule
+
+/**
+ * The relative rule (ADR 0014, fixed before its numbers were seen): only the top memory can be
+ * added, and only when s1 ≥ f and s1 − s2 ≥ g (s2 = 0 with one memory).
+ */
+const gap = (top: { score: number }[]) => (top[0]?.score ?? 0) - (top[1]?.score ?? 0);
+const fires = (top: { score: number }[], f: number, g: number) =>
+  top.length > 0 && top[0]!.score >= f && gap(top) >= g;
+const relativeHit = (r: Relevant, f: number, g: number) =>
+  r.top.length > 0 && r.expect.every((key) => key === r.top[0]!.key) && fires(r.top, f, g);
+
+function relativeAt(set: ReturnType<typeof evaluate>, f: number, g: number) {
+  const recalled = set.relevant.filter((r) => r.lexicalFound || relativeHit(r, f, g));
+  const recovered = set.relevant.filter((r) => !r.lexicalFound && relativeHit(r, f, g));
+  const noisy = set.unrelated.filter((u) => u.lexicalInjects || fires(u.top, f, g));
+  return { recalled, recovered, noisy };
+}
+
+const grid = (from: number, to: number) =>
+  Array.from(
+    { length: Math.round((to - from) * 100) + 1 },
+    (_, i) => Math.round(from * 100 + i) / 100,
+  );
+const fs = grid(0.3, 0.6);
+const gs = grid(0.05, 0.3);
+
+function relativeDetail(set: ReturnType<typeof evaluate>, f: number, g: number) {
+  say("Relevant prompts lexical misses:");
+  say();
+  say("| Prompt | Expected | Top memory | s1 | s2 | Gap | Fires (top = expected) |");
+  say("|---|---|---|---|---|---|---|");
+  for (const r of set.relevant.filter((x) => !x.lexicalFound))
+    say(
+      `| ${r.prompt} | ${r.expect.join(", ")} | ${r.top[0]?.key ?? "—"} | ${f3(r.top[0]?.score ?? 0)} | ${f3(r.top[1]?.score ?? 0)} | ${f3(gap(r.top))} | ${fires(r.top, f, g) ? "yes" : "no"} (${relativeHit(r, f, g) ? "recovered" : r.top[0]?.key === r.expect[0] ? "right memory" : "wrong memory"}) |`,
+    );
+  say();
+  say("The five unrelated prompts with the largest gap:");
+  say();
+  say("| Unrelated prompt | Top memory | s1 | s2 | Gap | Fires |");
+  say("|---|---|---|---|---|---|");
+  for (const u of [...set.unrelated].sort((a, b) => gap(b.top) - gap(a.top)).slice(0, 5))
+    say(
+      `| ${u.prompt} | ${u.top[0]?.key ?? "—"} | ${f3(u.top[0]?.score ?? 0)} | ${f3(u.top[1]?.score ?? 0)} | ${f3(gap(u.top))} | ${fires(u.top, f, g) ? "yes" : "no"} |`,
+    );
+  say();
+}
+
+say("## 3. A relative rule");
+say();
+say(
+  `Only the top memory can be added, when s1 ≥ f and s1 − s2 ≥ g. Grid on retrieval.json only: f ${fs[0]!.toFixed(2)}–${fs[fs.length - 1]!.toFixed(2)}, g ${gs[0]!.toFixed(2)}–${gs[gs.length - 1]!.toFixed(2)}, by 0.01 (${fs.length * gs.length} pairs). Among pairs with 0 false injections: highest recall; ties → largest g, then largest f.`,
+);
+say();
+let pick: { f: number; g: number; recall: number } | null = null;
+const zeroFalse: { f: number; g: number; recall: number }[] = [];
+for (const g of gs)
+  for (const f of fs) {
+    const r = relativeAt(original, f, g);
+    if (r.noisy.length > 0) continue;
+    const cell = { f, g, recall: r.recalled.length };
+    zeroFalse.push(cell);
+    if (
+      pick === null ||
+      cell.recall > pick.recall ||
+      (cell.recall === pick.recall && (g > pick.g || (g === pick.g && f > pick.f)))
+    )
+      pick = cell;
+  }
+say("Per g: the best recall among f with 0 false injections, and the f values that reach it.");
+say();
+say("| g | Pairs with 0 false | Best recall at 0 false | f reaching it |");
+say("|---|---|---|---|");
+const ranges = (values: number[]) => {
+  const parts: string[] = [];
+  let start = values[0];
+  for (let i = 1; i <= values.length; i++) {
+    if (i === values.length || Math.round((values[i]! - values[i - 1]!) * 100) !== 1) {
+      const end = values[i - 1]!;
+      parts.push(start === end ? start!.toFixed(2) : `${start!.toFixed(2)}–${end.toFixed(2)}`);
+      start = values[i];
+    }
+  }
+  return parts.join(", ");
+};
+for (const g of gs) {
+  const cells = zeroFalse.filter((c) => c.g === g);
+  if (cells.length === 0) {
+    say(`| ${g.toFixed(2)} | 0 | — | — |`);
+    continue;
+  }
+  const best = Math.max(...cells.map((c) => c.recall));
+  say(
+    `| ${g.toFixed(2)} | ${cells.length} | ${best}/24 | ${ranges(cells.filter((c) => c.recall === best).map((c) => c.f))} |`,
+  );
+}
+say();
+if (pick === null) {
+  say("**No pair has 0 false injections.**");
+} else {
+  const p = pick;
+  const region = zeroFalse.filter((c) => c.recall === p.recall);
+  const regionGs = [...new Set(region.map((c) => c.g))];
+  say(
+    `**Chosen: f = ${p.f.toFixed(2)}, g = ${p.g.toFixed(2)}**, recall ${p.recall}/${original.relevant.length}, false injections 0/${original.unrelated.length}.`,
+  );
+  say();
+  say(
+    `Winning region (0 false, recall ${p.recall}/24): ${region.length} of ${fs.length * gs.length} pairs; g ${ranges(regionGs)}; f ${ranges([...new Set(region.map((c) => c.f))].sort((a, b) => a - b))}.`,
+  );
+  say();
+  relativeDetail(original, p.f, p.g);
+  const held = relativeAt(extended, p.f, p.g);
+  say(`### Held out: semantic.json at f = ${p.f.toFixed(2)}, g = ${p.g.toFixed(2)} (not re-tuned)`);
+  say();
+  say(
+    `Recall ${held.recalled.length}/${extended.relevant.length} (lexical ${extended.relevant.filter((r) => r.lexicalFound).length}, recovered ${held.recovered.length}); false injections ${held.noisy.length}/${extended.unrelated.length}${held.noisy.length ? ` — ${held.noisy.map((x) => `"${x.prompt}"`).join("; ")}` : ""}.`,
+  );
+  say();
+  relativeDetail(extended, p.f, p.g);
+}
+
 db.close();
 rmSync(base, { recursive: true, force: true });
 
@@ -369,6 +498,14 @@ say(`- false injections at t: ${g.noisy.length}/${original.unrelated.length}`);
 say(
   `- probe p95 − noop p95 at 65,000 vectors: ${f1(big.probeP95)} − ${f1(big.noopP95)} = ${f1(big.probeP95 - big.noopP95)} ms (add the prompt hook p95 from tests/perf/budgets.test.ts)`,
 );
+
+if (pick !== null) {
+  const held = relativeAt(extended, pick.f, pick.g);
+  const r = relativeAt(original, pick.f, pick.g);
+  say(
+    `- Relative rule (f = ${pick.f.toFixed(2)}, g = ${pick.g.toFixed(2)}): recall ${r.recalled.length}/24, false ${r.noisy.length}/23; held out recall ${held.recalled.length}/20, false ${held.noisy.length}/20`,
+  );
+}
 
 const text = out.join("\n");
 writeFileSync(join(scratch, "spike-report.md"), `${text}\n`);

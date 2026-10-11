@@ -5,12 +5,12 @@
  *   bun build --compile --outfile <scratch>/spike-probe scripts/embed/spike-probe.ts
  *
  * Usage: `spike-probe <pack> <vectors.bin> <prompt>` prints `ms_open ms_embed ms_scan best_score`;
- * `spike-probe --noop` exits at once (the cost of the process alone). vectors.bin holds N records
+ * `spike-probe --noop` exits at once, before the engine's modules load (the cost of the process
+ * alone). vectors.bin holds N records
  * of a float32 scale (little-endian) followed by 256 int8 components. Dev-only; never shipped.
  */
-import { embed } from "../../src/embed/embed.ts";
-import { openPack } from "../../src/embed/pack.ts";
-import { clip } from "../../src/util/text.ts";
+// A module (top-level await), with no static import: see --noop below.
+export {};
 
 const DIMS = 256;
 const RECORD = 4 + DIMS;
@@ -19,7 +19,12 @@ const KEEP = 20;
 const MAX_PROMPT_CHARS = 4000;
 
 const args = process.argv.slice(2);
+// Before any import of the engine: --noop is the process alone, and the probe's wall time minus
+// it includes loading the engine's modules, as the hook would.
 if (args[0] === "--noop") process.exit(0);
+const { embed } = await import("../../src/embed/embed.ts");
+const { openPack } = await import("../../src/embed/pack.ts");
+const { clip } = await import("../../src/util/text.ts");
 const [packPath, vectorsPath, prompt] = args;
 if (packPath === undefined || vectorsPath === undefined || prompt === undefined) {
   console.error("usage: spike-probe <pack> <vectors.bin> <prompt> | --noop");
