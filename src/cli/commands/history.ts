@@ -143,8 +143,10 @@ export async function run(argv: string[]): Promise<number> {
       }
     };
     if (sub === "index" && transcript !== undefined) {
-      const hdb = openHistoryDb(storeDir, { create: true, busyTimeoutMs: 2000 });
-      if (hdb === null) throw new Error(`${HISTORY_DB_FILE} could not be opened`);
+      // The session-end hook runs this: it updates an index the user has, never makes one,
+      // so a `history forget` stays forgotten.
+      const hdb = openHistoryDb(storeDir, { create: false, write: true, busyTimeoutMs: 2000 });
+      if (hdb === null) return 0;
       try {
         const stat = statSync(transcript);
         const before = hdb

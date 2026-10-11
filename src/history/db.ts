@@ -34,14 +34,35 @@ END;
 /**
  * Opens (creating when asked) the history index: a rebuildable copy of every past turn,
  * redacted, kept apart from the main database so it can be deleted without loss.
- * Null when it does not exist and `create` is false.
+ * Null when it does not exist and `create` is false. Without `create` the connection
+ * reads only, unless `write` asks to update an index that already exists.
  */
 export function openHistoryDb(
   storeDir: string,
-  options: { create: boolean; busyTimeoutMs?: number },
+  options: { create: boolean; write?: boolean; busyTimeoutMs?: number },
 ): Database | null {
   const path = historyDbPath(storeDir);
   const busy = Math.max(0, Math.trunc(options.busyTimeoutMs ?? 5000));
+  if (!options.create && options.write === true) {
+    if (!existsSync(path)) return null;
+    let db: Database;
+    try {
+      db = new Database(path, { readwrite: true, create: false });
+    } catch (error) {
+      // Forgotten since the check: never bring it back.
+      if ((error as { code?: unknown }).code === "SQLITE_CANTOPEN") return null;
+      throw error;
+    }
+    try {
+      db.run(`PRAGMA busy_timeout = ${busy}`);
+      db.run("PRAGMA foreign_keys = ON");
+      db.run("PRAGMA synchronous = NORMAL");
+    } catch (error) {
+      db.close();
+      throw error;
+    }
+    return db;
+  }
   if (!options.create) {
     if (!existsSync(path)) return null;
     // An index pass made the file (schema, WAL, mode); readers write nothing and take no write lock.

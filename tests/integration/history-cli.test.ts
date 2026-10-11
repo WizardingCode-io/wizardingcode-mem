@@ -161,8 +161,18 @@ describe("wizardingcode-mem history", () => {
     expect(found.stdout).toContain("Never mock the database");
   });
 
+  test("index --transcript does nothing, silently, when there is no index", async () => {
+    const file = join(base, "claude", "projects", "-shop", "s1.jsonl");
+    const out = await history("index", "--transcript", file, "--agent", "claude-code");
+    expect(out.exitCode).toBe(0);
+    expect(out.stdout).toBe("");
+    expect(out.stderr).toBe("");
+    expect(existsSync(join(base, "home", "mem", "history.db"))).toBe(false);
+  });
+
   test("index --transcript indexes exactly that file and needs --agent", async () => {
     const file = join(base, "claude", "projects", "-shop", "s1.jsonl");
+    await history("index", "--agent", "codex"); // an empty index, as after a first pass
     const one = await history("index", "--transcript", file, "--agent", "claude-code");
     expect(one.exitCode).toBe(0);
     expect(one.stdout).toMatch(
