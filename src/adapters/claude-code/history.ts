@@ -1,7 +1,14 @@
-import { closeSync, openSync, readdirSync, readSync, statSync } from "node:fs";
+import { readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { isObject, type Json, parseLines, text } from "../common/jsonl.ts";
+import {
+  DEFAULT_CHUNK_BYTES,
+  isObject,
+  type Json,
+  parseLines,
+  readLines,
+  text,
+} from "../common/jsonl.ts";
 import type { HistoryTurn } from "../history.ts";
 import { isPrompt, turnDetailFromLines } from "./transcript.ts";
 
@@ -57,32 +64,6 @@ function said(line: Json): string | null {
     .map((block) => text((block as Json).text) ?? "")
     .filter((part) => part !== "");
   return parts.length === 0 ? null : parts.join("\n");
-}
-
-const DEFAULT_CHUNK_BYTES = 1024 * 1024;
-
-/** Lines of a file, read in fixed-size chunks so a huge transcript is never held whole. */
-function* fileLines(path: string, chunkBytes: number): Generator<string> {
-  const fd = openSync(path, "r");
-  try {
-    const buffer = Buffer.alloc(chunkBytes);
-    let pending: Buffer[] = [];
-    for (;;) {
-      const read = readSync(fd, buffer, 0, chunkBytes, null);
-      if (read === 0) break;
-      let from = 0;
-      for (let at = buffer.indexOf(10, 0); at !== -1 && at < read; at = buffer.indexOf(10, from)) {
-        pending.push(Buffer.from(buffer.subarray(from, at)));
-        yield Buffer.concat(pending).toString("utf8");
-        pending = [];
-        from = at + 1;
-      }
-      if (from < read) pending.push(Buffer.from(buffer.subarray(from, read)));
-    }
-    if (pending.length > 0) yield Buffer.concat(pending).toString("utf8");
-  } finally {
-    closeSync(fd);
-  }
 }
 
 /** A line where the user typed: not a subagent's, not an injected notice or a compaction summary. */
@@ -143,7 +124,7 @@ export function readClaudeCodeHistory(
     body = [];
   };
   try {
-    for (const raw of fileLines(path, options.chunkBytes ?? DEFAULT_CHUNK_BYTES)) {
+    for (const raw of readLines(path, options.chunkBytes ?? DEFAULT_CHUNK_BYTES)) {
       const line = parseLines(raw)[0];
       if (line === undefined || line.isSidechain === true) continue;
       if (opensTurn(line)) {

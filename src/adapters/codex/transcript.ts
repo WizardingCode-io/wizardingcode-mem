@@ -15,7 +15,7 @@ function add(set: Set<string>, value: string | null): void {
 }
 
 /** The `event_msg` payload of a line, when it belongs to a turn. */
-function turnEvent(line: Json): (Json & { turn_id: string }) | null {
+export function turnEvent(line: Json): (Json & { turn_id: string }) | null {
   if (line.type !== "event_msg" || !isObject(line.payload)) return null;
   const turnId = text(line.payload.turn_id);
   return turnId === null ? null : (line.payload as Json & { turn_id: string });
@@ -30,10 +30,10 @@ function commandOf(item: Json): string | null {
   return text(parts.join(" "));
 }
 
-export function readTurnDetail(
-  transcriptPath: string,
+/** What one turn did, from the turn events of a rollout file. */
+export function turnDetailFromEvents(
+  events: (Json & { turn_id: string })[],
   turnId: string | null,
-  options: { maxBytes?: number } = {},
 ): TurnDetail {
   const filesRead = new Set<string>();
   const filesChanged = new Set<string>();
@@ -48,14 +48,6 @@ export function readTurnDetail(
     savedMemory,
   });
 
-  let lines: Json[];
-  try {
-    lines = parseLines(readTail(transcriptPath, options.maxBytes ?? DEFAULT_MAX_BYTES));
-  } catch {
-    return detail();
-  }
-
-  const events = lines.map(turnEvent).filter((e) => e !== null);
   const id = turnId ?? events.at(-1)?.turn_id ?? null;
   if (id === null) return detail();
 
@@ -95,4 +87,21 @@ export function readTurnDetail(
     }
   }
   return detail();
+}
+
+export function readTurnDetail(
+  transcriptPath: string,
+  turnId: string | null,
+  options: { maxBytes?: number } = {},
+): TurnDetail {
+  let lines: Json[];
+  try {
+    lines = parseLines(readTail(transcriptPath, options.maxBytes ?? DEFAULT_MAX_BYTES));
+  } catch {
+    return turnDetailFromEvents([], null);
+  }
+  return turnDetailFromEvents(
+    lines.map(turnEvent).filter((e) => e !== null),
+    turnId,
+  );
 }
