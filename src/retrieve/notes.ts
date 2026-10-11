@@ -58,7 +58,10 @@ export function toNote(db: Db, row: MemoryRow): Note {
   };
 }
 
-/** Records what was shown, which is also what stops it being shown again in this context. */
+/**
+ * Records what was shown, which is also what stops it being shown again in this context.
+ * Returns the notes this call actually recorded: one already recorded by another call is not new.
+ */
 export function recordInjections(
   db: Db,
   input: {
@@ -68,9 +71,10 @@ export function recordInjections(
     notes: Note[];
     now: number;
   },
-): void {
+): Note[] {
+  const recorded: Note[] = [];
   for (const note of input.notes) {
-    db.run(
+    const result = db.run(
       `INSERT OR IGNORE INTO injections (session_id, context_epoch, memory_id, event, tokens, at)
        VALUES (?, ?, ?, ?, ?, ?)`,
       [
@@ -82,7 +86,9 @@ export function recordInjections(
         input.now,
       ],
     );
+    if (result.changes > 0) recorded.push(note);
   }
+  return recorded;
 }
 
 /** Ranks by `score`, best first. Equal scores share a rank, so that ties decide nothing. */

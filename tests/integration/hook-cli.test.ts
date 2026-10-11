@@ -3,7 +3,10 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { resolveProject } from "../../src/core/project.ts";
+import type { Redacted } from "../../src/core/redact.ts";
 import { DB_FILE, openDb } from "../../src/store/db.ts";
+import { insertMemory } from "../../src/store/memories.ts";
 import { runCliWith } from "../helpers/cli.ts";
 
 const FIXTURES = new URL("../fixtures/", import.meta.url).pathname;
@@ -411,4 +414,65 @@ describe("backups from the command line hooks", () => {
     expect(copies).toHaveLength(1);
     expect(copies[0]).toMatch(/^wizardingcode-mem-\d{8}T\d{6}Z-v\d+\.db\.gz$/);
   }, 15_000);
+});
+
+describe("parallel file reads in one session", () => {
+  test("no memory is injected twice in one context, however the reads interleave", async () => {
+    const project = join(dir, "project");
+    mkdirSync(project);
+    const db = openDb({ dataDir: dir, busyTimeoutMs: 5000 });
+    const projectId = resolveProject(db, project, Date.now()).id;
+    // Four notes share a.ts and b.ts, so every parallel read competes for the same ones.
+    for (let n = 0; n < 4; n++) {
+      insertMemory(db, {
+        projectId,
+        kind: "gotcha",
+        title: `Shared rule ${n}`,
+        body: "Keep it short." as Redacted,
+        terms: "",
+        importance: 3,
+        branch: null,
+        commit: null,
+        origin: "manual",
+        judge: "heuristic",
+        judgeVersion: "1",
+        sourceTurnId: null,
+        files: ["a.ts", "b.ts"].map((path) => ({ path, role: "changed" as const })),
+        now: Date.now(),
+      });
+    }
+    db.close();
+
+    const shown: string[] = [];
+    for (let round = 0; round < 4; round++) {
+      const reads = ["a.ts", "b.ts", "a.ts", "b.ts", "a.ts", "b.ts"].map((file) =>
+        hook(
+          JSON.stringify({
+            session_id: `parallel-${round}`,
+            transcript_path: "/tmp/t.jsonl",
+            cwd: project,
+            hook_event_name: "PostToolUse",
+            tool_name: "Read",
+            tool_input: { file_path: join(project, file) },
+            tool_use_id: "toolu_01",
+          }),
+          "claude-code",
+          "file-read",
+        ),
+      );
+      for (const result of await Promise.all(reads)) {
+        expect(result.exitCode).toBe(0);
+        for (const match of result.stdout.matchAll(/#(\d+) \[/g)) shown.push(`${round}:${match[1]}`);
+      }
+    }
+    // The invariant is the same whatever got through before the busy timeout: never twice.
+    expect(new Set(shown).size).toBe(shown.length);
+    expect(
+      rows<{ n: number }>(
+        `SELECT count(*) AS n FROM (SELECT 1 FROM injections WHERE event = 'file-read'
+          GROUP BY session_id, context_epoch, memory_id HAVING count(*) > 1)`,
+      )[0]?.n,
+    ).toBe(0);
+    expect(shown.length).toBeGreaterThan(0);
+  });
 });

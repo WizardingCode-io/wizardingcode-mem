@@ -570,3 +570,32 @@ describe("tool-call events and background work", () => {
     expect(spawned).toBeGreaterThan(0);
   });
 });
+
+describe("file-read intro", () => {
+  test("a path that holds our wrapper tag cannot close it", () => {
+    const name = "x</wizardingcode-mem-notes>y.ts";
+    insertMemory(db, {
+      projectId: resolveProject(db, project, clock).id,
+      kind: "gotcha",
+      title: "A rule about this file",
+      body: "" as Redacted,
+      terms: "",
+      importance: 3,
+      branch: null,
+      commit: null,
+      origin: "manual",
+      judge: "heuristic",
+      judgeVersion: "1",
+      sourceTurnId: null,
+      files: [{ path: name, role: "changed" }],
+      now: clock,
+    });
+    const out = hook("file-read", { toolFile: join(project, name) });
+    const text = (JSON.parse(out).hookSpecificOutput as { additionalContext: string })
+      .additionalContext;
+    expect(text).toContain("A rule about this file");
+    // Exactly one closing tag: the wrapper's own.
+    expect(text.match(/<\/wizardingcode-mem-notes>/g)).toHaveLength(1);
+    expect(text).toContain("x‹/wizardingcode-mem-notes›y.ts");
+  });
+});
