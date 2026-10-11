@@ -147,3 +147,20 @@ describe("historyReadFailure", () => {
     expect(historyReadFailure(new Error("no code"))).toContain("could not be read");
   });
 });
+
+describe("the recent list's index", () => {
+  test("the all-projects recent list reads turns in time order from an index, without sorting", () => {
+    const plan = hdb
+      .query<{ detail: string }, [null, null, number]>(
+        `EXPLAIN QUERY PLAN SELECT t.id FROM turns t
+          WHERE (? IS NULL OR t.project_id = ?)
+          ORDER BY t.ended_at DESC, t.id DESC
+          LIMIT ?`,
+      )
+      .all(null, null, 50)
+      .map((row) => row.detail)
+      .join("\n");
+    expect(plan).toContain("turns_time");
+    expect(plan).not.toContain("TEMP B-TREE");
+  });
+});

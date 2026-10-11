@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS turns (
 );
 CREATE INDEX IF NOT EXISTS turns_path ON turns(path);
 CREATE INDEX IF NOT EXISTS turns_project_time ON turns(project_id, ended_at DESC);
+CREATE INDEX IF NOT EXISTS turns_time ON turns(ended_at DESC, id DESC);
 CREATE VIRTUAL TABLE IF NOT EXISTS turns_fts USING fts5(
   prompt, final_text, content='turns', content_rowid='id', tokenize = "unicode61 remove_diacritics 2"
 );
