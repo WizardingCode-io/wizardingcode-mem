@@ -143,7 +143,7 @@ export interface BackupsView {
 export type BackupOutcome =
   | { ok: true; name: string; bytes: number }
   | { ok: false; reason: string; detail: string };
-export type RestoreOutcome = { ok: true; replaced: string } | { ok: false; reason: string; detail: string };
+export type RestoreOutcome = { ok: true; replaced: string; historyRemoved: boolean } | { ok: false; reason: string; detail: string };
 /** A refused settings change: one message per key. */
 export class SettingsError extends Error {
   constructor(public errors: Partial<Record<SettingKey, string>>) {

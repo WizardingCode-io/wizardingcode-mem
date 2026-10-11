@@ -112,7 +112,7 @@ async function restore() {
   try {
     const outcome = await api.restoreBackup(restoring.value);
     if (outcome.ok) {
-      toast.add({ title: "Restored", description: `The previous database was kept as ${outcome.replaced.split("/").pop()}.`, color: "success" });
+      toast.add({ title: "Restored", description: `The previous database was kept as ${outcome.replaced.split("/").pop()}.${outcome.historyRemoved ? " The history index was removed; run wizardingcode-mem history index to rebuild it." : ""}`, color: "success" });
       restoring.value = null;
       await Promise.all([load(), loadOverview()]);
     } else {

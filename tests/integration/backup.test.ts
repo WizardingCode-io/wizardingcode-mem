@@ -20,6 +20,7 @@ import { resolveProject } from "../../src/core/project.ts";
 import type { Redacted } from "../../src/core/redact.ts";
 import { DB_FILE, type Db, LATEST_VERSION, openDb } from "../../src/store/db.ts";
 import { insertMemory } from "../../src/store/memories.ts";
+import { runCliWith } from "../helpers/cli.ts";
 import { claimLease, leaseActive, releaseLease } from "../../src/store/meta.ts";
 
 const NOW = Date.UTC(2026, 9, 6, 10, 30, 15);
@@ -178,6 +179,49 @@ describe("restoreBackup", () => {
     expect(memories(join(storeDir, replaced[0] as string))).toBe(0);
     db = openDb({ dataDir: storeDir, busyTimeoutMs: 2000 });
     expect(memories(join(storeDir, DB_FILE))).toBe(4);
+  });
+
+  test("removes the history index, whose project ids may name other projects in the copy", async () => {
+    await run();
+    const index = join(storeDir, "history.db");
+    for (const suffix of ["", "-wal", "-shm"]) writeFileSync(index + suffix, "index");
+    db.close();
+    const outcome = await restoreBackup({
+      storeDir,
+      target: folderTarget(folder),
+      name: backupName(NOW, LATEST_VERSION),
+      now: NOW + HOUR,
+    });
+    expect(outcome).toMatchObject({ ok: true, historyRemoved: true });
+    for (const suffix of ["", "-wal", "-shm"]) expect(existsSync(index + suffix)).toBe(false);
+    db = openDb({ dataDir: storeDir, busyTimeoutMs: 2000 });
+  });
+
+  test("backup --restore says the history index was removed and how to rebuild it", async () => {
+    await run();
+    writeFileSync(join(storeDir, "history.db"), "index");
+    db.close();
+    const out = await runCliWith(
+      {
+        env: {
+          WIZARDINGCODE_MEM_DATA_DIR: storeDir,
+          WIZARDINGCODE_MEM_BACKUP_TO: folder,
+          WIZARDINGCODE_MEM_DISTILL: "off",
+          WIZARDINGCODE_MEM_UI_AUTO_OPEN: "off",
+          WIZARDINGCODE_MEM_MIGRATE: "off",
+          WIZARDINGCODE_MEM_UI_BROWSER: "none",
+        },
+      },
+      "backup",
+      "--restore",
+      backupName(NOW, LATEST_VERSION),
+    );
+    db = openDb({ dataDir: storeDir, busyTimeoutMs: 2000 });
+    expect(out.exitCode).toBe(0);
+    expect(out.stdout).toContain(
+      "history index removed; run wizardingcode-mem history index to rebuild it",
+    );
+    expect(existsSync(join(storeDir, "history.db"))).toBe(false);
   });
 
   test("refuses a copy that is not a sound database of a version it knows", async () => {

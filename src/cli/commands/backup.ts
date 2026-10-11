@@ -48,6 +48,11 @@ export async function run(argv: string[]): Promise<number> {
       process.stdout.write(
         `backup: restored ${name}; the previous database is ${outcome.replaced}\n`,
       );
+      if (outcome.historyRemoved) {
+        process.stdout.write(
+          "backup: history index removed; run wizardingcode-mem history index to rebuild it\n",
+        );
+      }
       return 0;
     }
     process.stderr.write(`wizardingcode-mem backup: not restored: ${outcome.detail}\n`);
