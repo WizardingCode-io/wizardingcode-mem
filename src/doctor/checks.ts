@@ -10,6 +10,7 @@ import { GEMINI } from "../install/gemini.ts";
 import { type HostSpec, inspectHooksFile } from "../install/hooks-file.ts";
 import { findLegacyPlugins } from "../install/legacy-plugins.ts";
 import { PLUGIN_MARKER } from "../install/opencode-plugin.ts";
+import { QWEN } from "../install/qwen.ts";
 import { Breaker } from "../judge/breaker.ts";
 import { keyFingerprint } from "../judge/key.ts";
 import { loadSettings } from "../settings/settings.ts";
@@ -34,6 +35,7 @@ export interface DoctorContext {
   cursorHooksPath: string;
   geminiSettingsPath: string;
   opencodePluginPath: string;
+  qwenSettingsPath: string;
   /** Whether a host's command is on this machine; null when it is not. */
   which: (command: string) => string | null;
   now: number;
@@ -210,6 +212,7 @@ const NATIVE_INSTALL: Record<string, string> = {
   gemini: "run: gemini extensions install https://github.com/WizardingCode-io/wizardingcode-mem",
   cursor: "run: wizardingcode-mem install cursor",
   opencode: "run: opencode plugin wizardingcode-mem-opencode --global",
+  qwen: "run: wizardingcode-mem install qwen",
 };
 
 const readText = (path: string): string | null => {
@@ -458,6 +461,7 @@ export function runChecks(context: DoctorContext): Check[] {
       hooksHost("Cursor", CURSOR, context.cursorHooksPath, "cursor", context),
       hooksHost("Gemini CLI", GEMINI, context.geminiSettingsPath, "gemini", context),
       openCode(context),
+      hooksHost("Qwen Code", QWEN, context.qwenSettingsPath, "qwen", context),
       claudeDesktop(context),
       legacy(context),
     ].filter((check): check is Check => check !== null);

@@ -10,6 +10,8 @@ const SOURCES = new Set(["startup", "resume", "clear", "compact"]);
 export interface HookJsonShape {
   /** The field naming the prompt that started the turn. */
   turnIdField: string;
+  /** The field holding the user's prompt; "prompt" unless the host says otherwise. */
+  promptField?: string;
 }
 
 function toolInput(payload: Record<string, unknown>): Record<string, unknown> | null {
@@ -43,7 +45,7 @@ export function parseHookJson(
     cwd,
     turnId: text(payload[shape.turnIdField]),
     transcriptPath: text(payload.transcript_path),
-    prompt: event === "prompt" ? text(payload.prompt) : null,
+    prompt: event === "prompt" ? text(payload[shape.promptField ?? "prompt"]) : null,
     finalText: event === "turn-end" ? text(payload.last_assistant_message) : null,
     source:
       event === "session-start"

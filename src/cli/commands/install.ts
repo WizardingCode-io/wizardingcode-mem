@@ -18,6 +18,7 @@ import { offerHistoryImportHere } from "../../install/history-offer.ts";
 import type { InstallResult } from "../../install/hooks-file.ts";
 import { findLegacyPlugins } from "../../install/legacy-plugins.ts";
 import { installOpenCode, opencodePluginPath } from "../../install/opencode.ts";
+import { installQwen, qwenContext } from "../../install/qwen.ts";
 import {
   describeImport,
   describeStop,
@@ -37,6 +38,7 @@ export const SUPPORTED_AGENTS = [
   "cursor",
   "gemini",
   "opencode",
+  "qwen",
 ];
 export const AGENT_NAMES: Record<string, string> = {
   "claude-code": "Claude Code",
@@ -45,11 +47,12 @@ export const AGENT_NAMES: Record<string, string> = {
   cursor: "Cursor",
   gemini: "Gemini CLI",
   opencode: "OpenCode",
+  qwen: "Qwen Code",
 };
 
 const USAGE = `Usage: wizardingcode-mem install [<agent>] [--binary <path>] [--yes] [--keep-claude-mem] [--no-import] [--import-history | --no-import-history]
 
-  <agent>             claude-code | claude-desktop | codex | cursor | gemini | opencode; none installs for every one found
+  <agent>             claude-code | claude-desktop | codex | cursor | gemini | opencode | qwen; none installs for every one found
   --binary <path>     The wizardingcode-mem binary the hooks will run (needed when running from source)
   --yes               Retire claude-mem and shibaox-mem without asking (disable or uninstall their plugins)
   --keep-claude-mem   Leave claude-mem installed and running
@@ -243,6 +246,12 @@ function installOne(agent: string, rest: string[], offer = true): number {
     if (agent === "cursor") {
       process.stdout.write(
         describeInstall(agent, installCursor(cursorContext(binaryPath)), binaryPath, lines),
+      );
+      return 0;
+    }
+    if (agent === "qwen") {
+      process.stdout.write(
+        describeInstall(agent, installQwen(qwenContext(binaryPath)), binaryPath, lines),
       );
       return 0;
     }

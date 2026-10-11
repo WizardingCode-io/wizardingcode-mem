@@ -90,6 +90,22 @@ describe("wizardingcode-mem hook", () => {
     ]);
   });
 
+  test("a whole turn from Qwen Code, through its own adapter, is stored under its prompt_id", async () => {
+    await hook(payload("session-start.startup", "qwen"), "qwen", "session-start");
+    await hook(payload("user-prompt-submit", "qwen"), "qwen", "prompt");
+    expect(await hook(payload("stop", "qwen"), "qwen", "turn-end")).toEqual(SILENT_SUCCESS);
+    expect(rows("SELECT agent FROM sessions")).toEqual([{ agent: "qwen" }]);
+    expect(rows("SELECT agent_turn_id, state, completeness, final_text FROM turns")).toEqual([
+      { agent_turn_id: "prompt-1", state: "pending", completeness: "full", final_text: "done" },
+    ]);
+  });
+
+  test("a Qwen Code payload missing what is needed is silent success", async () => {
+    for (const event of ["session-start", "prompt", "turn-end", "session-end"]) {
+      expect(await hook('{"prompt":"x","extra":1}', "qwen", event)).toEqual(SILENT_SUCCESS);
+    }
+  });
+
   test("a whole turn from Gemini CLI, which names no turn, closes the session's open one", async () => {
     await hook(payload("before-agent", "gemini"), "gemini", "prompt");
     expect(await hook(payload("after-agent", "gemini"), "gemini", "turn-end")).toEqual(

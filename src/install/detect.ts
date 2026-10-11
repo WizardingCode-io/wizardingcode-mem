@@ -6,6 +6,7 @@ import { codexContext } from "./codex.ts";
 import { cursorContext } from "./cursor.ts";
 import { geminiContext } from "./gemini.ts";
 import { opencodePluginPath } from "./opencode.ts";
+import { qwenContext } from "./qwen.ts";
 
 // Which supported agents are on this machine: their command is on PATH, or they have
 // left a configuration directory behind. Nothing is created by looking.
@@ -16,6 +17,7 @@ export const AGENT_ORDER: readonly AgentId[] = [
   "cursor",
   "gemini",
   "opencode",
+  "qwen",
 ];
 
 export function detectAgents(options: {
@@ -30,6 +32,7 @@ export function detectAgents(options: {
     cursor: cursorContext("", env).configDir,
     gemini: geminiContext("", env).configDir,
     opencode: dirname(dirname(opencodePluginPath(env))),
+    qwen: qwenContext("", env).configDir,
   };
   const command: Record<AgentId, string> = {
     "claude-code": "claude",
@@ -37,6 +40,7 @@ export function detectAgents(options: {
     cursor: "cursor",
     gemini: "gemini",
     opencode: "opencode",
+    qwen: "qwen",
   };
   return AGENT_ORDER.filter(
     (agent) => which(command[agent]) !== null || existsSync(configDir[agent]),

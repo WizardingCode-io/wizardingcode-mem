@@ -37,6 +37,11 @@ export interface HostSpec {
   mcpRemove: string[];
   /** When set, the MCP server is written into this JSON file instead (`mcpServers`). */
   mcpFile?: (context: InstallContext) => string;
+  /**
+   * The MCP server goes into the hooks file's own `mcpServers` (Qwen Code), in the same
+   * write as the hooks, so that the receipt still describes the whole file.
+   */
+  mcpInSettings?: boolean;
   /** grouped: event → [{ hooks: [entry] }] (Claude Code, Codex, Gemini). flat: event → [entry] (Cursor). */
   layout?: "grouped" | "flat";
   /** Keys the file must hold besides `hooks`, such as Cursor's `version`. */
@@ -151,6 +156,14 @@ function withoutOurs(spec: HostSpec, settings: Json): { settings: Json; removed:
   }
   const result: Json = { ...settings, hooks };
   if (removed > 0 && Object.keys(hooks).length === 0) delete result.hooks;
+  if (spec.mcpInSettings && isObject(settings.mcpServers)) {
+    const { [MCP_NAME]: ours, [LEGACY_MCP_NAME]: legacy, ...servers } = settings.mcpServers;
+    if (ours !== undefined || legacy !== undefined) {
+      removed += 1;
+      result.mcpServers = servers;
+      if (Object.keys(servers).length === 0) delete result.mcpServers;
+    }
+  }
   return { settings: result, removed };
 }
 
@@ -168,7 +181,12 @@ function withOurs(spec: HostSpec, settings: Json, binaryPath: string): Json {
           : { matcher, hooks: [entry] },
     ];
   }
-  return { ...(spec.topLevel ?? {}), ...settings, hooks };
+  const result: Json = { ...(spec.topLevel ?? {}), ...settings, hooks };
+  if (spec.mcpInSettings) {
+    const servers = isObject(settings.mcpServers) ? settings.mcpServers : {};
+    result.mcpServers = { ...servers, [MCP_NAME]: { command: binaryPath, args: ["mcp"] } };
+  }
+  return result;
 }
 
 /** Serialises in the file's own style: its indentation, and its final newline or lack of one. */
@@ -202,6 +220,9 @@ export function installHooksFile(spec: HostSpec, context: InstallContext): Insta
   const previous = existsSync(file) ? readFileSync(file, "utf8") : null;
   // Validated before anything is changed or run.
   const settings = parseSettings(settingsPath, previous);
+  if (spec.mcpInSettings && settings.mcpServers !== undefined && !isObject(settings.mcpServers)) {
+    throw new Error(`"mcpServers" in ${settingsPath} is not an object; fix it and run this again`);
+  }
   const next = serialise(
     withOurs(spec, withoutOurs(spec, settings).settings, binaryPath),
     previous,
@@ -257,6 +278,16 @@ export function installHooksFile(spec: HostSpec, context: InstallContext): Insta
   }
 
   const mcpCommand = spec.mcpAdd(binaryPath);
+  if (spec.mcpInSettings) {
+    return {
+      settingsPath,
+      changed,
+      mcp: "registered",
+      mcpCommand,
+      mcpPath: settingsPath,
+      notes: spec.notes,
+    };
+  }
   if (spec.mcpFile !== undefined) {
     const mcpPath = spec.mcpFile(context);
     writeMcpServer(mcpPath, binaryPath);
@@ -345,8 +376,9 @@ export function uninstallHooksFile(spec: HostSpec, context: InstallContext): Uni
     }
   }
 
+  // With mcpInSettings, the server already left with the hooks above.
   if (spec.mcpFile !== undefined) removeMcpServer(spec.mcpFile(context));
-  else {
+  else if (!spec.mcpInSettings) {
     context.run(spec.mcpRemove);
     context.run(legacyMcpRemove(spec));
   }

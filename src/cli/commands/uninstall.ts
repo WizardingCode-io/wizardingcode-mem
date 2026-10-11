@@ -5,6 +5,7 @@ import { claudeCodeContext } from "../../install/context.ts";
 import { cursorContext, uninstallCursor } from "../../install/cursor.ts";
 import { geminiContext, uninstallGemini } from "../../install/gemini.ts";
 import { opencodePluginPath, uninstallOpenCode } from "../../install/opencode.ts";
+import { qwenContext, uninstallQwen } from "../../install/qwen.ts";
 import { defaultDataDir } from "../../util/paths.ts";
 import { EXIT_USAGE } from "../exit.ts";
 import { AGENT_NAMES, SUPPORTED_AGENTS } from "./install.ts";
@@ -64,7 +65,9 @@ export function run(argv: string[]): number {
           ? uninstallGemini(geminiContext(""))
           : agent === "cursor"
             ? uninstallCursor(cursorContext(""))
-            : uninstallClaudeCode(claudeCodeContext(""));
+            : agent === "qwen"
+              ? uninstallQwen(qwenContext(""))
+              : uninstallClaudeCode(claudeCodeContext(""));
     process.stdout.write(
       [
         `Removed wizardingcode-mem from ${AGENT_NAMES[agent]}.`,
