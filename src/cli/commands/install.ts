@@ -195,7 +195,7 @@ function installOne(agent: string, rest: string[]): number {
           "Installed wizardingcode-mem for Claude Desktop.",
           `  config: ${result.configPath}${result.changed ? "" : " (already up to date)"}`,
           `  binary: ${binaryPath}`,
-          "  chat:   memory_search, memory_get, memory_save and memory_projects, across every project",
+          "  chat:   memory_search, memory_get, memory_save, history_search and memory_projects, across every project",
           "  Cowork: add the plugin in Customize → Plugins → Add marketplace → WizardingCode-io/wizardingcode-plugins",
           "Quit and reopen Claude Desktop for it to take effect.",
           "",

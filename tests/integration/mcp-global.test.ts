@@ -151,11 +151,20 @@ describe("the MCP server's tool list", () => {
       .find((m) => m.id === 2);
     const tools = Object.fromEntries(
       list.result.tools.map((t: { name: string }) => [t.name, t]),
-    ) as Record<string, { title?: string; annotations?: { readOnlyHint?: boolean } }>;
+    ) as Record<
+      string,
+      {
+        title?: string;
+        annotations?: { readOnlyHint?: boolean; idempotentHint?: boolean };
+      }
+    >;
     expect(tools.memory_search?.title).toBe("Search memories");
     expect(tools.memory_search?.annotations?.readOnlyHint).toBe(true);
     expect(tools.memory_get?.annotations?.readOnlyHint).toBe(true);
     expect(tools.memory_projects?.annotations?.readOnlyHint).toBe(true);
+    expect(tools.history_search?.title).toBe("Search past conversations");
+    expect(tools.history_search?.annotations?.readOnlyHint).toBe(true);
+    expect(tools.history_search?.annotations?.idempotentHint).toBe(true);
     expect(tools.memory_save?.title).toBe("Save a memory");
     expect(tools.memory_save?.annotations?.readOnlyHint).toBe(false);
   });
