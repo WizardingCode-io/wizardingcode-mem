@@ -53,7 +53,7 @@ function userVersion(db: Db): number {
   return db.query<{ user_version: number }, []>("PRAGMA user_version").get()?.user_version ?? 0;
 }
 
-function restrict(path: string, mode: number): void {
+export function restrict(path: string, mode: number): void {
   if (process.platform === "win32" || !existsSync(path)) return;
   try {
     chmodSync(path, mode);
@@ -83,7 +83,7 @@ function backup(db: Db, dir: string, version: number): void {
  * fails at once instead of waiting for `busy_timeout`. Several processes creating the
  * database together therefore have to retry by hand.
  */
-function enableWal(db: Db, busyTimeoutMs: number): void {
+export function enableWal(db: Db, busyTimeoutMs: number): void {
   const deadline = Date.now() + Math.max(busyTimeoutMs, 1000);
   for (;;) {
     try {
