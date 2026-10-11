@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EXIT_USAGE } from "../../src/cli/exit.ts";
@@ -127,5 +127,44 @@ describe("wizardingcode-mem history", () => {
     const out = await history("restore-imports");
     expect(out.exitCode).toBe(0);
     expect(out.stdout).toContain("0 restored");
+  });
+  test("index then search finds the turn; forget removes only the index", async () => {
+    const idx = await history("index");
+    expect(idx.exitCode).toBe(0);
+    expect(idx.stdout).toMatch(
+      /history index: 1 files, 1 indexed, 0 unchanged, 0 removed, 1 turns/,
+    );
+    const found = await history("search", "SQLite", "file");
+    expect(found.exitCode).toBe(0);
+    expect(found.stdout).toContain("Never mock the database");
+    expect(found.stdout).toContain("shop");
+    const mine = await history("search", "sqlite", "--project", "nonexistent");
+    expect(mine.stdout).not.toContain("Never mock");
+
+    await history("import");
+    const forgotten = await history("forget");
+    expect(forgotten.stdout).toContain("history forget: index deleted");
+    expect(existsSync(join(base, "home", "mem", "history.db"))).toBe(false);
+    expect(existsSync(dbPath())).toBe(true);
+    const db = new Database(dbPath(), { readonly: true });
+    const count = db.query<{ n: number }, []>("SELECT count(*) AS n FROM memories").get()?.n;
+    db.close();
+    expect(count).toBe(1);
+  });
+
+  test("search before any index says so and exits 0", async () => {
+    const out = await history("search", "anything");
+    expect(out.exitCode).toBe(0);
+    expect(out.stdout).toContain("history search: no history index yet");
+  });
+
+  test("search without words is a usage error", async () => {
+    expect((await history("search")).exitCode).toBe(EXIT_USAGE);
+  });
+
+  test("import prints the backfill line and the index line", async () => {
+    const out = await history("import");
+    expect(out.stdout).toContain("history: 1 transcripts");
+    expect(out.stdout).toContain("history index: 1 files");
   });
 });
