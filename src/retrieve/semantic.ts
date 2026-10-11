@@ -12,7 +12,7 @@ import type { Db } from "../store/db.ts";
 import { logError } from "../util/log.ts";
 
 /** The least cosine a memory needs to be offered by meaning alone. Calibrated: ADR 0017. */
-export const SEMANTIC_FLOOR = 0.31;
+export const SEMANTIC_FLOOR = 0.32;
 
 /** The RRF constant every search fuses with. */
 export const RRF_K = 60;

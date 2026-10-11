@@ -73,7 +73,7 @@ export async function toolSchemas(global = false) {
 
 export const TOOL_DESCRIPTIONS: Record<(typeof TOOL_NAMES)[number], string> = {
   memory_search:
-    "Search notes saved from earlier sessions in this project; returns one heading per note.",
+    "Search notes saved from earlier sessions in this project, by words and, when the optional model is installed, by meaning; returns one heading per note.",
   memory_get: "Read saved notes in full, by the ids that memory_search returned.",
   memory_save:
     "Save something worth knowing in later sessions: a decision and its reason, a rule the user stated, a pitfall, a fix.",
@@ -83,7 +83,7 @@ export const TOOL_DESCRIPTIONS: Record<(typeof TOOL_NAMES)[number], string> = {
 
 export const GLOBAL_TOOL_DESCRIPTIONS: Record<ToolName, string> = {
   memory_search:
-    "Search notes saved while working on any of the user's projects; each heading names its project.",
+    "Search notes saved while working on any of the user's projects, by words and, when the optional model is installed, by meaning; each heading names its project.",
   memory_get: "Read saved notes in full, by the ids that memory_search returned.",
   memory_save:
     "Save something worth knowing later, into the project it belongs to: a decision and its reason, a rule the user stated, a pitfall.",

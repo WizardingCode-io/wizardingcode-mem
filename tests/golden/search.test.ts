@@ -156,9 +156,13 @@ function withPack(pack: string) {
     },
     noise: () => {
       const unrelated = [...golden.unrelated, ...semantic.unrelated];
+      const perQuery = (queries: string[]) =>
+        queries.reduce((n, query) => n + semanticOnly(query), 0) / queries.length;
       return {
         found: unrelated.reduce((n, query) => n + semanticOnly(query), 0),
         queries: unrelated.length,
+        // Each set read on its own too (ruling R3): the coding-flavoured one is the noisier.
+        worstSet: Math.max(perQuery(golden.unrelated), perQuery(semantic.unrelated)),
       };
     },
     gibberish: () =>
@@ -177,16 +181,17 @@ describe("explicit search with the model (subset pack)", () => {
     console.log(
       `top ${TOP}: ${all[0]}/${all[2]} → ${all[1]}/${all[2]}; Portuguese of English: ${portuguese[0]}/${portuguese[2]} → ${portuguese[1]}/${portuguese[2]}`,
     );
-    // Measured at the floor's calibration: 35/44 → 40/44, Portuguese 1/8 → 4/8.
-    expect(all[1]).toBeGreaterThanOrEqual(40);
+    // Measured at the floor's calibration (0.32): 35/44 → 39/44, Portuguese 1/8 → 4/8.
+    expect(all[1]).toBeGreaterThanOrEqual(39);
     expect(portuguese[2]).toBe(8);
     expect(portuguese[1]).toBeGreaterThanOrEqual(4);
   });
 
   test("an unrelated query gets at most one memory by meaning alone, on average", () => {
-    const { found, queries } = golden_.noise();
+    const { found, queries, worstSet } = golden_.noise();
     console.log(`semantic-only results for unrelated queries: ${found}/${queries}`);
     expect(found / queries).toBeLessThanOrEqual(1);
+    expect(worstSet).toBeLessThanOrEqual(1);
   });
 });
 
@@ -196,10 +201,11 @@ describe.skipIf(!fullPack || !existsSync(fullPack))("explicit search with the fu
 
   test("the same numbers as with the subset", () => {
     const { all, portuguese } = full.paraphrases();
-    expect(all[1]).toBeGreaterThanOrEqual(40);
+    expect(all[1]).toBeGreaterThanOrEqual(39);
     expect(portuguese[1]).toBeGreaterThanOrEqual(4);
-    const { found, queries } = full.noise();
+    const { found, queries, worstSet } = full.noise();
     expect(found / queries).toBeLessThanOrEqual(1);
+    expect(worstSet).toBeLessThanOrEqual(1);
   });
 
   test("gibberish finds nothing by meaning", () => {
