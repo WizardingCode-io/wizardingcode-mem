@@ -257,3 +257,24 @@ export function dequantize(scale: number, q: Int8Array): Float32Array;
 - [ ] **Step 2: ADR 0014** "Spike": machine, pack size and sha256, the latency table (5,000 and 65,000 vectors; open, embed, scan), the recall/noise table at the chosen `t`, the margin, the extended-set result at that `t`, int8 vs float agreement from Task 4. "Decision": go / no-go against the gate (recall@5 ≥ 22/24, false injections 0/23, prompt-path p95 ≤ 80 ms, estimated as the current prompt hook p95 from `tests/perf/budgets.test.ts` plus (probe p95 − `--noop` p95), at 65,000 vectors), and the chosen threshold.
 - [ ] **Step 3:** `bun run check`; commit "Spike: semantic recall measured against the gate (ADR 0014)".
 - [ ] **Step 4: Stop.** Report the numbers to the author in Portuguese with the go/no-go. Parts 2–4 are planned only after a go.
+
+### Task 6: A relative rule, measured against the same gate (added after the no-go, by the author's decision)
+
+The absolute threshold failed (ADR 0014): the best lexical miss scores 0.506, a generic unrelated prompt 0.519. Three of the five misses rank first with a wide lead over the second memory. This task measures one relative rule, fixed before looking at its numbers, against the unchanged gate, with the extended set as a held-out check.
+
+**Files:**
+- Modify: `scripts/embed/spike.ts` (a `--relative` mode, or a sibling function; no change to the absolute sweep's output)
+- Modify: `docs/adr/0014-semantic-recall.md` (a section "A relative rule" and an updated "Decision")
+
+**The rule.** For a prompt with vector `p`, let `s1 ≥ s2` be the two highest cosine scores over the project's memories (`s2 = 0` with one memory). Only the top memory can be added by the semantic channel, and only when `s1 ≥ f` **and** `s1 − s2 ≥ g`. A relevant prompt counts as found when lexical finds it, or when its expected memory is that top memory and the rule fires. An unrelated prompt counts as a false injection when lexical injects for it, or when the rule fires for it.
+
+**Choosing `f` and `g`, on `retrieval.json` only:** sweep `f` from 0.30 to 0.60 and `g` from 0.05 to 0.30, both by 0.01. Keep the pairs with 0/23 false injections; among them, the highest recall; ties go to the largest `g`, then the largest `f` (the most conservative rule). Report the chosen pair, the recall, and the region of the grid that achieves it (how wide it is says how much luck is involved).
+
+**Held-out check, `semantic.json`, at the chosen pair, not re-tuned:** recall x/20 and false injections x/20.
+
+**Gate (unchanged, plus one held-out condition):** go when recall@5 on `retrieval.json` ≥ 22/24, false injections 0/23, prompt-path p95 ≤ 80 ms (already measured: 56.2 ms; the rule adds one subtraction), **and** 0/20 false injections on the held-out `semantic.json`. Otherwise no-go for the prompt channel; the on-demand search uses (part 2) go ahead either way.
+
+- [ ] **Step 1:** Implement the relative mode in `scripts/embed/spike.ts` exactly as defined; run it with the full pack.
+- [ ] **Step 2:** ADR 0014: section "A relative rule" (the rule, the grid result, the chosen pair, the width of the winning region, the held-out result, each relevant miss with `s1`, `s2`, gap and whether it fired, the five unrelated prompts with the largest gap) and the updated "Decision" for the prompt channel.
+- [ ] **Step 3:** `bun run check`; commit "Spike: a relative rule against the same gate (ADR 0014)".
+- [ ] **Step 4: Stop.** Report the numbers to the author in Portuguese with the go/no-go for the prompt channel.
