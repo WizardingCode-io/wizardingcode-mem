@@ -7,11 +7,11 @@ import {
   importPill,
   indexPill,
   judgesWithTypeSafe,
+  offerLine,
   offerWhere,
   progressOf,
   progressPoller,
   sessionsFound,
-  shouldOffer,
   sizeOf,
 } from "../../ui/src/history.ts";
 
@@ -48,25 +48,22 @@ const indexRun = (state: "running" | "done" | "failed") => ({
 });
 
 describe("the one-time offer", () => {
-  test("shows when there are past sessions, nothing ran and it was not dismissed", () => {
-    expect(shouldOffer(status())).toBe(true);
+  // Whether it shows is the server's call (/api/history/offer); the banner words it.
+  const offer = (claudeCode: number, codex: number) => ({
+    show: true,
+    sessions: claudeCode + codex,
+    transcripts: { claudeCode, codex },
   });
-  test("stays away without transcripts, after a run, or once dismissed", () => {
-    expect(shouldOffer(status({ transcripts: { claudeCode: 0, codex: 0 } }))).toBe(false);
-    for (const state of ["running", "done", "failed"] as const) {
-      expect(
-        shouldOffer(
-          status({
-            run: { state, kind: "import" as const, startedAt: 1, finishedAt: null, last: null },
-          }),
-        ),
-      ).toBe(false);
-    }
-    expect(shouldOffer(status({ offer: { dismissed: true } }))).toBe(false);
-    // An index run is not an import: the offer stands once it is over, not while it goes.
-    expect(shouldOffer(status({ run: indexRun("done") }))).toBe(true);
-    expect(shouldOffer(status({ run: indexRun("running") }))).toBe(false);
-    expect(shouldOffer(null)).toBe(false);
+  test("names the count and the agents that have sessions", () => {
+    expect(offerLine(offer(1200, 34), false)).toBe(
+      "Learn from your 1,234 past sessions with Claude Code and Codex. It runs in the background, on this machine.",
+    );
+    expect(offerLine(offer(1, 0), false)).toBe(
+      "Learn from your 1 past session with Claude Code. It runs in the background, on this machine.",
+    );
+    expect(offerLine(offer(0, 5), true)).toBe(
+      "Learn from your 5 past sessions with Codex. It runs in the background, on this machine, except TypeSafe judgements (a key is set).",
+    );
   });
 });
 

@@ -639,6 +639,23 @@ describe("wizardingcode-mem ui: history runs", () => {
     expect(after.replace).toMatchObject({ wouldArchive: 2, replaced: 0 });
   });
 
+  test("the offer is its own light route: shown with the count, gone once dismissed", async () => {
+    const claude = join(dataDir, "claude-home");
+    mkdirSync(join(claude, "projects", "-shop"), { recursive: true });
+    writeFileSync(join(claude, "projects", "-shop", "s1.jsonl"), "{}\n");
+    const s = await start({
+      env: { CLAUDE_CONFIG_DIR: claude, CODEX_HOME: join(dataDir, "no-codex") },
+    });
+    expect((await fetch(`${s.origin}/api/history/offer`)).status).toBe(401);
+    expect(await (await api(s, "/api/history/offer")).json()).toEqual({
+      show: true,
+      sessions: 1,
+      transcripts: { claudeCode: 1, codex: 0 },
+    });
+    await post(s, "/api/history/offer/dismiss");
+    expect(await (await api(s, "/api/history/offer")).json()).toMatchObject({ show: false });
+  });
+
   test("restore-imports and the offer dismissal", async () => {
     const { s } = await startSpying();
     expect(await (await post(s, "/api/history/restore-imports")).json()).toEqual({ restored: 0 });

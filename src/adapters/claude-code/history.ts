@@ -49,6 +49,24 @@ export function listClaudeCodeTranscripts(root: string, sinceMs: number): string
   return found.sort((a, b) => a.mtime - b.mtime).map((f) => f.path);
 }
 
+/** Whether any transcript is there: stops at the first one found. */
+export function hasClaudeCodeTranscript(root: string): boolean {
+  let projects: string[];
+  try {
+    projects = readdirSync(root);
+  } catch {
+    return false;
+  }
+  for (const project of projects) {
+    try {
+      if (readdirSync(join(root, project)).some((name) => name.endsWith(".jsonl"))) return true;
+    } catch {
+      // Not a folder, or gone.
+    }
+  }
+  return false;
+}
+
 const time = (line: Json | undefined): number | null => {
   const value = Date.parse(text(line?.timestamp) ?? "");
   return Number.isNaN(value) ? null : value;

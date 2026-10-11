@@ -1,7 +1,7 @@
 // The viewer's client for /api. The token comes from the URL the binary opened.
-import type { HistoryProgress, HistoryStatus, PastSearch } from "./history";
+import type { HistoryOffer, HistoryProgress, HistoryStatus, PastSearch } from "./history";
 
-export type { HistoryProgress, HistoryQueue, HistoryRun, HistoryRunState, HistoryStatus, PastSearch, PastTurn } from "./history";
+export type { HistoryOffer, HistoryProgress, HistoryQueue, HistoryRun, HistoryRunState, HistoryStatus, PastSearch, PastTurn } from "./history";
 
 export const TOKEN = new URLSearchParams(location.search).get("token") ?? "";
 
@@ -233,6 +233,8 @@ export const api = {
     return call<PastSearch>(`/api/history/search?${params}`);
   },
   historyProgress: () => call<HistoryProgress>("/api/history/progress"),
+  /** The one-time offer: light, for every page load. */
+  historyOffer: () => call<HistoryOffer>("/api/history/offer"),
   /** Starts a background run; `started: false` when one is already going. */
   historyImport: () => call<{ started: boolean }>("/api/history/import", { method: "POST", body: "{}" }),
   historyIndex: () => call<{ started: boolean }>("/api/history/index", { method: "POST", body: "{}" }),

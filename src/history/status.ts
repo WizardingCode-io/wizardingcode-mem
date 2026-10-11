@@ -1,6 +1,9 @@
 import { statSync } from "node:fs";
-import { listClaudeCodeTranscripts } from "../adapters/claude-code/history.ts";
-import { listCodexTranscripts } from "../adapters/codex/history.ts";
+import {
+  hasClaudeCodeTranscript,
+  listClaudeCodeTranscripts,
+} from "../adapters/claude-code/history.ts";
+import { hasCodexTranscript, listCodexTranscripts } from "../adapters/codex/history.ts";
 import { previewReplaceImports, projectsReadyForReplacement } from "../backfill/replace.ts";
 import type { Db } from "../store/db.ts";
 import { getMeta, HISTORY_LEASE, leaseActive } from "../store/meta.ts";
@@ -164,4 +167,34 @@ export function historyStatus(
     },
     offer: { dismissed: getMeta(db, HISTORY_OFFER_DISMISSED) !== null },
   };
+}
+
+export interface HistoryOffer {
+  show: boolean;
+  /** Counted only when the offer shows. */
+  sessions: number;
+  transcripts: { claudeCode: number; codex: number };
+}
+
+/**
+ * The viewer's one-time offer, light enough for every page load: the meta first (dismissed,
+ * a run going, an import already made), then whether any transcript exists, stopping at the
+ * first; the transcripts are counted only when the offer shows.
+ */
+export function historyOffer(
+  db: Db,
+  roots: { claudeCode: string; codex: string },
+  now: number,
+): HistoryOffer {
+  const none = { show: false, sessions: 0, transcripts: { claudeCode: 0, codex: 0 } };
+  if (getMeta(db, HISTORY_OFFER_DISMISSED) !== null) return none;
+  const run = runStatus(db, now);
+  if (run.state === "running" || importStatus(db, run).state !== "never") return none;
+  if (!hasClaudeCodeTranscript(roots.claudeCode) && !hasCodexTranscript(roots.codex)) return none;
+  const transcripts = {
+    claudeCode: listClaudeCodeTranscripts(roots.claudeCode, 0).length,
+    codex: listCodexTranscripts(roots.codex, 0).length,
+  };
+  const sessions = transcripts.claudeCode + transcripts.codex;
+  return { show: sessions > 0, sessions, transcripts };
 }

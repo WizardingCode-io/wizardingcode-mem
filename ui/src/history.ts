@@ -38,16 +38,12 @@ export type HistoryProgress = Pick<HistoryStatus, "run" | "import" | "queue">;
 /** Every past session found, across agents. */
 export const sessionsFound = (s: HistoryStatus): number => s.transcripts.claudeCode + s.transcripts.codex;
 
-/**
- * The one-time offer: past sessions exist, nothing was ever imported (an index run does not
- * count), no run is going, and it was not turned down.
- */
-export const shouldOffer = (s: HistoryStatus | null): boolean =>
-  s !== null &&
-  sessionsFound(s) > 0 &&
-  s.import.state === "never" &&
-  s.run.state !== "running" &&
-  !s.offer.dismissed;
+/** The one-time offer as `/api/history/offer` returns it: whether to show it is the server's call. */
+export interface HistoryOffer {
+  show: boolean;
+  sessions: number;
+  transcripts: { claudeCode: number; codex: number };
+}
 
 /**
  * Whether a run's judgements go to TypeSafe: a key is set and the switch is not off (as
@@ -64,6 +60,15 @@ export const historyCardDescription = (typesafe: boolean): string =>
 /** The offer's last sentence: where the import runs. */
 export const offerWhere = (typesafe: boolean): string =>
   `It runs in the background, on this machine${typesafe ? `, ${EXCEPT_TYPESAFE}` : ""}.`;
+
+/** The offer's one line: how many sessions, with which agents, and where it runs. */
+export function offerLine(offer: HistoryOffer, typesafe: boolean): string {
+  const agents = [offer.transcripts.claudeCode > 0 ? "Claude Code" : "", offer.transcripts.codex > 0 ? "Codex" : ""]
+    .filter(Boolean)
+    .join(" and ");
+  const count = offer.sessions;
+  return `Learn from your ${count.toLocaleString("en-GB")} past ${count === 1 ? "session" : "sessions"} with ${agents}. ${offerWhere(typesafe)}`;
+}
 
 /** Turns settled (done, skipped or failed) over all queued, rounded down: 100 only at the end. */
 export function progressOf(q: HistoryQueue): { settled: number; total: number; percent: number } {

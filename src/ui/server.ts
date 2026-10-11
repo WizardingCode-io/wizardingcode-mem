@@ -13,7 +13,13 @@ import { replaceAllImports, restoreImports } from "../backfill/replace.ts";
 import { openHistoryDb } from "../history/db.ts";
 import { forgetHistoryIndex } from "../history/run-state.ts";
 import { historyReadFailure, recentHistory, searchHistory } from "../history/search.ts";
-import { HISTORY_LEASE, HISTORY_OFFER_DISMISSED, historyProgress, historyStatus } from "../history/status.ts";
+import {
+  HISTORY_LEASE,
+  HISTORY_OFFER_DISMISSED,
+  historyOffer,
+  historyProgress,
+  historyStatus,
+} from "../history/status.ts";
 import { loadSettings, publicSettings, saveSettings, validatePatch } from "../settings/settings.ts";
 import { statusReport } from "../status/report.ts";
 import { CompactBusyError, compact } from "../store/compact.ts";
@@ -516,6 +522,9 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
     if (path === "/api/history/restore-imports" && request.method === "POST") {
       if (historyRunning()) return problem(409, "a history run is going; wait for it to finish");
       return json({ restored: restoreImports(db) });
+    }
+    if (path === "/api/history/offer" && request.method === "GET") {
+      return json(historyOffer(db, { claudeCode: claudeCodeRoot(env), codex: codexRoot(env) }, now()));
     }
     if (path === "/api/history/offer/dismiss" && request.method === "POST") {
       setMeta(db, HISTORY_OFFER_DISMISSED, "1");

@@ -46,6 +46,29 @@ export function listCodexTranscripts(root: string, sinceMs: number): string[] {
   return found.sort((a, b) => a.mtime - b.mtime).map((f) => f.path);
 }
 
+/** Whether any transcript is there: stops at the first one found. */
+export function hasCodexTranscript(root: string): boolean {
+  const walk = (dir: string): boolean => {
+    let names: string[];
+    try {
+      names = readdirSync(dir);
+    } catch {
+      return false;
+    }
+    for (const name of names) {
+      const path = join(dir, name);
+      try {
+        const stat = statSync(path);
+        if (stat.isDirectory() ? walk(path) : name.endsWith(".jsonl")) return true;
+      } catch {
+        // Gone between the listing and the stat.
+      }
+    }
+    return false;
+  };
+  return walk(root);
+}
+
 const time = (line: Json): number | null => {
   const value = Date.parse(text(line.timestamp) ?? "");
   return Number.isNaN(value) ? null : value;

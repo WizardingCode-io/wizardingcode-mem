@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { previewReplaceImports, replaceAllImports } from "../../src/backfill/replace.ts";
 import { openHistoryDb } from "../../src/history/db.ts";
-import { historyStatus } from "../../src/history/status.ts";
+import { historyOffer, historyStatus } from "../../src/history/status.ts";
 import { type Db, openDb } from "../../src/store/db.ts";
 import { setMeta } from "../../src/store/meta.ts";
 
@@ -166,5 +166,41 @@ describe("historyStatus", () => {
     // An import that died while running, then an index run: the import stopped.
     setMeta(db, "history.import.state", "running");
     expect(historyStatus(db, dir, roots, NOW).import.state).toBe("failed");
+  });
+});
+
+describe("historyOffer", () => {
+  const none = { show: false, sessions: 0, transcripts: { claudeCode: 0, codex: 0 } };
+  test("no transcripts: no offer", () => {
+    expect(historyOffer(db, roots, NOW)).toEqual(none);
+  });
+  test("transcripts and nothing imported: shown, with the counts", () => {
+    mkdirSync(join(roots.claudeCode, "p"), { recursive: true });
+    writeFileSync(join(roots.claudeCode, "p", "a.jsonl"), "{}\n");
+    writeFileSync(join(roots.claudeCode, "p", "b.jsonl"), "{}\n");
+    mkdirSync(join(roots.codex, "2026", "10", "01"), { recursive: true });
+    writeFileSync(join(roots.codex, "2026", "10", "01", "rollout-x.jsonl"), "{}\n");
+    expect(historyOffer(db, roots, NOW)).toEqual({
+      show: true,
+      sessions: 3,
+      transcripts: { claudeCode: 2, codex: 1 },
+    });
+    // An index run is not an import.
+    setMeta(db, "history.run.kind", "index");
+    setMeta(db, "history.run.state", "done");
+    expect(historyOffer(db, roots, NOW).show).toBe(true);
+    // ... but while it goes, the offer waits.
+    setMeta(db, "history.run.state", "running");
+    setMeta(db, "history.lease", JSON.stringify({ owner: "x", until: NOW + 60_000 }));
+    expect(historyOffer(db, roots, NOW)).toEqual(none);
+  });
+  test("an import that ran, or a dismissal, ends it without walking the transcripts", () => {
+    mkdirSync(join(roots.claudeCode, "p"), { recursive: true });
+    writeFileSync(join(roots.claudeCode, "p", "a.jsonl"), "{}\n");
+    setMeta(db, "history.run.state", "done");
+    expect(historyOffer(db, roots, NOW)).toEqual(none);
+    db.run("DELETE FROM meta");
+    setMeta(db, "history.offer.dismissed", "1");
+    expect(historyOffer(db, roots, NOW)).toEqual(none);
   });
 });

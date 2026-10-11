@@ -1,10 +1,10 @@
 <script lang="ts">
 import { ref } from "vue";
-import type { HistoryStatus } from "../api";
+import type { HistoryOffer } from "../api";
 
-// Asked once per page load: the full status walks the transcripts, so going back and forth
-// between views does not ask again.
-const offered = ref<HistoryStatus | null>(null);
+// Asked once per page load (a light route: it walks the transcripts only when it shows), so
+// going back and forth between views does not ask again.
+const offered = ref<HistoryOffer | null>(null);
 let asked = false;
 </script>
 
@@ -14,20 +14,14 @@ let asked = false;
 // that truncates, the action links on the right.
 import { computed, onMounted } from "vue";
 import { api } from "../api";
-import { offerWhere, sessionsFound, shouldOffer } from "../history";
+import { offerLine } from "../history";
 import { loadSettings, settingsState, typesafeJudging } from "../settings";
 
 const emit = defineEmits<{ progress: [] }>();
 const toast = useToast();
 const busy = ref(false);
-const show = computed(() => shouldOffer(offered.value));
-const line = computed(() => {
-  const s = offered.value;
-  if (!s) return "";
-  const agents = [s.transcripts.claudeCode > 0 ? "Claude Code" : "", s.transcripts.codex > 0 ? "Codex" : ""].filter(Boolean).join(" and ");
-  const count = sessionsFound(s);
-  return `Learn from your ${count.toLocaleString("en-GB")} past ${count === 1 ? "session" : "sessions"} with ${agents}. ${offerWhere(typesafeJudging())}`;
-});
+const show = computed(() => offered.value?.show === true);
+const line = computed(() => (offered.value ? offerLine(offered.value, typesafeJudging()) : ""));
 
 onMounted(async () => {
   if (asked) return;
@@ -35,7 +29,7 @@ onMounted(async () => {
   try {
     // The line says whether TypeSafe judges, which the settings tell.
     if (settingsState.view === null) await loadSettings().catch(() => undefined);
-    offered.value = await api.history();
+    offered.value = await api.historyOffer();
   } catch {
     // No offer is better than a broken page.
   }
