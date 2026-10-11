@@ -46,7 +46,8 @@ export const installQwen = (context: InstallContext): InstallResult =>
   installHooksFile(QWEN, context);
 export const uninstallQwen = (context: InstallContext): UninstallResult =>
   uninstallHooksFile(QWEN, context);
-export const inspectQwenSettings = (text: string) => inspectHooksFile(QWEN, text);
+export const inspectQwenSettings = (text: string, path = "settings.json") =>
+  inspectHooksFile(QWEN, text, path);
 
 /** QWEN_HOME as Qwen Code reads it: empty is unset, a leading ~ is home, relative is from here. */
 function qwenHome(env: Record<string, string | undefined>, home: string): string {

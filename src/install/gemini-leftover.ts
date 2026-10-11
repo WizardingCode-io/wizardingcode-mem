@@ -96,7 +96,7 @@ export function findGeminiLeftover(settingsPath: string): GeminiLeftover | null 
   let mcp = false;
   if (settings !== null && isObject(settings.parsed)) {
     try {
-      hooks = inspectHooksFile(GEMINI_LEFTOVER, settings.text).events;
+      hooks = inspectHooksFile(GEMINI_LEFTOVER, settings.text, settingsPath).events;
     } catch {
       hooks = [];
     }

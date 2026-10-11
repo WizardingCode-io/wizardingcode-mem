@@ -160,6 +160,10 @@ describe("install droid", () => {
     expect(settings().Stop).toEqual([theirStop, ours("turn-end")]);
   });
 
+  test("inspect names the file it read when that file is broken", () => {
+    expect(() => inspectDroidSettings("{ nope")).toThrow("hooks.json is not valid JSON");
+  });
+
   test("what install wrote is what inspect finds", () => {
     seedUser();
     installDroid(context());
@@ -169,10 +173,12 @@ describe("install droid", () => {
     });
   });
 
-  test("a settings file that is not plain JSON is refused and left exactly as it was", () => {
+  test("a hooks file with comments is refused, saying so, and left exactly as it was", () => {
     const withComment = '{\n  // mine\n  "model": { "name": "x" }\n}\n';
     seedUser(withComment);
-    expect(() => installDroid(context())).toThrow("not valid JSON");
+    expect(() => installDroid(context())).toThrow(
+      `comments in ${settingsPath} are not supported yet; remove them and run this again`,
+    );
     expect(readFileSync(settingsPath, "utf8")).toBe(withComment);
   });
 });
@@ -182,6 +188,31 @@ test("an mcp.json that is not plain JSON is refused and left as it was", () => {
   writeFileSync(mcpPath, "{ nope");
   expect(() => installDroid(context())).toThrow("not valid JSON");
   expect(readFileSync(mcpPath, "utf8")).toBe("{ nope");
+});
+
+describe("an invalid mcp.json stops install before anything is written", () => {
+  const receipts = () =>
+    existsSync(join(dataDir, "install")) ? readdirSync(join(dataDir, "install")) : [];
+
+  test("a comment in mcp.json: no hooks.json, no receipt, and an error that names the comment", () => {
+    mkdirSync(configDir, { recursive: true });
+    const theirs = '{ // mine\n "mcpServers": {} }';
+    writeFileSync(mcpPath, theirs);
+    expect(() => installDroid(context())).toThrow(
+      `comments in ${mcpPath} are not supported yet; remove them and run this again`,
+    );
+    expect(existsSync(settingsPath)).toBe(false);
+    expect(receipts()).toEqual([]);
+    expect(readFileSync(mcpPath, "utf8")).toBe(theirs);
+  });
+
+  test("the user's own hooks.json stays byte for byte", () => {
+    const original = seedUser();
+    writeFileSync(mcpPath, "[1]");
+    expect(() => installDroid(context())).toThrow("does not hold a JSON object");
+    expect(readFileSync(settingsPath, "utf8")).toBe(original);
+    expect(receipts()).toEqual([]);
+  });
 });
 
 describe("uninstall droid", () => {

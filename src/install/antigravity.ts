@@ -69,7 +69,8 @@ export function uninstallAntigravity(context: AntigravityContext): UninstallResu
   return result;
 }
 
-export const inspectAntigravityHooks = (text: string) => inspectHooksFile(ANTIGRAVITY, text);
+export const inspectAntigravityHooks = (text: string, path = "hooks.json") =>
+  inspectHooksFile(ANTIGRAVITY, text, path);
 
 export function antigravityContext(
   binaryPath: string,

@@ -130,10 +130,10 @@ describe("install qwen", () => {
     });
   });
 
-  test("a settings file that is not plain JSON is refused and left exactly as it was", () => {
+  test("a settings file with comments is refused, saying so, and left exactly as it was", () => {
     const withComment = '{\n  // mine\n  "model": { "name": "x" }\n}\n';
     seedUser(withComment);
-    expect(() => installQwen(context())).toThrow("not valid JSON");
+    expect(() => installQwen(context())).toThrow("comments in");
     expect(readFileSync(settingsPath, "utf8")).toBe(withComment);
   });
 });

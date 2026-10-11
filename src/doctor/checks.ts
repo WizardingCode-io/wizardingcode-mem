@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 import { accessSync, constants, existsSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { lastBackup } from "../backup/schedule.ts";
 import { ANTIGRAVITY } from "../install/antigravity.ts";
 import { CLAUDE_CODE } from "../install/claude-code.ts";
@@ -301,12 +301,12 @@ function hooksHost(
   if (!existsSync(path)) return absent();
   let found: ReturnType<typeof inspectHooksFile>;
   try {
-    found = inspectHooksFile(spec, readFileSync(path, "utf8"));
+    found = inspectHooksFile(spec, readFileSync(path, "utf8"), path);
   } catch (error) {
     return {
       name,
       status: "warn",
-      detail: error instanceof Error ? error.message.replace("settings.json", path) : String(error),
+      detail: error instanceof Error ? error.message.replace(basename(path), path) : String(error),
     };
   }
   if (found.events.length === 0) return absent();

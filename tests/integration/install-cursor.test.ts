@@ -97,6 +97,17 @@ describe("install cursor", () => {
   });
 });
 
+describe("an invalid mcp.json stops install before anything is written", () => {
+  test("the user's hooks.json is left as it was, with no receipt", () => {
+    const original = '{"version": 1, "hooks": {}}\n';
+    writeFileSync(hooksPath, original);
+    writeFileSync(mcpPath, '{\n  /* mine */\n  "mcpServers": {}\n}\n');
+    expect(() => installCursor(context())).toThrow(`comments in ${mcpPath} are not supported yet`);
+    expect(readFileSync(hooksPath, "utf8")).toBe(original);
+    expect(existsSync(join(dataDir, "install"))).toBe(false);
+  });
+});
+
 describe("uninstall cursor", () => {
   test("puts hooks.json back and takes the server out of mcp.json, keeping the rest", () => {
     const original = '{"version": 1, "hooks": {}}\n';

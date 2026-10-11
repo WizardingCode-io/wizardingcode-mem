@@ -10,7 +10,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 import type { AgentId, HookEvent, RetiredAgentId } from "../core/types.ts";
 
@@ -128,6 +128,10 @@ function parseSettings(path: string, text: string | null, spec?: HostSpec): Json
   try {
     parsed = JSON.parse(text);
   } catch {
+    // Hosts that accept JSONC are common; saying so is more use than "not valid JSON".
+    if (hasComments(text)) {
+      throw new Error(`comments in ${path} are not supported yet; remove them and run this again`);
+    }
     throw new Error(`${path} is not valid JSON; fix it and run this again`);
   }
   if (!isObject(parsed)) throw new Error(`${path} does not hold a JSON object`);
@@ -147,6 +151,20 @@ function parseSettings(path: string, text: string | null, spec?: HostSpec): Json
     throw new Error(`"hooks" in ${path} is not an object; fix it and run this again`);
   }
   return parsed;
+}
+
+/** Whether the text holds a line or block comment outside a string. */
+export function hasComments(text: string): boolean {
+  let inString = false;
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (inString) {
+      if (char === "\\") i++;
+      else if (char === '"') inString = false;
+    } else if (char === '"') inString = true;
+    else if (char === "/" && (text[i + 1] === "/" || text[i + 1] === "*")) return true;
+  }
+  return false;
 }
 
 /** The settings without any hook of ours; hook groups and events left empty are dropped. */
@@ -271,6 +289,13 @@ export function installHooksFile(spec: HostSpec, context: InstallContext): Insta
     previous,
   );
   const changed = next !== previous;
+  // The MCP file is read and validated now, so that a broken one stops the install before the
+  // hooks go live: nothing is written unless both files can be.
+  const mcpPath = spec.mcpFile?.(context);
+  const mcpWrite =
+    mcpPath === undefined
+      ? null
+      : planMcpServer(mcpPath, spec.mcpEntry?.(binaryPath) ?? mcpServerEntry(binaryPath));
 
   if (changed) {
     const installDir = join(dataDir, "install");
@@ -331,9 +356,11 @@ export function installHooksFile(spec: HostSpec, context: InstallContext): Insta
       notes: spec.notes,
     };
   }
-  if (spec.mcpFile !== undefined) {
-    const mcpPath = spec.mcpFile(context);
-    writeMcpServer(mcpPath, spec.mcpEntry?.(binaryPath) ?? mcpServerEntry(binaryPath));
+  if (mcpPath !== undefined) {
+    if (mcpWrite !== null) {
+      mkdirSync(dirname(mcpWrite.file), { recursive: true });
+      writeAtomically(mcpWrite.file, mcpWrite.text);
+    }
     return { settingsPath, changed, mcp: "registered", mcpCommand, mcpPath, notes: spec.notes };
   }
   // Otherwise the MCP server is registered through the host's own command: its config
@@ -350,18 +377,22 @@ const legacyMcpRemove = (spec: HostSpec): string[] =>
 
 const mcpServerEntry = (binaryPath: string): Json => ({ command: binaryPath, args: ["mcp"] });
 
-/** Adds our server to a host's `mcpServers` file, keeping every other entry. */
-function writeMcpServer(path: string, entry: Json): void {
+/**
+ * What adding our server to a host's `mcpServers` file, keeping every other entry, would
+ * write; null when it is already there. Throws, writing nothing, when the file is not valid.
+ */
+function planMcpServer(path: string, entry: Json): { file: string; text: string } | null {
   const file = resolved(path);
   const previous = existsSync(file) ? readFileSync(file, "utf8") : null;
   const config = parseSettings(path, previous);
+  if (config.mcpServers !== undefined && !isObject(config.mcpServers)) {
+    throw new Error(`"mcpServers" in ${path} is not an object; fix it and run this again`);
+  }
   const { [LEGACY_MCP_NAME]: _legacy, ...servers } = isObject(config.mcpServers)
     ? config.mcpServers
     : {};
   const next = serialise({ ...config, mcpServers: { ...servers, [MCP_NAME]: entry } }, previous);
-  if (next === previous) return;
-  mkdirSync(dirname(file), { recursive: true });
-  writeAtomically(file, next);
+  return next === previous ? null : { file, text: next };
 }
 
 /** Takes our server out of a host's `mcpServers` file; a file left empty by that goes away. */
@@ -433,8 +464,11 @@ export function uninstallHooksFile(spec: HostSpec, context: InstallContext): Uni
 export function inspectHooksFile(
   spec: HostSpec,
   text: string,
+  /** The file the text came from; errors name it. */
+  path: string,
 ): { events: string[]; binaries: string[] } {
-  const settings = parseSettings("settings.json", text, spec);
+  // Errors name the file that was read, not always settings.json.
+  const settings = parseSettings(basename(path), text, spec);
   const events: string[] = [];
   const binaries = new Set<string>();
   if (isObject(settings.hooks)) {

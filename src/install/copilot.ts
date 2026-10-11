@@ -87,7 +87,8 @@ export function uninstallCopilot(context: CopilotContext): UninstallResult {
   return result;
 }
 
-export const inspectCopilotHooks = (text: string) => inspectHooksFile(COPILOT, text);
+export const inspectCopilotHooks = (text: string, path = `${MCP_NAME}.json`) =>
+  inspectHooksFile(COPILOT, text, path);
 
 /** COPILOT_HOME as the documentation gives it: a directory replacing ~/.copilot; empty is unset. */
 function copilotHome(env: Record<string, string | undefined>, home: string): string {

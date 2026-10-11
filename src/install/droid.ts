@@ -47,7 +47,8 @@ export const installDroid = (context: DroidContext): InstallResult =>
   installHooksFile(DROID, context);
 export const uninstallDroid = (context: DroidContext): UninstallResult =>
   uninstallHooksFile(DROID, context);
-export const inspectDroidSettings = (text: string) => inspectHooksFile(DROID, text);
+export const inspectDroidSettings = (text: string, path = "hooks.json") =>
+  inspectHooksFile(DROID, text, path);
 
 export function droidContext(
   binaryPath: string,

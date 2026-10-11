@@ -148,6 +148,12 @@ describe("install copilot", () => {
     expect(hooks()).toEqual(OURS);
   });
 
+  test("inspect names the file it read when that file is broken", () => {
+    expect(() => inspectCopilotHooks("[1]")).toThrow(
+      "wizardingcode-mem.json does not hold a JSON object",
+    );
+  });
+
   test("what install wrote is what inspect finds", () => {
     installCopilot(context());
     expect(inspectCopilotHooks(readFileSync(hooksPath, "utf8"))).toEqual({
@@ -161,6 +167,17 @@ describe("install copilot", () => {
     writeFileSync(mcpPath, "{ nope");
     expect(() => installCopilot(context())).toThrow("not valid JSON");
     expect(readFileSync(mcpPath, "utf8")).toBe("{ nope");
+  });
+});
+
+describe("an invalid mcp-config.json stops install before anything is written", () => {
+  test("[1] in mcp-config.json: no hooks file, no receipt, a clear error", () => {
+    mkdirSync(configDir, { recursive: true });
+    writeFileSync(mcpPath, "[1]");
+    expect(() => installCopilot(context())).toThrow(`${mcpPath} does not hold a JSON object`);
+    expect(existsSync(hooksPath)).toBe(false);
+    expect(existsSync(join(dataDir, "install"))).toBe(false);
+    expect(readFileSync(mcpPath, "utf8")).toBe("[1]");
   });
 });
 

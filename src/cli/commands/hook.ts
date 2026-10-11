@@ -106,7 +106,9 @@ async function standsDownAsPlugin(agent: string, flags: string[]): Promise<boole
     };
     const found = await direct();
     if (found === null) return false;
-    return inspectHooksFile(found.spec, readFileSync(found.path, "utf8")).events.length > 0;
+    return (
+      inspectHooksFile(found.spec, readFileSync(found.path, "utf8"), found.path).events.length > 0
+    );
   } catch {
     return false;
   }
