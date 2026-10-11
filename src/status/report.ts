@@ -140,11 +140,12 @@ function formatHistory(h: HistoryStatus): string[] {
     !index.exists &&
     run.state === "never" &&
     replace.replaced === 0;
+  // The import line reports the last import; a later index run does not stand for it.
   if (quiet) return [];
   const lines = [
     "History",
     `  found     ${h.transcripts.claudeCode} Claude Code · ${h.transcripts.codex} Codex transcripts`,
-    `  import    ${run.state} · ${queue.pending} queued · ${queue.done} distilled · ${queue.skipped} skipped · ${queue.failed} failed`,
+    `  import    ${h.import.state} · ${queue.pending} queued · ${queue.done} distilled · ${queue.skipped} skipped · ${queue.failed} failed`,
     index.exists
       ? `  index     ${plural(index.files, "file")} · ${plural(index.turns, "turn")} · ${megabytes(index.bytes)}`
       : "  index     none yet",

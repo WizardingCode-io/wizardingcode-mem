@@ -57,7 +57,14 @@ describe("historyStatus", () => {
   test("a fresh store: never run, nothing counted", () => {
     const s = historyStatus(db, dir, roots, NOW);
     expect(s.transcripts).toEqual({ claudeCode: 0, codex: 0 });
-    expect(s.run).toEqual({ state: "never", startedAt: null, finishedAt: null, last: null });
+    expect(s.run).toEqual({
+      state: "never",
+      kind: "import",
+      startedAt: null,
+      finishedAt: null,
+      last: null,
+    });
+    expect(s.import).toEqual({ state: "never", startedAt: null, finishedAt: null });
     expect(s.queue).toEqual({ pending: 0, done: 0, skipped: 0, failed: 0 });
     expect(s.index).toEqual({ exists: false, files: 0, turns: 0, bytes: 0 });
     expect(s.replace).toEqual({ projectsReady: 0, wouldArchive: 0, replaced: 0 });
@@ -115,6 +122,7 @@ describe("historyStatus", () => {
     setMeta(db, "history.run.report", JSON.stringify({ turns: 3 }));
     expect(historyStatus(db, dir, roots, NOW).run).toEqual({
       state: "done",
+      kind: "import",
       startedAt: 100,
       finishedAt: 200,
       last: { turns: 3 },
@@ -123,5 +131,40 @@ describe("historyStatus", () => {
     expect(historyStatus(db, dir, roots, NOW).run.state).toBe("failed");
     setMeta(db, "history.lease", JSON.stringify({ owner: "x", until: NOW + 60_000 }));
     expect(historyStatus(db, dir, roots, NOW).run.state).toBe("running");
+  });
+
+  test("the last import stands apart from an index run that came after it", () => {
+    // Before run kinds were recorded, a run was an import.
+    setMeta(db, "history.run.state", "done");
+    setMeta(db, "history.run.started_at", "100");
+    setMeta(db, "history.run.finished_at", "200");
+    expect(historyStatus(db, dir, roots, NOW).import).toEqual({
+      state: "done",
+      startedAt: 100,
+      finishedAt: 200,
+    });
+
+    // An index run alone: never imported.
+    setMeta(db, "history.run.kind", "index");
+    expect(historyStatus(db, dir, roots, NOW).run.kind).toBe("index");
+    expect(historyStatus(db, dir, roots, NOW).import).toEqual({
+      state: "never",
+      startedAt: null,
+      finishedAt: null,
+    });
+
+    // An index run after an import: the import's own record.
+    setMeta(db, "history.import.state", "done");
+    setMeta(db, "history.import.started_at", "10");
+    setMeta(db, "history.import.finished_at", "20");
+    expect(historyStatus(db, dir, roots, NOW).import).toEqual({
+      state: "done",
+      startedAt: 10,
+      finishedAt: 20,
+    });
+
+    // An import that died while running, then an index run: the import stopped.
+    setMeta(db, "history.import.state", "running");
+    expect(historyStatus(db, dir, roots, NOW).import.state).toBe("failed");
   });
 });

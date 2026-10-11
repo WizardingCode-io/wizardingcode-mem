@@ -2,13 +2,21 @@
 // and the progress poll. Pure, so the tests drive it without a browser.
 // No import from api.ts: it reads the page's location, and the tests load this file without one.
 
-/** The history import as the server reports it (src/history/status.ts); api.ts re-exports these. */
+/** The history runs as the server reports them (src/history/status.ts); api.ts re-exports these. */
 export type HistoryRunState = "never" | "running" | "done" | "failed";
+export type HistoryRunKind = "import" | "index";
 export interface HistoryRun {
   state: HistoryRunState;
+  kind: HistoryRunKind;
   startedAt: number | null;
   finishedAt: number | null;
   last: unknown | null;
+}
+/** The last import, whatever ran after it: an index run never stands for one. */
+export interface HistoryImport {
+  state: HistoryRunState;
+  startedAt: number | null;
+  finishedAt: number | null;
 }
 export interface HistoryQueue {
   pending: number;
@@ -19,19 +27,27 @@ export interface HistoryQueue {
 export interface HistoryStatus {
   transcripts: { claudeCode: number; codex: number };
   run: HistoryRun;
+  import: HistoryImport;
   queue: HistoryQueue;
   index: { exists: boolean; files: number; turns: number; bytes: number };
   replace: { projectsReady: number; wouldArchive: number; replaced: number };
   offer: { dismissed: boolean };
 }
-export type HistoryProgress = Pick<HistoryStatus, "run" | "queue">;
+export type HistoryProgress = Pick<HistoryStatus, "run" | "import" | "queue">;
 
 /** Every past session found, across agents. */
 export const sessionsFound = (s: HistoryStatus): number => s.transcripts.claudeCode + s.transcripts.codex;
 
-/** The one-time offer: past sessions exist, nothing ever ran, and it was not turned down. */
+/**
+ * The one-time offer: past sessions exist, nothing was ever imported (an index run does not
+ * count), no run is going, and it was not turned down.
+ */
 export const shouldOffer = (s: HistoryStatus | null): boolean =>
-  s !== null && sessionsFound(s) > 0 && s.run.state === "never" && !s.offer.dismissed;
+  s !== null &&
+  sessionsFound(s) > 0 &&
+  s.import.state === "never" &&
+  s.run.state !== "running" &&
+  !s.offer.dismissed;
 
 /**
  * Whether a run's judgements go to TypeSafe: a key is set and the switch is not off (as
@@ -58,9 +74,45 @@ export function progressOf(q: HistoryQueue): { settled: number; total: number; p
 
 /** The import button: a first import, the rest of an unfinished one, or what came since. */
 export function importLabel(s: HistoryStatus): string {
-  if (s.run.state === "never") return "Import";
-  if (s.run.state === "failed" || s.queue.pending > 0) return "Continue";
+  if (s.import.state === "never") return "Import";
+  if (s.import.state === "failed" || s.queue.pending > 0) return "Continue";
   return "Import new sessions";
+}
+
+/** A status pill: its words and colours (app.css tokens); `square` marks a stop. */
+export interface Pill {
+  label: string;
+  bg: string;
+  fg: string;
+  shape: "" | "square";
+}
+const NEUTRAL = { bg: "var(--paper-sunken)", fg: "var(--ink-muted)" };
+const BLUE = { bg: "var(--blue-soft)", fg: "var(--blue-text)" };
+const OK = { bg: "var(--ok-soft)", fg: "var(--ok)" };
+const WARN = { bg: "var(--warn-soft)", fg: "var(--warn)" };
+
+/** The Past sessions row's pill: the last import's state. */
+export function importPill(s: HistoryStatus): Pill {
+  switch (s.import.state) {
+    case "never":
+      return { label: "Not imported", ...NEUTRAL, shape: "" };
+    case "running":
+      return { label: "Importing", ...BLUE, shape: "" };
+    case "failed":
+      return { label: "Stopped", ...WARN, shape: "square" };
+    default:
+      // It ended within its time budget with turns still queued: Continue does the rest.
+      return s.queue.pending > 0 ? { label: "Partly imported", ...WARN, shape: "" } : { label: "Imported", ...OK, shape: "" };
+  }
+}
+
+/** The Search index row's pill, when the last run was an index run. */
+export function indexPill(s: HistoryStatus): Pill | null {
+  if (s.run.kind !== "index") return null;
+  if (s.run.state === "running") return { label: "Indexing", ...BLUE, shape: "" };
+  if (s.run.state === "done") return { label: "Indexed", ...OK, shape: "" };
+  if (s.run.state === "failed") return { label: "Stopped", ...WARN, shape: "square" };
+  return null;
 }
 
 export const sizeOf = (bytes: number): string =>

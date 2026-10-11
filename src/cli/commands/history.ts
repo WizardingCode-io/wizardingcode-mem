@@ -190,14 +190,14 @@ export async function run(argv: string[]): Promise<number> {
       return 0;
     }
     if (sub === "index") {
-      const ran = await withHistoryRun(db, Date.now, (renew) =>
+      const ran = await withHistoryRun(db, Date.now, "index", (renew) =>
         runIndex((maxSeconds ?? 600) * 1000, renew),
       );
       process.stdout.write(ran === null ? already : indexLine(ran.report));
       return 0;
     }
     const budgetMs = (maxSeconds ?? 600) * 1000;
-    const ran = await withHistoryRun(db, Date.now, async (renew) => {
+    const ran = await withHistoryRun(db, Date.now, "import", async (renew) => {
       const started = Date.now();
       const backfill = await runBackfill(
         {

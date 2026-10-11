@@ -12,16 +12,32 @@ export const RUN_STATE = "history.run.state";
 export const RUN_STARTED_AT = "history.run.started_at";
 export const RUN_FINISHED_AT = "history.run.finished_at";
 export const RUN_REPORT = "history.run.report";
+/** `import` or `index`: what the last run was. Missing on runs recorded before kinds were. */
+export const RUN_KIND = "history.run.kind";
+/**
+ * The last import, kept apart from the run keys so an index run after it does not hide it:
+ * written by import runs only (src/history/run-state.ts). The offer, the card's import pill
+ * and its button read this, never an index run.
+ */
+export const IMPORT_STATE = "history.import.state";
+export const IMPORT_STARTED_AT = "history.import.started_at";
+export const IMPORT_FINISHED_AT = "history.import.finished_at";
+
+export type RunKind = "import" | "index";
+export type RunState = "never" | "running" | "done" | "failed";
 export const HISTORY_OFFER_DISMISSED = "history.offer.dismissed";
 
 export interface HistoryStatus {
   transcripts: { claudeCode: number; codex: number };
   run: {
-    state: "never" | "running" | "done" | "failed";
+    state: RunState;
+    kind: RunKind;
     startedAt: number | null;
     finishedAt: number | null;
     last: unknown | null;
   };
+  /** The last import run, whatever ran after it. */
+  import: { state: RunState; startedAt: number | null; finishedAt: number | null };
   queue: { pending: number; done: number; skipped: number; failed: number };
   index: { exists: boolean; files: number; turns: number; bytes: number };
   replace: { projectsReady: number; wouldArchive: number; replaced: number };
@@ -54,9 +70,25 @@ function runStatus(db: Db, now: number): HistoryStatus["run"] {
   }
   return {
     state,
+    kind: getMeta(db, RUN_KIND) === "index" ? "index" : "import",
     startedAt: number(getMeta(db, RUN_STARTED_AT)),
     finishedAt: number(getMeta(db, RUN_FINISHED_AT)),
     last,
+  };
+}
+
+function importStatus(db: Db, run: HistoryStatus["run"]): HistoryStatus["import"] {
+  if (run.kind === "import") {
+    return { state: run.state, startedAt: run.startedAt, finishedAt: run.finishedAt };
+  }
+  const raw = getMeta(db, IMPORT_STATE);
+  // The last run is an index run: an import still marked running died on the way.
+  const state: RunState =
+    raw === "done" || raw === "failed" ? raw : raw === "running" ? "failed" : "never";
+  return {
+    state,
+    startedAt: number(getMeta(db, IMPORT_STARTED_AT)),
+    finishedAt: number(getMeta(db, IMPORT_FINISHED_AT)),
   };
 }
 
@@ -98,8 +130,12 @@ export function queueStatus(db: Db): HistoryStatus["queue"] {
 }
 
 /** The light view the viewer polls while a run goes: no transcript walk, no index open. */
-export function historyProgress(db: Db, now: number): Pick<HistoryStatus, "run" | "queue"> {
-  return { run: runStatus(db, now), queue: queueStatus(db) };
+export function historyProgress(
+  db: Db,
+  now: number,
+): Pick<HistoryStatus, "run" | "import" | "queue"> {
+  const run = runStatus(db, now);
+  return { run, import: importStatus(db, run), queue: queueStatus(db) };
 }
 
 /** One view of the history import for `status`, the viewer and the install prompt. */
@@ -110,12 +146,14 @@ export function historyStatus(
   now: number,
 ): HistoryStatus {
   const queue = queueStatus(db);
+  const run = runStatus(db, now);
   return {
     transcripts: {
       claudeCode: listClaudeCodeTranscripts(roots.claudeCode, 0).length,
       codex: listCodexTranscripts(roots.codex, 0).length,
     },
-    run: runStatus(db, now),
+    run,
+    import: importStatus(db, run),
     queue,
     index: indexStatus(storeDir),
     replace: {

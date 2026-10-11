@@ -293,9 +293,16 @@ describe("wizardingcode-mem history", () => {
       expect(existsSync(join(store, "history.db"))).toBe(false);
     });
 
-    test("an index run is recorded too", async () => {
-      await history("import");
+    test("an index run is recorded too, as an index run: the import stays on record apart", async () => {
       expect((await history("index")).exitCode).toBe(0);
+      expect(meta("history.run.kind")).toBe("index");
+      expect(meta("history.import.state")).toBeNull();
+      await history("import");
+      expect(meta("history.run.kind")).toBe("import");
+      expect(meta("history.import.state")).toBe("done");
+      expect((await history("index")).exitCode).toBe(0);
+      expect(meta("history.run.kind")).toBe("index");
+      expect(meta("history.import.state")).toBe("done");
       expect(meta("history.run.state")).toBe("done");
       expect(JSON.parse(meta("history.run.report") as string)).toHaveProperty("files");
     });

@@ -3,7 +3,17 @@ import type { Db } from "../store/db.ts";
 import { claimLease, HISTORY_LEASE, releaseLease, setMeta } from "../store/meta.ts";
 import { logError } from "../util/log.ts";
 import { historyDbPath } from "./path.ts";
-import { RUN_FINISHED_AT, RUN_REPORT, RUN_STARTED_AT, RUN_STATE } from "./status.ts";
+import {
+  IMPORT_FINISHED_AT,
+  IMPORT_STARTED_AT,
+  IMPORT_STATE,
+  RUN_FINISHED_AT,
+  RUN_KIND,
+  RUN_REPORT,
+  RUN_STARTED_AT,
+  RUN_STATE,
+  type RunKind,
+} from "./status.ts";
 
 const LEASE_MS = 120_000;
 const RENEW_EVERY_MS = 30_000;
@@ -17,7 +27,8 @@ const isBusy = (error: unknown): boolean =>
 
 /**
  * Runs `work` as the one history run: it holds `history.lease` (renewed while it works),
- * records `running`, then `done` with the report, or `failed`. Returns null, without
+ * records `running` and its `kind`, then `done` with the report, or `failed`. An import
+ * also records its state under `history.import.*`, which an index run leaves alone. Returns null, without
  * running, when another live run holds the lease. `renew` is for the work's own loops
  * (at most one write every ten seconds); a timer renews too, for the stretches where it
  * awaits. A renewal that meets a busy database is logged and tried again later: the lease
@@ -26,6 +37,7 @@ const isBusy = (error: unknown): boolean =>
 export async function withHistoryRun<T extends object>(
   db: Db,
   now: () => number,
+  kind: RunKind,
   work: (renew: () => void) => Promise<T> | T,
 ): Promise<{ report: T } | null> {
   const owner = `${process.pid}-${crypto.randomUUID()}`;
@@ -65,11 +77,18 @@ export async function withHistoryRun<T extends object>(
     for (const key of [RUN_REPORT, RUN_FINISHED_AT])
       db.run("DELETE FROM meta WHERE key = ?", [key]);
     setMeta(db, RUN_STATE, "running");
+    setMeta(db, RUN_KIND, kind);
     setMeta(db, RUN_STARTED_AT, String(now()));
+    if (kind === "import") {
+      db.run("DELETE FROM meta WHERE key = ?", [IMPORT_FINISHED_AT]);
+      setMeta(db, IMPORT_STATE, "running");
+      setMeta(db, IMPORT_STARTED_AT, String(now()));
+    }
     const report = await work(renew);
     if (lost) throw new Error("history lease lost: another run took over");
     setMeta(db, RUN_REPORT, JSON.stringify(report));
     setMeta(db, RUN_STATE, "done");
+    if (kind === "import") setMeta(db, IMPORT_STATE, "done");
     return { report };
   } catch (error) {
     // A run that lost the lease must not overwrite the state of the one that has it.
@@ -81,6 +100,7 @@ export async function withHistoryRun<T extends object>(
           JSON.stringify({ error: error instanceof Error ? error.message : String(error) }),
         );
         setMeta(db, RUN_STATE, "failed");
+        if (kind === "import") setMeta(db, IMPORT_STATE, "failed");
       } catch (recording) {
         logError("history-run-state", recording);
       }
@@ -90,7 +110,9 @@ export async function withHistoryRun<T extends object>(
     clearInterval(timer);
     if (!lost) {
       try {
-        setMeta(db, RUN_FINISHED_AT, String(now()));
+        const at = String(now());
+        setMeta(db, RUN_FINISHED_AT, at);
+        if (kind === "import") setMeta(db, IMPORT_FINISHED_AT, at);
       } catch (recording) {
         logError("history-run-state", recording);
       }

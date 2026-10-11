@@ -5,6 +5,7 @@ const status =
   (
     over: {
       state?: "never" | "running" | "done" | "failed";
+      imported?: "never" | "running" | "done" | "failed";
       dismissed?: boolean;
       cc?: number;
       codex?: number;
@@ -13,6 +14,7 @@ const status =
   () => ({
     transcripts: { claudeCode: over.cc ?? 3, codex: over.codex ?? 2 },
     run: { state: over.state ?? ("never" as const) },
+    import: { state: over.imported ?? over.state ?? ("never" as const) },
     offer: { dismissed: over.dismissed ?? false },
   });
 
@@ -92,6 +94,15 @@ describe("offerHistoryImport", () => {
       expect(calls.asked).toEqual([]);
       expect(calls.spawned).toEqual([]);
     }
+  });
+
+  test("an index run is not an import: the offer still stands, unless a run is going", () => {
+    const { calls, deps } = harness({ state: "done", imported: "never" });
+    offerHistoryImport([], deps);
+    expect(calls.asked).toHaveLength(1);
+    const going = harness({ state: "running", imported: "never" });
+    expect(offerHistoryImport([], going.deps)).toEqual([]);
+    expect(going.calls.asked).toHaveLength(0);
   });
 
   test("a status that cannot be read means no offer", () => {

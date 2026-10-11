@@ -30,6 +30,7 @@ describe("withHistoryRun", () => {
       withHistoryRun(
         db,
         () => NOW,
+        "import",
         () => {
           ran = true;
           return {};
@@ -48,6 +49,7 @@ describe("withHistoryRun", () => {
     await withHistoryRun(
       db,
       () => NOW,
+      "import",
       () => {
         seen = [getMeta(db, "history.run.report"), getMeta(db, "history.run.finished_at")];
         return { fresh: true };
@@ -64,6 +66,7 @@ describe("withHistoryRun", () => {
       withHistoryRun(
         db,
         () => clock,
+        "import",
         (renew) => {
           setMeta(
             db,
@@ -92,6 +95,7 @@ describe("withHistoryRun", () => {
     await withHistoryRun(
       db,
       () => clock,
+      "import",
       (renew) => {
         seen.push(until());
         clock += 4_000;
@@ -115,6 +119,7 @@ describe("withHistoryRun", () => {
       const outcome = await withHistoryRun(
         quick,
         () => clock,
+        "import",
         (renew) => {
           other.run("BEGIN IMMEDIATE");
           try {
@@ -143,10 +148,51 @@ describe("withHistoryRun", () => {
       withHistoryRun(
         db,
         () => NOW,
+        "import",
         () => {
           throw new Error("the work broke");
         },
       ),
     ).rejects.toThrow("the work broke");
+  });
+
+  test("records the run's kind; an import also records itself apart, which an index run leaves alone", async () => {
+    let during: (string | null)[] = [];
+    await withHistoryRun(
+      db,
+      () => NOW,
+      "import",
+      () => {
+        during = [getMeta(db, "history.run.kind"), getMeta(db, "history.import.state")];
+        return {};
+      },
+    );
+    expect(during).toEqual(["import", "running"]);
+    expect(getMeta(db, "history.import.state")).toBe("done");
+    expect(getMeta(db, "history.import.started_at")).toBe(String(NOW));
+    expect(getMeta(db, "history.import.finished_at")).toBe(String(NOW));
+
+    await withHistoryRun(
+      db,
+      () => NOW + 1000,
+      "index",
+      () => ({}),
+    );
+    expect(getMeta(db, "history.run.kind")).toBe("index");
+    expect(getMeta(db, "history.run.state")).toBe("done");
+    expect(getMeta(db, "history.import.state")).toBe("done");
+    expect(getMeta(db, "history.import.finished_at")).toBe(String(NOW));
+
+    await expect(
+      withHistoryRun(
+        db,
+        () => NOW + 2000,
+        "import",
+        () => {
+          throw new Error("broke");
+        },
+      ),
+    ).rejects.toThrow("broke");
+    expect(getMeta(db, "history.import.state")).toBe("failed");
   });
 });

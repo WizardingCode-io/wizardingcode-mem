@@ -10,6 +10,7 @@ import { spawnDetached } from "../util/self.ts";
 export interface HistoryOfferDeps {
   status: () => Pick<HistoryStatus, "transcripts"> & {
     run: Pick<HistoryStatus["run"], "state">;
+    import: Pick<HistoryStatus["import"], "state">;
     offer: HistoryStatus["offer"];
   };
   historyDays: number;
@@ -34,7 +35,14 @@ export function offerHistoryImport(flags: string[], deps: HistoryOfferDeps): str
     return [];
   }
   const sessions = found.transcripts.claudeCode + found.transcripts.codex;
-  if (sessions === 0 || found.run.state !== "never" || found.offer.dismissed) return [];
+  // Only an import counts: an index run reads the transcripts but learns nothing from them.
+  if (
+    sessions === 0 ||
+    found.import.state !== "never" ||
+    found.run.state === "running" ||
+    found.offer.dismissed
+  )
+    return [];
 
   const start = (): string[] => {
     deps.spawn("history", "import");
@@ -71,6 +79,7 @@ export function offerHistoryImportHere(
             codex: listCodexTranscripts(roots.codex, 0).length,
           },
           run: { state: "never" as const },
+          import: { state: "never" as const },
           offer: { dismissed: false },
         };
       }

@@ -558,13 +558,13 @@ describe("wizardingcode-mem ui: history runs", () => {
     expect(spawned.length).toBe(2);
   });
 
-  test("progress is light: only the run and the queue", async () => {
+  test("progress is light: only the run, the last import and the queue", async () => {
     const { s } = await startSpying();
     const progress = (await (await api(s, "/api/history/progress")).json()) as Record<
       string,
       unknown
     >;
-    expect(Object.keys(progress).sort()).toEqual(["queue", "run"]);
+    expect(Object.keys(progress).sort()).toEqual(["import", "queue", "run"]);
     expect((progress.run as { state: string }).state).toBe("never");
     holdLease(NOW + 60_000);
     const running = (await (await api(s, "/api/history/progress")).json()) as {
