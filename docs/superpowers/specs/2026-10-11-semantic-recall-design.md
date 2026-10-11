@@ -1,6 +1,6 @@
 # Semantic recall and two more moments to remember — design
 
-Date: 2026-10-11. Status: design approved in conversation; awaiting review of this spec. Roadmap items A3 (semantic recall, local, no daemon) and A4 (remember at more moments).
+Date: 2026-10-11. Status: approved; the prompt channel was measured no-go twice (ADR 0014); by the author's decision the engine is used for on-demand search only; the engine reads the pack with mmap (fallback: read into memory). Roadmap items A3 (semantic recall, local, no daemon) and A4 (remember at more moments).
 
 ## Why
 
