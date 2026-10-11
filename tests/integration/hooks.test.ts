@@ -557,3 +557,16 @@ describe("backups from the hooks", () => {
     expect(backups).toBe(0);
   });
 });
+
+describe("tool-call events and background work", () => {
+  test("file-read and tool-failed never start distillation, even with turns queued", () => {
+    hook("prompt", { turnId: "t1", prompt: "work" });
+    hook("turn-end", { turnId: "t1", finalText: "done" });
+    spawned = 0;
+    hook("file-read", { toolFile: join(project, "a.ts") });
+    hook("tool-failed", { toolError: "boom" });
+    expect(spawned).toBe(0);
+    hook("prompt", { turnId: "t2", prompt: "again" });
+    expect(spawned).toBeGreaterThan(0);
+  });
+});

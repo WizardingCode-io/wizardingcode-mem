@@ -53,9 +53,9 @@ export function renderNote(note: Note): string {
 }
 
 /** Notes relevant to a prompt, in full. An empty list renders as nothing. */
-export function renderNotes(notes: Note[]): string {
+export function renderNotes(notes: Note[], intro: string = INTRO): string {
   if (notes.length === 0) return "";
-  return [OPEN, INTRO, "", ...notes.map(renderNote), CLOSE].join("\n");
+  return [OPEN, intro, "", ...notes.map(renderNote), CLOSE].join("\n");
 }
 
 export interface LastTurn {

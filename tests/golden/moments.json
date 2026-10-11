@@ -1,0 +1,14 @@
+{
+  "fileRead": [
+    { "read": "src/store/db.ts", "expect": ["busy-timeout", "wal-retry"] },
+    { "read": "src/hooks/handle.ts", "expect": ["open-at-prompt", "redact-first"] },
+    { "read": "src/cli/commands/hook.ts", "expect": ["exit-code"] },
+    { "read": "scripts/build.ts", "expect": ["baseline", "dotenv"] },
+    { "read": "src/retrieve/prompt.ts", "expect": ["cross-join"] },
+    { "read": "src/mcp/server.ts", "expect": ["mcp-sdk"] },
+    { "read": "src/store/meta.ts", "expect": ["drain-lease"] },
+    { "read": "src/spike/support.ts", "expect": ["pending-timer"] },
+    { "read": "src/cli/commands/status.ts", "expect": [] },
+    { "read": "README.md", "expect": [] }
+  ]
+}

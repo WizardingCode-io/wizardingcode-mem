@@ -1,7 +1,6 @@
-import { realpathSync } from "node:fs";
 import type { AgentAdapter, TurnDetail } from "../adapters/types.ts";
-import { readGitInfo } from "../core/git.ts";
 import { isFromTheHost } from "../core/host-prompt.ts";
+import { relativeTo, rootsOf } from "../core/paths.ts";
 import { type Redacted, redact } from "../core/redact.ts";
 import type { DistillCandidate, DistillVerdict, Judge } from "../judge/types.ts";
 import { withoutNotes } from "../retrieve/render.ts";
@@ -52,25 +51,6 @@ const EMPTY: TurnDetail = {
   savedMemory: false,
 };
 
-function realpath(path: string): string {
-  try {
-    return realpathSync(path);
-  } catch {
-    return path;
-  }
-}
-
-/** Project-relative paths with forward slashes. Files outside the project are not anchors. */
-function relativeTo(roots: string[], paths: string[]): string[] {
-  const relative = new Set<string>();
-  for (const path of paths) {
-    const normalised = path.replaceAll("\\", "/");
-    const root = roots.find((candidate) => normalised.startsWith(`${candidate}/`));
-    if (root !== undefined) relative.add(normalised.slice(root.length + 1));
-  }
-  return [...relative];
-}
-
 /** What a history turn was queued with: its transcript's tail no longer holds an old turn. */
 function storedDetail(db: Db, turnId: number): TurnDetail {
   const row = db
@@ -94,22 +74,6 @@ function storedDetail(db: Db, turnId: number): TurnDetail {
     errors: parse(row?.errors),
     savedMemory: false,
   };
-}
-
-const ROOTS_CACHE_MAX = 256;
-const rootsCache = new Map<string, string[]>();
-
-/** The directories a turn's paths are made relative to; cached, since a history drain asks per turn. */
-function rootsOf(turnCwd: string): string[] {
-  const cached = rootsCache.get(turnCwd);
-  if (cached !== undefined) return cached;
-  const cwd = realpath(turnCwd);
-  const roots = [...new Set([readGitInfo(cwd)?.root ?? cwd, cwd, turnCwd])].map((root) =>
-    root.replaceAll("\\", "/"),
-  );
-  if (rootsCache.size >= ROOTS_CACHE_MAX) rootsCache.clear();
-  rootsCache.set(turnCwd, roots);
-  return roots;
 }
 
 function readDetail(deps: DistillDeps, turn: QueuedTurn): TurnDetail {

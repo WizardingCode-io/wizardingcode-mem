@@ -89,6 +89,7 @@ describe("retrieveForPrompt", () => {
     recordInjections(db, { sessionId, epoch: 0, event: "file-read", notes: note, now: NOW });
     expect(ids("sessions expire thirty minutes")).toEqual([]);
     recordInjections(db, { sessionId, epoch: 0, event: "tool-failed", notes: note, now: NOW });
+    expect(ids("sessions expire thirty minutes")).toEqual([]);
   });
 
   test("a memory that shares an exact identifier with the prompt is found", () => {
