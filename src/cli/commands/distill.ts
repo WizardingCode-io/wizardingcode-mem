@@ -1,5 +1,6 @@
 import { ADAPTERS } from "../../adapters/index.ts";
 import { drainQueue } from "../../distill/queue.ts";
+import { loadModel } from "../../embed/model.ts";
 import { makeJudge } from "../../judge/index.ts";
 import { type Db, openDb } from "../../store/db.ts";
 import { logError } from "../../util/log.ts";
@@ -18,7 +19,14 @@ export async function run(): Promise<number> {
     const { dataDir, storeDir } = resolvePaths();
     db = openDb({ dataDir: storeDir, busyTimeoutMs: 2000 });
     const report = await drainQueue(
-      { db, judge: makeJudge({ db, dataDir }), adapters: ADAPTERS, now: Date.now },
+      {
+        db,
+        judge: makeJudge({ db, dataDir }),
+        adapters: ADAPTERS,
+        now: Date.now,
+        // Once per drain, in this background process; hooks never load it.
+        model: loadModel({ dataDir }),
+      },
       { owner: `${process.pid}-${crypto.randomUUID()}`, maxTurns: MAX_TURNS, maxMs: MAX_MS },
     );
     process.stdout.write(

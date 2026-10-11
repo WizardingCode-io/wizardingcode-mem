@@ -4,6 +4,7 @@ import type { MemoryKind } from "../core/types.ts";
 import { consolidate } from "../distill/consolidate.ts";
 import { TITLE_MAX_CHARS } from "../distill/policy.ts";
 import { splitSentences } from "../distill/segment.ts";
+import type { Model } from "../embed/model.ts";
 import type { Judge } from "../judge/types.ts";
 import { MEMORY_COLUMNS, type MemoryRow, prior, ranks, toNote } from "../retrieve/notes.ts";
 import { explicitMatch } from "../retrieve/query.ts";
@@ -25,6 +26,8 @@ export interface ToolContext {
   root: string;
   branch: string | null;
   now: number;
+  /** The semantic model, when loaded: a saved memory gets its vector. */
+  model?: Model | null;
 }
 
 const DEFAULT_LIMIT = 10;
@@ -257,26 +260,30 @@ export async function saveMemory(
   }
 
   const id = withWrite(db, () => {
-    const created = insertMemory(db, {
-      projectId,
-      kind: draft.kind,
-      title: draft.title,
-      body: draft.body,
-      terms: searchTerms(
-        draft.title,
-        draft.body,
-        draft.files.map((file) => file.path),
-      ),
-      importance: draft.importance,
-      branch: context.branch,
-      commit: null,
-      origin: "manual",
-      judge: "agent",
-      judgeVersion: "1",
-      sourceTurnId: null,
-      files: draft.files,
-      now,
-    });
+    const created = insertMemory(
+      db,
+      {
+        projectId,
+        kind: draft.kind,
+        title: draft.title,
+        body: draft.body,
+        terms: searchTerms(
+          draft.title,
+          draft.body,
+          draft.files.map((file) => file.path),
+        ),
+        importance: draft.importance,
+        branch: context.branch,
+        commit: null,
+        origin: "manual",
+        judge: "agent",
+        judgeVersion: "1",
+        sourceTurnId: null,
+        files: draft.files,
+        now,
+      },
+      context.model ?? null,
+    );
     for (const oldId of action.supersedes) supersede(db, oldId, created, now);
     return created;
   });

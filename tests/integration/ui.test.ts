@@ -1,10 +1,19 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveProject } from "../../src/core/project.ts";
 import type { Redacted } from "../../src/core/redact.ts";
 import type { MemoryKind } from "../../src/core/types.ts";
+import { loadModel, modelPath } from "../../src/embed/model.ts";
 import { openHistoryDb } from "../../src/history/db.ts";
 import { type Db, openDb } from "../../src/store/db.ts";
 import { insertMemory } from "../../src/store/memories.ts";
@@ -308,6 +317,22 @@ describe("wizardingcode-mem ui: the API", () => {
       ).status,
     ).toBe(400);
     expect((await api(s, "/api/memories/1", { method: "POST", body: "nope" })).status).toBe(400);
+  });
+
+  test("with the semantic model, an edit writes the memory's new vector", async () => {
+    mkdirSync(join(dataDir, "models"), { recursive: true });
+    copyFileSync(join(import.meta.dir, "../fixtures/embed/subset.wcpack"), modelPath(dataDir));
+    const s = await start({ env: {} });
+    const edited = await api(s, "/api/memories/1", {
+      method: "PATCH",
+      body: JSON.stringify({ title: "Never mock the database in these tests." }),
+    });
+    expect(edited.status).toBe(200);
+    const db = openDb({ dataDir, busyTimeoutMs: 2000 });
+    expect(db.query("SELECT memory_id, model FROM memory_vectors").all()).toEqual([
+      { memory_id: 1, model: loadModel({ dataDir, env: {} })?.id },
+    ]);
+    db.close();
   });
 
   test("a memory can be edited: title, body, kind and importance; the judge becomes the user", async () => {

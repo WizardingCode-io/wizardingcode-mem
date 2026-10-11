@@ -18,7 +18,9 @@ import {
   writeSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
+import type { Db } from "../store/db.ts";
 import { MODEL_FILE, modelPath } from "./model.ts";
+import { dropMemoryVectors } from "./vectors.ts";
 
 export const MODEL_URL =
   "https://github.com/WizardingCode-io/wizardingcode-mem/releases/download/model-potion-multilingual-128M-v1/potion-multilingual-128M.wcpack";
@@ -222,12 +224,15 @@ export async function downloadModel(options: DownloadOptions): Promise<DownloadR
   }
 }
 
-/** Removes the pack. The vector tables are dropped by the tasks that create them. */
-export function deleteModel(dataDir: string): boolean {
+/** Removes the pack and, given the database, every vector made with it. */
+export function deleteModel(dataDir: string, db?: Db): boolean {
   try {
     unlinkSync(modelPath(dataDir));
   } catch (error) {
-    return (error as NodeJS.ErrnoException).code === "ENOENT";
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") return false;
   }
+  // The vectors go with the model: they mean nothing without it, and a different model
+  // downloaded later would ignore them anyway.
+  if (db !== undefined) dropMemoryVectors(db);
   return true;
 }

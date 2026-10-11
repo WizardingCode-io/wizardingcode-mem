@@ -1,4 +1,5 @@
 import { resolveProject } from "../core/project.ts";
+import { loadModel } from "../embed/model.ts";
 import { openHistoryDb } from "../history/db.ts";
 import { historyReadFailure, renderHits, searchHistory } from "../history/search.ts";
 import { makeJudge } from "../judge/index.ts";
@@ -208,6 +209,7 @@ export async function runGlobalTool(name: ToolName, args: unknown): Promise<stri
           makeJudge({ db, dataDir }),
           now,
           args as Parameters<typeof globalSave>[3],
+          loadModel({ dataDir }),
         );
       case "history_search":
         return searchPast(storeDir, args as Parameters<typeof searchPast>[1]);
@@ -244,7 +246,11 @@ export async function runTool(name: ToolName, args: unknown, projectDir: string)
       case "memory_get":
         return getMemories(context, args as Parameters<typeof getMemories>[1]);
       case "memory_save":
-        return await saveMemory(context, args as Parameters<typeof saveMemory>[1]);
+        // Loaded only to save (cached per process): a search or a get does not need it yet.
+        return await saveMemory(
+          { ...context, model: loadModel({ dataDir }) },
+          args as Parameters<typeof saveMemory>[1],
+        );
       case "history_search":
         return searchPast(storeDir, { ...(args as { query: string; limit?: number }) }, project.id);
       case "memory_projects":

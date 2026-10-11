@@ -1,4 +1,5 @@
 import type { MemoryKind } from "../core/types.ts";
+import type { Model } from "../embed/model.ts";
 import type { Judge } from "../judge/types.ts";
 import type { Db } from "../store/db.ts";
 import { getMemories, saveMemory, searchMemories, type ToolContext } from "./tools.ts";
@@ -84,13 +85,17 @@ export async function globalSave(
   judge: Judge,
   now: number,
   args: { text: string; kind: MemoryKind; files?: string[]; importance?: number; project?: string },
+  model: Model | null = null,
 ): Promise<string> {
   if (!args.project?.trim()) {
     return `Nothing saved. Say which project this belongs to (the project argument). Recent projects: ${listNames(db)}.`;
   }
   const project = findProject(db, args.project);
   if (!project) return `Nothing saved. ${unknown(db, args.project)}`;
-  const saved = await saveMemory(context(db, judge, now, project.id), { ...args, files: [] });
+  const saved = await saveMemory(
+    { ...context(db, judge, now, project.id), model },
+    { ...args, files: [] },
+  );
   return saved
     .replace(/^(Saved as #\d+)/, `$1 in ${project.name}`)
     .replace(/^(Already known as #\d+)/, `$1 in ${project.name}`);

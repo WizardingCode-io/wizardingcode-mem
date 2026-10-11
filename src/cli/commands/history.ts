@@ -3,6 +3,7 @@ import { claudeCodeRoot } from "../../adapters/claude-code/history.ts";
 import { codexRoot } from "../../adapters/codex/history.ts";
 import { replaceAllImports, restoreImports } from "../../backfill/replace.ts";
 import { runBackfill } from "../../backfill/run.ts";
+import { loadModel } from "../../embed/model.ts";
 import { HISTORY_DB_FILE, openHistoryDb } from "../../history/db.ts";
 import { type IndexReport, indexAll, indexTranscript } from "../../history/index-pass.ts";
 import { forgetHistoryIndex, withHistoryRun } from "../../history/run-state.ts";
@@ -205,6 +206,7 @@ export async function run(argv: string[]): Promise<number> {
           judge: makeJudge({ db: db as Db, dataDir }),
           now: Date.now,
           roots,
+          model: loadModel({ dataDir }),
         },
         {
           days: days ?? loadSettings(process.env, dataDir).historyDays,

@@ -103,6 +103,29 @@ describe("store/db", () => {
     db.close();
   });
 
+  test("migration 6 adds memory vectors to a version-5 database, keeping its memories, and they cascade", () => {
+    const before = open(MIGRATIONS.slice(0, 5));
+    const { memoryId } = seed(before);
+    before.close();
+
+    const db = open();
+    expect(version(db)).toBe(LATEST_VERSION);
+    expect(db.query("SELECT id FROM memories").all()).toEqual([{ id: memoryId }]);
+    expect(db.query("SELECT count(*) AS n FROM memory_vectors").get()).toEqual({ n: 0 });
+    db.run(
+      "INSERT INTO memory_vectors (memory_id, model, scale, vec) VALUES (?, 'm@1', 0.5, x'0102')",
+      [memoryId],
+    );
+    expect(() =>
+      db.run(
+        "INSERT INTO memory_vectors (memory_id, model, scale, vec) VALUES (999, 'm@1', 1, x'00')",
+      ),
+    ).toThrow();
+    db.run("DELETE FROM memories WHERE id = ?", [memoryId]);
+    expect(db.query("SELECT count(*) AS n FROM memory_vectors").get()).toEqual({ n: 0 });
+    db.close();
+  });
+
   test("migration 5 keeps the injections of a version-4 database and accepts the two new events", () => {
     const before = open(MIGRATIONS.slice(0, 4));
     const { projectId, memoryId } = seed(before);

@@ -1,6 +1,8 @@
 import type { ProjectRef } from "../core/project.ts";
 import { redact } from "../core/redact.ts";
 import { MEMORY_KINDS, type MemoryKind } from "../core/types.ts";
+import type { Model } from "../embed/model.ts";
+import { refreshMemoryVector } from "../embed/vectors.ts";
 import { explicitMatch } from "../retrieve/query.ts";
 import { hookLatency } from "../status/report.ts";
 import { type Db, withWrite } from "../store/db.ts";
@@ -220,6 +222,8 @@ export function updateMemory(
   id: number,
   changes: MemoryChanges,
   now: number,
+  /** The semantic model, when loaded: a new text gets a new vector. */
+  model: Model | null = null,
 ): "ok" | "not-found" | "invalid" {
   const allowed = new Set(["title", "body", "kind", "importance"]);
   const keys = Object.keys(changes);
@@ -268,6 +272,9 @@ export function updateMemory(
     sets.push("judge = 'user'", "judge_version = '1'", "updated_at = ?");
     params.push(now, id);
     db.run(`UPDATE memories SET ${sets.join(", ")} WHERE id = ?`, params);
+    if (changes.title !== undefined || changes.body !== undefined) {
+      refreshMemoryVector(db, model, id);
+    }
     outcome = "ok";
   });
   return outcome;

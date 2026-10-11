@@ -2,6 +2,7 @@ import type { AgentAdapter, TurnDetail } from "../adapters/types.ts";
 import { isFromTheHost } from "../core/host-prompt.ts";
 import { relativeTo, rootsOf } from "../core/paths.ts";
 import { type Redacted, redact } from "../core/redact.ts";
+import type { Model } from "../embed/model.ts";
 import type { DistillCandidate, DistillVerdict, Judge } from "../judge/types.ts";
 import { withoutNotes } from "../retrieve/render.ts";
 import { type Db, withWrite } from "../store/db.ts";
@@ -17,6 +18,8 @@ export interface DistillDeps {
   judge: Judge;
   adapters: Partial<Record<string, AgentAdapter>>;
   now: () => number;
+  /** The semantic model, loaded once per drain: new memories get their vector as they are written. */
+  model?: Model | null;
 }
 
 /** A queued turn, as claimed from the queue. Its text was redacted when it was stored. */
@@ -214,26 +217,30 @@ export async function distillTurn(
     if (action.type === "duplicate") {
       reinforce(db, action.targetId, turn.id, now);
     } else {
-      const id = insertMemory(db, {
-        projectId: turn.projectId,
-        kind: draft.kind,
-        title: draft.title,
-        body: draft.body,
-        terms: searchTerms(
-          draft.title,
-          draft.body,
-          draft.files.map((file) => file.path),
-        ),
-        importance: draft.importance,
-        branch: turn.branch,
-        commit: turn.commit,
-        origin: "distilled",
-        judge: verdict.source,
-        judgeVersion: deps.judge.versions[verdict.source] ?? deps.judge.version,
-        sourceTurnId: turn.id,
-        files: draft.files,
-        now,
-      });
+      const id = insertMemory(
+        db,
+        {
+          projectId: turn.projectId,
+          kind: draft.kind,
+          title: draft.title,
+          body: draft.body,
+          terms: searchTerms(
+            draft.title,
+            draft.body,
+            draft.files.map((file) => file.path),
+          ),
+          importance: draft.importance,
+          branch: turn.branch,
+          commit: turn.commit,
+          origin: "distilled",
+          judge: verdict.source,
+          judgeVersion: deps.judge.versions[verdict.source] ?? deps.judge.version,
+          sourceTurnId: turn.id,
+          files: draft.files,
+          now,
+        },
+        deps.model ?? null,
+      );
       for (const oldId of action.supersedes) {
         if (oldId !== id) {
           // A history memory must not supersede a newer memory.

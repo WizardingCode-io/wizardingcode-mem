@@ -8,6 +8,7 @@ import { targetFor } from "../backup/target.ts";
 import { claudeCodeRoot } from "../adapters/claude-code/history.ts";
 import { codexRoot } from "../adapters/codex/history.ts";
 import { runChecks } from "../doctor/checks.ts";
+import { loadModel } from "../embed/model.ts";
 import { doctorContext } from "../doctor/context.ts";
 import { replaceAllImports, restoreImports } from "../backfill/replace.ts";
 import { openHistoryDb } from "../history/db.ts";
@@ -428,7 +429,13 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
         if (body === null || typeof body !== "object")
           return problem(400, "body must be an object");
         if (request.method === "PATCH") {
-          const outcome = updateMemory(db, id, body as Parameters<typeof updateMemory>[2], now());
+          const outcome = updateMemory(
+            db,
+            id,
+            body as Parameters<typeof updateMemory>[2],
+            now(),
+            loadModel({ dataDir: options.dataDir, env }),
+          );
           if (outcome === "ok") return json(getMemory(db, id));
           if (outcome === "not-found") return problem(404, "no such memory");
           return problem(

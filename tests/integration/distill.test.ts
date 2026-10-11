@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { claudeCode } from "../../src/adapters/claude-code/adapter.ts";
@@ -7,6 +7,7 @@ import { ADAPTERS } from "../../src/adapters/index.ts";
 import type { HookInput } from "../../src/adapters/types.ts";
 import type { HookEvent } from "../../src/core/types.ts";
 import { type DistillDeps, drainQueue } from "../../src/distill/queue.ts";
+import { loadModel, modelPath } from "../../src/embed/model.ts";
 import { handleHook } from "../../src/hooks/handle.ts";
 import { heuristicJudge } from "../../src/judge/heuristic.ts";
 import type { Judge } from "../../src/judge/types.ts";
@@ -132,6 +133,25 @@ describe("distill: from a queued turn to a memory", () => {
     expect(db.query("SELECT memory_id, relation FROM memory_sources").all()).toEqual([
       { memory_id: 1, relation: "origin" },
     ]);
+  });
+
+  test("with the semantic model, a distilled memory gets its vector in the same write", async () => {
+    const modelDir = join(base, "model-data");
+    mkdirSync(join(modelDir, "models"), { recursive: true });
+    copyFileSync(join(import.meta.dir, "../fixtures/embed/subset.wcpack"), modelPath(modelDir));
+    const model = loadModel({ dataDir: modelDir, env: {} });
+    expect(model).not.toBeNull();
+    turn("the tests fail with a timeout", FIX);
+    await drainQueue({ ...deps(), model }, { owner: "test", maxTurns: 50, maxMs: 10_000 });
+    expect(db.query("SELECT memory_id, model FROM memory_vectors").all()).toEqual([
+      { memory_id: 1, model: model?.id },
+    ]);
+  });
+
+  test("without the model, a distilled memory has no vector", async () => {
+    turn("the tests fail with a timeout", FIX);
+    await drain();
+    expect(db.query("SELECT count(*) AS n FROM memory_vectors").get()).toEqual({ n: 0 });
   });
 
   test("a memory records the version of the judge that produced it, not of the wrapper", async () => {

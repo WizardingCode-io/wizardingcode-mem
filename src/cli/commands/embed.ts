@@ -1,12 +1,14 @@
 import { unlinkSync } from "node:fs";
+import { runEmbedBackfill } from "../../embed/backfill.ts";
 import { deleteModel, downloadModel } from "../../embed/download.ts";
-import { modelState } from "../../embed/model.ts";
+import { loadModel, modelState } from "../../embed/model.ts";
 import { openDb } from "../../store/db.ts";
 import { setMeta } from "../../store/meta.ts";
 import { resolvePaths } from "../../util/paths.ts";
 import { EXIT_USAGE } from "../exit.ts";
 
-const USAGE = "Usage: wizardingcode-mem embed <download | status | delete>\n";
+const USAGE =
+  "Usage: wizardingcode-mem embed <download | status | delete | backfill [--limit n]>\n";
 export const PROGRESS_DONE = "embed.download.done";
 export const PROGRESS_TOTAL = "embed.download.total";
 
@@ -28,8 +30,21 @@ export async function run(argv: string[]): Promise<number> {
     );
     return 0;
   }
+  if (sub === "backfill") return backfill(argv.slice(1), dataDir, storeDir);
   if (sub === "delete") {
-    if (!deleteModel(dataDir)) {
+    let db: ReturnType<typeof openDb> | undefined;
+    try {
+      db = openDb({ dataDir: storeDir, busyTimeoutMs: 2000 });
+    } catch {
+      // No database to clean: removing the file is still worth doing.
+    }
+    let removed: boolean;
+    try {
+      removed = deleteModel(dataDir, db);
+    } finally {
+      db?.close();
+    }
+    if (!removed) {
       process.stderr.write(
         "wizardingcode-mem embed: could not remove the model (is it in use? close the viewer and retry)\n",
       );
@@ -108,5 +123,37 @@ export async function run(argv: string[]): Promise<number> {
       db?.run("DELETE FROM meta WHERE key IN (?, ?)", [PROGRESS_DONE, PROGRESS_TOTAL]);
     } catch {}
     db?.close();
+  }
+}
+
+/** `embed backfill [--limit n]`: a vector for every memory that lacks one of the present model. */
+async function backfill(args: string[], dataDir: string, storeDir: string): Promise<number> {
+  let limit: number | undefined;
+  if (args.length > 0) {
+    const n = Number(args[1]);
+    if (args[0] !== "--limit" || args.length !== 2 || !Number.isInteger(n) || n < 1) {
+      process.stderr.write(USAGE);
+      return EXIT_USAGE;
+    }
+    limit = n;
+  }
+  const model = loadModel({ dataDir });
+  if (model === null) {
+    process.stderr.write(
+      "wizardingcode-mem embed: no semantic model (run `wizardingcode-mem embed download`, and check it is switched on)\n",
+    );
+    return 1;
+  }
+  const db = openDb({ dataDir: storeDir, busyTimeoutMs: 2000 });
+  try {
+    const out = await runEmbedBackfill(db, model, { now: Date.now, ...(limit ? { limit } : {}) });
+    process.stdout.write(
+      out === null
+        ? "embed backfill: already running in another process\n"
+        : `embed backfill: ${out.written} written, ${out.remaining} remaining\n`,
+    );
+    return 0;
+  } finally {
+    db.close();
   }
 }
