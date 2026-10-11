@@ -152,6 +152,15 @@ describe("wizardingcode-mem history", () => {
     expect(count).toBe(1);
   });
 
+  test("search works once the index's WAL and shared-memory files are gone", async () => {
+    await history("index");
+    const index = join(base, "home", "mem", "history.db");
+    for (const suffix of ["-wal", "-shm"]) rmSync(index + suffix, { force: true });
+    const found = await history("search", "SQLite");
+    expect(found.exitCode).toBe(0);
+    expect(found.stdout).toContain("Never mock the database");
+  });
+
   test("index --transcript indexes exactly that file and needs --agent", async () => {
     const file = join(base, "claude", "projects", "-shop", "s1.jsonl");
     const one = await history("index", "--transcript", file, "--agent", "claude-code");

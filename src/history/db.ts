@@ -45,14 +45,15 @@ export function openHistoryDb(
   if (!options.create) {
     if (!existsSync(path)) return null;
     // An index pass made the file (schema, WAL, mode); readers write nothing and take no write lock.
-    const reader = new Database(path, { readonly: true });
     try {
-      reader.run(`PRAGMA busy_timeout = ${busy}`);
+      return openReader(path, { readonly: true }, busy);
     } catch (error) {
-      reader.close();
-      throw error;
+      if ((error as { code?: unknown }).code !== "SQLITE_CANTOPEN") throw error;
+      // A read-only connection cannot create the -wal and -shm files of a WAL database, and
+      // they are gone whenever no one has it open (Linux, Windows, or after a copy or a move).
+      // A read-write connection makes them; it still runs no schema and no writing pragma.
+      return openReader(path, { readwrite: true, create: false }, busy);
     }
-    return reader;
   }
   mkdirSync(storeDir, { recursive: true, mode: 0o700 });
   const db = new Database(path, { create: true });
@@ -72,4 +73,21 @@ export function openHistoryDb(
   }
   for (const suffix of ["", "-wal", "-shm"]) restrict(path + suffix, 0o600);
   return db;
+}
+
+function openReader(
+  path: string,
+  mode: { readonly: true } | { readwrite: true; create: false },
+  busy: number,
+): Database {
+  const reader = new Database(path, mode);
+  try {
+    reader.run(`PRAGMA busy_timeout = ${busy}`);
+    // The file opens lazily: a first read surfaces a database that cannot be opened.
+    reader.query("PRAGMA user_version").get();
+  } catch (error) {
+    reader.close();
+    throw error;
+  }
+  return reader;
 }

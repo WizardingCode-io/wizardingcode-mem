@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HISTORY_DB_FILE, openHistoryDb } from "../../src/history/db.ts";
 import { indexAll } from "../../src/history/index-pass.ts";
+import { searchHistory } from "../../src/history/search.ts";
 import { type Db, openDb } from "../../src/store/db.ts";
 
 let dir: string;
@@ -231,5 +232,30 @@ describe("opening without create", () => {
     hdb.run("ROLLBACK");
     const after = statSync(path);
     expect([after.size, after.mtimeMs]).toEqual([before.size, before.mtimeMs]);
+  });
+
+  test("answers when the WAL and shared-memory files are gone (closed, copied, checkpointed)", () => {
+    const path = join(dir, HISTORY_DB_FILE);
+    hdb.run(
+      "INSERT INTO files(path, agent, size, mtime, indexed_at) VALUES ('/t', 'codex', 1, 1, 1)",
+    );
+    hdb.run(
+      `INSERT INTO turns(path, agent, session_id, turn_id, project_id, project_name, cwd, started_at, ended_at, prompt, final_text)
+       VALUES ('/t', 'codex', 's', 't', 1, 'shop', '/x', 1, 1, 'the zebra cache', NULL)`,
+    );
+    hdb.close(); // every connection closed: the WAL is checkpointed into the file
+    for (const suffix of ["-wal", "-shm"]) rmSync(path + suffix, { force: true });
+    const reader = openHistoryDb(dir, { create: false, busyTimeoutMs: 50 });
+    if (reader === null) throw new Error("expected the index");
+    try {
+      expect(searchHistory(reader, { query: "zebra" }).map((h) => h.prompt)).toEqual([
+        "the zebra cache",
+      ]);
+    } finally {
+      reader.close();
+    }
+    const reopened = openHistoryDb(dir, { create: true });
+    if (reopened === null) throw new Error("expected the index");
+    hdb = reopened; // afterEach closes it
   });
 });
