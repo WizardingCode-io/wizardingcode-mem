@@ -2,7 +2,10 @@ import { describe, expect, test } from "bun:test";
 import {
   awaitingStart,
   type HistoryStatus,
+  historyCardDescription,
   importLabel,
+  judgesWithTypeSafe,
+  offerWhere,
   progressOf,
   progressPoller,
   sessionsFound,
@@ -188,5 +191,28 @@ describe("the progress poll", () => {
     poller.stop();
     await c.run();
     expect(loads).toBe(0);
+  });
+});
+
+describe("what the history copy says leaves the machine", () => {
+  test("TypeSafe judges only with a key and the switch not off", () => {
+    expect(judgesWithTypeSafe(true, "on")).toBe(true);
+    expect(judgesWithTypeSafe(true, null)).toBe(true);
+    expect(judgesWithTypeSafe(true, "off")).toBe(false);
+    expect(judgesWithTypeSafe(false, "on")).toBe(false);
+  });
+  test("the card says nothing leaves, unless TypeSafe judges", () => {
+    expect(historyCardDescription(false)).toBe(
+      "Learn from the sessions your agents had before. Nothing leaves this machine.",
+    );
+    expect(historyCardDescription(true)).toBe(
+      "Learn from the sessions your agents had before. It runs on this machine, except TypeSafe judgements (a key is set).",
+    );
+  });
+  test("the offer says where it runs, and names TypeSafe when it judges", () => {
+    expect(offerWhere(false)).toBe("It runs in the background, on this machine.");
+    expect(offerWhere(true)).toBe(
+      "It runs in the background, on this machine, except TypeSafe judgements (a key is set).",
+    );
   });
 });

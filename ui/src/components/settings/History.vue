@@ -5,7 +5,8 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { api, type HistoryProgress, type HistoryStatus } from "../../api";
 import { ago } from "../../format";
-import { awaitingStart, importLabel, progressOf, progressPoller, sessionsFound, sizeOf } from "../../history";
+import { awaitingStart, historyCardDescription, importLabel, progressOf, progressPoller, sessionsFound, sizeOf } from "../../history";
+import { typesafeJudging } from "../../settings";
 import { loadOverview } from "../../viewer";
 import Confirm from "../Confirm.vue";
 import Card from "./Card.vue";
@@ -169,7 +170,7 @@ async function restore() {
 </script>
 
 <template>
-  <Card id="history" title="History" description="Learn from the sessions your agents had before. Nothing leaves this machine." flush>
+  <Card id="history" title="History" :description="historyCardDescription(typesafeJudging())" flush>
     <p v-if="!status" class="m-0 px-3.5 py-3 text-[13px] text-(--ink-muted)">Loading…</p>
     <template v-else>
       <!-- Past sessions: the import and its progress. -->

@@ -1,6 +1,7 @@
 // The settings page's state: the file's view as the server shows it, and the one way to
 // change it. Every section reads from here, so a change in one is seen by the others.
 import { reactive } from "vue";
+import { judgesWithTypeSafe } from "./history";
 import { api, type PublicSetting, type SettingKey, type SettingsError, type SettingsPatch, type SettingsView } from "./api";
 
 export const settingsState = reactive({
@@ -50,6 +51,12 @@ export function valueOf(key: SettingKey): string | null {
 /** Set by the environment: the file cannot change it, so the page must not pretend. */
 export function fromEnvironment(key: SettingKey): boolean {
   return setting(key)?.source === "env";
+}
+
+/** Whether TypeSafe judges now, as the settings stand (see `judgesWithTypeSafe`). */
+export function typesafeJudging(): boolean {
+  const key = setting("TYPESAFE_API_KEY");
+  return judgesWithTypeSafe(key !== null && "secret" in key && key.set, valueOf("WIZARDINGCODE_MEM_TYPESAFE"));
 }
 
 export const SOURCE_LABEL: Record<"env" | "file" | "default", string> = {

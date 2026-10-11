@@ -33,6 +33,22 @@ export const sessionsFound = (s: HistoryStatus): number => s.transcripts.claudeC
 export const shouldOffer = (s: HistoryStatus | null): boolean =>
   s !== null && sessionsFound(s) > 0 && s.run.state === "never" && !s.offer.dismissed;
 
+/**
+ * Whether a run's judgements go to TypeSafe: a key is set and the switch is not off (as
+ * src/judge/index.ts decides). Then not everything stays on this machine, and the copy says so.
+ */
+export const judgesWithTypeSafe = (keySet: boolean, typesafe: string | null): boolean => keySet && typesafe !== "off";
+
+const EXCEPT_TYPESAFE = "except TypeSafe judgements (a key is set)";
+
+/** The History card's description. */
+export const historyCardDescription = (typesafe: boolean): string =>
+  `Learn from the sessions your agents had before. ${typesafe ? `It runs on this machine, ${EXCEPT_TYPESAFE}.` : "Nothing leaves this machine."}`;
+
+/** The offer's last sentence: where the import runs. */
+export const offerWhere = (typesafe: boolean): string =>
+  `It runs in the background, on this machine${typesafe ? `, ${EXCEPT_TYPESAFE}` : ""}.`;
+
 /** Turns settled (done, skipped or failed) over all queued, rounded down: 100 only at the end. */
 export function progressOf(q: HistoryQueue): { settled: number; total: number; percent: number } {
   const settled = q.done + q.skipped + q.failed;

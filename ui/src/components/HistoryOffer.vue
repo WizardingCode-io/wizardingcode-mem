@@ -14,7 +14,8 @@ let asked = false;
 // that truncates, the action links on the right.
 import { computed, onMounted } from "vue";
 import { api } from "../api";
-import { sessionsFound, shouldOffer } from "../history";
+import { offerWhere, sessionsFound, shouldOffer } from "../history";
+import { loadSettings, settingsState, typesafeJudging } from "../settings";
 
 const emit = defineEmits<{ progress: [] }>();
 const toast = useToast();
@@ -25,13 +26,15 @@ const line = computed(() => {
   if (!s) return "";
   const agents = [s.transcripts.claudeCode > 0 ? "Claude Code" : "", s.transcripts.codex > 0 ? "Codex" : ""].filter(Boolean).join(" and ");
   const count = sessionsFound(s);
-  return `Learn from your ${count.toLocaleString("en-GB")} past ${count === 1 ? "session" : "sessions"} with ${agents}. It runs in the background, on this machine.`;
+  return `Learn from your ${count.toLocaleString("en-GB")} past ${count === 1 ? "session" : "sessions"} with ${agents}. ${offerWhere(typesafeJudging())}`;
 });
 
 onMounted(async () => {
   if (asked) return;
   asked = true;
   try {
+    // The line says whether TypeSafe judges, which the settings tell.
+    if (settingsState.view === null) await loadSettings().catch(() => undefined);
     offered.value = await api.history();
   } catch {
     // No offer is better than a broken page.
