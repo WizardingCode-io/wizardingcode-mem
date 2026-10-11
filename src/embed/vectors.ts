@@ -15,15 +15,15 @@ export const vectorText = (title: string, body: string): string => `${title}\n${
 
 const EMPTY = new Uint8Array(0);
 
-/** No-op without a model; otherwise replaces the memory's row. */
+/** No-op without a model; otherwise replaces the memory's row. True when the row was written. */
 export function writeMemoryVector(
   db: Db,
   model: Model | null,
   memoryId: number,
   title: string,
   body: string,
-): void {
-  if (model === null) return;
+): boolean {
+  if (model === null) return false;
   try {
     const v = model.embed(vectorText(title, body));
     const { scale, q } = v === null ? { scale: 0, q: null } : quantize(v);
@@ -36,26 +36,29 @@ export function writeMemoryVector(
        ON CONFLICT (memory_id) DO UPDATE SET model = excluded.model, scale = excluded.scale, vec = excluded.vec`,
       [memoryId, model.id, scale, vec],
     );
+    return true;
   } catch (error) {
     logError("vectors", error);
+    return false;
   }
 }
 
 /**
- * The memory's text changed: rewrite its vector, or, without a model, drop the stale one so
- * that a search never matches the old text and the backfill writes it again.
+ * The memory's text changed: rewrite its vector, or, without a model or when the new one
+ * cannot be made, drop the stale one so that a search never matches the old text and the
+ * backfill writes it again.
  */
 export function refreshMemoryVector(db: Db, model: Model | null, memoryId: number): void {
-  if (model === null) {
-    db.run("DELETE FROM memory_vectors WHERE memory_id = ?", [memoryId]);
-    return;
-  }
-  const row = db
-    .query<{ title: string; body: string }, [number]>(
-      "SELECT title, body FROM memories WHERE id = ?",
-    )
-    .get(memoryId);
-  if (row !== null) writeMemoryVector(db, model, memoryId, row.title, row.body);
+  const row =
+    model === null
+      ? null
+      : db
+          .query<{ title: string; body: string }, [number]>(
+            "SELECT title, body FROM memories WHERE id = ?",
+          )
+          .get(memoryId);
+  if (row !== null && writeMemoryVector(db, model, memoryId, row.title, row.body)) return;
+  db.run("DELETE FROM memory_vectors WHERE memory_id = ?", [memoryId]);
 }
 
 /** Every vector, of every model: for when the model is deleted. */

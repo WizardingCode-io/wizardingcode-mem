@@ -25,11 +25,12 @@ export async function runEmbedBackfill(
   const owner = `${process.pid}-${crypto.randomUUID()}`;
   if (!claimLease(db, EMBED_LEASE, owner, options.now(), LEASE_MS)) return null;
   let written = 0;
+  let selected = 0;
   // A cursor, so a row that fails to write is not picked again in the same run.
   let after = 0;
   try {
     for (;;) {
-      const want = Math.min(BATCH, (options.limit ?? Number.POSITIVE_INFINITY) - written);
+      const want = Math.min(BATCH, (options.limit ?? Number.POSITIVE_INFINITY) - selected);
       if (want <= 0) break;
       // Selected and written in one transaction: a concurrent edit or drain either lands
       // before (and is read here) or after (and replaces this row); no row is written twice.
@@ -39,10 +40,12 @@ export async function runEmbedBackfill(
             `SELECT m.id, m.title, m.body ${TODO} AND m.id > ? ORDER BY m.id LIMIT ?`,
           )
           .all(model.id, after, want);
-        for (const row of rows) writeMemoryVector(db, model, row.id, row.title, row.body);
+        for (const row of rows) {
+          if (writeMemoryVector(db, model, row.id, row.title, row.body)) written++;
+        }
         return rows;
       });
-      written += done.length;
+      selected += done.length;
       if (done.length < want) break;
       after = done[done.length - 1]?.id ?? after;
       if (!claimLease(db, EMBED_LEASE, owner, options.now(), LEASE_MS)) break;

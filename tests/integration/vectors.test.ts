@@ -142,6 +142,42 @@ describe("memory vectors", () => {
     expect(rows()).toEqual([]);
   });
 
+  test("writeMemoryVector says whether it wrote; a failed edit refresh drops the stale row", () => {
+    const failing: Model = {
+      ...model,
+      embed: () => {
+        throw new Error("embed failed");
+      },
+    };
+    const a = memory(0, model);
+    expect(writeMemoryVector(db, null, a, "x", "y")).toBe(false);
+    expect(writeMemoryVector(db, failing, a, "x", "y")).toBe(false);
+    expect(writeMemoryVector(db, model, a, ...(TEXTS[1] as [string, string]))).toBe(true);
+    expect(rows()).toEqual([{ memory_id: a, model: model.id }]);
+    // The text changed but its vector could not be made: the old one must not stay under
+    // the current model's id, or the backfill would never rewrite it.
+    expect(updateMemory(db, a, { title: TEXTS[2]?.[0] }, NOW, failing)).toBe("ok");
+    expect(rows()).toEqual([]);
+  });
+
+  test("the backfill counts only the vectors it wrote", async () => {
+    const failing: Model = {
+      ...model,
+      embed: () => {
+        throw new Error("embed failed");
+      },
+    };
+    [0, 1, 2].map((i) => memory(i, null));
+    expect(await runEmbedBackfill(db, failing, { now: () => NOW })).toEqual({
+      written: 0,
+      remaining: 3,
+    });
+    expect(await runEmbedBackfill(db, model, { now: () => NOW })).toEqual({
+      written: 3,
+      remaining: 0,
+    });
+  });
+
   test("deleting a memory deletes its vector", () => {
     const a = memory(0, model);
     db.run("DELETE FROM memories WHERE id = ?", [a]);
