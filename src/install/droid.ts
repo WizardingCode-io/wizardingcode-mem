@@ -14,15 +14,16 @@ import {
 } from "./hooks-file.ts";
 import { ourShellHookBinary, shellHookCommand } from "./shell-hook.ts";
 
-// Factory Droid: hooks go in ~/.factory/settings.json under "hooks" (the standalone
-// hooks.json is keyed directly by event and stays the user's); MCP servers live in
-// ~/.factory/mcp.json. No environment variable that moves ~/.factory is documented. The hook
+// Factory Droid: hooks go in ~/.factory/hooks.json, keyed directly by event. Droid reads the
+// "hooks" key of settings.json only when hooks.json is absent, so that is not used. MCP servers
+// live in ~/.factory/mcp.json. No environment variable that moves ~/.factory is documented. The hook
 // timeout is in seconds.
 
 export type DroidContext = InstallContext & { mcpPath: string };
 
 export const DROID: HostSpec = {
   agent: "droid",
+  unwrapped: true,
   events: [
     ["SessionStart", "session-start"],
     ["UserPromptSubmit", "prompt"],
@@ -55,7 +56,7 @@ export function droidContext(
   const configDir = join(env.HOME || homedir(), ".factory");
   return {
     configDir,
-    settingsPath: join(configDir, "settings.json"),
+    settingsPath: join(configDir, "hooks.json"),
     mcpPath: join(configDir, "mcp.json"),
     dataDir: defaultDataDir(env),
     binaryPath,

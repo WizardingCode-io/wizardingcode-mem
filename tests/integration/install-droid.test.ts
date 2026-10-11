@@ -31,7 +31,7 @@ let commands: string[][];
 beforeEach(() => {
   home = mkdtempSync(join(tmpdir(), "wizardingcode-mem-install-droid-"));
   configDir = join(home, ".factory");
-  settingsPath = join(configDir, "settings.json");
+  settingsPath = join(configDir, "hooks.json");
   mcpPath = join(configDir, "mcp.json");
   dataDir = join(home, ".wizardingcode", "mem");
   commands = [];
@@ -64,16 +64,16 @@ const ours = (event: string, binary = BIN) => ({
 });
 const OUR_SERVER = { command: BIN, args: ["mcp"] };
 
-// A user's own settings: their hooks on the same events, their MCP server, other keys.
+// A user's own hooks.json (keyed by event): their hooks on the same events, their MCP server, other keys.
 const theirHook = {
   matcher: "",
   hooks: [{ type: "command", command: "echo hi", name: "greet", timeout: 10 }],
 };
 const theirStop = { hooks: [{ type: "command", command: "notify.sh" }] };
 const USER = {
-  model: { name: "claude-opus" },
-  general: { vimMode: false },
-  hooks: { SessionStart: [theirHook], Stop: [theirStop], PreToolUse: [theirStop] },
+  SessionStart: [theirHook],
+  Stop: [theirStop],
+  PreToolUse: [theirStop],
   somethingNew: [1, 2, 3],
 };
 const USER_MCP = { mcpServers: { github: { type: "stdio", command: "gh-mcp", args: [] } } };
@@ -98,13 +98,10 @@ describe("install droid", () => {
     expect(result.mcpPath).toBe(mcpPath);
     expect(settings()).toEqual({
       ...USER,
-      hooks: {
-        SessionStart: [theirHook, ours("session-start")],
-        Stop: [theirStop, ours("turn-end")],
-        PreToolUse: [theirStop],
-        UserPromptSubmit: [ours("prompt")],
-        SessionEnd: [ours("session-end")],
-      },
+      SessionStart: [theirHook, ours("session-start")],
+      Stop: [theirStop, ours("turn-end")],
+      UserPromptSubmit: [ours("prompt")],
+      SessionEnd: [ours("session-end")],
     });
     expect(mcp()).toEqual({
       mcpServers: { github: USER_MCP.mcpServers.github, "wizardingcode-mem": OUR_SERVER },
@@ -112,30 +109,40 @@ describe("install droid", () => {
     expect(commands).toEqual([]);
   });
 
-  test("a fresh machine without ~/.factory gets only the directory, settings.json and mcp.json", () => {
+  test("a fresh machine without ~/.factory gets only the directory, hooks.json and mcp.json", () => {
     installDroid(context());
     expect(settings()).toEqual({
-      hooks: {
-        SessionStart: [ours("session-start")],
-        UserPromptSubmit: [ours("prompt")],
-        Stop: [ours("turn-end")],
-        SessionEnd: [ours("session-end")],
-      },
+      SessionStart: [ours("session-start")],
+      UserPromptSubmit: [ours("prompt")],
+      Stop: [ours("turn-end")],
+      SessionEnd: [ours("session-end")],
     });
     expect(mcp()).toEqual({ mcpServers: { "wizardingcode-mem": OUR_SERVER } });
-    expect(readdirSync(configDir).sort()).toEqual(["mcp.json", "settings.json"]);
+    expect(readdirSync(configDir).sort()).toEqual(["hooks.json", "mcp.json"]);
     expect(uninstallDroid(context()).settings).toBe("removed");
     expect(existsSync(settingsPath)).toBe(false);
     expect(existsSync(mcpPath)).toBe(false);
   });
 
-  test("the user's own hooks.json is never touched", () => {
+  test("settings.json is never touched, whatever it holds", () => {
     mkdirSync(configDir, { recursive: true });
-    const theirs = '{"PreToolUse":[{"matcher":"Execute","hooks":[]}]}\n';
-    writeFileSync(join(configDir, "hooks.json"), theirs);
+    const theirs = '{\n  // mine\n  "hooks": {"Stop": []}\n}\n';
+    writeFileSync(join(configDir, "settings.json"), theirs);
     installDroid(context());
     uninstallDroid(context());
-    expect(readFileSync(join(configDir, "hooks.json"), "utf8")).toBe(theirs);
+    expect(readFileSync(join(configDir, "settings.json"), "utf8")).toBe(theirs);
+    expect(existsSync(settingsPath)).toBe(false);
+  });
+
+  test("beside a user's hooks.json with their own SessionStart group, theirs stays first and uninstall takes only ours", () => {
+    seedUser();
+    installDroid(context());
+    expect(settings().SessionStart[0]).toEqual(theirHook);
+    expect(settings().SessionStart).toHaveLength(2);
+    // Changed since: uninstall edits rather than restores.
+    writeFileSync(settingsPath, JSON.stringify({ ...settings(), Notification: [] }, null, 2));
+    uninstallDroid(context());
+    expect(settings()).toEqual({ ...USER, Notification: [] });
   });
 
   test("reinstalling is idempotent, and a new binary replaces the old one everywhere", () => {
@@ -150,7 +157,7 @@ describe("install droid", () => {
     expect(readFileSync(mcpPath, "utf8")).toBe(onceMcp);
     expect(once).not.toContain("/old/");
     expect(onceMcp).not.toContain("/old/");
-    expect(settings().hooks.Stop).toEqual([theirStop, ours("turn-end")]);
+    expect(settings().Stop).toEqual([theirStop, ours("turn-end")]);
   });
 
   test("what install wrote is what inspect finds", () => {
@@ -193,9 +200,9 @@ describe("uninstall droid", () => {
     seedUser();
     seedMcp();
     installDroid(context());
-    writeFileSync(settingsPath, JSON.stringify({ ...settings(), theme: "Dark" }, null, 2));
+    writeFileSync(settingsPath, JSON.stringify({ ...settings(), Notification: [] }, null, 2));
     expect(uninstallDroid(context()).settings).toBe("edited");
-    expect(settings()).toEqual({ ...USER, theme: "Dark" });
+    expect(settings()).toEqual({ ...USER, Notification: [] });
     expect(mcp()).toEqual(USER_MCP);
   });
 
@@ -210,7 +217,7 @@ describe("droidContext", () => {
   test("is ~/.factory under HOME; no environment variable moves it", () => {
     const c = droidContext(BIN, { HOME: "/h", FACTORY_HOME: "/elsewhere" });
     expect(c.configDir).toBe("/h/.factory");
-    expect(c.settingsPath).toBe("/h/.factory/settings.json");
+    expect(c.settingsPath).toBe("/h/.factory/hooks.json");
     expect(c.mcpPath).toBe("/h/.factory/mcp.json");
   });
 });
@@ -247,7 +254,7 @@ describe("wizardingcode-mem install droid / uninstall droid / doctor", () => {
     expect(installed.exitCode).toBe(0);
     expect(installed.stdout).toContain("Installed wizardingcode-mem for Factory Droid.");
     expect(installed.stdout).toContain(`MCP:    registered in ${mcpPath}`);
-    expect(settings().hooks.Stop[0].hooks[0].command).toBe(`'${binary}' hook droid turn-end`);
+    expect(settings().Stop[0].hooks[0].command).toBe(`'${binary}' hook droid turn-end`);
 
     const doctor = await runCliWith({ env: env() }, "doctor");
     const line = doctor.stdout.split("\n").find((l) => l.includes("Factory Droid:"));

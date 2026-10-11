@@ -44,6 +44,8 @@ export interface HostSpec {
   mcpInSettings?: boolean;
   /** grouped: event → [{ hooks: [entry] }] (Claude Code, Codex, Gemini). flat: event → [entry] (Cursor). */
   layout?: "grouped" | "flat";
+  /** The file is the event map itself, with no `hooks` key around it (Factory Droid's hooks.json). */
+  unwrapped?: boolean;
   /** Keys the file must hold besides `hooks`, such as Cursor's `version`. */
   topLevel?: Json;
   /** Anything the user still has to do by hand after installing. */
@@ -110,7 +112,7 @@ function resolved(path: string): string {
   }
 }
 
-function parseSettings(path: string, text: string | null): Json {
+function parseSettings(path: string, text: string | null, spec?: HostSpec): Json {
   if (text === null || text.trim() === "") return {};
   let parsed: unknown;
   try {
@@ -119,6 +121,8 @@ function parseSettings(path: string, text: string | null): Json {
     throw new Error(`${path} is not valid JSON; fix it and run this again`);
   }
   if (!isObject(parsed)) throw new Error(`${path} does not hold a JSON object`);
+  // An unwrapped file is the event map: seen from here, it is what sits under `hooks`.
+  if (spec?.unwrapped) return { hooks: parsed };
   if (parsed.hooks !== undefined && !isObject(parsed.hooks)) {
     throw new Error(`"hooks" in ${path} is not an object; fix it and run this again`);
   }
@@ -189,6 +193,14 @@ function withOurs(spec: HostSpec, settings: Json, binaryPath: string): Json {
   return result;
 }
 
+/** The text of a hooks file: the settings as they are, or for an unwrapped file its event map. */
+function render(spec: HostSpec, settings: Json, previous: string | null): string {
+  return serialise(
+    spec.unwrapped ? (isObject(settings.hooks) ? settings.hooks : {}) : settings,
+    previous,
+  );
+}
+
 /** Serialises in the file's own style: its indentation, and its final newline or lack of one. */
 function serialise(settings: Json, previous: string | null): string {
   const indent = previous === null ? "  " : (/\n([ \t]+)\S/.exec(previous)?.[1] ?? "  ");
@@ -219,11 +231,12 @@ export function installHooksFile(spec: HostSpec, context: InstallContext): Insta
   const file = resolved(settingsPath);
   const previous = existsSync(file) ? readFileSync(file, "utf8") : null;
   // Validated before anything is changed or run.
-  const settings = parseSettings(settingsPath, previous);
+  const settings = parseSettings(settingsPath, previous, spec);
   if (spec.mcpInSettings && settings.mcpServers !== undefined && !isObject(settings.mcpServers)) {
     throw new Error(`"mcpServers" in ${settingsPath} is not an object; fix it and run this again`);
   }
-  const next = serialise(
+  const next = render(
+    spec,
     withOurs(spec, withoutOurs(spec, settings).settings, binaryPath),
     previous,
   );
@@ -368,9 +381,9 @@ export function uninstallHooksFile(spec: HostSpec, context: InstallContext): Uni
       outcome = "restored";
     } else {
       // The file has moved on: take out what is ours and keep everything else.
-      const { settings, removed } = withoutOurs(spec, parseSettings(settingsPath, current));
+      const { settings, removed } = withoutOurs(spec, parseSettings(settingsPath, current, spec));
       if (removed > 0) {
-        writeAtomically(file, serialise(settings, current));
+        writeAtomically(file, render(spec, settings, current));
         outcome = "edited";
       }
     }
@@ -392,7 +405,7 @@ export function inspectHooksFile(
   spec: HostSpec,
   text: string,
 ): { events: string[]; binaries: string[] } {
-  const settings = parseSettings("settings.json", text);
+  const settings = parseSettings("settings.json", text, spec);
   const events: string[] = [];
   const binaries = new Set<string>();
   if (isObject(settings.hooks)) {

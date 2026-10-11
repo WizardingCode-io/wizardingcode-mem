@@ -111,7 +111,8 @@ describe("wizardingcode-mem hook", () => {
     await hook(payload("user-prompt-submit", "droid"), "droid", "prompt");
     expect(await hook(payload("stop", "droid"), "droid", "turn-end")).toEqual(SILENT_SUCCESS);
     expect(rows("SELECT agent FROM sessions")).toEqual([{ agent: "droid" }]);
-    expect(rows("SELECT state FROM turns")).toHaveLength(1);
+    expect(rows("SELECT state FROM turns")).toEqual([{ state: "pending" }]);
+    expect(rows("SELECT id FROM turns WHERE state = 'open'")).toEqual([]);
   });
 
   test("a Factory Droid payload missing what is needed is silent success", async () => {

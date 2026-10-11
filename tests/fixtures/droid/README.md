@@ -30,11 +30,14 @@ with captured payloads once one is recorded, and note what differed.
 - **The final message.** `Stop` documents no assistant text, so `finalMessageInPayload: false`.
 - **`transcript_path`.** The name is documented, the format is not: no transcript reader and no
   history reader (`transcript: false`).
-- **Where our hooks go.** Hooks may live in `~/.factory/hooks.json` (keyed directly by event) or
-  in `settings.json` under `"hooks"`. The installer writes `~/.factory/settings.json`, whose
-  documented shape matches the other hosts, and never touches the user's `hooks.json`.
-- **Comments in `settings.json`.** Not documented; the installer refuses a file it cannot parse
-  as JSON and leaves it untouched.
+- **Where our hooks go.** `~/.factory/hooks.json`, keyed directly by event (no `"hooks"`
+  wrapper). The hooks reference (https://docs.factory.com/reference/hooks-reference) says the
+  `"hooks"` key of `settings.json` is read only when `hooks.json` is absent, so a user who already
+  has a `hooks.json` would get none of ours from `settings.json`. The installer therefore always
+  writes `hooks.json`, merged beside the user's groups, and never touches `settings.json`.
+- **Comments in Factory's JSON files.** The documentation shows plain JSON for `hooks.json`,
+  `settings.json` and `mcp.json` and says nothing about comments. The installer refuses a file it
+  cannot parse as JSON and leaves it untouched.
 - **The MCP server** goes into `~/.factory/mcp.json` (`mcpServers`, stdio entry), a separate file
   from the hooks; only the command and args are written (`type` defaults to stdio).
 - **A config-dir environment variable.** None is documented; `~/.factory` under `HOME` is used.
