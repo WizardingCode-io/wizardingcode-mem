@@ -35,11 +35,11 @@ export interface HookDeps {
 
 /** No turn runs this long: one still open after it belongs to a session that died. */
 const ABANDONED_AFTER_MS = 12 * 3_600_000;
-const PROMPT_MAX_CHARS = 8 * 1024;
-const FINAL_TEXT_MAX_CHARS = 16 * 1024;
+export const PROMPT_MAX_CHARS = 8 * 1024;
+export const FINAL_TEXT_MAX_CHARS = 16 * 1024;
 
 /** Redacts first, then cuts: cutting first could leave half a secret unrecognised. */
-function stored(text: string, max: number): Redacted {
+export function stored(text: string, max: number): Redacted {
   return clip(redact(text), max, "…") as Redacted;
 }
 
