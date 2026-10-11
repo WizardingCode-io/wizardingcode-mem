@@ -221,6 +221,26 @@ describe("retrieveForPrompt", () => {
     expect(ids("tidy up the validation please")).toEqual([id]);
   });
 
+  test("the session's files come from its latest turns by time, not by insertion order", () => {
+    const id = memory("Validation happens before the database is opened.", "", {
+      files: ["src/cli/status.ts"],
+    });
+    db.run(
+      `INSERT INTO turns (session_id, project_id, seq, state, prompt, files_changed, started_at, ended_at)
+       VALUES (?, ?, 1, 'done', '', '["src/cli/status.ts"]', ?, ?)`,
+      [sessionId, projectId, NOW, NOW],
+    );
+    // History read back afterwards: older turns, inserted later.
+    for (let seq = 2; seq <= 7; seq++) {
+      db.run(
+        `INSERT INTO turns (session_id, project_id, seq, state, origin, prompt, started_at, ended_at)
+         VALUES (?, ?, ?, 'done', 'history', '', ?, ?)`,
+        [sessionId, projectId, seq, NOW - 100 * DAY, NOW - 100 * DAY],
+      );
+    }
+    expect(ids("tidy up the validation please")).toEqual([id]);
+  });
+
   test("a memory is not returned twice in one context, and is again after the context is wiped", () => {
     const id = memory("The pragma busy_timeout must be the first statement on a connection.");
     const first = retrieve("why is busy_timeout ignored here?");
@@ -407,6 +427,18 @@ describe("sessionBrief", () => {
         "</wizardingcode-mem-notes>",
       ].join("\n"),
     );
+  });
+
+  test("where things stood is the latest turn by time, not an older one read back from history", () => {
+    const turn = (prompt: string, at: number, origin: string) =>
+      db.run(
+        `INSERT INTO turns (session_id, project_id, seq, state, origin, prompt, final_text, started_at, ended_at)
+         VALUES (?, ?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM turns), 'done', ?, ?, 'Done.', ?, ?)`,
+        [sessionId, projectId, origin, prompt, at, at],
+      );
+    turn("the recent live question", NOW - DAY, "live");
+    turn("a question from months ago", NOW - 100 * DAY, "history");
+    expect(brief().text).toContain("- Asked: the recent live question");
   });
 
   test("with memories but no finished turn, lists only what is known", () => {

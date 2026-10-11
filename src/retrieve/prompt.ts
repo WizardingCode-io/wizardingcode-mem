@@ -47,7 +47,9 @@ function sessionFiles(db: Db, sessionId: number): string[] {
   const files = new Set<string>();
   const turns = db
     .query<{ files_changed: string; files_read: string }, [number, number]>(
-      "SELECT files_changed, files_read FROM turns WHERE session_id = ? ORDER BY id DESC LIMIT ?",
+      // By time: history read back later can hold older turns of the same session.
+      `SELECT files_changed, files_read FROM turns WHERE session_id = ?
+        ORDER BY COALESCE(ended_at, started_at) DESC, id DESC LIMIT ?`,
     )
     .all(sessionId, RECENT_TURNS);
   for (const turn of turns) {
