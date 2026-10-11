@@ -18,7 +18,7 @@ import { backupDue } from "../../src/backup/schedule.ts";
 import { folderTarget, parseBackupName, parseS3Url } from "../../src/backup/target.ts";
 import { resolveProject } from "../../src/core/project.ts";
 import type { Redacted } from "../../src/core/redact.ts";
-import { DB_FILE, type Db, openDb } from "../../src/store/db.ts";
+import { DB_FILE, type Db, LATEST_VERSION, openDb } from "../../src/store/db.ts";
 import { insertMemory } from "../../src/store/memories.ts";
 import { claimLease, leaseActive, releaseLease } from "../../src/store/meta.ts";
 
@@ -91,8 +91,8 @@ describe("backupName", () => {
 describe("runBackup to a folder", () => {
   test("writes a compressed, consistent copy and remembers it", async () => {
     const outcome = await run();
-    expect(outcome).toMatchObject({ ok: true, name: backupName(NOW, 2) });
-    const gz = join(folder, backupName(NOW, 2));
+    expect(outcome).toMatchObject({ ok: true, name: backupName(NOW, LATEST_VERSION) });
+    const gz = join(folder, backupName(NOW, LATEST_VERSION));
     expect(existsSync(gz)).toBe(true);
     const restored = join(base, "check.db");
     gunzipTo(gz, restored);
@@ -102,7 +102,11 @@ describe("runBackup to a folder", () => {
       "ok",
     );
     probe.close();
-    expect(lastBackup(db)).toMatchObject({ name: backupName(NOW, 2), at: NOW, label: folder });
+    expect(lastBackup(db)).toMatchObject({
+      name: backupName(NOW, LATEST_VERSION),
+      at: NOW,
+      label: folder,
+    });
     expect((lastBackup(db) as { bytes: number }).bytes).toBeGreaterThan(0);
     // Nothing of ours is left in the store besides the database.
     expect(readdirSync(join(storeDir, "backups")).filter((n) => n.startsWith(".tmp"))).toEqual([]);
@@ -116,7 +120,10 @@ describe("runBackup to a folder", () => {
     const ours = readdirSync(folder)
       .filter((n) => n.startsWith("wizardingcode-mem-"))
       .sort();
-    expect(ours).toEqual([backupName(NOW + 2 * HOUR, 2), backupName(NOW + 3 * HOUR, 2)]);
+    expect(ours).toEqual([
+      backupName(NOW + 2 * HOUR, LATEST_VERSION),
+      backupName(NOW + 3 * HOUR, LATEST_VERSION),
+    ]);
     expect(existsSync(join(folder, "unrelated.db.gz"))).toBe(true);
   });
 
@@ -161,7 +168,7 @@ describe("restoreBackup", () => {
     const outcome = await restoreBackup({
       storeDir,
       target: folderTarget(folder),
-      name: backupName(NOW, 2),
+      name: backupName(NOW, LATEST_VERSION),
       now: NOW + HOUR,
     });
     expect(outcome).toMatchObject({ ok: true });

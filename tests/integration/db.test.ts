@@ -220,6 +220,59 @@ describe("store/db", () => {
     db.close();
   });
 
+  test("upgrading drops the context lines that a host notification left in memories", () => {
+    const before = open(MIGRATIONS.slice(0, 2));
+    const { projectId } = seed(before);
+    const now = Date.now();
+    const insert = (title: string, body: string, terms: string) => {
+      before.run(
+        `INSERT INTO memories (project_id, kind, title, body, terms, importance, origin, judge, judge_version, created_at, updated_at)
+         VALUES (?, 'change', ?, ?, ?, 2, 'distilled', 'heuristic', '1', ?, ?)`,
+        [projectId, title, body, terms, now, now],
+      );
+      return before.query<{ id: number }, []>("SELECT max(id) AS id FROM memories").get()
+        ?.id as number;
+    };
+    const noisy = insert(
+      "Release published.",
+      "The checksums match.\nContext: <task-notification> <task-id>bq7x</task-id> <output-file>/tmp/claude/bq7x.output…",
+      "bq7x task notification output",
+    );
+    before.run(
+      "INSERT INTO memory_files (memory_id, path, role) VALUES (?, 'src/release.ts', 'changed')",
+      [noisy],
+    );
+    const report = insert(
+      "Review done.",
+      'Context: <agent-message from="a33"> [Subagent hand-back] The text below…',
+      "a33 subagent",
+    );
+    const kept = insert(
+      "Moved the pragma.",
+      "It runs first now.\nContext: why does <task-notification> show up?",
+      "pragma",
+    );
+    before.close();
+
+    const db = open();
+    const row = (id: number) =>
+      db
+        .query<{ body: string; terms: string }, [number]>(
+          "SELECT body, terms FROM memories WHERE id = ?",
+        )
+        .get(id);
+    expect(row(noisy)?.body).toBe("The checksums match.");
+    expect(row(noisy)?.terms).toContain("src/release.ts");
+    expect(row(report)?.body).toBe("");
+    expect(row(kept)?.body).toBe(
+      "It runs first now.\nContext: why does <task-notification> show up?",
+    );
+    expect(search(db, "bq7x")).toEqual([]);
+    expect(search(db, "a33")).toEqual([]);
+    expect(search(db, "checksums")).toEqual([noisy]);
+    db.close();
+  });
+
   test("a database with data is backed up before it is migrated, keeping the two newest", () => {
     const first = open();
     seed(first);

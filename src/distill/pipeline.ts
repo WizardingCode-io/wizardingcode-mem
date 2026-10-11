@@ -1,6 +1,7 @@
 import { realpathSync } from "node:fs";
 import type { AgentAdapter, TurnDetail } from "../adapters/types.ts";
 import { readGitInfo } from "../core/git.ts";
+import { isFromTheHost } from "../core/host-prompt.ts";
 import { type Redacted, redact } from "../core/redact.ts";
 import type { DistillCandidate, DistillVerdict, Judge } from "../judge/types.ts";
 import { withoutNotes } from "../retrieve/render.ts";
@@ -171,7 +172,9 @@ export async function distillTurn(
 
   // Text cut from redacted text is itself redacted.
   const told = toldInSession(db, turn.sessionId);
-  const prompt = withoutNotes(turn.prompt, told) as Redacted;
+  // A host notification is not the user speaking: no rule comes from it, and it gives
+  // the answer no context.
+  const prompt = (isFromTheHost(turn.prompt) ? "" : withoutNotes(turn.prompt, told)) as Redacted;
   const finalText = withoutNotes(turn.finalText ?? "", told) as Redacted;
   const cands = candidates(prompt, finalText).map((candidate) => ({
     ...candidate,

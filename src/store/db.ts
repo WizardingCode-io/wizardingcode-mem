@@ -4,19 +4,23 @@ import { join } from "node:path";
 import { resolvePaths } from "../util/paths.ts";
 import init from "./migrations/0001_init.sql" with { type: "text" };
 import ftsProject from "./migrations/0002_fts_project.sql" with { type: "text" };
+import { dropHostContext } from "./migrations/0003_host_context.ts";
 
 export type Db = Database;
 
 export interface Migration {
   version: number;
   name: string;
-  sql: string;
+  /** A schema change; a change to the data that needs code goes in `run`. */
+  sql?: string;
+  run?: (db: Db) => void;
 }
 
 /** Forward-only. A migration is never edited once released; a change is a new migration. */
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: "init", sql: init },
   { version: 2, name: "fts_project", sql: ftsProject },
+  { version: 3, name: "host_context", run: dropHostContext },
 ];
 export const LATEST_VERSION = MIGRATIONS.length;
 
@@ -129,7 +133,8 @@ function migrate(
       if (now > 0) backup(db, dir, now);
       for (const migration of [...migrations].sort((a, b) => a.version - b.version)) {
         if (migration.version <= now) continue;
-        lock.run(migration.sql);
+        if (migration.sql !== undefined) lock.run(migration.sql);
+        migration.run?.(lock);
         lock.run(`PRAGMA user_version = ${migration.version}`);
       }
       lock.run("COMMIT");

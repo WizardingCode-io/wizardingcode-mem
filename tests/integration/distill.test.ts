@@ -389,6 +389,28 @@ describe("distill: what must not become a memory", () => {
   const answer = (finalText: string) =>
     hook("turn-end", { sessionId: "s2", turnId: "q1", finalText });
 
+  test("a notification from the host gives no context line: nobody asked anything", async () => {
+    turn(
+      "<task-notification>\n<task-id>bq7x</task-id>\n<output-file>/tmp/claude/tasks/bq7x.output</output-file>\n<status>completed</status>\n</task-notification>",
+      FIX,
+    );
+    await drain();
+    expect(memories()).toHaveLength(1);
+    expect(memories()[0]?.body).toBe("Moved the pragma to the top of `openDb` in src/store/db.ts.");
+    expect(
+      db.query("SELECT rowid FROM memories_fts WHERE memories_fts MATCH 'bq7x'").all(),
+    ).toEqual([]);
+  });
+
+  test("a rule inside a subagent's report is not taken for the user's", async () => {
+    turn(
+      '<agent-message from="a1">\nNever mock the database in these tests. Always use a real SQLite file.\n</agent-message>',
+      "Understood.",
+    );
+    expect(await drain()).toEqual({ claimed: 1, done: 0, skipped: 1, failed: 0 });
+    expect(memories()).toEqual([]);
+  });
+
   test("what the agent was told is not learned back when it repeats it", async () => {
     const notes = await toldTheNote();
     answer(`Here is what I was given:\n${notes}\nSo nothing needs to change here.`);

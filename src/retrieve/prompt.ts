@@ -1,3 +1,4 @@
+import { isFromTheHost } from "../core/host-prompt.ts";
 import type { Db } from "../store/db.ts";
 import { anyOf, inProject, isGeneric, stem } from "../util/words.ts";
 import { MEMORY_COLUMNS, type MemoryRow, prior, ranks, toNote } from "./notes.ts";
@@ -15,12 +16,6 @@ const RRF_K = 60;
 const EVIDENCE_WEIGHT = 3;
 const RECENT_TURNS = 5;
 const MAX_SESSION_FILES = 50;
-
-/**
- * What the host sends in the user's place: a background task finishing, a subagent
- * reporting back. Nobody asked anything; its ids and paths only make for a slow search.
- */
-const FROM_THE_HOST = /^\s*<(?:task-notification|agent-message)[\s>]/;
 
 interface Candidate {
   row: MemoryRow;
@@ -117,7 +112,8 @@ export function retrieveForPrompt(
     now: number;
   },
 ): Note[] {
-  if (FROM_THE_HOST.test(input.prompt)) return [];
+  // Its ids and paths only make for a slow search.
+  if (isFromTheHost(input.prompt)) return [];
   const query = buildQuery(input.prompt);
   if (query === null) return [];
 
