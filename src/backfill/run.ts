@@ -9,7 +9,7 @@ import { drainQueue } from "../distill/queue.ts";
 import type { Judge } from "../judge/types.ts";
 import type { Db } from "../store/db.ts";
 import { enqueueHistory } from "./enqueue.ts";
-import { projectsReadyForReplacement, replaceImports } from "./replace.ts";
+import { projectsReadyForReplacement } from "./replace.ts";
 
 const DAY = 86_400_000;
 const BATCH = 50;
@@ -21,7 +21,8 @@ export interface BackfillReport {
   skipped: number;
   skippedBy: { window: number; host: number; disabled: number; unresolved: number };
   distilled: number;
-  replaced: number;
+  /** Projects whose history is done; `history replace-imports` acts on them. */
+  ready: number;
   /** History turns still waiting; a later run continues with them. */
   remaining: number;
 }
@@ -37,8 +38,9 @@ const READERS = {
 
 /**
  * Reads the agents' transcripts from the last `days`, queues their finished turns,
- * distils for at most `maxMs`, then replaces the imports of every project whose history
- * is done. Idempotent: running it again continues where it stopped.
+ * distils for at most `maxMs`, then counts the projects whose history is done. It never
+ * archives anything: replacing imports is a separate, explicit step. Idempotent: running
+ * it again continues where it stopped.
  */
 export async function runBackfill(
   deps: { db: Db; judge: Judge; now: () => number; roots: { claudeCode: string; codex: string } },
@@ -53,7 +55,7 @@ export async function runBackfill(
     skipped: 0,
     skippedBy: { window: 0, host: 0, disabled: 0, unresolved: 0 },
     distilled: 0,
-    replaced: 0,
+    ready: 0,
     remaining: 0,
   };
 
@@ -88,9 +90,7 @@ export async function runBackfill(
     if (drained.claimed === 0) break;
   }
 
-  for (const projectId of projectsReadyForReplacement(deps.db)) {
-    report.replaced += replaceImports(deps.db, projectId, { now: deps.now() });
-  }
+  report.ready = projectsReadyForReplacement(deps.db).length;
   report.remaining =
     deps.db
       .query<{ n: number }, []>(

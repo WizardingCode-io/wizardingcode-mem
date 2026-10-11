@@ -1,32 +1,45 @@
 import { type Db, withWrite } from "../store/db.ts";
-import { setMeta } from "../store/meta.ts";
 
-// Distilled history and claude-mem's imports describe the same sessions. Once a
-// project's history is distilled, its imports from the same window step aside:
-// archived, never deleted, and listed so that the undo touches only them.
+// Distilled history and claude-mem's imports describe the same sessions. On request,
+// once a project's history is distilled, its imports from the period that history
+// covers step aside: archived, never deleted, and listed so that the undo touches only
+// them. An import that history confirmed (reinforced, or kept over a history memory)
+// stays.
 
-const replacedKey = (projectId: number) => `history.replaced.${projectId}`;
+export interface Replacement {
+  archived: number;
+  /** Imports inside the span left active because history confirmed them. */
+  spared: number;
+}
 
+/** Projects whose history turns are all finished, at least one of them distilled. */
 export function projectsReadyForReplacement(db: Db): number[] {
   return db
     .query<{ id: number }, []>(
-      `SELECT t.project_id AS id FROM turns t
-        WHERE t.origin = 'history'
-          AND NOT EXISTS (SELECT 1 FROM meta WHERE key = 'history.replaced.' || t.project_id)
-        GROUP BY t.project_id
-       HAVING SUM(t.state IN ('open','pending','processing')) = 0
-        ORDER BY t.project_id`,
+      `SELECT project_id AS id FROM turns
+        WHERE origin = 'history'
+        GROUP BY project_id
+       HAVING SUM(state IN ('open','pending','processing')) = 0 AND SUM(state = 'done') > 0
+        ORDER BY project_id`,
     )
     .all()
     .map((row) => row.id);
 }
 
+// History confirmed the import: one of its turns reinforced it, or a memory distilled
+// from history stepped aside for it.
+const CONFIRMED = `(EXISTS (SELECT 1 FROM memory_sources s JOIN turns t ON t.id = s.turn_id
+                            WHERE s.memory_id = m.id AND t.origin = 'history')
+                  OR EXISTS (SELECT 1 FROM memories h JOIN turns t ON t.id = h.source_turn_id
+                              WHERE h.superseded_by = m.id AND t.origin = 'history'))`;
+
 /**
  * Archives the project's active imports created inside the period its history covers
- * (earliest start to latest end of its history turns). Imports from periods whose
- * transcripts were never read stay. No history turns: nothing is archived.
+ * (earliest start to latest end of its history turns, computed afresh each time), except
+ * those history confirmed. Imports from periods whose transcripts were never read stay.
+ * Idempotent: what is archived is no longer active.
  */
-export function replaceImports(db: Db, projectId: number, options: { now: number }): number {
+export function replaceImports(db: Db, projectId: number, options: { now: number }): Replacement {
   return withWrite(db, () => {
     const span = db
       .query<{ first: number | null; last: number | null }, [number]>(
@@ -34,32 +47,45 @@ export function replaceImports(db: Db, projectId: number, options: { now: number
            FROM turns WHERE project_id = ? AND origin = 'history'`,
       )
       .get(projectId);
-    const ids =
-      span?.first == null || span.last == null
-        ? []
-        : db
-            .query<{ id: number }, [number, number, number]>(
-              `SELECT id FROM memories
-                WHERE project_id = ? AND origin = 'imported' AND status = 'active'
-                  AND created_at BETWEEN ? AND ?`,
-            )
-            .all(projectId, span.first, span.last)
-            .map((row) => row.id);
-    for (const id of ids) {
-      db.run("UPDATE memories SET status = 'archived', updated_at = ? WHERE id = ?", [
-        options.now,
-        id,
-      ]);
+    if (span?.first == null || span.last == null) return { archived: 0, spared: 0 };
+    const rows = db
+      .query<{ id: number; confirmed: number }, [number, number, number]>(
+        `SELECT m.id, ${CONFIRMED} AS confirmed FROM memories m
+          WHERE m.project_id = ? AND m.origin = 'imported' AND m.status = 'active'
+            AND m.created_at BETWEEN ? AND ?`,
+      )
+      .all(projectId, span.first, span.last);
+    let archived = 0;
+    for (const row of rows) {
+      if (row.confirmed) continue;
+      // Status only: the memory itself did not change.
+      db.run("UPDATE memories SET status = 'archived' WHERE id = ?", [row.id]);
       db.run(
-        "INSERT OR IGNORE INTO history_replacements (memory_id, project_id, run_at) VALUES (?, ?, ?)",
-        [id, projectId, options.now],
+        "INSERT OR REPLACE INTO history_replacements (memory_id, project_id, run_at) VALUES (?, ?, ?)",
+        [row.id, projectId, options.now],
       );
+      archived++;
     }
-    setMeta(db, replacedKey(projectId), String(options.now));
-    return ids.length;
+    return { archived, spared: rows.length - archived };
   });
 }
 
+/** Replaces the imports of every ready project. */
+export function replaceAllImports(
+  db: Db,
+  options: { now: number },
+): Replacement & { projects: number } {
+  const total = { projects: 0, archived: 0, spared: 0 };
+  for (const projectId of projectsReadyForReplacement(db)) {
+    const replaced = replaceImports(db, projectId, options);
+    total.projects++;
+    total.archived += replaced.archived;
+    total.spared += replaced.spared;
+  }
+  return total;
+}
+
+/** Reactivates what replacement archived and is still archived, then forgets the list. */
 export function restoreImports(db: Db): number {
   return withWrite(db, () => {
     const restored = db.run(
@@ -67,7 +93,6 @@ export function restoreImports(db: Db): number {
         WHERE status = 'archived' AND id IN (SELECT memory_id FROM history_replacements)`,
     ).changes;
     db.run("DELETE FROM history_replacements");
-    db.run("DELETE FROM meta WHERE key LIKE 'history.replaced.%'");
     return restored;
   });
 }

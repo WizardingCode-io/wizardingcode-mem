@@ -1,6 +1,6 @@
 import { claudeCodeRoot } from "../../adapters/claude-code/history.ts";
 import { codexRoot } from "../../adapters/codex/history.ts";
-import { restoreImports } from "../../backfill/replace.ts";
+import { replaceAllImports, restoreImports } from "../../backfill/replace.ts";
 import { runBackfill } from "../../backfill/run.ts";
 import { makeJudge } from "../../judge/index.ts";
 import { loadSettings } from "../../settings/settings.ts";
@@ -10,6 +10,7 @@ import { resolvePaths } from "../../util/paths.ts";
 import { EXIT_USAGE } from "../exit.ts";
 
 const USAGE = `Usage: wizardingcode-mem history import [--days <n>] [--agent claude-code|codex] [--max-seconds <n>]
+       wizardingcode-mem history replace-imports
        wizardingcode-mem history restore-imports
 `;
 
@@ -26,7 +27,7 @@ function positiveInt(argv: string[], flag: string): number | undefined | null {
  */
 export async function run(argv: string[]): Promise<number> {
   const [sub, ...rest] = argv;
-  if (sub !== "import" && sub !== "restore-imports") {
+  if (sub !== "import" && sub !== "replace-imports" && sub !== "restore-imports") {
     process.stderr.write(USAGE);
     return EXIT_USAGE;
   }
@@ -46,6 +47,13 @@ export async function run(argv: string[]): Promise<number> {
   try {
     const { dataDir, storeDir } = resolvePaths();
     db = openDb({ dataDir: storeDir, busyTimeoutMs: 2000 });
+    if (sub === "replace-imports") {
+      const done = replaceAllImports(db, { now: Date.now() });
+      process.stdout.write(
+        `history: ${done.archived} imports archived, ${done.spared} spared as confirmed, ${done.projects} projects\n`,
+      );
+      return 0;
+    }
     if (sub === "restore-imports") {
       process.stdout.write(`history: ${restoreImports(db)} restored\n`);
       return 0;
@@ -64,7 +72,7 @@ export async function run(argv: string[]): Promise<number> {
       },
     );
     process.stdout.write(
-      `history: ${report.transcripts} transcripts, ${report.queued} queued, ${report.known} known, ${report.skipped} skipped (window ${report.skippedBy.window}, host ${report.skippedBy.host}, disabled ${report.skippedBy.disabled}, unresolved ${report.skippedBy.unresolved}), ${report.distilled} distilled, ${report.replaced} imports replaced, ${report.remaining} remaining\n`,
+      `history: ${report.transcripts} transcripts, ${report.queued} queued, ${report.known} known, ${report.skipped} skipped (window ${report.skippedBy.window}, host ${report.skippedBy.host}, disabled ${report.skippedBy.disabled}, unresolved ${report.skippedBy.unresolved}), ${report.distilled} distilled, ${report.remaining} remaining, ${report.ready} projects ready for replace-imports\n`,
     );
     return 0;
   } catch (error) {

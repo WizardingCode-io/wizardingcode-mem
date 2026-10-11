@@ -70,6 +70,47 @@ describe("wizardingcode-mem history", () => {
     expect(rows[0]?.created_at).toBeLessThan(Date.now() - 2 * 86_400_000);
   });
 
+  test("import never archives; it says how many projects are ready for replace-imports", async () => {
+    const out = await history("import");
+    expect(out.stdout).toContain("1 projects ready for replace-imports");
+    expect(out.stdout).not.toContain("replaced");
+  });
+
+  test("replace-imports archives the imports history covers; restore and a later import keep them active", async () => {
+    await history("import");
+    const db = new Database(dbPath());
+    const turn = db
+      .query<{ project_id: number; started_at: number }, []>(
+        "SELECT project_id, started_at FROM turns WHERE origin = 'history'",
+      )
+      .get();
+    db.run(
+      `INSERT INTO memories (project_id, kind, title, body, importance, origin, judge, judge_version, created_at, updated_at)
+       VALUES (?, 'decision', 'Imported', 'From claude-mem.', 3, 'imported', 'x', '1', ?, ?)`,
+      [turn?.project_id ?? 0, turn?.started_at ?? 0, turn?.started_at ?? 0],
+    );
+    db.close();
+    const statusOf = () => {
+      const read = new Database(dbPath(), { readonly: true });
+      const row = read
+        .query<{ status: string }, []>("SELECT status FROM memories WHERE origin = 'imported'")
+        .get();
+      read.close();
+      return row?.status;
+    };
+
+    const replaced = await history("replace-imports");
+    expect(replaced.exitCode).toBe(0);
+    expect(replaced.stdout).toContain("1 imports archived, 0 spared as confirmed, 1 projects");
+    expect(statusOf()).toBe("archived");
+
+    expect((await history("restore-imports")).stdout).toContain("1 restored");
+    expect(statusOf()).toBe("active");
+
+    await history("import");
+    expect(statusOf()).toBe("active");
+  });
+
   test("running it again adds nothing", async () => {
     await history("import");
     const again = await history("import");
