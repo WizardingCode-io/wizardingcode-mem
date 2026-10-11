@@ -3,12 +3,12 @@
  * original model's `encode` does: it cuts the input to 512 x the vocabulary's median token length
  * characters before tokenising, keeps the first 512 tokens, and averages their rows.
  *
- * [UNK] is NOT dropped, although the task brief said to. The published tokenizer is Unigram, which
- * names its unknown by `unk_id`, and model2vec only strips an unknown it finds as `unk_token`, so
- * it strips nothing: the reference vectors include the [UNK] row; a text with no known token at
- * all is still null (cosine 0.93 without it on the
- * item with a stray combining mark, 0.9999 with it).
+ * [UNK] is kept, not dropped: the published tokenizer is Unigram, which names its unknown by
+ * `unk_id`, and model2vec only strips an unknown it finds as `unk_token`, so it strips nothing and
+ * the reference vectors include the [UNK] row (cosine 0.93 without it on the item with a stray
+ * combining mark, 0.9999 with it). A text with no known token at all is still null.
  */
+import { logError } from "../util/log.ts";
 import type { Pack } from "./pack.ts";
 import { tokenizeIndexes } from "./tokenize.ts";
 
@@ -28,7 +28,12 @@ function clip(text: string, max: number): string {
   return text.slice(0, end);
 }
 
-/** The text's unit vector, or null when it has no known token. Never throws. */
+let failureLogged = false;
+
+/**
+ * The text's unit vector, or null when it has no known token. Never throws; an unexpected
+ * failure also gives null, and the first one in a process is written to the error log.
+ */
 export function embed(pack: Pack, text: string): Float32Array | null {
   try {
     const unk = pack.find("[UNK]");
@@ -46,12 +51,18 @@ export function embed(pack: Pack, text: string): Float32Array | null {
     if (!(norm > 0) || !Number.isFinite(norm)) return null;
     for (let d = 0; d < out.length; d++) out[d] = out[d]! / norm;
     return out;
-  } catch {
+  } catch (error) {
+    if (!failureLogged) {
+      failureLogged = true;
+      logError("embed", error);
+    }
     return null;
   }
 }
 
+/** Cosine similarity; 0 for vectors of different lengths or with a zero norm. */
 export function cosine(a: Float32Array, b: Float32Array): number {
+  if (a.length !== b.length) return 0;
   let dot = 0;
   let na = 0;
   let nb = 0;
@@ -66,10 +77,12 @@ export function cosine(a: Float32Array, b: Float32Array): number {
 
 /** int8 storage for vectors kept in the database (part 2): one scale per vector. */
 export function quantize(v: Float32Array): { scale: number; q: Int8Array } {
+  const q = new Int8Array(v.length);
   let max = 0;
   for (let i = 0; i < v.length; i++) max = Math.max(max, Math.abs(v[i]!));
+  // A NaN or infinity would poison the scale: store nothing rather than garbage.
+  if (!Number.isFinite(max) || v.some((x) => Number.isNaN(x))) return { scale: 0, q };
   const scale = max / 127;
-  const q = new Int8Array(v.length);
   if (scale > 0) for (let i = 0; i < v.length; i++) q[i] = Math.round(v[i]! / scale);
   return { scale, q };
 }

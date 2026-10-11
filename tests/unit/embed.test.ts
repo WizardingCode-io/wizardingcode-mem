@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { cosine, dequantize, embed, quantize } from "../../src/embed/embed.ts";
 import { openPack } from "../../src/embed/pack.ts";
@@ -81,5 +82,43 @@ describe("quantize", () => {
     const { scale, q } = quantize(new Float32Array(4));
     expect(scale).toBe(0);
     expect(Array.from(dequantize(scale, q))).toEqual([0, 0, 0, 0]);
+  });
+});
+
+describe("guards", () => {
+  test("cosine of vectors of different lengths, or with a zero norm, is 0", () => {
+    expect(cosine(new Float32Array([1, 2]), new Float32Array([1, 2, 3]))).toBe(0);
+    expect(cosine(new Float32Array(3), new Float32Array([1, 2, 3]))).toBe(0);
+  });
+
+  test("quantize of a non-finite vector gives scale 0 and zeros", () => {
+    for (const bad of [Number.NaN, Number.POSITIVE_INFINITY]) {
+      const { scale, q } = quantize(Float32Array.from([1, bad, 2]));
+      expect(scale).toBe(0);
+      expect(Array.from(q)).toEqual([0, 0, 0]);
+    }
+  });
+
+  test("embed still returns null when the pack throws, and logs the first failure once", () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "wcmem-embed-log-"));
+    const saved = process.env.WIZARDINGCODE_MEM_DATA_DIR;
+    process.env.WIZARDINGCODE_MEM_DATA_DIR = dataDir;
+    try {
+      const broken = {
+        ...pack,
+        find() {
+          throw new Error("boom");
+        },
+      } as unknown as typeof pack;
+      expect(embed(broken, "hello world")).toBeNull();
+      expect(embed(broken, "hello again")).toBeNull();
+      const log = readFileSync(join(dataDir, "logs", "wizardingcode-mem.log"), "utf8");
+      expect(log.trim().split("\n")).toHaveLength(1);
+      expect(log).toContain("embed");
+      expect(log).toContain("boom");
+    } finally {
+      if (saved === undefined) delete process.env.WIZARDINGCODE_MEM_DATA_DIR;
+      else process.env.WIZARDINGCODE_MEM_DATA_DIR = saved;
+    }
   });
 });

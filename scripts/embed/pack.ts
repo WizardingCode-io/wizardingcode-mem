@@ -71,6 +71,9 @@ let minScore = Number.POSITIVE_INFINITY;
 let maxPieceChars = 0;
 for (const [piece, score] of vocab) {
   if (score < minScore) minScore = score;
+  // The word-by-word Viterbi in src/embed/tokenize.ts relies on "▁" only ever starting a piece.
+  if (piece.indexOf("▁", 1) >= 1)
+    throw new Error(`piece ${JSON.stringify(piece)} holds "▁" after its first position`);
   const n = [...piece].length;
   if (n > maxPieceChars) maxPieceChars = n;
 }
@@ -102,7 +105,8 @@ for (let id = 0; id < vocab.length; id++) {
 writePack(outPath, {
   header: {
     model: "minishlab/potion-multilingual-128M",
-    revision: process.env.WCMEM_MODEL_REVISION ?? "73908c3438cf03b6a01bcb9611d62b23d0726f08",
+    revision:
+      process.env.WIZARDINGCODE_MEM_MODEL_REVISION ?? "73908c3438cf03b6a01bcb9611d62b23d0726f08",
     dims,
     vocabSize: vocab.length,
     unkId,

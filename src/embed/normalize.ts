@@ -67,9 +67,18 @@ function lookup(map: Charsmap, bytes: Uint8Array): string | null {
   return utf8.decode(strings.subarray(found, end));
 }
 
+/** Distinct code points remembered per charsmap; unbounded it grew by ~88 MB over all of Unicode. */
+const CACHE_LIMIT = 65_536;
+
+/** How many code points a charsmap's cache holds now (for tests). */
+export function cachedCodePoints(charsmap: Uint8Array): number {
+  return decode(charsmap).cache.size;
+}
+
 function mapCodePoint(map: Charsmap, cp: string): string {
   let out = map.cache.get(cp);
   if (out === undefined) {
+    if (map.cache.size >= CACHE_LIMIT) map.cache.clear();
     out = lookup(map, encoder.encode(cp));
     map.cache.set(cp, out);
   }

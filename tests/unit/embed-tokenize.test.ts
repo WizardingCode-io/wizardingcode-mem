@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { normalize } from "../../src/embed/normalize.ts";
+import { cachedCodePoints, normalize } from "../../src/embed/normalize.ts";
 import { openPack } from "../../src/embed/pack.ts";
 import { tokenize } from "../../src/embed/tokenize.ts";
 
@@ -25,6 +25,14 @@ describe("embed normaliser", () => {
       (item) => normalize(item.text, pack.charsmap) !== item.normalized,
     );
     expect(wrong.map((item) => item.text)).toEqual([]);
+  });
+
+  test("the per-code-point cache stays bounded however many distinct characters pass through", () => {
+    let text = "";
+    for (let cp = 0x4e00; cp < 0x4e00 + 70_000; cp++) text += String.fromCodePoint(cp);
+    normalize(text, pack.charsmap);
+    expect(cachedCodePoints(pack.charsmap)).toBeLessThanOrEqual(65_536);
+    expect(normalize("ｈｅｌｌｏ", pack.charsmap)).toBe("hello");
   });
 
   test("the charsmap folds compatibility characters", () => {

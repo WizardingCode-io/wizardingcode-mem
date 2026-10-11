@@ -16,6 +16,10 @@ const METASPACE = "▁";
 const UNK_PENALTY = 10;
 const encoder = new TextEncoder();
 
+/**
+ * Hot-path callers must go through `embed`, which clips the text first: these functions
+ * normalise the WHOLE input before looking at `maxTokens` (12 MB took ~690 ms).
+ */
 export function tokenize(pack: Pack, text: string, maxTokens = 512): number[] {
   const { unkId } = pack.header;
   return tokenizeIndexes(pack, text, maxTokens).map((i) => (i < 0 ? unkId : pack.idOf(i)));
