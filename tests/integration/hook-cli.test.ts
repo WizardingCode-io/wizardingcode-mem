@@ -106,6 +106,20 @@ describe("wizardingcode-mem hook", () => {
     }
   });
 
+  test("a whole turn from Factory Droid, which names no turn, closes the session's open one", async () => {
+    await hook(payload("session-start.startup", "droid"), "droid", "session-start");
+    await hook(payload("user-prompt-submit", "droid"), "droid", "prompt");
+    expect(await hook(payload("stop", "droid"), "droid", "turn-end")).toEqual(SILENT_SUCCESS);
+    expect(rows("SELECT agent FROM sessions")).toEqual([{ agent: "droid" }]);
+    expect(rows("SELECT state FROM turns")).toHaveLength(1);
+  });
+
+  test("a Factory Droid payload missing what is needed is silent success", async () => {
+    for (const event of ["session-start", "prompt", "turn-end", "session-end"]) {
+      expect(await hook('{"prompt":"x","extra":1}', "droid", event)).toEqual(SILENT_SUCCESS);
+    }
+  });
+
   test("a whole turn from Gemini CLI, which names no turn, closes the session's open one", async () => {
     await hook(payload("before-agent", "gemini"), "gemini", "prompt");
     expect(await hook(payload("after-agent", "gemini"), "gemini", "turn-end")).toEqual(

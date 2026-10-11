@@ -156,7 +156,14 @@ describe("wizardingcode-mem doctor", () => {
 
   test("agents that are not on this machine are skipped, not warned about", async () => {
     const result = await cli("doctor");
-    for (const name of ["Codex", "Cursor", "Gemini CLI", "OpenCode", "Qwen Code"]) {
+    for (const name of [
+      "Codex",
+      "Cursor",
+      "Gemini CLI",
+      "OpenCode",
+      "Qwen Code",
+      "Factory Droid",
+    ]) {
       expect(line(result.stdout, name)).toStartWith("skip");
       expect(line(result.stdout, name)).toContain("not found on this machine");
     }
@@ -242,18 +249,32 @@ describe("wizardingcode-mem doctor", () => {
       QWEN_HOME: join(home, ".qwen"),
       XDG_CONFIG_HOME: join(home, ".config"),
     };
-    for (const agent of ["codex", "cursor", "gemini", "opencode", "qwen"]) {
+    for (const agent of ["codex", "cursor", "gemini", "opencode", "qwen", "droid"]) {
       const installed = await cliWith(codexEnv, "install", agent, "--binary", binary);
       expect(installed.exitCode).toBe(0);
     }
     const result = await cliWith(codexEnv, "doctor");
-    for (const name of ["Codex", "Cursor", "Gemini CLI", "OpenCode", "Qwen Code"]) {
+    for (const name of [
+      "Codex",
+      "Cursor",
+      "Gemini CLI",
+      "OpenCode",
+      "Qwen Code",
+      "Factory Droid",
+    ]) {
       expect(line(result.stdout, name)).toStartWith("ok");
       expect(line(result.stdout, name)).toContain(binary);
     }
     rmSync(binary);
     const broken = await cliWith(codexEnv, "doctor");
-    for (const name of ["Codex", "Cursor", "Gemini CLI", "OpenCode", "Qwen Code"]) {
+    for (const name of [
+      "Codex",
+      "Cursor",
+      "Gemini CLI",
+      "OpenCode",
+      "Qwen Code",
+      "Factory Droid",
+    ]) {
       expect(line(broken.stdout, name)).toStartWith("FAIL");
     }
   });

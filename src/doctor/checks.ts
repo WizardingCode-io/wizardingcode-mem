@@ -6,6 +6,7 @@ import { CLAUDE_CODE } from "../install/claude-code.ts";
 import { claudeDesktopServer, hasClaudeDesktop } from "../install/claude-desktop.ts";
 import { CODEX } from "../install/codex.ts";
 import { CURSOR } from "../install/cursor.ts";
+import { DROID } from "../install/droid.ts";
 import { GEMINI } from "../install/gemini.ts";
 import { type HostSpec, inspectHooksFile } from "../install/hooks-file.ts";
 import { findLegacyPlugins } from "../install/legacy-plugins.ts";
@@ -36,6 +37,7 @@ export interface DoctorContext {
   geminiSettingsPath: string;
   opencodePluginPath: string;
   qwenSettingsPath: string;
+  droidSettingsPath: string;
   /** Whether a host's command is on this machine; null when it is not. */
   which: (command: string) => string | null;
   now: number;
@@ -213,6 +215,7 @@ const NATIVE_INSTALL: Record<string, string> = {
   cursor: "run: wizardingcode-mem install cursor",
   opencode: "run: opencode plugin wizardingcode-mem-opencode --global",
   qwen: "run: wizardingcode-mem install qwen",
+  droid: "run: wizardingcode-mem install droid",
 };
 
 const readText = (path: string): string | null => {
@@ -462,6 +465,7 @@ export function runChecks(context: DoctorContext): Check[] {
       hooksHost("Gemini CLI", GEMINI, context.geminiSettingsPath, "gemini", context),
       openCode(context),
       hooksHost("Qwen Code", QWEN, context.qwenSettingsPath, "qwen", context),
+      hooksHost("Factory Droid", DROID, context.droidSettingsPath, "droid", context),
       claudeDesktop(context),
       legacy(context),
     ].filter((check): check is Check => check !== null);

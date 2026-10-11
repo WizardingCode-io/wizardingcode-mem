@@ -3,6 +3,7 @@ import { claudeDesktopConfigPath, uninstallClaudeDesktop } from "../../install/c
 import { codexContext, uninstallCodex } from "../../install/codex.ts";
 import { claudeCodeContext } from "../../install/context.ts";
 import { cursorContext, uninstallCursor } from "../../install/cursor.ts";
+import { droidContext, uninstallDroid } from "../../install/droid.ts";
 import { geminiContext, uninstallGemini } from "../../install/gemini.ts";
 import { opencodePluginPath, uninstallOpenCode } from "../../install/opencode.ts";
 import { qwenContext, uninstallQwen } from "../../install/qwen.ts";
@@ -67,7 +68,9 @@ export function run(argv: string[]): number {
             ? uninstallCursor(cursorContext(""))
             : agent === "qwen"
               ? uninstallQwen(qwenContext(""))
-              : uninstallClaudeCode(claudeCodeContext(""));
+              : agent === "droid"
+                ? uninstallDroid(droidContext(""))
+                : uninstallClaudeCode(claudeCodeContext(""));
     process.stdout.write(
       [
         `Removed wizardingcode-mem from ${AGENT_NAMES[agent]}.`,
