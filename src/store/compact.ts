@@ -1,6 +1,7 @@
 import { statSync } from "node:fs";
 import { DEFAULTS } from "../settings/settings.ts";
 import { type Db, withWrite } from "./db.ts";
+import { anyLeaseActive } from "./meta.ts";
 
 // Keeps the database to what still serves a purpose. Memories are never touched here:
 // what to keep or archive is the user's call, in the viewer. What goes is the record of
@@ -33,6 +34,13 @@ export interface CompactOptions {
   historyDays?: number;
 }
 
+/** Background work (a history run, a drain, a backup) holds the database: compact waits. */
+export class CompactBusyError extends Error {
+  constructor() {
+    super("background work is running (a history run, a drain or a backup); compact when it ends");
+  }
+}
+
 function fileSize(db: Db): number {
   const file = db.filename;
   try {
@@ -46,6 +54,8 @@ export function compact(db: Db, options: CompactOptions): CompactReport {
   const cutoff = options.now - (options.retentionDays ?? RETENTION_DAYS) * DAY_MS;
   const historyCutoff = options.now - (options.historyDays ?? HISTORY_DAYS) * DAY_MS;
   const dryRun = options.dryRun === true;
+  // The deletes and the VACUUM hold the write lock for seconds: not under a running job.
+  if (!dryRun && anyLeaseActive(db, options.now)) throw new CompactBusyError();
   const n = (sql: string, params: (number | string)[]) =>
     db.query<{ n: number }, (number | string)[]>(sql).get(...params)?.n ?? 0;
 

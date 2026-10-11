@@ -16,7 +16,7 @@ import { historyReadFailure, recentHistory, searchHistory } from "../history/sea
 import { HISTORY_LEASE, HISTORY_OFFER_DISMISSED, historyProgress, historyStatus } from "../history/status.ts";
 import { loadSettings, publicSettings, saveSettings, validatePatch } from "../settings/settings.ts";
 import { statusReport } from "../status/report.ts";
-import { compact } from "../store/compact.ts";
+import { CompactBusyError, compact } from "../store/compact.ts";
 import { DB_FILE, type Db, openDb } from "../store/db.ts";
 import { drainActive, leaseActive, setMeta } from "../store/meta.ts";
 import { inspectTarget, moveStore } from "../store/move.ts";
@@ -379,7 +379,12 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
       if (body instanceof Response) return body;
       const dryRun = body.dryRun === true;
       const { retentionDays, historyDays } = loadSettings(env, options.dataDir);
-      return json(compact(db, { now: now(), dryRun, retentionDays, historyDays }));
+      try {
+        return json(compact(db, { now: now(), dryRun, retentionDays, historyDays }));
+      } catch (error) {
+        if (error instanceof CompactBusyError) return problem(409, error.message);
+        throw error;
+      }
     }
     if (path === "/api/memories" && request.method === "GET") {
       const projectId = Number(url.searchParams.get("project"));

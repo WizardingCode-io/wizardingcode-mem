@@ -7,6 +7,7 @@ import type { Redacted } from "../../src/core/redact.ts";
 import { keyFingerprint } from "../../src/judge/key.ts";
 import { type Db, openDb } from "../../src/store/db.ts";
 import { insertMemory } from "../../src/store/memories.ts";
+import { claimLease } from "../../src/store/meta.ts";
 import { startUi, type UiServer } from "../../src/ui/server.ts";
 
 const NOW = Date.UTC(2026, 9, 5, 12);
@@ -185,6 +186,20 @@ describe("wizardingcode-mem ui: settings", () => {
     expect(count(db, "turns")).toBe(0);
     expect(count(db, "memories")).toBe(1);
     db.close();
+  });
+});
+
+describe("wizardingcode-mem ui: compact during a run", () => {
+  test("is refused with 409 while a history run holds the lease", async () => {
+    const s = await start();
+    const db = openDb({ dataDir, busyTimeoutMs: 2000 });
+    claimLease(db, "history.lease", "run-1", NOW, 120_000);
+    db.close();
+    const r = await api(s, "/api/compact", { method: "POST", body: "{}" });
+    expect(r.status).toBe(409);
+    const check = openDb({ dataDir, busyTimeoutMs: 2000 });
+    expect(count(check, "turns")).toBe(1);
+    check.close();
   });
 });
 

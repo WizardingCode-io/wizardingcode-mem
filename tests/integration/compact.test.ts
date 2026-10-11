@@ -5,9 +5,15 @@ import { join } from "node:path";
 import { enqueueHistory } from "../../src/backfill/enqueue.ts";
 import { resolveProject } from "../../src/core/project.ts";
 import type { Redacted } from "../../src/core/redact.ts";
-import { compact, KEEP_HOOK_RUNS, RETENTION_DAYS } from "../../src/store/compact.ts";
+import {
+  CompactBusyError,
+  compact,
+  KEEP_HOOK_RUNS,
+  RETENTION_DAYS,
+} from "../../src/store/compact.ts";
 import { DB_FILE, type Db, openDb } from "../../src/store/db.ts";
 import { insertMemory } from "../../src/store/memories.ts";
+import { claimLease } from "../../src/store/meta.ts";
 import { runCliWith } from "../helpers/cli.ts";
 
 const NOW = Date.UTC(2026, 9, 5, 12);
@@ -168,6 +174,15 @@ describe("compact", () => {
     expect(count("sessions")).toBe(1);
   });
 
+  test("refuses while a history run holds its lease: the vacuum would stall it; a dry run still reports", () => {
+    const old = session("old", NOW - 200 * DAY);
+    turn(old, 1, "done", NOW - 200 * DAY);
+    expect(claimLease(db, "history.lease", "run-1", NOW, 120_000)).toBe(true);
+    expect(() => compact(db, { now: NOW })).toThrow(CompactBusyError);
+    expect(count("turns")).toBe(1);
+    expect(compact(db, { now: NOW, dryRun: true })).toMatchObject({ turns: 1, dryRun: true });
+  });
+
   test("the file shrinks after a vacuum", () => {
     const s = session("bulk", NOW - 200 * DAY);
     for (let i = 1; i <= 300; i++) {
@@ -208,6 +223,18 @@ describe("wizardingcode-mem compact", () => {
     );
     db = openDb({ dataDir, busyTimeoutMs: 2000 });
     expect(result.stdout).toContain("would remove");
+    expect(count("turns")).toBe(1);
+  });
+
+  test("refuses while a history run goes, and says so", async () => {
+    const old = session("old", NOW - 200 * DAY);
+    turn(old, 1, "done", NOW - 200 * DAY);
+    claimLease(db, "history.lease", "run-1", Date.now(), 120_000);
+    db.close();
+    const result = await runCliWith({ env: { WIZARDINGCODE_MEM_DATA_DIR: dataDir } }, "compact");
+    db = openDb({ dataDir, busyTimeoutMs: 2000 });
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("background work is running");
     expect(count("turns")).toBe(1);
   });
 

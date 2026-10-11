@@ -59,16 +59,18 @@ describe("withHistoryRun", () => {
 
   test("a run that lost its lease stops at the next renewal and leaves the lease to its new owner", async () => {
     let afterRenew = false;
+    let clock = NOW;
     await expect(
       withHistoryRun(
         db,
-        () => NOW,
+        () => clock,
         (renew) => {
           setMeta(
             db,
             "history.lease",
             JSON.stringify({ owner: `${process.pid}-other`, until: NOW + 60_000 }),
           );
+          clock += 10_000;
           renew();
           afterRenew = true;
           return {};
@@ -80,5 +82,71 @@ describe("withHistoryRun", () => {
     expect(getMeta(db, "history.run.state")).toBe("running");
     expect(leaseActive(db, "history.lease", NOW)).toBe(true);
     expect(claimLease(db, "history.lease", `${process.pid}-third`, NOW, 1000)).toBe(false);
+  });
+
+  test("renewals within ten seconds of the last one write nothing", async () => {
+    let clock = NOW;
+    const until = () =>
+      (JSON.parse(getMeta(db, "history.lease") ?? "{}") as { until: number }).until;
+    const seen: number[] = [];
+    await withHistoryRun(
+      db,
+      () => clock,
+      (renew) => {
+        seen.push(until());
+        clock += 4_000;
+        renew();
+        seen.push(until());
+        clock += 6_000;
+        renew();
+        seen.push(until());
+        return {};
+      },
+    );
+    expect(seen[1]).toBe(seen[0]);
+    expect(seen[2]).toBe(NOW + 10_000 + 120_000);
+  });
+
+  test("a renewal that meets a busy database is logged and the run goes on", async () => {
+    const quick = openDb({ dataDir: base, busyTimeoutMs: 1 });
+    const other = openDb({ dataDir: base, busyTimeoutMs: 2000 });
+    let clock = NOW;
+    try {
+      const outcome = await withHistoryRun(
+        quick,
+        () => clock,
+        (renew) => {
+          other.run("BEGIN IMMEDIATE");
+          try {
+            clock += 30_000;
+            renew();
+          } finally {
+            other.run("COMMIT");
+          }
+          return { went: true };
+        },
+      );
+      expect(outcome).toEqual({ report: { went: true } });
+      expect(getMeta(db, "history.run.state")).toBe("done");
+    } finally {
+      other.close();
+      quick.close();
+    }
+  });
+
+  test("a lease that cannot be released does not hide the error that ended the run", async () => {
+    db.run(
+      `CREATE TRIGGER keep_lease BEFORE DELETE ON meta WHEN OLD.key = 'history.lease'
+       BEGIN SELECT RAISE(ABORT, 'cannot release'); END`,
+    );
+    await expect(
+      withHistoryRun(
+        db,
+        () => NOW,
+        () => {
+          throw new Error("the work broke");
+        },
+      ),
+    ).rejects.toThrow("the work broke");
   });
 });
