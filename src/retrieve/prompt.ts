@@ -1,4 +1,5 @@
 import { isFromTheHost } from "../core/host-prompt.ts";
+import type { MemoryKind } from "../core/types.ts";
 import type { Db } from "../store/db.ts";
 import { anyOf, inProject, isGeneric, stem } from "../util/words.ts";
 import { MEMORY_COLUMNS, type MemoryRow, prior, ranks, toNote } from "./notes.ts";
@@ -114,8 +115,22 @@ export function retrieveForPrompt(
     prompt: string;
     branch: string | null;
     now: number;
+    /** Only memories of these kinds; default all. */
+    kinds?: readonly MemoryKind[];
+    /** Default 5. */
+    maxNotes?: number;
+    /** Default 2,400 characters. */
+    budgetChars?: number;
   },
 ): Note[] {
+  const maxNotes = input.maxNotes ?? MAX_NOTES;
+  const budgetChars = input.budgetChars ?? BUDGET_CHARS;
+  const kindFilter =
+    input.kinds === undefined
+      ? "1"
+      : input.kinds.length === 0
+        ? "0"
+        : `m.kind IN (${input.kinds.map((kind) => `'${kind.replaceAll("'", "''")}'`).join(", ")})`;
   // Its ids and paths only make for a slow search.
   if (isFromTheHost(input.prompt)) return [];
   const query = buildQuery(input.prompt);
@@ -127,7 +142,7 @@ export function retrieveForPrompt(
     .query<MemoryRow & { bm25: number }, [string, number, number]>(
       `SELECT ${MEMORY_COLUMNS}, bm25(memories_fts, 4.0, 1.0, 2.0, 0.0) AS bm25
          FROM memories_fts CROSS JOIN memories m ON m.id = memories_fts.rowid
-        WHERE memories_fts MATCH ? AND m.project_id = ? AND m.status = 'active' AND ${unseen}
+        WHERE memories_fts MATCH ? AND m.project_id = ? AND m.status = 'active' AND ${unseen} AND ${kindFilter}
         ORDER BY bm25 LIMIT ?`,
     )
     .all(inProject(query.match, input.projectId), input.projectId, CANDIDATES_PER_CHANNEL);
@@ -140,7 +155,7 @@ export function retrieveForPrompt(
         `SELECT ${MEMORY_COLUMNS}, count(*) AS overlap
            FROM memory_files f JOIN memories m ON m.id = f.memory_id
           WHERE f.path IN (${files.map(() => "?").join(", ")})
-            AND m.project_id = ? AND m.status = 'active' AND ${unseen}
+            AND m.project_id = ? AND m.status = 'active' AND ${unseen} AND ${kindFilter}
           GROUP BY m.id ORDER BY overlap DESC LIMIT ?`,
       )
       .all(...files, input.projectId, CANDIDATES_PER_CHANNEL);
@@ -209,10 +224,10 @@ export function retrieveForPrompt(
     { id: 0, kind: "fix", title: "", body: "", createdAt: 0, files: [], stale: false },
   ]).length;
   for (const candidate of eligible.sort((a, b) => fused(b) - fused(a) || b.row.id - a.row.id)) {
-    if (notes.length === MAX_NOTES) break;
+    if (notes.length === maxNotes) break;
     const note = toNote(db, candidate.row);
     const cost = renderNote(note).length + 1 + (notes.length === 0 ? overhead : 0);
-    if (size + cost > BUDGET_CHARS) continue;
+    if (size + cost > budgetChars) continue;
     notes.push(note);
     size += cost;
   }

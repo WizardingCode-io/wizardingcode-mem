@@ -149,3 +149,33 @@ describe("golden set: a file is read", () => {
     ).toHaveLength(2);
   });
 });
+
+/** Fails a tool through the hook, in a session of its own, and returns the ids shown. */
+function failThroughHook(error: string, session: string): number[] {
+  const out = handleHook({ db, now: () => NOW, spawnDistill: () => {} }, claudeCode, {
+    agent: "claude-code",
+    event: "tool-failed",
+    sessionId: session,
+    cwd: project,
+    turnId: null,
+    transcriptPath: null,
+    prompt: null,
+    finalText: null,
+    source: null,
+    toolFile: null,
+    toolError: error,
+    subagent: false,
+  });
+  if (out === "") return [];
+  const text: string = JSON.parse(out).hookSpecificOutput.additionalContext;
+  return [...text.matchAll(/^- #(\d+) \[/gm)].map((m) => Number(m[1]));
+}
+
+describe("golden set: a tool fails", () => {
+  moments.toolFailed.forEach((item, index) => {
+    test(`failure ${index}: ${item.error.split("\n").pop()?.slice(0, 50)}`, () => {
+      const got = failThroughHook(item.error, `golden-fail-${index}`).map(keyOf);
+      expect(got.sort()).toEqual([...item.expect].sort());
+    });
+  });
+});

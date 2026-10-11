@@ -42,7 +42,8 @@ export function notesForFile(
   const chosen: Note[] = [];
   for (const row of rows.slice(0, MAX_NOTES)) {
     const next = [...chosen, toNote(db, row)];
-    if (renderNotes(next).length > BUDGET_CHARS) break;
+    // `continue`, as on the prompt path: a long note must not hide a short one after it.
+    if (renderNotes(next).length > BUDGET_CHARS) continue;
     chosen.push(next[next.length - 1] as Note);
   }
   return chosen;
