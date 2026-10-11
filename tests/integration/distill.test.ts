@@ -162,6 +162,66 @@ describe("distill: from a queued turn to a memory", () => {
     ).toBe(then);
   });
 
+  test("reinforcing a history memory does not move updated_at backwards", async () => {
+    turn("the tests fail with a timeout", FIX);
+    await drain();
+    const memoryId = memories()[0]?.id ?? 0;
+    const originalUpdatedAt = db
+      .query<{ updated_at: number }, [number]>("SELECT updated_at FROM memories WHERE id = ?")
+      .get(memoryId)?.updated_at;
+    expect(originalUpdatedAt).not.toBeNull();
+
+    // Now reinforce the same memory from a history turn dated 30 days earlier.
+    const then = clock - 30 * 86_400_000;
+    turn("timeouts in the database tests again", FIX.replace("busy", "busy_old"));
+    db.run(
+      "UPDATE turns SET origin = 'history', ended_at = ? WHERE id = (SELECT MAX(id) FROM turns)",
+      [then],
+    );
+    await drain();
+
+    // The evidence_count should increase, but updated_at should not go backwards.
+    const updated = db
+      .query<{ updated_at: number; evidence_count: number }, [number]>(
+        "SELECT updated_at, evidence_count FROM memories WHERE id = ?",
+      )
+      .get(memoryId);
+    expect(updated?.evidence_count).toBe(2);
+    expect(updated?.updated_at).toBe(originalUpdatedAt);
+  });
+
+  test("a history memory does not supersede a newer memory", async () => {
+    // Live turn learns a convention.
+    turn(
+      "how should we handle retries?",
+      "We decided the retry limit is five attempts because the upstream service recovers slowly.",
+    );
+    await drain();
+    const newerMemoryId = memories()[0]?.id ?? 0;
+    expect(memories()[0]?.status).toBe("active");
+
+    // History turn (30 days earlier) says the contradicting thing.
+    const then = clock - 30 * 86_400_000;
+    turn(
+      "old question about retries",
+      "The retry limit is three attempts because the upstream service recovers quickly; it is no longer five attempts.",
+    );
+    db.run(
+      "UPDATE turns SET origin = 'history', ended_at = ? WHERE id = (SELECT MAX(id) FROM turns)",
+      [then],
+    );
+    await drain();
+
+    // The newer memory stays active.
+    // The history memory is superseded by the newer one.
+    const allMemories = memories();
+    const activeMemory = allMemories.find((m) => m.id === newerMemoryId);
+    const olderMemory = allMemories.find((m) => m.id !== newerMemoryId);
+    expect(activeMemory?.status).toBe("active");
+    expect(olderMemory?.status).toBe("superseded");
+    expect(olderMemory?.superseded_by).toBe(newerMemoryId);
+  });
+
   test("the memory can be found by words from the question that led to it", async () => {
     turn("the tests fail with a timeout", FIX);
     await drain();

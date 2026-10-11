@@ -227,7 +227,22 @@ export async function distillTurn(
         files: draft.files,
         now,
       });
-      for (const oldId of action.supersedes) if (oldId !== id) supersede(db, oldId, id, now);
+      for (const oldId of action.supersedes) {
+        if (oldId !== id) {
+          // A history memory must not supersede a newer memory.
+          // If the old memory is newer than the new one, reverse the supersession.
+          const oldCreatedAt = db
+            .query<{ created_at: number }, [number]>("SELECT created_at FROM memories WHERE id = ?")
+            .get(oldId)?.created_at;
+          if (oldCreatedAt !== undefined && oldCreatedAt > now) {
+            // The old memory is newer; the new (history) memory should step aside.
+            supersede(db, id, oldId, now);
+          } else {
+            // The old memory is older or same age; it is superseded by the new one.
+            supersede(db, oldId, id, now);
+          }
+        }
+      }
     }
     finish("done");
   });
