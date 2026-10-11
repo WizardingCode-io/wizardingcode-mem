@@ -27,11 +27,13 @@ export function projectsReadyForReplacement(db: Db): number[] {
 }
 
 // History confirmed the import: one of its turns reinforced it, or a memory distilled
-// from history stepped aside for it.
-const CONFIRMED = `(EXISTS (SELECT 1 FROM memory_sources s JOIN turns t ON t.id = s.turn_id
-                            WHERE s.memory_id = m.id AND t.origin = 'history')
-                  OR EXISTS (SELECT 1 FROM memories h JOIN turns t ON t.id = h.source_turn_id
-                              WHERE h.superseded_by = m.id AND t.origin = 'history'))`;
+// from history stepped aside for it. Not correlated, so it is computed once per query
+// (superseded_by has no index; a per-row lookup scanned every memory for every import).
+const CONFIRMED = `m.id IN (SELECT s.memory_id FROM memory_sources s JOIN turns t ON t.id = s.turn_id
+                               WHERE t.origin = 'history'
+                              UNION
+                              SELECT h.superseded_by FROM memories h JOIN turns t ON t.id = h.source_turn_id
+                               WHERE t.origin = 'history' AND h.superseded_by IS NOT NULL)`;
 
 /**
  * Archives the project's active imports created inside the period its history covers
