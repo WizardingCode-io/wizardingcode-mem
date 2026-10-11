@@ -8,6 +8,7 @@ import About from "./settings/About.vue";
 import Agents from "./settings/Agents.vue";
 import Backups from "./settings/Backups.vue";
 import Health from "./settings/Health.vue";
+import History from "./settings/History.vue";
 import Judge from "./settings/Judge.vue";
 import Retention from "./settings/Retention.vue";
 import Storage from "./settings/Storage.vue";
@@ -30,8 +31,11 @@ const AGENT_CHECKS = ["Claude Code", "Claude Desktop", "Codex", "Cursor", "Gemin
 const agentChecks = computed(() => (checks.value ?? []).filter((c) => AGENT_CHECKS.includes(c.name)));
 const healthChecks = computed(() => (checks.value ?? []).filter((c) => !AGENT_CHECKS.includes(c.name)));
 
-type Page = "agents" | "health" | "judge" | "retention" | "storage" | "backups" | "viewer" | "team" | "about";
-const page = ref<Page>("agents");
+type Page = "agents" | "health" | "judge" | "retention" | "history" | "storage" | "backups" | "viewer" | "team" | "about";
+const PAGES: Page[] = ["agents", "health", "judge", "retention", "history", "storage", "backups", "viewer", "team", "about"];
+// #settings/<page> opens that page (a link from the offer, or from elsewhere).
+const linked = /^#settings\/([a-z]+)$/.exec(location.hash)?.[1] as Page | undefined;
+const page = ref<Page>(linked && PAGES.includes(linked) ? linked : "agents");
 const GROUPS = computed<{ label: string; items: { id: Page; label: string; icon: string; meta?: string; warn?: boolean }[] }[]>(() => [
   {
     label: "This machine",
@@ -45,6 +49,7 @@ const GROUPS = computed<{ label: string; items: { id: Page; label: string; icon:
     items: [
       { id: "judge", label: "Judge", icon: "i-lucide-scale" },
       { id: "retention", label: "Retention", icon: "i-lucide-timer" },
+      { id: "history", label: "History", icon: "i-lucide-history" },
     ],
   },
   {
@@ -95,6 +100,7 @@ const GROUPS = computed<{ label: string; items: { id: Page; label: string; icon:
           <Health v-else-if="page === 'health'" :checks="healthChecks" :loaded="checks !== null" @refresh="loadChecks" />
           <Judge v-else-if="page === 'judge'" />
           <Retention v-else-if="page === 'retention'" />
+          <History v-else-if="page === 'history'" />
           <Storage v-else-if="page === 'storage'" />
           <Backups v-else-if="page === 'backups'" />
           <Viewer v-else-if="page === 'viewer'" />

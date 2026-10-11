@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watchEffect } from "vue";
 import { api } from "./api";
+import HistoryOffer from "./components/HistoryOffer.vue";
 import MemoryDetail from "./components/MemoryDetail.vue";
 import MemoryList from "./components/MemoryList.vue";
 import Palette from "./components/Palette.vue";
@@ -43,6 +44,12 @@ const palette = ref(false);
 watchEffect(() => {
   document.title = project.value ? `${project.value.name} · wizardingcode-mem` : "wizardingcode-mem";
 });
+
+/** Settings, on one of its pages: the page reads the hash when it opens. */
+function openSettings(page: string) {
+  tab.value = "settings";
+  history.replaceState(null, "", `#settings/${page}`);
+}
 
 function openTurn(id: number) {
   state.turnId = id;
@@ -108,7 +115,7 @@ onMounted(async () => {
   onBeforeUnmount(startHeartbeat());
   const deep = /^#m(\d+)$/.exec(location.hash);
   if (location.hash === "#search") palette.value = true;
-  const hashTab = /^#(turns|overview|settings)$/.exec(location.hash)?.[1] as Tab | undefined;
+  const hashTab = (/^#(turns|overview|settings)$/.exec(location.hash)?.[1] ?? (/^#settings\/[a-z]+$/.test(location.hash) ? "settings" : undefined)) as Tab | undefined;
   if (hashTab) state.tab = hashTab;
   try {
     await loadOverview();
@@ -171,6 +178,7 @@ onMounted(async () => {
             </template>
             <span v-else class="flex h-9 items-center gap-2 border-b-2 border-(--ink) pt-0.5 text-[12.5px] font-semibold"><span aria-hidden="true" class="size-2.5 rounded-[3px] bg-[#FFC53D]" />This machine</span>
           </div>
+          <HistoryOffer v-if="state.tab === 'memories' && !failed" @progress="openSettings('history')" />
           <div v-if="failed" class="m-4 rounded-xl border border-(--danger) bg-(--danger-soft) px-3.5 py-3 text-[13px] text-(--danger)">Could not reach wizardingcode-mem: {{ failed }}</div>
           <div v-else-if="state.tab === 'memories'" class="flex min-h-0 flex-1">
             <div class="flex min-h-0 min-w-0 flex-1 flex-col">

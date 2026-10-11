@@ -30,6 +30,8 @@ export default defineConfig({
               md: { base: "h-8 px-4 text-[13px] leading-4 gap-1.5", leadingIcon: "size-4", trailingIcon: "size-4" },
             },
           },
+          // The DS secondary: the raised surface (white, or the dark theme's raised panel), not the page's.
+          compoundVariants: [{ color: "neutral", variant: "outline", class: "bg-(--paper-raised) hover:bg-(--surface-hover)" }],
           defaultVariants: { size: "sm" },
         },
         input: {

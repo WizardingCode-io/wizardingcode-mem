@@ -1,4 +1,7 @@
 // The viewer's client for /api. The token comes from the URL the binary opened.
+import type { HistoryProgress, HistoryStatus } from "./history";
+
+export type { HistoryProgress, HistoryQueue, HistoryRun, HistoryRunState, HistoryStatus } from "./history";
 
 export const TOKEN = new URLSearchParams(location.search).get("token") ?? "";
 
@@ -144,6 +147,10 @@ export type BackupOutcome =
   | { ok: true; name: string; bytes: number }
   | { ok: false; reason: string; detail: string };
 export type RestoreOutcome = { ok: true; replaced: string; historyRemoved: boolean } | { ok: false; reason: string; detail: string };
+/** A replacement either ran, or the count moved since it was shown (`stale`). */
+export type ReplaceOutcome =
+  | { ok: true; projects: number; archived: number; spared: number }
+  | { ok: false; stale: true; count: number };
 /** A refused settings change: one message per key. */
 export class SettingsError extends Error {
   constructor(public errors: Partial<Record<SettingKey, string>>) {
@@ -218,6 +225,26 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ path, confirm: true }),
     }),
+  history: () => call<HistoryStatus>("/api/history"),
+  historyProgress: () => call<HistoryProgress>("/api/history/progress"),
+  /** Starts a background run; `started: false` when one is already going. */
+  historyImport: () => call<{ started: boolean }>("/api/history/import", { method: "POST", body: "{}" }),
+  historyIndex: () => call<{ started: boolean }>("/api/history/index", { method: "POST", body: "{}" }),
+  historyForget: () => call<{ forgotten: true }>("/api/history/forget", { method: "POST", body: "{}" }),
+  /** Archives the imports now covered by history, if `expected` is still the count. */
+  replaceImports: async (expected: number): Promise<ReplaceOutcome> => {
+    const res = await fetch("/api/history/replace-imports", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${TOKEN}` },
+      body: JSON.stringify({ expected }),
+    });
+    const body = (await res.json().catch(() => ({}))) as { count?: number; error?: string; projects?: number; archived?: number; spared?: number };
+    if (res.status === 409 && typeof body.count === "number") return { ok: false, stale: true, count: body.count };
+    if (!res.ok) throw new Error(body.error ?? res.statusText);
+    return { ok: true, projects: body.projects ?? 0, archived: body.archived ?? 0, spared: body.spared ?? 0 };
+  },
+  restoreImports: () => call<{ restored: number }>("/api/history/restore-imports", { method: "POST", body: "{}" }),
+  dismissHistoryOffer: () => call<{ dismissed: true }>("/api/history/offer/dismiss", { method: "POST", body: "{}" }),
   compact: (dryRun: boolean) =>
     call<CompactReport>("/api/compact", { method: "POST", body: JSON.stringify({ dryRun }) }),
 };
