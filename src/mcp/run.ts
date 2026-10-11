@@ -1,6 +1,6 @@
 import { resolveProject } from "../core/project.ts";
 import { openHistoryDb } from "../history/db.ts";
-import { renderHits, searchHistory } from "../history/search.ts";
+import { historyReadFailure, renderHits, searchHistory } from "../history/search.ts";
 import { makeJudge } from "../judge/index.ts";
 import { openDb } from "../store/db.ts";
 import { logError } from "../util/log.ts";
@@ -185,7 +185,7 @@ function searchPast(
     return hits.length === 0 ? "No past conversations match." : renderHits(hits);
   } catch (error) {
     logError("mcp history_search", error);
-    return "The history index is busy; try again in a moment.";
+    return historyReadFailure(error);
   } finally {
     hdb?.close();
   }

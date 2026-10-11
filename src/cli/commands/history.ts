@@ -5,7 +5,7 @@ import { replaceAllImports, restoreImports } from "../../backfill/replace.ts";
 import { runBackfill } from "../../backfill/run.ts";
 import { HISTORY_DB_FILE, historyDbPath, openHistoryDb } from "../../history/db.ts";
 import { indexAll, indexTranscript } from "../../history/index-pass.ts";
-import { renderHits, searchHistory } from "../../history/search.ts";
+import { historyReadFailure, renderHits, searchHistory } from "../../history/search.ts";
 import { makeJudge } from "../../judge/index.ts";
 import { loadSettings } from "../../settings/settings.ts";
 import { type Db, openDb } from "../../store/db.ts";
@@ -95,22 +95,27 @@ export async function run(argv: string[]): Promise<number> {
       return 0;
     }
     if (sub === "search") {
-      const hdb = openHistoryDb(storeDir, { create: false, busyTimeoutMs: 2000 });
-      if (hdb === null) {
-        process.stdout.write(
-          "history search: no history index yet — run wizardingcode-mem history import\n",
-        );
-        return 0;
-      }
+      let hdb: ReturnType<typeof openHistoryDb> = null;
       try {
+        hdb = openHistoryDb(storeDir, { create: false, busyTimeoutMs: 2000 });
+        if (hdb === null) {
+          process.stdout.write(
+            "history search: no history index yet — run wizardingcode-mem history import\n",
+          );
+          return 0;
+        }
         const hits = searchHistory(hdb, { query, projectName, limit });
         process.stdout.write(
           hits.length === 0 ? "history search: no matches\n" : `${renderHits(hits)}\n`,
         );
+        return 0;
+      } catch (error) {
+        logError("history search", error);
+        process.stderr.write(`${historyReadFailure(error)}\n`);
+        return 1;
       } finally {
-        hdb.close();
+        hdb?.close();
       }
-      return 0;
     }
     db = openDb({ dataDir: storeDir, busyTimeoutMs: 2000 });
     if (sub === "replace-imports") {

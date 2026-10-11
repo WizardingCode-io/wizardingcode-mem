@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openHistoryDb } from "../../src/history/db.ts";
-import { renderHits, searchHistory } from "../../src/history/search.ts";
+import { historyReadFailure, renderHits, searchHistory } from "../../src/history/search.ts";
 
 let dir: string;
 let hdb: Database;
@@ -108,5 +108,17 @@ describe("renderHits", () => {
       { project: "p", agent: "codex", sessionId: "s", endedAt: 0, prompt: "q", answer: null },
     ]);
     expect(text).toContain("q");
+  });
+});
+
+describe("historyReadFailure", () => {
+  test("only a busy database is busy; anything else says how to rebuild", () => {
+    const busy = Object.assign(new Error("database is locked"), { code: "SQLITE_BUSY" });
+    expect(historyReadFailure(busy)).toBe("The history index is busy; try again in a moment.");
+    const broken = Object.assign(new Error("file is not a database"), { code: "SQLITE_NOTADB" });
+    expect(historyReadFailure(broken)).toBe(
+      "The history index could not be read. The user can rebuild it: wizardingcode-mem history forget, then wizardingcode-mem history index",
+    );
+    expect(historyReadFailure(new Error("no code"))).toContain("could not be read");
   });
 });

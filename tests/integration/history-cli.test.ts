@@ -180,6 +180,16 @@ describe("wizardingcode-mem history", () => {
     expect(out.stdout).toContain("history search: no history index yet");
   });
 
+  test("search over an index that cannot be read says how to rebuild it and exits 1", async () => {
+    mkdirSync(join(base, "home", "mem"), { recursive: true });
+    writeFileSync(join(base, "home", "mem", "history.db"), "not a database, not at all");
+    const out = await history("search", "anything");
+    expect(out.exitCode).toBe(1);
+    expect(out.stderr.trim()).toBe(
+      "The history index could not be read. The user can rebuild it: wizardingcode-mem history forget, then wizardingcode-mem history index",
+    );
+  });
+
   test("search without words is a usage error", async () => {
     expect((await history("search")).exitCode).toBe(EXIT_USAGE);
   });

@@ -110,6 +110,9 @@ function seedHistory(projectId: number) {
 const NO_INDEX =
   "No past conversations are indexed yet. The user can run: wizardingcode-mem history import";
 
+const UNREADABLE =
+  "The history index could not be read. The user can rebuild it: wizardingcode-mem history forget, then wizardingcode-mem history index";
+
 describe("history_search", () => {
   test("without an index it says how to build one, and creates nothing", async () => {
     const result = await tool("history_search", { query: "zebra" });
@@ -125,11 +128,11 @@ describe("history_search", () => {
     expect(result.stdout).not.toContain("migration plan");
   });
 
-  test("an index that cannot be read says it is busy, and the tool still succeeds", async () => {
+  test("an index that cannot be read says how to rebuild it, and the tool still succeeds", async () => {
     writeFileSync(join(dataDir, "history.db"), "not a database, not at all, not even close");
     const result = await tool("history_search", { query: "zebra" });
     expect(result.exitCode).toBe(0);
-    expect(result.stdout.trim()).toBe("The history index is busy; try again in a moment.");
+    expect(result.stdout.trim()).toBe(UNREADABLE);
   });
 
   test("a query that matches nothing says so", async () => {

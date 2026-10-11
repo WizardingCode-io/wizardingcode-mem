@@ -51,3 +51,14 @@ export function renderHits(hits: HistoryHit[]): string {
     })
     .join("\n\n");
 }
+
+/**
+ * What to tell a person or a model when the index could not be opened or read: busy is
+ * passing; anything else (a damaged or foreign file) needs a rebuild.
+ */
+export function historyReadFailure(error: unknown): string {
+  const code = (error as { code?: unknown } | null)?.code;
+  return typeof code === "string" && code.startsWith("SQLITE_BUSY")
+    ? "The history index is busy; try again in a moment."
+    : "The history index could not be read. The user can rebuild it: wizardingcode-mem history forget, then wizardingcode-mem history index";
+}
