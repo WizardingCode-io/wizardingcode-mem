@@ -43,14 +43,14 @@ Distilled memories lose detail, so part 2 keeps the conversation itself, searcha
 
 - **A separate file.** `history.db` lives in the store directory (mode 0600), next to the main database but not in it. It is rebuildable from the transcripts, so it is never part of backups, never migrates with the main schema, and deleting it loses nothing that cannot be rebuilt. It is also the opt-in: the session-end hook indexes the finished session only when the file already exists.
 - **What is stored.** Per finished turn, the redacted prompt (clipped to 8 KiB) and the redacted final answer (16 KiB), plus agent, project, session and time, in an FTS index. Redaction runs first, then the clip. Nothing else (tool calls, thinking, tool output) is kept.
-- **What is skipped.** The same rules as the import: host notifications, sidechain (subagent) lines, `isMeta` lines and compact summaries, claude-mem observer sessions, and projects with memory disabled.
+- **What is skipped.** The same content rules as the import: host notifications, sidechain (subagent) lines, `isMeta` lines and compact summaries, claude-mem observer sessions, and projects with memory disabled.
 - **How it stays current.** A manifest records each transcript's size and mtime; `history index` re-reads only files that changed and drops rows of files that disappeared. `history import` also indexes. The session-end hook spawns a detached `history index --transcript <file> --agent <agent>`; `WIZARDINGCODE_MEM_DISTILL=off` turns that off. `--max-seconds` bounds a run.
 - **How it is read.** `history search <words> [--project] [--limit]` and the MCP tool `history_search` (read-only open, no write lock; a busy database answers with a sentence instead of failing). Raw history is never injected into a prompt or a session start.
 - **How it is removed.** `history forget` deletes `history.db` and its sidecars; the next `history index` rebuilds it.
 
 ### Measured
 
-On the author's machine, the main database copied read-only to a temporary store directory (the real one untouched), TypeSafe and distilling off, 5,186 transcripts from the last 180 days:
+On the author's machine, the main database copied read-only to a temporary store directory (the real one untouched), TypeSafe and distilling off, all 5,186 transcripts found on disk (the index has no day window; `historyDays` applies only to `history import`):
 
 | | |
 |---|---|
