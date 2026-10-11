@@ -30,6 +30,11 @@ function clip(text: string, max: number): string {
 
 let failureLogged = false;
 
+/** Test hook: lets the "logged once" behaviour be seen again in the same process. */
+export function resetFailureLogForTests(): void {
+  failureLogged = false;
+}
+
 /**
  * The text's unit vector, or null when it has no known token. Never throws; an unexpected
  * failure also gives null, and the first one in a process is written to the error log.

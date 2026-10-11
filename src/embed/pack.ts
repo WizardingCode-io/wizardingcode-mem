@@ -118,9 +118,9 @@ export function openPack(path: string, options: OpenOptions = {}): PackResult {
     const header = JSON.parse(
       new TextDecoder().decode(bytes.subarray(pos + 4, pos + 4 + hlen)),
     ) as PackHeader;
+    if (header === null || typeof header !== "object") return { ok: false, reason: "bad header" };
     if (header.format !== FORMAT)
       return { ok: false, reason: `unknown format ${String(header.format)}` };
-    if (typeof header !== "object" || header === null) return { ok: false, reason: "bad header" };
     const { dims, count, tableSize, unkId, vocabSize, minScore, maxPieceChars } = header;
     if (!isCount(dims, 1)) return { ok: false, reason: "bad dims" };
     if (!isCount(count)) return { ok: false, reason: "bad count" };
@@ -290,7 +290,8 @@ export function writePack(
   }
 
   // Never write the pack in place: an open mapping of the old file must stay valid (see openPack).
-  const tmp = `${path}.tmp`;
+  // Unique, so two writers never share a temporary file.
+  const tmp = `${path}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`;
   const fd = openSync(tmp, "w");
   let written = 0;
   const put = (data: Uint8Array): void => {
@@ -363,5 +364,10 @@ export function writePack(
     closeSync(fd);
     if (!done) rmQuietly(tmp);
   }
-  renameSync(tmp, path);
+  try {
+    renameSync(tmp, path);
+  } catch (error) {
+    rmQuietly(tmp);
+    throw error;
+  }
 }
