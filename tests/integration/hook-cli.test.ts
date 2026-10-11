@@ -462,7 +462,8 @@ describe("parallel file reads in one session", () => {
       );
       for (const result of await Promise.all(reads)) {
         expect(result.exitCode).toBe(0);
-        for (const match of result.stdout.matchAll(/#(\d+) \[/g)) shown.push(`${round}:${match[1]}`);
+        for (const match of result.stdout.matchAll(/#(\d+) \[/g))
+          shown.push(`${round}:${match[1]}`);
       }
     }
     // The invariant is the same whatever got through before the busy timeout: never twice.

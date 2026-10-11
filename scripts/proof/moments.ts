@@ -34,7 +34,8 @@ import { notYetShown, retrieveForPrompt } from "../../src/retrieve/prompt.ts";
 import type { Note } from "../../src/retrieve/render.ts";
 import { DB_FILE, type Db, openDb } from "../../src/store/db.ts";
 import { advanceEpoch, touchSession } from "../../src/store/sessions.ts";
-import { resolvePaths } from "../../src/util/paths.ts";
+import { defaultDataDir, resolvePaths } from "../../src/util/paths.ts";
+import { assertNotLive } from "./live-guard.ts";
 
 // ---- arguments ---------------------------------------------------------------------
 
@@ -61,10 +62,12 @@ if (MEMORIES !== "then" && MEMORIES !== "now") throw new Error("--memories is th
 
 const copy = resolve(copyPath);
 if (basename(copy) !== DB_FILE) throw new Error(`the copy must be named ${DB_FILE}`);
-// Never the live database: this script writes.
-if (resolve(dirname(copy)) === resolve(resolvePaths().storeDir)) {
-  throw new Error("refusing to replay into the live database; take a copy first");
-}
+// Never the live database: this script writes. Real paths, device and inode, both directories.
+assertNotLive(
+  copy,
+  [defaultDataDir(), resolvePaths().storeDir],
+  join(resolvePaths().storeDir, DB_FILE),
+);
 
 // ---- transcripts -------------------------------------------------------------------
 
