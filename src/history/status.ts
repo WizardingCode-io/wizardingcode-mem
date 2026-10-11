@@ -3,11 +3,15 @@ import { listClaudeCodeTranscripts } from "../adapters/claude-code/history.ts";
 import { listCodexTranscripts } from "../adapters/codex/history.ts";
 import { previewReplaceImports, projectsReadyForReplacement } from "../backfill/replace.ts";
 import type { Db } from "../store/db.ts";
-import { getMeta, leaseActive } from "../store/meta.ts";
+import { getMeta, HISTORY_LEASE, leaseActive } from "../store/meta.ts";
 import { openHistoryDb } from "./db.ts";
 import { historyDbPath } from "./path.ts";
 
-export const HISTORY_LEASE = "history.lease";
+export { HISTORY_LEASE };
+export const RUN_STATE = "history.run.state";
+export const RUN_STARTED_AT = "history.run.started_at";
+export const RUN_FINISHED_AT = "history.run.finished_at";
+export const RUN_REPORT = "history.run.report";
 export const HISTORY_OFFER_DISMISSED = "history.offer.dismissed";
 
 export interface HistoryStatus {
@@ -31,7 +35,7 @@ const number = (raw: string | null): number | null => {
 };
 
 function runStatus(db: Db, now: number): HistoryStatus["run"] {
-  const raw = getMeta(db, "history.run.state");
+  const raw = getMeta(db, RUN_STATE);
   const known = raw === "running" || raw === "done" || raw === "failed";
   // A run that says it is running while no live process holds the lease died on the way.
   const state = !known
@@ -40,7 +44,7 @@ function runStatus(db: Db, now: number): HistoryStatus["run"] {
       ? "failed"
       : raw;
   let last: unknown | null = null;
-  const report = getMeta(db, "history.run.report");
+  const report = getMeta(db, RUN_REPORT);
   if (report !== null) {
     try {
       last = JSON.parse(report);
@@ -50,8 +54,8 @@ function runStatus(db: Db, now: number): HistoryStatus["run"] {
   }
   return {
     state,
-    startedAt: number(getMeta(db, "history.run.started_at")),
-    finishedAt: number(getMeta(db, "history.run.finished_at")),
+    startedAt: number(getMeta(db, RUN_STARTED_AT)),
+    finishedAt: number(getMeta(db, RUN_FINISHED_AT)),
     last,
   };
 }
@@ -78,13 +82,7 @@ function indexStatus(storeDir: string): HistoryStatus["index"] {
   }
 }
 
-/** One view of the history import for `status`, the viewer and the install prompt. */
-export function historyStatus(
-  db: Db,
-  storeDir: string,
-  roots: { claudeCode: string; codex: string },
-  now: number,
-): HistoryStatus {
+export function queueStatus(db: Db): HistoryStatus["queue"] {
   const queue = { pending: 0, done: 0, skipped: 0, failed: 0 };
   for (const row of db
     .query<{ state: string; n: number }, []>(
@@ -96,6 +94,22 @@ export function historyStatus(
     else if (row.state === "failed") queue.failed += row.n;
     else queue.pending += row.n;
   }
+  return queue;
+}
+
+/** The light view the viewer polls while a run goes: no transcript walk, no index open. */
+export function historyProgress(db: Db, now: number): Pick<HistoryStatus, "run" | "queue"> {
+  return { run: runStatus(db, now), queue: queueStatus(db) };
+}
+
+/** One view of the history import for `status`, the viewer and the install prompt. */
+export function historyStatus(
+  db: Db,
+  storeDir: string,
+  roots: { claudeCode: string; codex: string },
+  now: number,
+): HistoryStatus {
+  const queue = queueStatus(db);
   return {
     transcripts: {
       claudeCode: listClaudeCodeTranscripts(roots.claudeCode, 0).length,

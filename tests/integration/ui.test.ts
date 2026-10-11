@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveProject } from "../../src/core/project.ts";
@@ -7,6 +7,7 @@ import type { Redacted } from "../../src/core/redact.ts";
 import type { MemoryKind } from "../../src/core/types.ts";
 import { type Db, openDb } from "../../src/store/db.ts";
 import { insertMemory } from "../../src/store/memories.ts";
+import { setMeta } from "../../src/store/meta.ts";
 import { startUi, type UiServer } from "../../src/ui/server.ts";
 
 const NOW = Date.UTC(2026, 9, 5, 12);
@@ -83,7 +84,12 @@ function seed(
 }
 
 async function start(
-  options: { idleMs?: number; onIdle?: () => void; env?: Record<string, string | undefined> } = {},
+  options: {
+    idleMs?: number;
+    onIdle?: () => void;
+    env?: Record<string, string | undefined>;
+    spawn?: (...args: string[]) => void;
+  } = {},
 ): Promise<UiServer> {
   server = await startUi({ dataDir, port: 0, open: false, now: () => NOW, ...options });
   return server;
@@ -468,6 +474,106 @@ describe("wizardingcode-mem ui: the API", () => {
     expect(history.run.state).toBe("never");
     expect(history.index.exists).toBe(false);
     expect(history.transcripts.claudeCode).toBe(0);
+  });
+});
+
+describe("wizardingcode-mem ui: history runs", () => {
+  const post = (s: UiServer, path: string, body?: unknown) =>
+    api(s, path, { method: "POST", body: body === undefined ? undefined : JSON.stringify(body) });
+  const histEnv = () => ({
+    CLAUDE_CONFIG_DIR: join(dataDir, "no-claude"),
+    CODEX_HOME: join(dataDir, "no-codex"),
+  });
+  const holdLease = (until: number) => {
+    const db = openDb({ dataDir, busyTimeoutMs: 2000 });
+    setMeta(db, "history.lease", JSON.stringify({ owner: `${process.pid}-x`, until }));
+    setMeta(db, "history.run.state", "running");
+    db.close();
+  };
+  const startSpying = async () => {
+    const spawned: string[][] = [];
+    const s = await start({
+      env: histEnv(),
+      spawn: (...args: string[]) => void spawned.push(args),
+    });
+    return { s, spawned };
+  };
+
+  test("every route needs the token", async () => {
+    const s = await start({ env: histEnv() });
+    for (const path of [
+      "import",
+      "index",
+      "forget",
+      "replace-imports",
+      "restore-imports",
+      "offer/dismiss",
+    ]) {
+      expect((await fetch(`${s.origin}/api/history/${path}`, { method: "POST" })).status).toBe(401);
+    }
+    expect((await fetch(`${s.origin}/api/history/progress`)).status).toBe(401);
+  });
+
+  test("import and index start a detached run, unless one is going", async () => {
+    const { s, spawned } = await startSpying();
+    expect(await (await post(s, "/api/history/import")).json()).toEqual({ started: true });
+    expect(await (await post(s, "/api/history/index")).json()).toEqual({ started: true });
+    expect(spawned).toEqual([
+      ["history", "import"],
+      ["history", "index"],
+    ]);
+    holdLease(NOW + 60_000);
+    expect(await (await post(s, "/api/history/import")).json()).toEqual({ started: false });
+    expect(await (await post(s, "/api/history/index")).json()).toEqual({ started: false });
+    expect(spawned.length).toBe(2);
+  });
+
+  test("progress is light: only the run and the queue", async () => {
+    const { s } = await startSpying();
+    const progress = (await (await api(s, "/api/history/progress")).json()) as Record<
+      string,
+      unknown
+    >;
+    expect(Object.keys(progress).sort()).toEqual(["queue", "run"]);
+    expect((progress.run as { state: string }).state).toBe("never");
+    holdLease(NOW + 60_000);
+    const running = (await (await api(s, "/api/history/progress")).json()) as {
+      run: { state: string };
+    };
+    expect(running.run.state).toBe("running");
+  });
+
+  test("forget deletes the index, and is refused while a run is going", async () => {
+    const { s } = await startSpying();
+    const index = join(dataDir, "history.db");
+    writeFileSync(index, "x");
+    holdLease(NOW + 60_000);
+    expect((await post(s, "/api/history/forget")).status).toBe(409);
+    expect(existsSync(index)).toBe(true);
+    holdLease(NOW - 1000);
+    expect(await (await post(s, "/api/history/forget")).json()).toEqual({ forgotten: true });
+    expect(existsSync(index)).toBe(false);
+  });
+
+  test("replace-imports needs the count the user saw; a stale one is a 409 with the new count", async () => {
+    const { s } = await startSpying();
+    expect((await post(s, "/api/history/replace-imports", {})).status).toBe(400);
+    const stale = await post(s, "/api/history/replace-imports", { expected: 7 });
+    expect(stale.status).toBe(409);
+    expect(await stale.json()).toEqual({ count: 0 });
+    const ok = await post(s, "/api/history/replace-imports", { expected: 0 });
+    expect(ok.status).toBe(200);
+    expect(await ok.json()).toMatchObject({ archived: 0, projects: 0 });
+  });
+
+  test("restore-imports and the offer dismissal", async () => {
+    const { s } = await startSpying();
+    expect(await (await post(s, "/api/history/restore-imports")).json()).toEqual({ restored: 0 });
+    expect(await (await post(s, "/api/history/offer/dismiss")).json()).toEqual({ dismissed: true });
+    const status = (await (await api(s, "/api/history")).json()) as {
+      offer: { dismissed: boolean };
+    };
+    expect(status.offer.dismissed).toBe(true);
   });
 });
 

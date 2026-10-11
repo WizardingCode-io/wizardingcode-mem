@@ -209,4 +209,61 @@ describe("wizardingcode-mem history", () => {
     expect(out.stdout).toContain("history: 1 transcripts");
     expect(out.stdout).toContain("history index: 1 files");
   });
+
+  describe("one run at a time", () => {
+    const meta = (key: string): string | null => {
+      const read = new Database(dbPath(), { readonly: true });
+      const row = read
+        .query<{ value: string }, [string]>("SELECT value FROM meta WHERE key = ?")
+        .get(key);
+      read.close();
+      return row?.value ?? null;
+    };
+    const setLease = (until: number) => {
+      const write = new Database(dbPath());
+      write.run("INSERT OR REPLACE INTO meta (key, value) VALUES ('history.lease', ?)", [
+        JSON.stringify({ owner: `${process.pid}-other`, until }),
+      ]);
+      write.run("INSERT OR REPLACE INTO meta (key, value) VALUES ('history.run.state', 'running')");
+      write.close();
+    };
+
+    test("a run records its state, its times and its report, and lets go of the lease", async () => {
+      expect((await history("import")).exitCode).toBe(0);
+      expect(meta("history.run.state")).toBe("done");
+      expect(Number(meta("history.run.started_at"))).toBeGreaterThan(0);
+      expect(Number(meta("history.run.finished_at"))).toBeGreaterThanOrEqual(
+        Number(meta("history.run.started_at")),
+      );
+      expect(JSON.parse(meta("history.run.report") as string)).toMatchObject({ queued: 1 });
+      expect(meta("history.lease")).toBeNull();
+    });
+
+    test("while another run holds the lease, import and index say so and change nothing", async () => {
+      await history("import");
+      setLease(Date.now() + 60_000);
+      for (const sub of ["import", "index"]) {
+        const out = await history(sub);
+        expect(out.exitCode).toBe(0);
+        expect(out.stdout).toBe("history: already running\n");
+      }
+      expect(meta("history.run.state")).toBe("running");
+    });
+
+    test("a run that was killed (its lease expired) does not block the next one", async () => {
+      await history("import");
+      setLease(Date.now() - 1000);
+      const out = await history("import");
+      expect(out.stdout).toContain("transcripts");
+      expect(meta("history.run.state")).toBe("done");
+      expect(meta("history.lease")).toBeNull();
+    });
+
+    test("an index run is recorded too", async () => {
+      await history("import");
+      expect((await history("index")).exitCode).toBe(0);
+      expect(meta("history.run.state")).toBe("done");
+      expect(JSON.parse(meta("history.run.report") as string)).toHaveProperty("files");
+    });
+  });
 });

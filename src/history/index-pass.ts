@@ -100,7 +100,7 @@ export function indexAll(
   hdb: Database,
   main: Db,
   roots: { claudeCode: string; codex: string },
-  options: { now: number; maxMs: number; agents: Agent[] },
+  options: { now: number; maxMs: number; agents: Agent[]; onProgress?: () => void },
 ): IndexReport {
   const report: IndexReport = {
     files: 0,
@@ -138,6 +138,7 @@ export function indexAll(
     for (const path of paths) {
       present.add(path);
       report.files++;
+      options.onProgress?.();
       if (Date.now() >= deadline) continue;
       try {
         const stat = statSync(path);

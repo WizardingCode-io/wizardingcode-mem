@@ -20,7 +20,7 @@ import { resolveProject } from "../../src/core/project.ts";
 import type { Redacted } from "../../src/core/redact.ts";
 import { DB_FILE, type Db, LATEST_VERSION, openDb } from "../../src/store/db.ts";
 import { insertMemory } from "../../src/store/memories.ts";
-import { claimLease, leaseActive, releaseLease } from "../../src/store/meta.ts";
+import { anyLeaseActive, claimLease, leaseActive, releaseLease } from "../../src/store/meta.ts";
 import { runCliWith } from "../helpers/cli.ts";
 
 const NOW = Date.UTC(2026, 9, 6, 10, 30, 15);
@@ -280,5 +280,12 @@ describe("leases", () => {
     // An owner that names no process is trusted until it expires.
     expect(leaseActive(db, "backup.lease", NOW)).toBe(true);
     expect(leaseActive(db, "backup.lease", NOW + 61_000)).toBe(false);
+  });
+
+  test("a history run counts as background work that blocks a move or a restore", () => {
+    const now = Date.now();
+    expect(anyLeaseActive(db, now)).toBe(false);
+    expect(claimLease(db, "history.lease", `${process.pid}-h`, now, 60_000)).toBe(true);
+    expect(anyLeaseActive(db, now)).toBe(true);
   });
 });

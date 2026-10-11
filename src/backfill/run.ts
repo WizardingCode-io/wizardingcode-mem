@@ -44,7 +44,13 @@ const READERS = {
  */
 export async function runBackfill(
   deps: { db: Db; judge: Judge; now: () => number; roots: { claudeCode: string; codex: string } },
-  options: { days: number; maxMs: number; agents: (keyof typeof READERS)[] },
+  options: {
+    days: number;
+    maxMs: number;
+    agents: (keyof typeof READERS)[];
+    /** Called between transcripts and batches, so a caller can renew its lease. */
+    onProgress?: () => void;
+  },
 ): Promise<BackfillReport> {
   const started = deps.now();
   const sinceMs = started - options.days * DAY;
@@ -65,6 +71,7 @@ export async function runBackfill(
     const reader = READERS[agent];
     for (const path of reader.list(deps.roots[reader.root], sinceMs)) {
       report.transcripts++;
+      options.onProgress?.();
       const queued = enqueueHistory(deps.db, reader.read(path), {
         sinceMs,
         now: deps.now(),
@@ -81,6 +88,7 @@ export async function runBackfill(
 
   const owner = `history-${process.pid}-${crypto.randomUUID()}`;
   while (deps.now() - started < options.maxMs) {
+    options.onProgress?.();
     const drained = await drainQueue(
       { db: deps.db, judge: deps.judge, adapters: ADAPTERS, now: deps.now },
       { owner, maxTurns: BATCH, maxMs: Math.max(1000, options.maxMs - (deps.now() - started)) },

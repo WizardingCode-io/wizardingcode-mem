@@ -1,10 +1,11 @@
-import { rmSync, statSync } from "node:fs";
+import { statSync } from "node:fs";
 import { claudeCodeRoot } from "../../adapters/claude-code/history.ts";
 import { codexRoot } from "../../adapters/codex/history.ts";
 import { replaceAllImports, restoreImports } from "../../backfill/replace.ts";
 import { runBackfill } from "../../backfill/run.ts";
-import { HISTORY_DB_FILE, historyDbPath, openHistoryDb } from "../../history/db.ts";
-import { indexAll, indexTranscript } from "../../history/index-pass.ts";
+import { HISTORY_DB_FILE, openHistoryDb } from "../../history/db.ts";
+import { type IndexReport, indexAll, indexTranscript } from "../../history/index-pass.ts";
+import { forgetHistoryIndex, withHistoryRun } from "../../history/run-state.ts";
 import { historyReadFailure, renderHits, searchHistory } from "../../history/search.ts";
 import { makeJudge } from "../../judge/index.ts";
 import { loadSettings } from "../../settings/settings.ts";
@@ -89,8 +90,7 @@ export async function run(argv: string[]): Promise<number> {
   try {
     const { dataDir, storeDir } = resolvePaths();
     if (sub === "forget") {
-      const path = historyDbPath(storeDir);
-      for (const suffix of ["", "-wal", "-shm"]) rmSync(path + suffix, { force: true });
+      forgetHistoryIndex(storeDir);
       process.stdout.write("history forget: index deleted\n");
       return 0;
     }
@@ -132,16 +132,23 @@ export async function run(argv: string[]): Promise<number> {
     const roots = { claudeCode: claudeCodeRoot(), codex: codexRoot() };
     const agents: ("claude-code" | "codex")[] =
       agent === undefined ? ["claude-code", "codex"] : [agent as "claude-code" | "codex"];
-    const runIndex = (budgetMs: number): string => {
+    const runIndex = (budgetMs: number, onProgress?: () => void): IndexReport => {
       const hdb = openHistoryDb(storeDir, { create: true, busyTimeoutMs: 2000 });
       if (hdb === null) throw new Error(`${HISTORY_DB_FILE} could not be opened`);
       try {
-        const r = indexAll(hdb, db as Db, roots, { now: Date.now(), maxMs: budgetMs, agents });
-        return `history index: ${r.files} files, ${r.indexed} indexed, ${r.unchanged} unchanged, ${r.removed} removed, ${r.turns} turns, ${r.failed} failed\n`;
+        return indexAll(hdb, db as Db, roots, {
+          now: Date.now(),
+          maxMs: budgetMs,
+          agents,
+          onProgress,
+        });
       } finally {
         hdb.close();
       }
     };
+    const indexLine = (r: IndexReport): string =>
+      `history index: ${r.files} files, ${r.indexed} indexed, ${r.unchanged} unchanged, ${r.removed} removed, ${r.turns} turns, ${r.failed} failed\n`;
+    const already = "history: already running\n";
     if (sub === "index" && transcript !== undefined) {
       // The session-end hook runs this: it updates an index the user has, never makes one,
       // so a `history forget` stays forgotten.
@@ -170,29 +177,38 @@ export async function run(argv: string[]): Promise<number> {
       return 0;
     }
     if (sub === "index") {
-      process.stdout.write(runIndex((maxSeconds ?? 600) * 1000));
+      const ran = await withHistoryRun(db, Date.now, (renew) =>
+        runIndex((maxSeconds ?? 600) * 1000, renew),
+      );
+      process.stdout.write(ran === null ? already : indexLine(ran.report));
       return 0;
     }
     const budgetMs = (maxSeconds ?? 600) * 1000;
-    const started = Date.now();
-    const report = await runBackfill(
-      {
-        db,
-        judge: makeJudge({ db, dataDir }),
-        now: Date.now,
-        roots,
-      },
-      {
-        days: days ?? loadSettings(process.env, dataDir).historyDays,
-        maxMs: budgetMs,
-        agents,
-      },
-    );
-    process.stdout.write(
-      `history: ${report.transcripts} transcripts, ${report.queued} queued, ${report.known} known, ${report.skipped} skipped (window ${report.skippedBy.window}, host ${report.skippedBy.host}, disabled ${report.skippedBy.disabled}, unresolved ${report.skippedBy.unresolved}), ${report.distilled} distilled, ${report.remaining} remaining, ${report.ready} projects ready for replace-imports\n`,
-    );
-    // The index pass gets what the backfill left, and at least a few seconds.
-    process.stdout.write(runIndex(Math.max(5000, budgetMs - (Date.now() - started))));
+    const ran = await withHistoryRun(db, Date.now, async (renew) => {
+      const started = Date.now();
+      const backfill = await runBackfill(
+        {
+          db: db as Db,
+          judge: makeJudge({ db: db as Db, dataDir }),
+          now: Date.now,
+          roots,
+        },
+        {
+          days: days ?? loadSettings(process.env, dataDir).historyDays,
+          maxMs: budgetMs,
+          agents,
+          onProgress: renew,
+        },
+      );
+      process.stdout.write(
+        `history: ${backfill.transcripts} transcripts, ${backfill.queued} queued, ${backfill.known} known, ${backfill.skipped} skipped (window ${backfill.skippedBy.window}, host ${backfill.skippedBy.host}, disabled ${backfill.skippedBy.disabled}, unresolved ${backfill.skippedBy.unresolved}), ${backfill.distilled} distilled, ${backfill.remaining} remaining, ${backfill.ready} projects ready for replace-imports\n`,
+      );
+      // The index pass gets what the backfill left, and at least a few seconds.
+      const index = runIndex(Math.max(5000, budgetMs - (Date.now() - started)), renew);
+      process.stdout.write(indexLine(index));
+      return { ...backfill, index };
+    });
+    if (ran === null) process.stdout.write(already);
     return 0;
   } catch (error) {
     logError("history", error);

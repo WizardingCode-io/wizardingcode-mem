@@ -9,15 +9,18 @@ import { claudeCodeRoot } from "../adapters/claude-code/history.ts";
 import { codexRoot } from "../adapters/codex/history.ts";
 import { runChecks } from "../doctor/checks.ts";
 import { doctorContext } from "../doctor/context.ts";
-import { historyStatus } from "../history/status.ts";
+import { previewReplaceImports, replaceAllImports, restoreImports } from "../backfill/replace.ts";
+import { forgetHistoryIndex } from "../history/run-state.ts";
+import { HISTORY_LEASE, HISTORY_OFFER_DISMISSED, historyProgress, historyStatus } from "../history/status.ts";
 import { loadSettings, publicSettings, saveSettings, validatePatch } from "../settings/settings.ts";
 import { statusReport } from "../status/report.ts";
 import { compact } from "../store/compact.ts";
 import { DB_FILE, type Db, openDb } from "../store/db.ts";
-import { drainActive } from "../store/meta.ts";
+import { drainActive, leaseActive, setMeta } from "../store/meta.ts";
 import { inspectTarget, moveStore } from "../store/move.ts";
 import { logError } from "../util/log.ts";
 import { storeDirOf } from "../util/paths.ts";
+import { spawnDetached } from "../util/self.ts";
 import { clearUiState, writeUiState } from "./state.ts";
 import {
   getMemory,
@@ -57,6 +60,8 @@ export interface UiOptions {
   openBrowser?: (url: string) => void;
   /** Refuse to start when another viewer is already on record (see `UiClaimedError`). */
   exclusive?: boolean;
+  /** How a background run is started (`history import`, ...); tests record instead. */
+  spawn?: (...args: string[]) => void;
 }
 
 /** Thrown by an exclusive start that lost the race to another viewer. */
@@ -144,6 +149,8 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
   let stopped = false;
 
   const open = options.openBrowser ?? openBrowser;
+  const spawn = options.spawn ?? spawnDetached;
+  const historyRunning = () => leaseActive(db, HISTORY_LEASE, now());
   // When a tab last said it was there, and when a browser was last opened.
   let lastPingAt: number | null = null;
   let openedAt: number | null = null;
@@ -425,6 +432,34 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
           now(),
         ),
       );
+    }
+    if (path === "/api/history/progress" && request.method === "GET") {
+      return json(historyProgress(db, now()));
+    }
+    if ((path === "/api/history/import" || path === "/api/history/index") && request.method === "POST") {
+      if (historyRunning()) return json({ started: false });
+      spawn("history", path.slice("/api/history/".length));
+      return json({ started: true });
+    }
+    if (path === "/api/history/forget" && request.method === "POST") {
+      if (historyRunning()) return problem(409, "a history run is going; wait for it to finish");
+      forgetHistoryIndex(storeDir);
+      return json({ forgotten: true });
+    }
+    if (path === "/api/history/replace-imports" && request.method === "POST") {
+      const body = await jsonObject(request);
+      if (body instanceof Response) return body;
+      if (typeof body.expected !== "number") return problem(400, "expected is required");
+      const count = previewReplaceImports(db);
+      if (body.expected !== count) return json({ count }, 409);
+      return json(replaceAllImports(db, { now: now() }));
+    }
+    if (path === "/api/history/restore-imports" && request.method === "POST") {
+      return json({ restored: restoreImports(db) });
+    }
+    if (path === "/api/history/offer/dismiss" && request.method === "POST") {
+      setMeta(db, HISTORY_OFFER_DISMISSED, "1");
+      return json({ dismissed: true });
     }
     if (path === "/api/turns" && request.method === "GET") {
       const projectId = Number(url.searchParams.get("project"));
