@@ -1,0 +1,8 @@
+minishlab/potion-multilingual-128M (revision 73908c3438cf03b6a01bcb9611d62b23d0726f08)
+
+License: MIT, per the model card at
+https://huggingface.co/minishlab/potion-multilingual-128M/blob/73908c3438cf03b6a01bcb9611d62b23d0726f08/README.md
+(front matter "license: mit"). The model repository ships no LICENSE file and the card names no
+copyright holder; the model was developed by the Minish Lab team (https://github.com/MinishLab/model2vec).
+
+subset.wcpack in this directory is a derived subset of that model's embeddings (int8-quantised).
