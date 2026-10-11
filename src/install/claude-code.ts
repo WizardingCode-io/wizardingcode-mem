@@ -26,6 +26,9 @@ export const CLAUDE_CODE: HostSpec = {
     ["UserPromptSubmit", "prompt"],
     ["Stop", "turn-end"],
     ["SessionEnd", "session-end"],
+    // Matchers: without one, Claude Code would call us after every tool.
+    ["PostToolUse", "file-read", "Read"],
+    ["PostToolUseFailure", "tool-failed", "Bash"],
   ],
   entry: (binaryPath, event) => ({
     type: "command",
@@ -64,4 +67,6 @@ export const installClaudeCode = (context: InstallContext): InstallResult =>
 export const uninstallClaudeCode = (context: InstallContext): UninstallResult =>
   uninstallHooksFile(CLAUDE_CODE, context);
 export const inspectSettings = (text: string) => inspectHooksFile(CLAUDE_CODE, text);
-export const HOOKED_EVENTS: readonly string[] = CLAUDE_CODE.events.map(([hostEvent]) => hostEvent);
+export const HOOKED_EVENTS: readonly string[] = [
+  ...new Set(CLAUDE_CODE.events.map(([hostEvent]) => hostEvent)),
+];

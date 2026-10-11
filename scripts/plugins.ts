@@ -42,7 +42,10 @@ const seconds = (event: string) =>
 function grouped(spec: HostSpec, entry: (event: string) => Record<string, unknown>) {
   return {
     hooks: Object.fromEntries(
-      spec.events.map(([hostEvent, event]) => [hostEvent, [{ hooks: [entry(event)] }]]),
+      spec.events.map(([hostEvent, event, matcher]) => [
+        hostEvent,
+        [matcher === undefined ? { hooks: [entry(event)] } : { matcher, hooks: [entry(event)] }],
+      ]),
     ),
   };
 }

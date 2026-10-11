@@ -90,6 +90,8 @@ function installHooks(binary: string): void {
         UserPromptSubmit: [hook("prompt")],
         Stop: [hook("turn-end")],
         SessionEnd: [hook("session-end")],
+        PostToolUse: [{ matcher: "Read", ...hook("file-read") }],
+        PostToolUseFailure: [{ matcher: "Bash", ...hook("tool-failed") }],
       },
     }),
   );

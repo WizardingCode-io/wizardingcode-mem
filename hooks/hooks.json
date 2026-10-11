@@ -67,6 +67,42 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/plugin/wizardingcode-mem.sh",
+              "hook",
+              "claude-code",
+              "file-read"
+            ],
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/plugin/wizardingcode-mem.sh",
+              "hook",
+              "claude-code",
+              "tool-failed"
+            ],
+            "timeout": 5
+          }
+        ]
+      }
     ]
   }
 }

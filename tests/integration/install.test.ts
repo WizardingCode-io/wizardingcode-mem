@@ -61,12 +61,13 @@ const receipts = () => {
         .map((name) => join(dir, name))
     : [];
 };
-const ours = (event: string) => ({
+const ours = (event: string, matcher?: string) => ({
+  ...(matcher === undefined ? {} : { matcher }),
   hooks: [{ type: "command", command: BIN, args: ["hook", "claude-code", event], timeout: 5 }],
 });
 
 describe("install claude-code", () => {
-  test("with no settings file, creates one holding the four hooks in exec form", () => {
+  test("with no settings file, creates one holding the hooks in exec form", () => {
     const result = installClaudeCode(context());
     expect(result.changed).toBe(true);
     expect(settings()).toEqual({
@@ -75,8 +76,23 @@ describe("install claude-code", () => {
         UserPromptSubmit: [ours("prompt")],
         Stop: [ours("turn-end")],
         SessionEnd: [ours("session-end")],
+        PostToolUse: [ours("file-read", "Read")],
+        PostToolUseFailure: [ours("tool-failed", "Bash")],
       },
     });
+  });
+
+  test("keeps a user's own PostToolUse group, and uninstall removes only ours", () => {
+    const theirs = { matcher: "Edit", hooks: [{ type: "command", command: "fmt" }] };
+    writeFileSync(settingsPath, JSON.stringify({ hooks: { PostToolUse: [theirs] } }, null, 2));
+    installClaudeCode(context());
+    expect(settings().hooks.PostToolUse).toEqual([theirs, ours("file-read", "Read")]);
+    installClaudeCode(context());
+    expect(settings().hooks.PostToolUse).toHaveLength(2);
+    // The file moved on after install, so uninstall edits instead of restoring.
+    writeFileSync(settingsPath, `${readFileSync(settingsPath, "utf8")}\n`);
+    uninstallClaudeCode(context());
+    expect(settings().hooks).toEqual({ PostToolUse: [theirs] });
   });
 
   test("leaves everything that is not ours exactly as it was", () => {
