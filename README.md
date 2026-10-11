@@ -228,9 +228,10 @@ A local page over your memories, in WizardingCode's app design:
 - **Memories** — a project's memories grouped by kind (or importance), with their importance, files, last update and how often agents read them. Open one in the side panel, or expand it to the whole window; edit a title, body, kind or importance when the judge got it wrong; archive what you do not want shown and bring it back.
 - **Turns** — every prompt and what it became, with filters (agent, status, source, period), sortable columns, a search over prompts and an export to CSV. Each turn opens with its prompt, files, commands, answer and the memories it left behind; Markdown is shown formatted.
 - **Overview** — the project's numbers and charts: memories and turns per week, by kind, by importance, and how fast the hooks have been.
-- **Settings** — agents, health, the judge, retention, storage, backups and the viewer, one page each.
+- **History** — past conversations with Claude Code and Codex, searchable, for one project or all of them (see [Learn from past sessions](#learn-from-past-sessions)).
+- **Settings** — agents, health, the judge, retention, history, storage, backups and the viewer, one page each.
 
-⌘K (or the search in the top bar) searches every project at once. Light and dark; `[` folds the projects panel, `1`–`4` switch views. It listens on the loopback only, behind a token in the URL, loads nothing from the network, and stops itself after half an hour without you or a tab. It opens by itself when a session starts, in any agent — one viewer per machine, never a second tab — and stays closed under CI, over SSH, or when you turn that off.
+⌘K (or the search in the top bar) searches every project at once. Light and dark; `[` folds the projects panel, `1`–`5` switch views. It listens on the loopback only, behind a token in the URL, loads nothing from the network, and stops itself after half an hour without you or a tab. It opens by itself when a session starts, in any agent — one viewer per machine, never a second tab — and stays closed under CI, over SSH, or when you turn that off.
 
 ## Learn from past sessions
 
@@ -242,7 +243,7 @@ wizardingcode-mem history index               # keep the conversations themselve
 wizardingcode-mem history search <words>      # find what was said; also the MCP tool history_search
 ```
 
-`install` offers this once (`--import-history` agrees in advance, `--no-import-history` skips the offer), and so does the viewer, with a **History** card in Settings that shows the progress and a **History** view that searches past conversations. Nothing runs without your say-so, only one run goes at a time, and hooks are as fast while it runs.
+`install` asks once when it runs in a terminal, and otherwise prints a one-line hint (`--import-history` agrees in advance, `--no-import-history` skips the question). The viewer asks once too, with a **History** card in Settings that shows the progress and a **History** view that searches past conversations. Nothing runs without your say-so, only one run goes at a time, and hooks are as fast while it runs.
 
 - **Kept:** for each finished turn, the prompt and the final answer, with secrets removed first, in `history.db` beside the database. Distilled memories are dated when they happened.
 - **Not kept:** tool calls, tool output, the model's thinking, subagent turns, and projects you turned off.
@@ -269,6 +270,7 @@ One page at a time, in groups:
 | **Health** | Check the database, the search and the hooks; anything wrong says how to fix it |
 | **Judge** | Paste a TypeSafe key (optional) and turn it on or off |
 | **Retention** | Choose how long old turns are kept, preview what a clean-up removes, run it |
+| **History** | Import past sessions and watch the progress, update or forget the conversation index, replace claude-mem's imports (and restore them) |
 | **Storage** | Move the database to another disk, an external drive or a NAS |
 | **Backups** | Pick a folder or a bucket, how often and how many to keep; back up now or restore one |
 | **Viewer** | Whether the viewer opens when a session starts |
