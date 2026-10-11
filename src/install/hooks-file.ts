@@ -54,6 +54,11 @@ export interface HostSpec {
    * under this name, and every other name in the file is the user's.
    */
   definition?: string;
+  /**
+   * The hooks to start the file from when it does not exist yet (Factory Droid: a copy of
+   * settings.json's, which the new file would otherwise silence). Throws when they cannot be read.
+   */
+  seed?: (context: InstallContext) => Json | null;
   /** Keys the file must hold besides `hooks`, such as Cursor's `version`. */
   topLevel?: Json;
   /** Anything the user still has to do by hand after installing. */
@@ -99,6 +104,8 @@ interface Receipt {
   backupPath: string | null;
   /** Hash of the settings file as we left it; equal means nobody changed it since. */
   installedSha256: string;
+  /** The hooks a file we created was seeded with: holding just those, it is still ours to remove. */
+  seeded?: Json;
 }
 
 type Json = Record<string, unknown>;
@@ -279,7 +286,12 @@ export function installHooksFile(spec: HostSpec, context: InstallContext): Insta
   const file = resolved(settingsPath);
   const previous = existsSync(file) ? readFileSync(file, "utf8") : null;
   // Validated before anything is changed or run.
-  const settings = parseSettings(settingsPath, previous, spec);
+  const earlier = readReceipt(dataDir, spec.agent, settingsPath);
+  const seeded = previous === null ? (spec.seed?.(context) ?? undefined) : earlier?.seeded;
+  const settings =
+    previous === null && seeded !== undefined
+      ? { hooks: seeded }
+      : parseSettings(settingsPath, previous, spec);
   if (spec.mcpInSettings && settings.mcpServers !== undefined && !isObject(settings.mcpServers)) {
     throw new Error(`"mcpServers" in ${settingsPath} is not an object; fix it and run this again`);
   }
@@ -304,7 +316,6 @@ export function installHooksFile(spec: HostSpec, context: InstallContext): Insta
     // An earlier receipt still describes this file only if nobody has changed the file
     // since we wrote it. Otherwise its backup is of a file that no longer exists, and
     // restoring it later would throw away whatever was done in between.
-    const earlier = readReceipt(dataDir, spec.agent, settingsPath);
     const earlierHolds =
       earlier !== null && previous !== null && sha256(previous) === earlier.installedSha256;
     let existedBefore: boolean;
@@ -337,6 +348,7 @@ export function installHooksFile(spec: HostSpec, context: InstallContext): Insta
       existedBefore,
       backupPath,
       installedSha256: sha256(next),
+      ...(seeded === undefined ? {} : { seeded }),
     };
     writeFileSync(
       receiptPath(dataDir, spec.agent, settingsPath),
@@ -442,7 +454,16 @@ export function uninstallHooksFile(spec: HostSpec, context: InstallContext): Uni
     } else {
       // The file has moved on: take out what is ours and keep everything else.
       const { settings, removed } = withoutOurs(spec, parseSettings(settingsPath, current, spec));
-      if (removed > 0) {
+      if (
+        removed > 0 &&
+        receipt?.seeded !== undefined &&
+        Bun.deepEquals(isObject(settings.hooks) ? settings.hooks : {}, receipt.seeded)
+      ) {
+        // A file we created that holds only the copy we seeded it with: removing it puts the
+        // host back on the hooks it was copied from.
+        rmSync(settingsPath);
+        outcome = "removed";
+      } else if (removed > 0) {
         writeAtomically(file, render(spec, settings, current));
         outcome = "edited";
       }

@@ -124,16 +124,6 @@ describe("install droid", () => {
     expect(existsSync(mcpPath)).toBe(false);
   });
 
-  test("settings.json is never touched, whatever it holds", () => {
-    mkdirSync(configDir, { recursive: true });
-    const theirs = '{\n  // mine\n  "hooks": {"Stop": []}\n}\n';
-    writeFileSync(join(configDir, "settings.json"), theirs);
-    installDroid(context());
-    uninstallDroid(context());
-    expect(readFileSync(join(configDir, "settings.json"), "utf8")).toBe(theirs);
-    expect(existsSync(settingsPath)).toBe(false);
-  });
-
   test("beside a user's hooks.json with their own SessionStart group, theirs stays first and uninstall takes only ours", () => {
     seedUser();
     installDroid(context());
@@ -212,6 +202,108 @@ describe("an invalid mcp.json stops install before anything is written", () => {
     expect(() => installDroid(context())).toThrow("does not hold a JSON object");
     expect(readFileSync(settingsPath, "utf8")).toBe(original);
     expect(receipts()).toEqual([]);
+  });
+});
+
+// Droid reads settings.json's "hooks" only while hooks.json is absent, so creating hooks.json
+// would silence them: they are copied in beside ours, and settings.json is never written.
+describe("the user's settings.json hooks keep running", () => {
+  const userSettingsPath = () => join(configDir, "settings.json");
+  const mine = { hooks: [{ type: "command", command: "my-notify" }] };
+  const SETTINGS = `${JSON.stringify({ model: "x", hooks: { Stop: [mine], PreToolUse: [mine] } }, null, 2)}\n`;
+  const seedSettings = (text = SETTINGS) => {
+    mkdirSync(configDir, { recursive: true });
+    writeFileSync(userSettingsPath(), text);
+  };
+  const receipts = () =>
+    existsSync(join(dataDir, "install")) ? readdirSync(join(dataDir, "install")) : [];
+
+  test("with no hooks.json, install starts it from a copy of settings.json's hooks", () => {
+    seedSettings();
+    installDroid(context());
+    expect(settings()).toEqual({
+      Stop: [mine, ours("turn-end")],
+      PreToolUse: [mine],
+      SessionStart: [ours("session-start")],
+      UserPromptSubmit: [ours("prompt")],
+      SessionEnd: [ours("session-end")],
+    });
+    expect(readFileSync(userSettingsPath(), "utf8")).toBe(SETTINGS);
+  });
+
+  test("uninstall takes the hooks.json it created away, so Droid reads settings.json again", () => {
+    seedSettings();
+    installDroid(context());
+    expect(uninstallDroid(context()).settings).toBe("removed");
+    expect(existsSync(settingsPath)).toBe(false);
+    expect(readFileSync(userSettingsPath(), "utf8")).toBe(SETTINGS);
+  });
+
+  test("even after hooks.json was reformatted, holding only the copy and ours, it goes", () => {
+    seedSettings();
+    installDroid(context());
+    writeFileSync(settingsPath, JSON.stringify(settings(), null, 4));
+    expect(uninstallDroid(context()).settings).toBe("removed");
+    expect(existsSync(settingsPath)).toBe(false);
+  });
+
+  test("a hook the user added to that hooks.json since keeps the file, without ours", () => {
+    seedSettings();
+    installDroid(context());
+    writeFileSync(settingsPath, JSON.stringify({ ...settings(), Notification: [mine] }, null, 2));
+    expect(uninstallDroid(context()).settings).toBe("edited");
+    expect(settings()).toEqual({ Stop: [mine], PreToolUse: [mine], Notification: [mine] });
+  });
+
+  test("reinstalling keeps the record of the copy", () => {
+    seedSettings();
+    installDroid(context("/old/wizardingcode-mem"));
+    installDroid(context());
+    expect(settings().Stop).toEqual([mine, ours("turn-end")]);
+    expect(uninstallDroid(context()).settings).toBe("removed");
+    expect(existsSync(settingsPath)).toBe(false);
+  });
+
+  test("a hooks.json that was already there is not seeded, and goes back as it was", () => {
+    seedSettings();
+    const original = seedUser();
+    installDroid(context());
+    expect(settings().PreToolUse).toEqual(USER.PreToolUse);
+    expect(JSON.stringify(settings())).not.toContain("my-notify");
+    expect(uninstallDroid(context()).settings).toBe("restored");
+    expect(readFileSync(settingsPath, "utf8")).toBe(original);
+  });
+
+  test("settings.json without hooks seeds nothing", () => {
+    seedSettings('{ "model": "x" }\n');
+    installDroid(context());
+    expect(Object.keys(settings()).sort()).toEqual([
+      "SessionEnd",
+      "SessionStart",
+      "Stop",
+      "UserPromptSubmit",
+    ]);
+  });
+
+  test("a settings.json with comments is refused before anything is written, and left as it was", () => {
+    const theirs = '{\n  // mine\n  "hooks": {"Stop": []}\n}\n';
+    seedSettings(theirs);
+    expect(() => installDroid(context())).toThrow(
+      `comments in ${userSettingsPath()} are not supported yet; remove them and run this again`,
+    );
+    expect(readFileSync(userSettingsPath(), "utf8")).toBe(theirs);
+    expect(existsSync(settingsPath)).toBe(false);
+    expect(existsSync(mcpPath)).toBe(false);
+    expect(receipts()).toEqual([]);
+  });
+
+  test("once hooks.json exists, settings.json is not read at all", () => {
+    const theirs = '{\n  // mine\n  "hooks": {"Stop": []}\n}\n';
+    seedSettings(theirs);
+    seedUser();
+    installDroid(context());
+    uninstallDroid(context());
+    expect(readFileSync(userSettingsPath(), "utf8")).toBe(theirs);
   });
 });
 
