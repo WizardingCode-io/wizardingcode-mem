@@ -131,8 +131,29 @@ describe("the history index", () => {
     utimesSync(a, later, later);
     expect(run()).toMatchObject({ indexed: 1, unchanged: 1 });
     expect(count()).toBe(4);
-    const fts = hdb.query<{ n: number }, []>("SELECT count(*) AS n FROM turns_fts").get();
-    expect(fts?.n).toBe(4);
+    // The full-text index holds the new rows only: no stale entry for a replaced row.
+    hdb.run("INSERT INTO turns_fts(turns_fts) VALUES('integrity-check')");
+    const matches = (word: string) =>
+      hdb
+        .query<{ n: number }, [string]>(
+          "SELECT count(*) AS n FROM turns_fts WHERE turns_fts MATCH ?",
+        )
+        .get(`"${word}"`)?.n;
+    expect(matches("pragma")).toBe(1);
+
+    writeFileSync(
+      a,
+      lines([
+        prompt("p1", "a different question", "2026-09-01T10:00:00.000Z"),
+        assistant("A different answer.", "2026-09-01T10:00:09.000Z"),
+      ]),
+    );
+    const later2 = new Date(Date.now() + 10_000);
+    utimesSync(a, later2, later2);
+    expect(run()).toMatchObject({ indexed: 1 });
+    hdb.run("INSERT INTO turns_fts(turns_fts) VALUES('integrity-check')");
+    expect(matches("pragma")).toBe(0);
+    expect(matches("different")).toBe(1);
   });
 
   test("a transcript that disappeared leaves the index", () => {
