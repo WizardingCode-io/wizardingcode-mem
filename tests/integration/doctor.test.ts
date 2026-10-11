@@ -115,6 +115,35 @@ describe("wizardingcode-mem doctor", () => {
     expect(result.stdout).toEndWith("All checks passed.\n");
   });
 
+  test("an install from before the file-read and tool-failed hooks is a warning, not an error", async () => {
+    const binary = join(home, "wizardingcode-mem");
+    writeFileSync(binary, "");
+    const hook = (event: string) => ({
+      hooks: [
+        { type: "command", command: binary, args: ["hook", "claude-code", event], timeout: 5 },
+      ],
+    });
+    writeFileSync(
+      settingsPath,
+      JSON.stringify({
+        hooks: {
+          SessionStart: [hook("session-start")],
+          UserPromptSubmit: [hook("prompt")],
+          Stop: [hook("turn-end")],
+          SessionEnd: [hook("session-end")],
+          PostToolUse: [{ matcher: "Edit", hooks: [{ type: "command", command: "fmt" }] }],
+        },
+      }),
+    );
+    seed(() => {});
+    const result = await cli("doctor");
+    expect(result.exitCode).toBe(0);
+    const claude = line(result.stdout, "Claude Code");
+    expect(claude).toStartWith("warn");
+    expect(claude).toContain("no PostToolUse, PostToolUseFailure hook");
+    expect(claude).toContain("wizardingcode-mem install claude-code");
+  });
+
   test("before first use there is nothing wrong, only nothing installed", async () => {
     const result = await cli("doctor");
     expect(result.exitCode).toBe(0);

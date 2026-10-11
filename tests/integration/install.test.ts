@@ -95,6 +95,34 @@ describe("install claude-code", () => {
     expect(settings().hooks).toEqual({ PostToolUse: [theirs] });
   });
 
+  test("an install from before the new events still uninstalls cleanly, matcher groups included", () => {
+    const theirs = { matcher: "Edit", hooks: [{ type: "command", command: "fmt" }] };
+    writeFileSync(
+      settingsPath,
+      JSON.stringify({
+        hooks: {
+          SessionStart: [ours("session-start")],
+          UserPromptSubmit: [ours("prompt")],
+          Stop: [ours("turn-end")],
+          SessionEnd: [ours("session-end")],
+          PostToolUse: [theirs, ours("file-read", "Read")],
+        },
+      }),
+    );
+    uninstallClaudeCode(context());
+    expect(settings().hooks).toEqual({ PostToolUse: [theirs] });
+  });
+
+  test("a user's own Read group beside ours stays a separate group and survives uninstall", () => {
+    const theirs = { matcher: "Read", hooks: [{ type: "command", command: "audit-reads" }] };
+    writeFileSync(settingsPath, JSON.stringify({ hooks: { PostToolUse: [theirs] } }));
+    installClaudeCode(context());
+    expect(settings().hooks.PostToolUse).toEqual([theirs, ours("file-read", "Read")]);
+    writeFileSync(settingsPath, `${readFileSync(settingsPath, "utf8")}\n`);
+    uninstallClaudeCode(context());
+    expect(settings().hooks).toEqual({ PostToolUse: [theirs] });
+  });
+
   test("leaves everything that is not ours exactly as it was", () => {
     const theirs = { hooks: [{ type: "command", command: "other-tool start" }] };
     writeFileSync(
