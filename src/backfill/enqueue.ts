@@ -4,7 +4,7 @@ import { type ProjectRef, resolveProject } from "../core/project.ts";
 import { redact } from "../core/redact.ts";
 import { FINAL_TEXT_MAX_CHARS, PROMPT_MAX_CHARS, stored } from "../hooks/handle.ts";
 import { type Db, withWrite } from "../store/db.ts";
-import { touchSession } from "../store/sessions.ts";
+import { ensureSession } from "../store/sessions.ts";
 import { clip } from "../util/text.ts";
 
 const DETAIL_MAX_CHARS = 500;
@@ -74,13 +74,14 @@ export function enqueueHistory(
     }
     const projectId = project.id;
     withWrite(db, () => {
-      const session = touchSession(db, {
+      const session = ensureSession(db, {
         agent: turn.agent,
         agentSessionId: turn.sessionId,
         projectId,
         cwd: turn.cwd,
         branch: turn.branch,
-        now: turn.endedAt,
+        startedAt: turn.startedAt,
+        endedAt: turn.endedAt,
       });
       const inserted = db.run(
         `INSERT INTO turns (session_id, project_id, seq, agent_turn_id, state, completeness, origin,

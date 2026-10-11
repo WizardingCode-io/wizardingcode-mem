@@ -112,6 +112,61 @@ describe("enqueueHistory", () => {
     expect(rows().map((r) => r.origin)).toEqual(["live"]);
   });
 
+  test("history never rewinds a live session", () => {
+    const hook = (event: "prompt" | "session-end", now: number) =>
+      handleHook({ db, now: () => now, spawnDistill: () => {} }, claudeCode, {
+        agent: "claude-code",
+        event,
+        sessionId: "s1",
+        cwd: project,
+        turnId: "live1",
+        transcriptPath: null,
+        prompt: "the live question",
+        finalText: null,
+        source: null,
+        subagent: false,
+      });
+    hook("prompt", NOW);
+    hook("session-end", NOW + 1000);
+    const session = () =>
+      db
+        .query<{ started_at: number; last_seen_at: number; ended_at: number | null }, []>(
+          "SELECT started_at, last_seen_at, ended_at FROM sessions",
+        )
+        .get();
+    const before = session();
+    expect(run([history("p1", 30)]).queued).toBe(1);
+    expect(session()).toEqual(before);
+  });
+
+  test("a session first seen in history is dated by its turn", () => {
+    run([history("p1", 30)]);
+    expect(
+      db.query("SELECT started_at, last_seen_at, ended_at FROM sessions").get(),
+    ).toEqual({
+      started_at: NOW - 30 * DAY,
+      last_seen_at: NOW - 30 * DAY + 5000,
+      ended_at: NOW - 30 * DAY + 5000,
+    });
+  });
+
+  test("a queued history turn that a hook completes is live", () => {
+    run([history("p1", 0)]);
+    handleHook({ db, now: () => NOW, spawnDistill: () => {} }, claudeCode, {
+      agent: "claude-code",
+      event: "turn-end",
+      sessionId: "s1",
+      cwd: project,
+      turnId: "p1",
+      transcriptPath: null,
+      prompt: null,
+      finalText: "answer p1, as the hook saw it",
+      source: null,
+      subagent: false,
+    });
+    expect(rows().map((r) => r.origin)).toEqual(["live"]);
+  });
+
   test("host notifications are skipped, and secrets never reach the queue", () => {
     const key = ["sk-ant-api03-", "a".repeat(90)].join("");
     run([
