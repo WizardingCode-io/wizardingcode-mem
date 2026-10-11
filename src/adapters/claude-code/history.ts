@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { closeSync, openSync, readdirSync, readSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { isObject, type Json, parseLines, text } from "../common/jsonl.ts";
@@ -59,53 +59,103 @@ function said(line: Json): string | null {
   return parts.length === 0 ? null : parts.join("\n");
 }
 
-/** Every finished turn in one transcript. Never throws. */
-export function readClaudeCodeHistory(path: string): HistoryTurn[] {
-  let lines: Json[];
+const DEFAULT_CHUNK_BYTES = 1024 * 1024;
+
+/** Lines of a file, read in fixed-size chunks so a huge transcript is never held whole. */
+function* fileLines(path: string, chunkBytes: number): Generator<string> {
+  const fd = openSync(path, "r");
   try {
-    lines = parseLines(readFileSync(path, "utf8")).filter((line) => line.isSidechain !== true);
+    const buffer = Buffer.alloc(chunkBytes);
+    let pending: Buffer[] = [];
+    for (;;) {
+      const read = readSync(fd, buffer, 0, chunkBytes, null);
+      if (read === 0) break;
+      let from = 0;
+      for (let at = buffer.indexOf(10, 0); at !== -1 && at < read; at = buffer.indexOf(10, from)) {
+        pending.push(Buffer.from(buffer.subarray(from, at)));
+        yield Buffer.concat(pending).toString("utf8");
+        pending = [];
+        from = at + 1;
+      }
+      if (from < read) pending.push(Buffer.from(buffer.subarray(from, read)));
+    }
+    if (pending.length > 0) yield Buffer.concat(pending).toString("utf8");
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/** A line where the user typed: not a subagent's, not an injected notice or a compaction summary. */
+const opensTurn = (line: Json): boolean =>
+  isPrompt(line) && line.isMeta !== true && line.isCompactSummary !== true;
+
+/** claude-mem's own observer sessions run under ~/.claude-mem; they are not the user's work. */
+const isOtherMemory = (cwd: string): boolean => cwd.split(/[\\/]/).includes(".claude-mem");
+
+function finish(path: string, body: Json[]): HistoryTurn | null {
+  const open = body[0] as Json;
+  let finalText: string | null = null;
+  let endedAt = time(open);
+  for (const line of body) {
+    const words = said(line);
+    if (words !== null) finalText = words;
+    endedAt = time(line) ?? endedAt;
+  }
+  const startedAt = time(open);
+  const turnId = text(open.promptId);
+  const sessionId = text(open.sessionId);
+  const cwd = text(open.cwd);
+  if (
+    startedAt === null ||
+    endedAt === null ||
+    turnId === null ||
+    sessionId === null ||
+    cwd === null
+  )
+    return null;
+  if (isOtherMemory(cwd)) return null;
+  return {
+    agent: "claude-code",
+    sessionId,
+    turnId,
+    cwd,
+    branch: text(open.gitBranch),
+    prompt: (open.message as Json).content as string,
+    finalText,
+    startedAt,
+    endedAt,
+    transcriptPath: path,
+    detail: turnDetailFromLines(body, turnId),
+  };
+}
+
+/** Every finished turn in one transcript. Never throws. Holds one turn's lines at a time. */
+export function readClaudeCodeHistory(
+  path: string,
+  options: { chunkBytes?: number } = {},
+): HistoryTurn[] {
+  const turns: HistoryTurn[] = [];
+  let body: Json[] = [];
+  const close = (): void => {
+    if (body.length === 0) return;
+    const turn = finish(path, body);
+    if (turn !== null) turns.push(turn);
+    body = [];
+  };
+  try {
+    for (const raw of fileLines(path, options.chunkBytes ?? DEFAULT_CHUNK_BYTES)) {
+      const line = parseLines(raw)[0];
+      if (line === undefined || line.isSidechain === true) continue;
+      if (opensTurn(line)) {
+        close();
+        body.push(line);
+      } else if (body.length > 0 && !(line.isMeta === true || line.isCompactSummary === true)) {
+        body.push(line);
+      }
+    }
   } catch {
     return [];
   }
-  const turns: HistoryTurn[] = [];
-  const starts = lines.flatMap((line, at) => (isPrompt(line) ? [at] : []));
-  starts.forEach((start, n) => {
-    const open = lines[start] as Json;
-    const end = starts[n + 1] ?? lines.length;
-    const body = lines.slice(start, end);
-    let finalText: string | null = null;
-    let endedAt = time(open);
-    for (const line of body) {
-      const words = said(line);
-      if (words !== null) finalText = words;
-      endedAt = time(line) ?? endedAt;
-    }
-    const startedAt = time(open);
-    const turnId = text(open.promptId);
-    const sessionId = text(open.sessionId);
-    const cwd = text(open.cwd);
-    const message = open.message as Json;
-    if (
-      startedAt === null ||
-      endedAt === null ||
-      turnId === null ||
-      sessionId === null ||
-      cwd === null
-    )
-      return;
-    turns.push({
-      agent: "claude-code",
-      sessionId,
-      turnId,
-      cwd,
-      branch: text(open.gitBranch),
-      prompt: message.content as string,
-      finalText,
-      startedAt,
-      endedAt,
-      transcriptPath: path,
-      detail: turnDetailFromLines(body, turnId),
-    });
-  });
+  close();
   return turns;
 }

@@ -90,6 +90,59 @@ describe("readClaudeCodeHistory", () => {
     expect(readClaudeCodeHistory(path).map((t) => t.turnId)).toEqual(["p1"]);
   });
 
+  test("many turns come back whole even when lines span chunk boundaries", () => {
+    const lines: unknown[] = [];
+    for (let i = 0; i < 200; i++) {
+      const at = (s: number) => new Date(Date.UTC(2026, 8, 1, 10, 0, s)).toISOString();
+      lines.push(prompt(`p${i}`, `question ${i} \u00e9\u4e2d`, at(i % 60)));
+      lines.push(assistant([{ type: "text", text: `answer ${i}` }], at(i % 60)));
+    }
+    const path = write("many.jsonl", lines);
+    const turns = readClaudeCodeHistory(path, { chunkBytes: 37 });
+    expect(turns.map((t) => t.turnId)).toEqual(
+      lines.filter((_, i) => i % 2 === 0).map((l) => (l as { promptId: string }).promptId),
+    );
+    expect(turns[199]).toMatchObject({
+      prompt: "question 199 \u00e9\u4e2d",
+      finalText: "answer 199",
+    });
+  });
+
+  test("meta and compaction-summary lines do not open turns", () => {
+    const path = write("meta.jsonl", [
+      prompt("p1", "real question", "2026-09-01T10:00:00.000Z"),
+      prompt("m1", "<command-name>/clear</command-name>", "2026-09-01T10:00:01.000Z", {
+        isMeta: true,
+      }),
+      prompt("c1", "This session is being continued...", "2026-09-01T10:00:02.000Z", {
+        isCompactSummary: true,
+      }),
+      assistant([{ type: "text", text: "Done." }], "2026-09-01T10:00:03.000Z"),
+    ]);
+    const turns = readClaudeCodeHistory(path);
+    expect(turns.map((t) => t.turnId)).toEqual(["p1"]);
+    expect(turns[0]?.finalText).toBe("Done.");
+  });
+
+  test("claude-mem's own sessions are skipped, lookalike paths are not", () => {
+    const mem = write("mem.jsonl", [
+      prompt("p1", "observe", "2026-09-01T10:00:00.000Z", {
+        cwd: "/Users/x/.claude-mem/observer-sessions",
+      }),
+      assistant([{ type: "text", text: "ok" }], "2026-09-01T10:00:01.000Z"),
+    ]);
+    expect(readClaudeCodeHistory(mem)).toEqual([]);
+    const root = write("root.jsonl", [
+      prompt("p1", "observe", "2026-09-01T10:00:00.000Z", { cwd: "/Users/x/.claude-mem" }),
+    ]);
+    expect(readClaudeCodeHistory(root)).toEqual([]);
+    const fork = write("fork.jsonl", [
+      prompt("p1", "hi", "2026-09-01T10:00:00.000Z", { cwd: "/work/claude-mem-fork" }),
+      assistant([{ type: "text", text: "ok" }], "2026-09-01T10:00:01.000Z"),
+    ]);
+    expect(readClaudeCodeHistory(fork)).toHaveLength(1);
+  });
+
   test("an unreadable file yields nothing", () => {
     expect(readClaudeCodeHistory(join(dir, "missing.jsonl"))).toEqual([]);
   });
