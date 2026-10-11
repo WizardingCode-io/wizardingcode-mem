@@ -7,11 +7,12 @@ import {
   readdirSync,
   realpathSync,
   rmSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { deleteModel, downloadModel } from "../../src/embed/download.ts";
+import { deleteModel, downloadModel, sweepStaleParts } from "../../src/embed/download.ts";
 import { MODEL_FILE, modelPath } from "../../src/embed/model.ts";
 import { runCliWith } from "../helpers/cli.ts";
 
@@ -41,6 +42,15 @@ const server = Bun.serve({
       return new Response(Buffer.alloc(body.length, 60), {
         headers: { "content-type": "text/html" },
       });
+    if (path === "/stall")
+      return new Response(
+        new ReadableStream({
+          start(c) {
+            c.enqueue(body.subarray(0, 10));
+          },
+        }),
+        { headers: { "content-length": String(body.length) } },
+      );
     if (path === "/error") return new Response("nope", { status: 503 });
     if (path === "/abort")
       return new Response(
@@ -130,7 +140,7 @@ describe("downloadModel", () => {
   test("a second download over a valid file is a no-op", async () => {
     await downloadModel(opts("/ok"));
     const out = await downloadModel(opts("/error"));
-    expect(out).toEqual({ ok: true, alreadyPresent: true } as never);
+    expect(out).toEqual({ ok: true, alreadyPresent: true });
   });
 
   test("an existing file of the wrong content is replaced", async () => {
@@ -150,6 +160,50 @@ describe("downloadModel", () => {
         .digest("hex"),
     ).toBe(sha);
     expect(leftovers()).toEqual([]);
+  });
+});
+
+describe("leftovers and stalls", () => {
+  const plant = (name: string, ageMs = 0) => {
+    mkdirSync(join(dataDir, "models"), { recursive: true });
+    const path = join(dataDir, "models", name);
+    writeFileSync(path, "partial");
+    const t = new Date(Date.now() - ageMs);
+    utimesSync(path, t, t);
+    return path;
+  };
+
+  test("sweeps a dead owner's part and an old one; keeps a live fresh one", async () => {
+    const dead = plant(`.${MODEL_FILE}.99999999.aa.part`);
+    const old = plant(`.${MODEL_FILE}.${process.pid}.bb.part`, 11 * 60_000);
+    const live = plant(`.${MODEL_FILE}.${process.pid}.cc.part`);
+    const other = plant("unrelated.txt", 11 * 60_000);
+    sweepStaleParts(dataDir);
+    expect(existsSync(dead)).toBe(false);
+    expect(existsSync(old)).toBe(false);
+    expect(existsSync(live)).toBe(true);
+    expect(existsSync(other)).toBe(true);
+  });
+
+  test("a download sweeps leftovers first", async () => {
+    const dead = plant(`.${MODEL_FILE}.99999999.aa.part`);
+    expect((await downloadModel(opts("/ok"))).ok).toBe(true);
+    expect(existsSync(dead)).toBe(false);
+  });
+
+  test("a stalled stream is aborted with a clear message and leaves nothing", async () => {
+    const out = await downloadModel(opts("/stall", { idleTimeoutMs: 100 }));
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.reason).toMatch(/no data|stalled/);
+    expect(existsSync(modelPath(dataDir))).toBe(false);
+    expect(leftovers()).toEqual([]);
+  });
+
+  test("deleteModel reports whether the file is gone", () => {
+    expect(deleteModel(dataDir)).toBe(true);
+    plant(MODEL_FILE);
+    expect(deleteModel(dataDir)).toBe(true);
+    expect(existsSync(modelPath(dataDir))).toBe(false);
   });
 });
 

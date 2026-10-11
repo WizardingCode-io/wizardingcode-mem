@@ -1,3 +1,4 @@
+import { unlinkSync } from "node:fs";
 import { deleteModel, downloadModel } from "../../embed/download.ts";
 import { modelState } from "../../embed/model.ts";
 import { openDb } from "../../store/db.ts";
@@ -28,7 +29,12 @@ export async function run(argv: string[]): Promise<number> {
     return 0;
   }
   if (sub === "delete") {
-    deleteModel(dataDir);
+    if (!deleteModel(dataDir)) {
+      process.stderr.write(
+        "wizardingcode-mem embed: could not remove the model (is it in use? close the viewer and retry)\n",
+      );
+      return 1;
+    }
     process.stdout.write("embed: model removed\n");
     return 0;
   }
@@ -38,10 +44,28 @@ export async function run(argv: string[]): Promise<number> {
   }
   let db: ReturnType<typeof openDb> | undefined;
   try {
-    db = openDb({ dataDir: storeDir, busyTimeoutMs: 5000 });
+    db = openDb({ dataDir: storeDir, busyTimeoutMs: 250 });
   } catch {
     // Progress is a courtesy; the download does not need the database.
   }
+  try {
+    db?.run("DELETE FROM meta WHERE key IN (?, ?)", [PROGRESS_DONE, PROGRESS_TOTAL]);
+  } catch {}
+  let partPath: string | null = null;
+  const dropPart = () => {
+    if (partPath === null) return;
+    try {
+      unlinkSync(partPath);
+    } catch {}
+  };
+  const onSignal = (code: number) => () => {
+    dropPart();
+    process.exit(code);
+  };
+  const sigint = onSignal(130);
+  const sigterm = onSignal(143);
+  process.on("SIGINT", sigint);
+  process.on("SIGTERM", sigterm);
   const progress = (done: number, total: number) => {
     try {
       if (db) {
@@ -55,6 +79,9 @@ export async function run(argv: string[]): Promise<number> {
     process.stdout.write("embed: downloading the semantic model (about 140 MB)\n");
     const out = await downloadModel({
       dataDir,
+      onPart: (path) => {
+        partPath = path;
+      },
       onProgress: (done, total) => {
         const now = Date.now();
         if (now - lastPrinted > 500 || done === total) {
@@ -74,6 +101,9 @@ export async function run(argv: string[]): Promise<number> {
     process.stdout.write(out.alreadyPresent ? "embed: already present\n" : "embed: model ready\n");
     return 0;
   } finally {
+    dropPart();
+    process.off("SIGINT", sigint);
+    process.off("SIGTERM", sigterm);
     try {
       db?.run("DELETE FROM meta WHERE key IN (?, ?)", [PROGRESS_DONE, PROGRESS_TOTAL]);
     } catch {}

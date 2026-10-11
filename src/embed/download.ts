@@ -10,6 +10,7 @@ import {
   closeSync,
   mkdirSync,
   openSync,
+  readdirSync,
   readSync,
   renameSync,
   statSync,
@@ -34,6 +35,47 @@ export interface DownloadOptions {
   bytes?: number;
   fetch?: typeof fetch;
   onProgress?: (done: number, total: number) => void;
+  /** Called with the part file's path once chosen, so a signal handler can remove it. */
+  onPart?: (path: string) => void;
+  /** No bytes for this long aborts the download. Default 60 s. */
+  idleTimeoutMs?: number;
+}
+
+interface Reader {
+  read(): Promise<{ done: boolean; value?: Uint8Array }>;
+  cancel(): Promise<void>;
+}
+
+const STALE_PART_MS = 10 * 60 * 1000;
+
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+/** Removes part files a killed download left behind: owner gone, or older than 10 minutes. */
+export function sweepStaleParts(dataDir: string, now = Date.now()): void {
+  const dir = dirname(modelPath(dataDir));
+  let names: string[];
+  try {
+    names = readdirSync(dir);
+  } catch {
+    return;
+  }
+  const prefix = `.${MODEL_FILE}.`;
+  for (const name of names) {
+    if (!name.startsWith(prefix) || !name.endsWith(".part")) continue;
+    const pid = Number(name.slice(prefix.length).split(".")[0]);
+    const path = join(dir, name);
+    try {
+      const old = now - statSync(path).mtimeMs > STALE_PART_MS;
+      if (old || !Number.isInteger(pid) || !alive(pid)) unlinkSync(path);
+    } catch {}
+  }
 }
 
 const mb = (n: number) => `${(n / 1024 / 1024).toFixed(1)} MB`;
@@ -80,8 +122,12 @@ export async function downloadModel(options: DownloadOptions): Promise<DownloadR
     `.${MODEL_FILE}.${process.pid}.${randomBytes(4).toString("hex")}.part`,
   );
   let fd: number | null = null;
+  let reader: Reader | null = null;
+  const idleMs = options.idleTimeoutMs ?? 60_000;
   try {
     mkdirSync(dirname(finalPath), { recursive: true });
+    sweepStaleParts(options.dataDir);
+    options.onPart?.(part);
     if (validPackAlreadyThere(finalPath, sha256, bytes)) return { ok: true, alreadyPresent: true };
 
     const response = await doFetch(url, { redirect: "follow" });
@@ -113,10 +159,22 @@ export async function downloadModel(options: DownloadOptions): Promise<DownloadR
     fd = openSync(part, "w", 0o644);
     const hash = createHash("sha256");
     let done = 0;
-    const reader = response.body.getReader();
+    const active: Reader = response.body.getReader() as unknown as Reader;
+    reader = active;
     for (;;) {
-      const { done: finished, value } = await reader.read();
-      if (finished) break;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const idle = new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () =>
+            reject(new Error(`no data for ${Math.round(idleMs / 1000)} s; the connection stalled`)),
+          idleMs,
+        );
+      });
+      const { done: finished, value: chunk } = await Promise.race([active.read(), idle]).finally(
+        () => clearTimeout(timer),
+      );
+      if (finished || !chunk) break;
+      const value = chunk;
       done += value.length;
       if (done > bytes) {
         await reader.cancel().catch(() => {});
@@ -154,6 +212,7 @@ export async function downloadModel(options: DownloadOptions): Promise<DownloadR
       reason: code === "ENOSPC" ? `the disk is full (${message})` : `download failed: ${message}`,
     };
   } finally {
+    await reader?.cancel().catch(() => {});
     if (fd !== null) {
       try {
         closeSync(fd);
@@ -164,6 +223,11 @@ export async function downloadModel(options: DownloadOptions): Promise<DownloadR
 }
 
 /** Removes the pack. The vector tables are dropped by the tasks that create them. */
-export function deleteModel(dataDir: string): void {
-  remove(modelPath(dataDir));
+export function deleteModel(dataDir: string): boolean {
+  try {
+    unlinkSync(modelPath(dataDir));
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "ENOENT";
+  }
+  return true;
 }
