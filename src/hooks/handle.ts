@@ -29,6 +29,8 @@ export interface HookDeps {
   backupDue?: () => boolean;
   /** Starts one in the background and returns at once. */
   spawnBackup?: () => void;
+  /** Indexes one finished session's transcript in the background; absent when there is no history index. */
+  spawnHistoryIndex?: (transcriptPath: string, agent: string) => void;
   /** Told about failures that were contained here rather than thrown. */
   onError?: (error: unknown) => void;
 }
@@ -168,6 +170,17 @@ export function handleHook(deps: HookDeps, adapter: AgentAdapter, input: HookInp
   if (input.event === "turn-end" || input.event === "session-end") {
     try {
       if (deps.backupDue?.()) deps.spawnBackup?.();
+    } catch (error) {
+      deps.onError?.(error);
+    }
+  }
+  if (
+    input.event === "session-end" &&
+    input.transcriptPath !== null &&
+    (input.agent === "claude-code" || input.agent === "codex")
+  ) {
+    try {
+      deps.spawnHistoryIndex?.(input.transcriptPath, input.agent);
     } catch (error) {
       deps.onError?.(error);
     }

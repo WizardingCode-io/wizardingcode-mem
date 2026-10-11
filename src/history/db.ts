@@ -2,12 +2,9 @@ import { Database } from "bun:sqlite";
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { enableWal, restrict } from "../store/db.ts";
+import { HISTORY_DB_FILE, historyDbPath } from "./path.ts";
 
-export const HISTORY_DB_FILE = "history.db";
-
-export function historyDbPath(storeDir: string): string {
-  return join(storeDir, HISTORY_DB_FILE);
-}
+export { HISTORY_DB_FILE, historyDbPath };
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS files (

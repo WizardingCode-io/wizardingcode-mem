@@ -152,6 +152,19 @@ describe("wizardingcode-mem history", () => {
     expect(count).toBe(1);
   });
 
+  test("index --transcript indexes exactly that file and needs --agent", async () => {
+    const file = join(base, "claude", "projects", "-shop", "s1.jsonl");
+    const one = await history("index", "--transcript", file, "--agent", "claude-code");
+    expect(one.exitCode).toBe(0);
+    expect(one.stdout).toMatch(
+      /history index: 1 files, 1 indexed, 0 unchanged, 0 removed, 1 turns/,
+    );
+    const again = await history("index", "--transcript", file, "--agent", "claude-code");
+    expect(again.stdout).toMatch(/history index: 1 files, 0 indexed, 1 unchanged/);
+    const bad = await history("index", "--transcript", file);
+    expect(bad.exitCode).toBe(EXIT_USAGE);
+  });
+
   test("search before any index says so and exits 0", async () => {
     const out = await history("search", "anything");
     expect(out.exitCode).toBe(0);

@@ -1,11 +1,13 @@
+import { existsSync } from "node:fs";
 import { ADAPTERS } from "../../adapters/index.ts";
 import { backupDue } from "../../backup/schedule.ts";
 import type { HookEvent } from "../../core/types.ts";
+import { historyDbPath } from "../../history/path.ts";
 import { handleHook } from "../../hooks/handle.ts";
 import { loadSettings } from "../../settings/settings.ts";
 import { type Db, openDb } from "../../store/db.ts";
 import { errorLabel, logError } from "../../util/log.ts";
-import { defaultDataDir } from "../../util/paths.ts";
+import { defaultDataDir, resolvePaths } from "../../util/paths.ts";
 import { spawnDetached } from "../../util/self.ts";
 
 // How long each event may wait for another process's database lock. The two events
@@ -39,6 +41,16 @@ async function readStdin(): Promise<string | null> {
 function spawnDistill(): void {
   // WIZARDINGCODE_MEM_DISTILL=off leaves queued turns for a later run, e.g. `wizardingcode-mem distill` by hand.
   if (process.env.WIZARDINGCODE_MEM_DISTILL !== "off") spawnDetached("distill");
+}
+
+/**
+ * Indexes a finished session into the history index, but only for users who already
+ * have one (they opted in by importing): one stat of a file, then a detached process.
+ */
+function spawnHistoryIndex(transcriptPath: string, agent: string): void {
+  if (process.env.WIZARDINGCODE_MEM_DISTILL === "off") return;
+  if (!existsSync(historyDbPath(resolvePaths().storeDir))) return;
+  spawnDetached("history", "index", "--transcript", transcriptPath, "--agent", agent);
 }
 
 /**
@@ -133,6 +145,7 @@ export async function run(argv: string[]): Promise<number> {
         now: Date.now,
         spawnDistill,
         spawnViewer,
+        spawnHistoryIndex,
         backupDue: () => {
           const { backup } = loadSettings(process.env, defaultDataDir());
           return (

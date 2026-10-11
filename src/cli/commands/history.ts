@@ -1,10 +1,10 @@
-import { rmSync } from "node:fs";
+import { rmSync, statSync } from "node:fs";
 import { claudeCodeRoot } from "../../adapters/claude-code/history.ts";
 import { codexRoot } from "../../adapters/codex/history.ts";
 import { replaceAllImports, restoreImports } from "../../backfill/replace.ts";
 import { runBackfill } from "../../backfill/run.ts";
 import { HISTORY_DB_FILE, historyDbPath, openHistoryDb } from "../../history/db.ts";
-import { indexAll } from "../../history/index-pass.ts";
+import { indexAll, indexTranscript } from "../../history/index-pass.ts";
 import { renderHits, searchHistory } from "../../history/search.ts";
 import { makeJudge } from "../../judge/index.ts";
 import { loadSettings } from "../../settings/settings.ts";
@@ -15,6 +15,7 @@ import { EXIT_USAGE } from "../exit.ts";
 
 const USAGE = `Usage: wizardingcode-mem history import [--days <n>] [--agent claude-code|codex] [--max-seconds <n>]
        wizardingcode-mem history index [--agent claude-code|codex] [--max-seconds <n>]
+       wizardingcode-mem history index --transcript <file> --agent claude-code|codex
        wizardingcode-mem history search <words...> [--project <name>] [--limit <n>]
        wizardingcode-mem history forget
        wizardingcode-mem history replace-imports
@@ -52,7 +53,14 @@ export async function run(argv: string[]): Promise<number> {
   const maxSeconds = positiveInt(rest, "--max-seconds");
   const agentAt = rest.indexOf("--agent");
   const agent = agentAt === -1 ? undefined : rest[agentAt + 1];
+  const transcriptAt = rest.indexOf("--transcript");
+  const transcript = transcriptAt === -1 ? undefined : rest[transcriptAt + 1];
   if (
+    (transcriptAt !== -1 &&
+      (sub !== "index" ||
+        transcript === undefined ||
+        transcript.startsWith("--") ||
+        agent === undefined)) ||
     days === null ||
     maxSeconds === null ||
     limit === null ||
@@ -129,6 +137,31 @@ export async function run(argv: string[]): Promise<number> {
         hdb.close();
       }
     };
+    if (sub === "index" && transcript !== undefined) {
+      const hdb = openHistoryDb(storeDir, { create: true, busyTimeoutMs: 2000 });
+      if (hdb === null) throw new Error(`${HISTORY_DB_FILE} could not be opened`);
+      try {
+        const stat = statSync(transcript);
+        const before = hdb
+          .query<{ size: number; mtime: number }, [string]>(
+            "SELECT size, mtime FROM files WHERE path = ?",
+          )
+          .get(transcript);
+        const unchanged = before?.size === stat.size && before.mtime === Math.trunc(stat.mtimeMs);
+        const turns = unchanged
+          ? 0
+          : indexTranscript(hdb, db, agent as "claude-code" | "codex", transcript, {
+              now: Date.now(),
+              projects: new Map(),
+            });
+        process.stdout.write(
+          `history index: 1 files, ${unchanged ? 0 : 1} indexed, ${unchanged ? 1 : 0} unchanged, 0 removed, ${turns} turns\n`,
+        );
+      } finally {
+        hdb.close();
+      }
+      return 0;
+    }
     if (sub === "index") {
       process.stdout.write(runIndex((maxSeconds ?? 600) * 1000));
       return 0;

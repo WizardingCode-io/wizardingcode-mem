@@ -20,6 +20,8 @@ let viewers: number;
 let viewerThrows: boolean;
 let backups: number;
 let backupIsDue: boolean;
+let indexed: [string, string][];
+let indexThrows: boolean;
 
 beforeEach(() => {
   base = realpathSync(mkdtempSync(join(tmpdir(), "wizardingcode-mem-hooks-")));
@@ -32,6 +34,8 @@ beforeEach(() => {
   viewerThrows = false;
   backups = 0;
   backupIsDue = false;
+  indexed = [];
+  indexThrows = false;
   errors = [];
 });
 afterEach(() => {
@@ -57,6 +61,10 @@ function hook(
     },
     backupDue: () => backupIsDue,
     spawnBackup: () => void backups++,
+    spawnHistoryIndex: (path: string, agent: string) => {
+      indexed.push([path, agent]);
+      if (indexThrows) throw new Error("no spawn");
+    },
     onError: (error: unknown) => void errors.push(error),
   };
   return handleHook(deps, adapter, {
@@ -273,6 +281,26 @@ describe("hook: session end", () => {
     hook("session-start", { source: "startup" });
     hook("session-end");
     expect(spawned).toBe(0);
+  });
+});
+
+describe("hook: session end indexes the transcript", () => {
+  test("once, with the transcript path and agent", () => {
+    hook("session-end", { transcriptPath: "/t/s1.jsonl" });
+    expect(indexed).toEqual([["/t/s1.jsonl", "claude-code"]]);
+  });
+
+  test("not on other events, nor without a transcript path", () => {
+    hook("session-start", { source: "startup", transcriptPath: "/t/s1.jsonl" });
+    hook("turn-end", { turnId: "p1", transcriptPath: "/t/s1.jsonl" });
+    hook("session-end", { transcriptPath: null });
+    expect(indexed).toEqual([]);
+  });
+
+  test("a failing spawn is contained", () => {
+    indexThrows = true;
+    expect(hook("session-end", { transcriptPath: "/t/s1.jsonl" })).toBe("");
+    expect(errors.length).toBe(1);
   });
 });
 
