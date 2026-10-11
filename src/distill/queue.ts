@@ -33,6 +33,8 @@ interface ClaimRow {
   branch: string | null;
   commit: string | null;
   attempts: number;
+  origin: "live" | "history";
+  endedAt: number | null;
 }
 
 /**
@@ -47,10 +49,11 @@ function claimNextTurn(db: Db, owner: string, now: number): QueuedTurn | null {
           `SELECT t.id, t.session_id AS sessionId, t.project_id AS projectId, s.agent, s.cwd,
                   t.agent_turn_id AS agentTurnId,
                   t.prompt, t.final_text AS finalText, t.transcript_path AS transcriptPath,
-                  t.branch, t.commit_sha AS "commit", t.attempts
+                  t.branch, t.commit_sha AS "commit", t.attempts,
+                  t.origin, t.ended_at AS endedAt
              FROM turns t JOIN sessions s ON s.id = t.session_id
             WHERE t.state = 'pending' OR (t.state = 'processing' AND t.lease_until < ?)
-            ORDER BY t.id LIMIT 1`,
+            ORDER BY t.origin = 'history', t.id LIMIT 1`,
         )
         .get(now);
       if (row === null) return null;

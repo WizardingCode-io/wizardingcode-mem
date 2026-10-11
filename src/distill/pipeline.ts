@@ -34,6 +34,10 @@ export interface QueuedTurn {
   branch: string | null;
   commit: string | null;
   attempts: number;
+  /** Where the turn came from: a hook, or an agent's transcript read afterwards. */
+  origin: "live" | "history";
+  /** When the turn ended; history memories are dated by it. */
+  endedAt: number | null;
 }
 
 const MAX_CHANGED_FILES = 10;

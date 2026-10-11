@@ -55,6 +55,18 @@ const search = (db: Database, term: string) =>
     .map((row) => row.rowid);
 
 describe("store/db", () => {
+  test("turns record where they came from, live by default", () => {
+    const db = open();
+    const columns = db
+      .query<{ name: string; dflt_value: string | null }, []>("PRAGMA table_info(turns)")
+      .all();
+    expect(columns.find((c) => c.name === "origin")?.dflt_value).toBe("'live'");
+    expect(
+      db.query("SELECT name FROM sqlite_master WHERE name = 'history_replacements'").all(),
+    ).toHaveLength(1);
+    db.close();
+  });
+
   test("a new database ends at the latest schema version, in WAL mode", () => {
     const db = open();
     expect(version(db)).toBe(LATEST_VERSION);

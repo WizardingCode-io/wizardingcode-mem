@@ -265,6 +265,14 @@ describe("distill: from a queued turn to a memory", () => {
 });
 
 describe("distill: the queue", () => {
+  test("a live turn is distilled before history queued ahead of it", async () => {
+    turn("the tests fail with a timeout", FIX);
+    db.run("UPDATE turns SET origin = 'history'");
+    turn("Never mock the database in these tests. Always use a real SQLite file.", "Understood.");
+    await drainQueue(deps(), { owner: "test", maxTurns: 1, maxMs: 10_000 });
+    expect(memories().map((m) => m.kind)).toEqual(["convention"]);
+  });
+
   const throwing = (times: number): Judge => {
     let left = times;
     return {
