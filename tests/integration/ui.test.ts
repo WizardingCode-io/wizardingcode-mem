@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { resolveProject } from "../../src/core/project.ts";
 import type { Redacted } from "../../src/core/redact.ts";
 import type { MemoryKind } from "../../src/core/types.ts";
+import { openHistoryDb } from "../../src/history/db.ts";
 import { type Db, openDb } from "../../src/store/db.ts";
 import { insertMemory } from "../../src/store/memories.ts";
 import { setMeta } from "../../src/store/meta.ts";
@@ -574,6 +575,127 @@ describe("wizardingcode-mem ui: history runs", () => {
       offer: { dismissed: boolean };
     };
     expect(status.offer.dismissed).toBe(true);
+  });
+});
+
+describe("wizardingcode-mem ui: searching past conversations", () => {
+  type Hit = {
+    id: number;
+    project: string;
+    agent: string;
+    sessionId: string;
+    cwd: string;
+    startedAt: number;
+    endedAt: number;
+    prompt: string;
+    answer: string | null;
+  };
+  type Found = { indexed: boolean; hits?: Hit[]; error?: string };
+  const histEnv = () => ({
+    CLAUDE_CONFIG_DIR: join(dataDir, "no-claude"),
+    CODEX_HOME: join(dataDir, "no-codex"),
+  });
+  const seedHistory = () => {
+    const hdb = openHistoryDb(dataDir, { create: true });
+    if (hdb === null) throw new Error("no history db");
+    hdb.run(
+      "INSERT INTO files (path, agent, size, mtime, indexed_at) VALUES ('/t.jsonl', 'claude-code', 1, 1, 1)",
+    );
+    const turn = (
+      n: number,
+      pid: number,
+      name: string,
+      prompt: string,
+      answer: string | null,
+      at: number,
+    ) =>
+      hdb.run(
+        `INSERT INTO turns (path, agent, session_id, turn_id, project_id, project_name, cwd, started_at, ended_at, prompt, final_text)
+         VALUES ('/t.jsonl', ?, 's1', ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          n === 3 ? "codex" : "claude-code",
+          `t${n}`,
+          pid,
+          name,
+          `/w/${name}`,
+          at - 60_000,
+          at,
+          prompt,
+          answer,
+        ],
+      );
+    turn(
+      1,
+      projectId,
+      "shop",
+      "Why is the cart total drifting?",
+      "Per-line rounding; round once at the end.",
+      NOW - 3 * DAY,
+    );
+    turn(2, projectId, "shop", "Add a Friday deploy freeze", null, NOW - DAY);
+    turn(3, 999, "blog", "The cart widget on the blog", "Moved it to the sidebar.", NOW - 2 * DAY);
+    hdb.close();
+  };
+  const search = async (s: UiServer, query: string) =>
+    (await (await api(s, `/api/history/search${query}`)).json()) as Found;
+
+  test("needs the token", async () => {
+    const s = await start({ env: histEnv() });
+    expect((await fetch(`${s.origin}/api/history/search?q=cart`)).status).toBe(401);
+  });
+
+  test("without an index it says so, and creates nothing", async () => {
+    const s = await start({ env: histEnv() });
+    expect(await search(s, "?q=cart")).toEqual({ indexed: false });
+    expect(existsSync(join(dataDir, "history.db"))).toBe(false);
+  });
+
+  test("finds turns by their words, across projects or in one", async () => {
+    seedHistory();
+    const s = await start({ env: histEnv() });
+    const all = await search(s, "?q=cart");
+    expect(all.indexed).toBe(true);
+    expect(all.hits?.map((h) => h.project).sort()).toEqual(["blog", "shop"]);
+    const shop = await search(s, `?q=cart&project=${projectId}`);
+    expect(shop.hits).toHaveLength(1);
+    expect(shop.hits?.[0]).toMatchObject({
+      project: "shop",
+      agent: "claude-code",
+      sessionId: "s1",
+      cwd: "/w/shop",
+      startedAt: NOW - 3 * DAY - 60_000,
+      endedAt: NOW - 3 * DAY,
+      prompt: "Why is the cart total drifting?",
+      answer: "Per-line rounding; round once at the end.",
+    });
+    expect(typeof shop.hits?.[0]?.id).toBe("number");
+    expect((await search(s, "?q=cart&limit=1")).hits).toHaveLength(1);
+    expect((await search(s, "?q=nothing-like-this")).hits).toEqual([]);
+  });
+
+  test("without words, the latest turns, newest first", async () => {
+    seedHistory();
+    const s = await start({ env: histEnv() });
+    const latest = await search(s, "");
+    expect(latest.hits?.map((h) => h.prompt)).toEqual([
+      "Add a Friday deploy freeze",
+      "The cart widget on the blog",
+      "Why is the cart total drifting?",
+    ]);
+    expect((await search(s, `?project=${projectId}&limit=1`)).hits?.map((h) => h.prompt)).toEqual([
+      "Add a Friday deploy freeze",
+    ]);
+  });
+
+  test("an index that cannot be read is reported, not a failure", async () => {
+    writeFileSync(join(dataDir, "history.db"), "not a database at all, just text".repeat(40));
+    const s = await start({ env: histEnv() });
+    const res = await api(s, "/api/history/search?q=cart");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Found;
+    expect(body.indexed).toBe(true);
+    expect(body.hits).toEqual([]);
+    expect(body.error).toContain("could not be read");
   });
 });
 

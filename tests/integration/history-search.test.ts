@@ -4,7 +4,12 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openHistoryDb } from "../../src/history/db.ts";
-import { historyReadFailure, renderHits, searchHistory } from "../../src/history/search.ts";
+import {
+  historyReadFailure,
+  recentHistory,
+  renderHits,
+  searchHistory,
+} from "../../src/history/search.ts";
 
 let dir: string;
 let hdb: Database;
@@ -81,6 +86,26 @@ describe("searchHistory", () => {
 
   test("nothing searchable gives no hits", () => {
     expect(searchHistory(hdb, { query: "?!" })).toEqual([]);
+  });
+
+  test("a hit names its turn, folder and start, for a viewer to show", () => {
+    turn({ project: "shop", projectId: 1, prompt: "pragma", endedAt: 5000 });
+    const [hit] = searchHistory(hdb, { query: "pragma" });
+    expect(hit).toMatchObject({ cwd: "/w", startedAt: 1, endedAt: 5000 });
+    expect(typeof hit?.id).toBe("number");
+  });
+});
+
+describe("recentHistory", () => {
+  test("the latest turns first, in one project or all, up to 100", () => {
+    turn({ project: "shop", projectId: 1, prompt: "old", endedAt: 1000 });
+    turn({ project: "blog", projectId: 2, prompt: "newest", endedAt: 3000 });
+    turn({ project: "shop", projectId: 1, prompt: "middle", endedAt: 2000 });
+    expect(recentHistory(hdb, {}).map((h) => h.prompt)).toEqual(["newest", "middle", "old"]);
+    expect(recentHistory(hdb, { projectId: 1, limit: 1 }).map((h) => h.prompt)).toEqual(["middle"]);
+    for (let i = 0; i < 120; i++) turn({ project: "shop", projectId: 1, prompt: `n${i}` });
+    expect(recentHistory(hdb, { limit: 500 })).toHaveLength(100);
+    expect(recentHistory(hdb, {})).toHaveLength(50);
   });
 });
 

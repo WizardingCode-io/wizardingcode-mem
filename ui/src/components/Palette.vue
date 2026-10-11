@@ -87,6 +87,7 @@ const sections = computed(() => {
     { key: "a1", title: "Show memories", sub: "This project's memories, grouped by kind", meta: "", tile: { text: "", bg: "var(--violet-soft)", fg: "var(--violet-text)", icon: "i-lucide-sticky-note" }, run: go("memories") },
     { key: "a2", title: "Show turns", sub: "Every prompt and what it became", meta: "", tile: { text: "", bg: "var(--violet-soft)", fg: "var(--violet-text)", icon: "i-lucide-history" }, run: go("turns") },
     { key: "a3", title: "Show overview", sub: "Numbers and charts for this project", meta: "", tile: { text: "", bg: "var(--violet-soft)", fg: "var(--violet-text)", icon: "i-lucide-chart-column" }, run: go("overview") },
+    { key: "a6", title: "Search past conversations", sub: "Every Claude Code and Codex session on this machine", meta: "", tile: { text: "", bg: "var(--violet-soft)", fg: "var(--violet-text)", icon: "i-lucide-messages-square" }, run: go("history") },
     { key: "a4", title: "Open settings", sub: "Judge, retention, storage, backups", meta: "", tile: { text: "", bg: "var(--violet-soft)", fg: "var(--violet-text)", icon: "i-lucide-settings" }, run: go("settings") },
     {
       key: "a5",

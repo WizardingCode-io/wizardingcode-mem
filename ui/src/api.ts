@@ -1,7 +1,7 @@
 // The viewer's client for /api. The token comes from the URL the binary opened.
-import type { HistoryProgress, HistoryStatus } from "./history";
+import type { HistoryProgress, HistoryStatus, PastSearch } from "./history";
 
-export type { HistoryProgress, HistoryQueue, HistoryRun, HistoryRunState, HistoryStatus } from "./history";
+export type { HistoryProgress, HistoryQueue, HistoryRun, HistoryRunState, HistoryStatus, PastSearch, PastTurn } from "./history";
 
 export const TOKEN = new URLSearchParams(location.search).get("token") ?? "";
 
@@ -226,6 +226,12 @@ export const api = {
       body: JSON.stringify({ path, confirm: true }),
     }),
   history: () => call<HistoryStatus>("/api/history"),
+  /** Past conversations: by their words, or the latest without any; one project or all. */
+  historySearch: (q: string, projectId: number | null, limit: number) => {
+    const params = new URLSearchParams({ q, limit: String(limit) });
+    if (projectId !== null) params.set("project", String(projectId));
+    return call<PastSearch>(`/api/history/search?${params}`);
+  },
   historyProgress: () => call<HistoryProgress>("/api/history/progress"),
   /** Starts a background run; `started: false` when one is already going. */
   historyImport: () => call<{ started: boolean }>("/api/history/import", { method: "POST", body: "{}" }),

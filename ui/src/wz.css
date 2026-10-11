@@ -111,6 +111,8 @@
 .wz-md a { color: var(--violet-text); font-weight: 600; text-decoration: none; }
 .wz-md a:hover { text-decoration: underline; }
 .wz-md ul, .wz-md ol { margin: 0; padding-left: 18px; }
+.wz-md ul { list-style: disc; }
+.wz-md ol { list-style: decimal; }
 .wz-md li + li { margin-top: 2px; }
 .wz-md li::marker { color: var(--ink-muted); }
 .wz-md code { font-family: var(--font-mono); font-size: 12px; padding: 1px 4px; border-radius: 4px; background: var(--paper-sunken); }

@@ -10,7 +10,9 @@ import { codexRoot } from "../adapters/codex/history.ts";
 import { runChecks } from "../doctor/checks.ts";
 import { doctorContext } from "../doctor/context.ts";
 import { previewReplaceImports, replaceAllImports, restoreImports } from "../backfill/replace.ts";
+import { openHistoryDb } from "../history/db.ts";
 import { forgetHistoryIndex } from "../history/run-state.ts";
+import { historyReadFailure, recentHistory, searchHistory } from "../history/search.ts";
 import { HISTORY_LEASE, HISTORY_OFFER_DISMISSED, historyProgress, historyStatus } from "../history/status.ts";
 import { loadSettings, publicSettings, saveSettings, validatePatch } from "../settings/settings.ts";
 import { statusReport } from "../status/report.ts";
@@ -432,6 +434,28 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
           now(),
         ),
       );
+    }
+    // Past conversations: the history index, read only and never created here.
+    if (path === "/api/history/search" && request.method === "GET") {
+      const q = (url.searchParams.get("q") ?? "").trim();
+      const projectParam = url.searchParams.get("project");
+      const projectId = projectParam === null || projectParam === "" ? undefined : Number(projectParam);
+      if (projectId !== undefined && !Number.isInteger(projectId)) return problem(400, "project must be an id");
+      const limitParam = Number(url.searchParams.get("limit") ?? Number.NaN);
+      const limit = Number.isFinite(limitParam) ? limitParam : undefined;
+      let hdb: ReturnType<typeof openHistoryDb> = null;
+      try {
+        hdb = openHistoryDb(storeDir, { create: false, busyTimeoutMs: 2000 });
+        if (hdb === null) return json({ indexed: false });
+        const hits =
+          q === "" ? recentHistory(hdb, { projectId, limit }) : searchHistory(hdb, { query: q, projectId, limit });
+        return json({ indexed: true, hits });
+      } catch (error) {
+        logError("ui history search", error, options.dataDir);
+        return json({ indexed: true, hits: [], error: historyReadFailure(error) });
+      } finally {
+        hdb?.close();
+      }
     }
     if (path === "/api/history/progress" && request.method === "GET") {
       return json(historyProgress(db, now()));

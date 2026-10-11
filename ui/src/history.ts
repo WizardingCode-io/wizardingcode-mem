@@ -122,3 +122,60 @@ export function progressPoller<H>(deps: {
     },
   };
 }
+
+/** One past turn from the history index, as `/api/history/search` returns it (src/history/search.ts). */
+export interface PastTurn {
+  id: number;
+  project: string;
+  agent: string;
+  sessionId: string;
+  cwd: string;
+  startedAt: number;
+  endedAt: number;
+  prompt: string;
+  answer: string | null;
+}
+/** No index yet; or the hits, with a sentence when the index could not be read. */
+export type PastSearch = { indexed: false } | { indexed: true; hits: PastTurn[]; error?: string };
+
+const AGENT_NAMES: Record<string, string> = {
+  "claude-code": "Claude Code",
+  "claude-desktop": "Claude Desktop",
+  codex: "Codex",
+  cursor: "Cursor",
+  gemini: "Gemini",
+  opencode: "OpenCode",
+};
+export const agentName = (agent: string): string => AGENT_NAMES[agent] ?? agent;
+
+export interface DayGroup {
+  key: string;
+  label: string;
+  hits: PastTurn[];
+}
+
+/** Past turns by the day they ended: newest day first, and newest first within a day. */
+export function dayGroups(hits: PastTurn[], now: number): DayGroup[] {
+  const keyOf = (ms: number) => {
+    const d = new Date(ms);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  };
+  const today = keyOf(now);
+  const yesterday = keyOf(new Date(now).setDate(new Date(now).getDate() - 1));
+  const thisYear = new Date(now).getFullYear();
+  const groups = new Map<string, DayGroup>();
+  for (const hit of hits) {
+    const key = keyOf(hit.endedAt);
+    let group = groups.get(key);
+    if (group === undefined) {
+      const d = new Date(hit.endedAt);
+      const date = d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", ...(d.getFullYear() === thisYear ? {} : { year: "numeric" }) }).replace(",", "");
+      const label = key === today ? `Today · ${date}` : key === yesterday ? `Yesterday · ${date}` : date;
+      group = { key, label, hits: [] };
+      groups.set(key, group);
+    }
+    group.hits.push(hit);
+  }
+  for (const group of groups.values()) group.hits.sort((a, b) => b.endedAt - a.endedAt);
+  return [...groups.values()].sort((a, b) => (a.key < b.key ? 1 : -1));
+}

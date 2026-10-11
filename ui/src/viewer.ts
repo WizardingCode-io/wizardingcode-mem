@@ -3,7 +3,7 @@ import { useDark } from "@vueuse/core";
 import { computed, reactive, ref } from "vue";
 import { api, type Kind, type MemoryDetail, type MemoryItem, type Project, type TurnItem } from "./api";
 
-export type Tab = "memories" | "turns" | "overview" | "settings";
+export type Tab = "memories" | "turns" | "overview" | "history" | "settings";
 export type Status = "active" | "archived" | "superseded" | "all";
 
 export const PAGE = 50;
@@ -24,6 +24,10 @@ const state = reactive({
   turns: [] as TurnItem[],
   /** The turn whose trace is open in the Turns view. */
   turnId: null as number | null,
+  /** The History view: what was searched, across every project or not, the turn open. */
+  pastQ: "",
+  pastAll: false,
+  pastId: null as number | null,
   /** The ids in the order the list shows them (grouped by kind or not), for ↑ and ↓. */
   order: [] as number[],
   selected: null as number | null,
