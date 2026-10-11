@@ -19,8 +19,15 @@ import { ourShellHookBinary } from "./shell-hook.ts";
 // and the extension under extensions/. This finds them and takes them out, and nothing else:
 // the user's own entries stay, and ~/.gemini/config — Antigravity's — is never opened.
 //
-// Qwen Code can install Gemini extensions into its own directory; if ours went there, its hooks
-// still run `hook gemini …`, which now exits silently. It is not looked for here.
+// What the leftover still does depends on how it was installed. Hooks written straight into
+// settings.json run the installed binary's `hook gemini …`, which now exits silently. The 0.4.4
+// extension runs its own bundled copy instead (`${extensionPath}/bin/wizardingcode-mem hook gemini
+// … --via-plugin`, and its MCP server), which keeps working until the extension is removed, and
+// fails open once the database schema is newer than it knows ("database schema version … is
+// newer"). `uninstall gemini` removes it.
+//
+// Qwen Code can install Gemini extensions into its own directory; one of ours there keeps running
+// its bundled binary the same way. It is not looked for here.
 
 export const GEMINI_CLEANUP = "wizardingcode-mem uninstall gemini";
 const ANTIGRAVITY = "wizardingcode-mem install antigravity";
@@ -82,11 +89,22 @@ function readSettings(settingsPath: string): { text: string; parsed: unknown } |
   }
 }
 
-/** Our extensions, recognised by their directory name and the manifest Gemini installed in it. */
+/** Our extensions: under our directory name, with a manifest that names us too. */
 function ourExtensions(settingsPath: string): string[] {
   return [MCP_NAME, LEGACY_MCP_NAME]
     .map((name) => join(dirname(settingsPath), "extensions", name))
-    .filter((dir) => existsSync(join(dir, "gemini-extension.json")));
+    .filter((dir) => {
+      // The directory is deleted whole, so its name alone is not proof enough.
+      try {
+        const manifest: unknown = JSON.parse(
+          readFileSync(join(dir, "gemini-extension.json"), "utf8"),
+        );
+        const name = isObject(manifest) ? manifest.name : undefined;
+        return name === MCP_NAME || name === LEGACY_MCP_NAME;
+      } catch {
+        return false;
+      }
+    });
 }
 
 /** What an old install of ours left for Gemini CLI; null when nothing is. Changes nothing. */

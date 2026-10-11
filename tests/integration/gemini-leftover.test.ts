@@ -108,6 +108,20 @@ describe("findGeminiLeftover", () => {
     expect(findGeminiLeftover(settingsPath)?.extensions).toEqual([old]);
   });
 
+  test("a directory under our name whose manifest names someone else is not ours, and stays", () => {
+    const foreign = join(gemini, "extensions", "wizardingcode-mem");
+    mkdirSync(foreign, { recursive: true });
+    writeFileSync(join(foreign, "gemini-extension.json"), JSON.stringify({ name: "not-us" }));
+    const broken = join(gemini, "extensions", "shibaox-mem");
+    mkdirSync(broken, { recursive: true });
+    writeFileSync(join(broken, "gemini-extension.json"), "{ not json");
+    expect(findGeminiLeftover(settingsPath)).toBeNull();
+    expect(removeGeminiLeftover(ctx()).extensions).toEqual([]);
+    expect(commands).toEqual([]);
+    expect(existsSync(join(foreign, "gemini-extension.json"))).toBe(true);
+    expect(existsSync(join(broken, "gemini-extension.json"))).toBe(true);
+  });
+
   test("nothing of ours: null, whatever else ~/.gemini holds", () => {
     expect(findGeminiLeftover(settingsPath)).toBeNull();
     mkdirSync(gemini, { recursive: true });
