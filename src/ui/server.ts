@@ -337,8 +337,8 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
       const body = await jsonObject(request);
       if (body instanceof Response) return body;
       const dryRun = body.dryRun === true;
-      const { retentionDays } = loadSettings(env, options.dataDir);
-      return json(compact(db, { now: now(), dryRun, retentionDays }));
+      const { retentionDays, historyDays } = loadSettings(env, options.dataDir);
+      return json(compact(db, { now: now(), dryRun, retentionDays, historyDays }));
     }
     if (path === "/api/memories" && request.method === "GET") {
       const projectId = Number(url.searchParams.get("project"));

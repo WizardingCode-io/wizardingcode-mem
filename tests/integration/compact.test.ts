@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { enqueueHistory } from "../../src/backfill/enqueue.ts";
 import { resolveProject } from "../../src/core/project.ts";
 import type { Redacted } from "../../src/core/redact.ts";
 import { compact, KEEP_HOOK_RUNS, RETENTION_DAYS } from "../../src/store/compact.ts";
@@ -81,6 +82,36 @@ describe("compact", () => {
       { id: 5 },
     ]);
     expect(db.query("SELECT id FROM turns WHERE id = ?").get(done)).toBeNull();
+  });
+
+  test("history turns inside the history window stay, so a later import does not queue them again", () => {
+    const at = NOW - 120 * DAY;
+    const historyTurn = {
+      agent: "claude-code" as const,
+      sessionId: "h1",
+      turnId: "p1",
+      cwd: join(base, "p"),
+      branch: null,
+      prompt: "question",
+      finalText: "answer",
+      startedAt: at,
+      endedAt: at + 5000,
+      transcriptPath: null,
+      detail: { filesRead: [], filesChanged: [], commands: [], errors: [], savedMemory: false },
+    };
+    const options = { sinceMs: NOW - 180 * DAY, now: NOW };
+    expect(enqueueHistory(db, [historyTurn], options).queued).toBe(1);
+    db.run("UPDATE turns SET state = 'done'");
+    const older = session("h0", NOW - 200 * DAY);
+    db.run("UPDATE turns SET origin = 'history' WHERE id = ?", [
+      turn(older, 1, "done", NOW - 200 * DAY),
+    ]);
+
+    expect(compact(db, { now: NOW, vacuum: false }).turns).toBe(1);
+    expect(enqueueHistory(db, [historyTurn], options).queued).toBe(0);
+
+    // A shorter history window lets them go like any other turn.
+    expect(compact(db, { now: NOW, vacuum: false, historyDays: 100 }).turns).toBe(1);
   });
 
   test("sessions left with nothing, last seen long ago, go too; recent empty ones stay", () => {
