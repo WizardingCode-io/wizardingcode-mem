@@ -207,6 +207,21 @@ describe("uninstall copilot", () => {
     expect(hooks()).toEqual({ version: 1, hooks: { preCompact: [{ bash: "x.sh" }] } });
   });
 
+  test("on a fresh machine, uninstall leaves no empty folders and Copilot is no longer detected", () => {
+    installCopilot(context());
+    uninstallCopilot(context());
+    expect(existsSync(configDir)).toBe(false);
+    expect(detectAgents({ env: { HOME: home }, which: () => null })).not.toContain("copilot");
+  });
+
+  test("folders holding the user's files stay, with the files", () => {
+    seedUser();
+    installCopilot(context());
+    uninstallCopilot(context());
+    expect(readdirSync(join(configDir, "hooks"))).toEqual(["theirs.json"]);
+    userFilesUntouched();
+  });
+
   test("with nothing installed, nothing changes", () => {
     seedUser();
     expect(uninstallCopilot(context()).settings).toBe("untouched");

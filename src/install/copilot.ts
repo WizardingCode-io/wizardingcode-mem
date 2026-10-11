@@ -1,6 +1,6 @@
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmdirSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { defaultDataDir } from "../util/paths.ts";
 import { run } from "./context.ts";
 import {
@@ -70,19 +70,35 @@ export function installCopilot(context: CopilotContext): InstallResult {
   return { ...result, notes: [...result.notes, ...vsCodeMcpNote(context.binaryPath)] };
 }
 
-/** The file is ours alone: once our hooks are out of it, a file holding nothing else goes too. */
+/**
+ * The file is ours alone: once our hooks are out of it, a file holding nothing else goes too,
+ * and so do the hooks folder and ~/.copilot when that leaves them empty; a ~/.copilot left
+ * behind would still look like Copilot to detectAgents, and a bare install would come back.
+ */
 export function uninstallCopilot(context: CopilotContext): UninstallResult {
-  const result = uninstallHooksFile(COPILOT, context);
-  if (result.settings !== "edited" || !existsSync(context.settingsPath)) return result;
-  try {
-    const left = JSON.parse(readFileSync(context.settingsPath, "utf8")) as Record<string, unknown>;
-    const { version, ...rest } = left;
-    if (Object.keys(rest).length === 0 && (version === undefined || version === 1)) {
-      rmSync(context.settingsPath);
-      return { ...result, settings: "removed" };
+  let result = uninstallHooksFile(COPILOT, context);
+  if (result.settings === "edited" && existsSync(context.settingsPath)) {
+    try {
+      const left = JSON.parse(readFileSync(context.settingsPath, "utf8")) as Record<
+        string,
+        unknown
+      >;
+      const { version, ...rest } = left;
+      if (Object.keys(rest).length === 0 && (version === undefined || version === 1)) {
+        rmSync(context.settingsPath);
+        result = { ...result, settings: "removed" };
+      }
+    } catch {
+      // Whatever is there now is the user's to keep.
     }
-  } catch {
-    // Whatever is there now is the user's to keep.
+  }
+  const hooksDir = dirname(context.settingsPath);
+  for (const dir of [hooksDir, dirname(hooksDir)]) {
+    try {
+      if (readdirSync(dir).length === 0) rmdirSync(dir);
+    } catch {
+      // Not there, or not ours to judge: left as it is.
+    }
   }
   return result;
 }
