@@ -1,5 +1,6 @@
 import pkg from "../../package.json" with { type: "json" };
 import type { ProjectRef } from "../core/project.ts";
+import type { HistoryStatus } from "../history/status.ts";
 import { USAGE_KEYS } from "../judge/index.ts";
 import { loadSettings } from "../settings/settings.ts";
 import type { Db } from "../store/db.ts";
@@ -22,6 +23,8 @@ export interface StatusReport {
   modelCalls: number;
   judge: JudgeReport;
   dataDir: string;
+  /** The history import across projects; set by callers that look at the transcripts. */
+  history?: HistoryStatus;
 }
 
 const EVENT_ORDER = ["session-start", "prompt", "turn-end", "session-end"];
@@ -122,6 +125,39 @@ export function statusReport(
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
+const megabytes = (bytes: number) => `${(bytes / 1_048_576).toFixed(1)} MB`;
+
+function formatHistory(h: HistoryStatus): string[] {
+  const { queue, index, replace, run } = h;
+  const quiet =
+    h.transcripts.claudeCode +
+      h.transcripts.codex +
+      queue.pending +
+      queue.done +
+      queue.skipped +
+      queue.failed ===
+      0 &&
+    !index.exists &&
+    run.state === "never" &&
+    replace.replaced === 0;
+  if (quiet) return [];
+  const lines = [
+    "History",
+    `  found     ${h.transcripts.claudeCode} Claude Code · ${h.transcripts.codex} Codex transcripts`,
+    `  import    ${run.state} · ${queue.pending} queued · ${queue.done} distilled · ${queue.skipped} skipped · ${queue.failed} failed`,
+    index.exists
+      ? `  index     ${plural(index.files, "file")} · ${plural(index.turns, "turn")} · ${megabytes(index.bytes)}`
+      : "  index     none yet",
+  ];
+  if (replace.replaced > 0)
+    lines.push(`  replaced  ${replace.replaced} imported memories archived`);
+  if (replace.wouldArchive > 0)
+    lines.push(
+      `  replace   ${replace.wouldArchive} imported memories ready to replace (${plural(replace.projectsReady, "project")})`,
+    );
+  return lines;
+}
+
 export function formatStatus(report: StatusReport): string {
   const lines = [`wizardingcode-mem ${report.version}`];
   const { memories, turns, hooks } = report;
@@ -161,5 +197,6 @@ export function formatStatus(report: StatusReport): string {
       : `judge     heuristic only (no TypeSafe key) · model calls made by wizardingcode-mem: ${report.modelCalls}`,
     `data      ${report.dataDir}`,
   );
+  if (report.history) lines.push(...formatHistory(report.history));
   return `${lines.join("\n")}\n`;
 }

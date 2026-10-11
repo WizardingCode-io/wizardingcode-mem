@@ -82,7 +82,9 @@ function seed(
   return id;
 }
 
-async function start(options: { idleMs?: number; onIdle?: () => void } = {}): Promise<UiServer> {
+async function start(
+  options: { idleMs?: number; onIdle?: () => void; env?: Record<string, string | undefined> } = {},
+): Promise<UiServer> {
   server = await startUi({ dataDir, port: 0, open: false, now: () => NOW, ...options });
   return server;
 }
@@ -451,6 +453,21 @@ describe("wizardingcode-mem ui: the API", () => {
       memories: { active: number; archived: number };
     };
     expect(status.memories).toMatchObject({ active: 2, archived: 1 });
+  });
+
+  test("the history status, behind the token", async () => {
+    const s = await start({
+      env: { CLAUDE_CONFIG_DIR: join(dataDir, "no-claude"), CODEX_HOME: join(dataDir, "no-codex") },
+    });
+    expect((await fetch(`${s.origin}/api/history`)).status).toBe(401);
+    const history = (await (await api(s, "/api/history")).json()) as {
+      run: { state: string };
+      index: { exists: boolean };
+      transcripts: { claudeCode: number };
+    };
+    expect(history.run.state).toBe("never");
+    expect(history.index.exists).toBe(false);
+    expect(history.transcripts.claudeCode).toBe(0);
   });
 });
 

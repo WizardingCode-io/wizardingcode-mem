@@ -36,40 +36,57 @@ const CONFIRMED = `m.id IN (SELECT s.memory_id FROM memory_sources s JOIN turns 
                                WHERE t.origin = 'history' AND h.superseded_by IS NOT NULL)`;
 
 /**
- * Archives the project's active imports created inside the period its history covers
- * (earliest start to latest end of its history turns, computed afresh each time), except
- * those history confirmed. Imports from periods whose transcripts were never read stay.
- * Idempotent: what is archived is no longer active.
+ * The project's active imports created inside the period its history covers (earliest
+ * start to latest end of its history turns, computed afresh each time), split into those
+ * to archive and those history confirmed. The one selection that replacing and its
+ * preview share.
+ */
+function selectImports(db: Db, projectId: number): { archive: number[]; spared: number } {
+  const span = db
+    .query<{ first: number | null; last: number | null }, [number]>(
+      `SELECT MIN(started_at) AS first, MAX(COALESCE(ended_at, started_at)) AS last
+         FROM turns WHERE project_id = ? AND origin = 'history'`,
+    )
+    .get(projectId);
+  if (span?.first == null || span.last == null) return { archive: [], spared: 0 };
+  const rows = db
+    .query<{ id: number; confirmed: number }, [number, number, number]>(
+      `SELECT m.id, ${CONFIRMED} AS confirmed FROM memories m
+        WHERE m.project_id = ? AND m.origin = 'imported' AND m.status = 'active'
+          AND m.created_at BETWEEN ? AND ?`,
+    )
+    .all(projectId, span.first, span.last);
+  const archive = rows.filter((row) => !row.confirmed).map((row) => row.id);
+  return { archive, spared: rows.length - archive.length };
+}
+
+/**
+ * Archives the project's active imports created inside the period its history covers,
+ * except those history confirmed. Imports from periods whose transcripts were never read
+ * stay. Idempotent: what is archived is no longer active.
  */
 export function replaceImports(db: Db, projectId: number, options: { now: number }): Replacement {
   return withWrite(db, () => {
-    const span = db
-      .query<{ first: number | null; last: number | null }, [number]>(
-        `SELECT MIN(started_at) AS first, MAX(COALESCE(ended_at, started_at)) AS last
-           FROM turns WHERE project_id = ? AND origin = 'history'`,
-      )
-      .get(projectId);
-    if (span?.first == null || span.last == null) return { archived: 0, spared: 0 };
-    const rows = db
-      .query<{ id: number; confirmed: number }, [number, number, number]>(
-        `SELECT m.id, ${CONFIRMED} AS confirmed FROM memories m
-          WHERE m.project_id = ? AND m.origin = 'imported' AND m.status = 'active'
-            AND m.created_at BETWEEN ? AND ?`,
-      )
-      .all(projectId, span.first, span.last);
-    let archived = 0;
-    for (const row of rows) {
-      if (row.confirmed) continue;
+    const { archive, spared } = selectImports(db, projectId);
+    for (const id of archive) {
       // Status only: the memory itself did not change.
-      db.run("UPDATE memories SET status = 'archived' WHERE id = ?", [row.id]);
+      db.run("UPDATE memories SET status = 'archived' WHERE id = ?", [id]);
       db.run(
         "INSERT OR REPLACE INTO history_replacements (memory_id, project_id, run_at) VALUES (?, ?, ?)",
-        [row.id, projectId, options.now],
+        [id, projectId, options.now],
       );
-      archived++;
     }
-    return { archived, spared: rows.length - archived };
+    return { archived: archive.length, spared };
   });
+}
+
+/** How many imports `replaceAllImports` would archive now. Writes nothing. */
+export function previewReplaceImports(db: Db): number {
+  let total = 0;
+  for (const projectId of projectsReadyForReplacement(db)) {
+    total += selectImports(db, projectId).archive.length;
+  }
+  return total;
 }
 
 /** Replaces the imports of every ready project. */

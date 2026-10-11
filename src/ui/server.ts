@@ -5,8 +5,11 @@ import pkg from "../../package.json" with { type: "json" };
 import { lastBackup, restoreBackup, runBackup } from "../backup/backup.ts";
 import { backupDue } from "../backup/schedule.ts";
 import { targetFor } from "../backup/target.ts";
+import { claudeCodeRoot } from "../adapters/claude-code/history.ts";
+import { codexRoot } from "../adapters/codex/history.ts";
 import { runChecks } from "../doctor/checks.ts";
 import { doctorContext } from "../doctor/context.ts";
+import { historyStatus } from "../history/status.ts";
 import { loadSettings, publicSettings, saveSettings, validatePatch } from "../settings/settings.ts";
 import { statusReport } from "../status/report.ts";
 import { compact } from "../store/compact.ts";
@@ -412,6 +415,16 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
       const projectId = Number(url.searchParams.get("project"));
       const project = Number.isInteger(projectId) ? projectRef(db, projectId) : null;
       return json(statusReport(db, project, options.dataDir));
+    }
+    if (path === "/api/history" && request.method === "GET") {
+      return json(
+        historyStatus(
+          db,
+          storeDir,
+          { claudeCode: claudeCodeRoot(env), codex: codexRoot(env) },
+          now(),
+        ),
+      );
     }
     if (path === "/api/turns" && request.method === "GET") {
       const projectId = Number(url.searchParams.get("project"));
