@@ -42,13 +42,16 @@ export function percentile(sorted: number[], p: number): number {
   return sorted[Math.max(0, Math.ceil((p / 100) * sorted.length) - 1)] ?? 0;
 }
 
-/** Runs considered for latency: enough for a percentile, few enough to be about now. */
+/** Runs per event considered for latency: enough for a percentile, few enough to be about now.
+ *  Per event, so that frequent file reads do not push out the rarer prompt and session samples. */
 const RECENT_RUNS = 200;
 
 export function hookLatency(db: Db): StatusReport["hooks"] {
   const rows = db
     .query<{ event: string; ms: number; outcome: string }, [number]>(
-      `SELECT event, ms, outcome FROM (SELECT * FROM hook_runs ORDER BY id DESC LIMIT ?) ORDER BY ms`,
+      `SELECT event, ms, outcome FROM (
+         SELECT *, row_number() OVER (PARTITION BY event ORDER BY id DESC) AS recent FROM hook_runs
+       ) WHERE recent <= ? ORDER BY ms`,
     )
     .all(RECENT_RUNS);
   const byEvent = new Map<string, number[]>();
