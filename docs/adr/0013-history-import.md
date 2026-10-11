@@ -1,4 +1,4 @@
-# ADR 0013 — History import, part 1: distilling the agents' own transcripts
+# ADR 0013 — History import: distilling the agents' own transcripts (parts 1 to 3)
 
 Date: 2026-10-11 · Status: accepted.
 
@@ -71,3 +71,35 @@ After the index process exited, `history.db-wal` (0 bytes) and `history.db-shm` 
 - **Sessions with no session-end hook** (a crash, a killed terminal, Codex without `transcript_path`) are indexed by the next `history index` or `history import`.
 - **Whole-file re-reads.** A changed transcript is read again whole; there is no bytes-read offset, a departure from the plan. The measured full pass (12.7 s for 5,186 files) and the unchanged pass (0.07 s) did not justify the extra state.
 - **Coverage.** Prompts whose content is an array (an image plus text; about 94 in six months on the author's machine) are not indexed. A renamed project keeps its old name on turns already indexed, so `--project` matches it by that name until those transcripts are indexed again.
+
+## Part 3: the trigger, progress and the viewer
+
+Nothing in parts 1 and 2 ran unasked. Part 3 decides who may start a run, how it is watched, and how it stays out of the hooks' way.
+
+### Trigger and consent
+
+- **Install asks, once.** After an install, `wizardingcode-mem install` offers to learn from the sessions found on disk. In a terminal it asks; anywhere else it prints the command to run. `--import-history` starts without asking, `--no-import-history` skips the offer. Declining at the prompt records the dismissal in the main database (`history.offer.dismissed`), so neither install nor viewer asks again. The offer is made only when a run has never happened.
+- **The viewer offers once.** A one-line banner under the page header on the Memories view, shown only when sessions exist, no run has ever started and the offer was not dismissed. It starts the import or dismisses the offer; either way it does not come back.
+- **Replacement stays explicit.** `history replace-imports` is never started by a run or an offer. In the viewer it lives only on the History card, which first shows the exact count of imports it would archive; the request carries that count (`expected`) and is refused with the current count (409) if it changed. Restoring is one click and needs no count.
+
+### One run at a time
+
+A run (`history import` or `history index`, from the CLI, install or the viewer) holds the meta lease `history.lease`, renewed while it works and released at the end. A second start reports `history: already running` and exits 0. The lease is time-bound, so a crashed run does not block for ever: the status reads a `running` state with no live lease as `failed`. While a run holds the lease, `history forget`, store moves and backup restores are refused (CLI and viewer), because each replaces or deletes files the run is writing.
+
+### The viewer
+
+- **Settings / History card.** The state of the last run, the counts, the size of the index and the actions: import, index, forget, replace and restore imports. While a run goes it polls only `GET /api/history/progress` (the queue counters, every 3 s, no filesystem walk); the full `GET /api/history` status, which counts transcripts on disk, is read at load and when the run ends.
+- **History view (tab 4, `#history`).** Search over the past conversations: `GET /api/history/search?q=&project=&limit=` reads `history.db` read-only and never creates it. With an empty query it lists the most recent turns. It answers `indexed: false` before an index exists, and a sentence instead of an error when the database is busy. Results open in the dock with the redacted prompt and answer.
+- Writes from the viewer (`POST /api/history/import|index|forget|replace-imports|restore-imports|offer/dismiss`) go through the same loopback token as the rest of the API.
+
+### Measured: hook latency under a running import
+
+On the author's machine (Apple silicon), the release binary built by `hostBinary()` (the one `tests/perf/budgets.test.ts` measures), a copy of the main database (221 MB, taken read-only with `.backup`) as the only store, TypeSafe off, `WIZARDINGCODE_MEM_DISTILL=off` for the hooks, the project being this repository, 5,186 transcripts on disk. `history import --max-seconds 120` ran in the background (it finished its whole work in under the cap: 3,395 queued, 3,436 distilled, 0 remaining, then the raw index of 3,744 turns) while the hooks were fired one process at a time from outside, as the budget test does. Each sample is a fresh process; one unmeasured run first.
+
+| Hook | Budget | Idle (n=40) p50 / p95 | During the import (n=60) p50 / p95 | Max during |
+|---|---|---|---|---|
+| prompt | 80 ms | 24.5 / 26.6 ms | 22.9 / 26.2 ms | 29.9 ms |
+| session-start | 150 ms | 24.4 / 25.5 ms | 24.3 / 29.8 ms | 35.5 ms |
+
+Every hook exited 0 with empty stderr, and the import was still running when the last sample was taken. A running import costs the hooks nothing visible: the store is in WAL mode, hooks only read, and the import writes in short transactions. The tail moved by about 4 ms for session-start and not at all for prompt, far inside the budgets. The budget test's synthetic corpus (65,000 memories, 5,000 in the project) is a harder retrieval case than this single-run sample; what this measurement adds is the import running beside the hooks.
+

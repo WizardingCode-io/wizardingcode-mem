@@ -232,6 +232,24 @@ A local page over your memories, in WizardingCode's app design:
 
 ⌘K (or the search in the top bar) searches every project at once. Light and dark; `[` folds the projects panel, `1`–`4` switch views. It listens on the loopback only, behind a token in the URL, loads nothing from the network, and stops itself after half an hour without you or a tab. It opens by itself when a session starts, in any agent — one viewer per machine, never a second tab — and stays closed under CI, over SSH, or when you turn that off.
 
+## Learn from past sessions
+
+Your agents already keep months of conversation on disk. This reads it once and turns the recent part into memories, so the first session after installing is not a blank one.
+
+```sh
+wizardingcode-mem history import              # the last 180 days, in the order they happened; resumable
+wizardingcode-mem history index               # keep the conversations themselves, searchable
+wizardingcode-mem history search <words>      # find what was said; also the MCP tool history_search
+```
+
+`install` offers this once (`--import-history` agrees in advance, `--no-import-history` skips the offer), and so does the viewer, with a **History** card in Settings that shows the progress and a **History** view that searches past conversations. Nothing runs without your say-so, only one run goes at a time, and hooks are as fast while it runs.
+
+- **Kept:** for each finished turn, the prompt and the final answer, with secrets removed first, in `history.db` beside the database. Distilled memories are dated when they happened.
+- **Not kept:** tool calls, tool output, the model's thinking, subagent turns, and projects you turned off.
+- **Stays on your machine.** The only thing that can leave is a TypeSafe judgement, and only if you set a key.
+- **Imports from claude-mem** inside the period history covers can be archived with `history replace-imports` (the viewer shows the count first). Nothing is deleted.
+- **To undo:** `history restore-imports` brings the archived imports back; `history forget` deletes the conversation index (it is rebuilt only if you ask).
+
 ## Settings
 
 Every setting can be changed from the viewer, with no file to edit and no command to type. Open the viewer (it opens by itself when a session starts, or run `wizardingcode-mem ui`) and choose the gear at the bottom left.
@@ -300,6 +318,7 @@ The binary is at `~/.wizardingcode/mem/bin/wizardingcode-mem`; put that director
 | `wizardingcode-mem compact` | Removes old records no memory depends on and gives the space back; never deletes memories |
 | `wizardingcode-mem backup` · `--list` · `--restore <name>` | A copy to the configured folder or bucket, now; what is there; one of them back in place |
 | `wizardingcode-mem import claude-mem` | Brings memories over from claude-mem |
+| `wizardingcode-mem history import` · `index` · `search` · `forget` · `replace-imports` · `restore-imports` | Learn from past sessions (see above) |
 | `wizardingcode-mem rejudge` | Asks TypeSafe to judge imported memories properly |
 | `wizardingcode-mem install [<name>]` · `uninstall <name>` | The direct install: every agent and app found, or one (`claude-code`, `claude-desktop`, `codex`, `cursor`, `gemini`, `opencode`) |
 
