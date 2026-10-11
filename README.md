@@ -110,7 +110,7 @@ Codex reviews a plugin's hooks before running them: open `/hooks` once and accep
 
 <tr><td><strong>Gemini CLI</strong><br><sub>no longer supported</sub></td><td>
 
-Google moved Gemini CLI's users to Antigravity CLI, and wizardingcode-mem followed: `wizardingcode-mem install antigravity`. An old Gemini CLI install of wizardingcode-mem keeps running silently until removed; `wizardingcode-mem uninstall gemini` removes it (`install` and `doctor` point it out). Memories from Gemini sessions stay.
+Google moved Gemini CLI's users to Antigravity CLI, and wizardingcode-mem followed: `wizardingcode-mem install antigravity`. An old Gemini CLI install of wizardingcode-mem keeps running until removed: hooks written straight into Gemini's `settings.json` now do nothing, but the 0.4.4 Gemini extension runs its own bundled binary and MCP server, which keep working at 0.4.4 and fail open once the database has moved to a newer schema. `wizardingcode-mem uninstall gemini` removes either (`install` and `doctor` point it out). Memories from Gemini sessions stay.
 
 </td></tr>
 
