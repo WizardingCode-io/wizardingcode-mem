@@ -57,7 +57,12 @@ const run = (turns: HistoryTurn[]) =>
 describe("enqueueHistory", () => {
   test("turns inside the window are queued as finished history, oldest first", () => {
     const report = run([history("p2", 10), history("p1", 20), history("p0", 400)]);
-    expect(report).toEqual({ queued: 2, known: 0, skipped: 1 });
+    expect(report).toEqual({
+      queued: 2,
+      known: 0,
+      skipped: 1,
+      skippedBy: { window: 1, host: 0, disabled: 0, unresolved: 0 },
+    });
     expect(rows()).toEqual([
       { agent_turn_id: "p1", origin: "history", state: "pending", ended_at: NOW - 20 * DAY + 5000 },
       { agent_turn_id: "p2", origin: "history", state: "pending", ended_at: NOW - 10 * DAY + 5000 },
@@ -69,9 +74,19 @@ describe("enqueueHistory", () => {
     expect(rows()).toEqual([]);
   });
 
+  test("a saved-memory turn outside the window counts as skipped, not known", () => {
+    const report = run([history("p0", 400, { detail: { ...EMPTY, savedMemory: true } })]);
+    expect([report.known, report.skipped, report.skippedBy.window]).toEqual([0, 1, 1]);
+  });
+
   test("running it twice queues nothing new", () => {
     run([history("p1", 20)]);
-    expect(run([history("p1", 20)])).toEqual({ queued: 0, known: 1, skipped: 0 });
+    expect(run([history("p1", 20)])).toEqual({
+      queued: 0,
+      known: 1,
+      skipped: 0,
+      skippedBy: { window: 0, host: 0, disabled: 0, unresolved: 0 },
+    });
     expect(rows()).toHaveLength(1);
   });
 
@@ -88,7 +103,12 @@ describe("enqueueHistory", () => {
       source: null,
       subagent: false,
     });
-    expect(run([history("p1", 1)])).toEqual({ queued: 0, known: 1, skipped: 0 });
+    expect(run([history("p1", 1)])).toEqual({
+      queued: 0,
+      known: 1,
+      skipped: 0,
+      skippedBy: { window: 0, host: 0, disabled: 0, unresolved: 0 },
+    });
     expect(rows().map((r) => r.origin)).toEqual(["live"]);
   });
 

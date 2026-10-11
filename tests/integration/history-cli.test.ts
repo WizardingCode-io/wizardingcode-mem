@@ -60,6 +60,7 @@ describe("wizardingcode-mem history", () => {
     const out = await history("import");
     expect(out.exitCode).toBe(0);
     expect(out.stdout).toContain("1 queued");
+    expect(out.stdout).toContain("0 skipped (window 0, host 0, disabled 0, unresolved 0)");
     const db = new Database(dbPath(), { readonly: true });
     const rows = db
       .query<{ kind: string; created_at: number }, []>("SELECT kind, created_at FROM memories")
@@ -78,6 +79,7 @@ describe("wizardingcode-mem history", () => {
   test("a bad flag is a usage error", async () => {
     const out = await history("import", "--days", "zero");
     expect(out.exitCode).toBe(EXIT_USAGE);
+    expect(out.stderr).toContain("bad option");
   });
 
   test("restore-imports reports what it reactivated", async () => {

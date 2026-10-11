@@ -19,6 +19,7 @@ export interface BackfillReport {
   queued: number;
   known: number;
   skipped: number;
+  skippedBy: { window: number; host: number; disabled: number; unresolved: number };
   distilled: number;
   replaced: number;
   /** History turns still waiting; a later run continues with them. */
@@ -50,6 +51,7 @@ export async function runBackfill(
     queued: 0,
     known: 0,
     skipped: 0,
+    skippedBy: { window: 0, host: 0, disabled: 0, unresolved: 0 },
     distilled: 0,
     replaced: 0,
     remaining: 0,
@@ -69,6 +71,9 @@ export async function runBackfill(
       report.queued += queued.queued;
       report.known += queued.known;
       report.skipped += queued.skipped;
+      for (const reason of Object.keys(queued.skippedBy) as (keyof typeof queued.skippedBy)[]) {
+        report.skippedBy[reason] += queued.skippedBy[reason];
+      }
     }
   }
 
@@ -84,7 +89,7 @@ export async function runBackfill(
   }
 
   for (const projectId of projectsReadyForReplacement(deps.db)) {
-    report.replaced += replaceImports(deps.db, projectId, { sinceMs, now: deps.now() });
+    report.replaced += replaceImports(deps.db, projectId, { now: deps.now() });
   }
   report.remaining =
     deps.db

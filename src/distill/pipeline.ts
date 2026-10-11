@@ -96,6 +96,22 @@ function storedDetail(db: Db, turnId: number): TurnDetail {
   };
 }
 
+const ROOTS_CACHE_MAX = 256;
+const rootsCache = new Map<string, string[]>();
+
+/** The directories a turn's paths are made relative to; cached, since a history drain asks per turn. */
+function rootsOf(turnCwd: string): string[] {
+  const cached = rootsCache.get(turnCwd);
+  if (cached !== undefined) return cached;
+  const cwd = realpath(turnCwd);
+  const roots = [...new Set([readGitInfo(cwd)?.root ?? cwd, cwd, turnCwd])].map((root) =>
+    root.replaceAll("\\", "/"),
+  );
+  if (rootsCache.size >= ROOTS_CACHE_MAX) rootsCache.clear();
+  rootsCache.set(turnCwd, roots);
+  return roots;
+}
+
 function readDetail(deps: DistillDeps, turn: QueuedTurn): TurnDetail {
   const adapter = deps.adapters[turn.agent];
   const raw =
@@ -105,10 +121,7 @@ function readDetail(deps: DistillDeps, turn: QueuedTurn): TurnDetail {
         ? adapter.readTurnDetail(turn.transcriptPath, turn.agentTurnId)
         : null;
   if (raw === null) return EMPTY;
-  const cwd = realpath(turn.cwd);
-  const roots = [...new Set([readGitInfo(cwd)?.root ?? cwd, cwd, turn.cwd])].map((root) =>
-    root.replaceAll("\\", "/"),
-  );
+  const roots = rootsOf(turn.cwd);
   return {
     filesRead: relativeTo(roots, raw.filesRead),
     filesChanged: relativeTo(roots, raw.filesChanged),

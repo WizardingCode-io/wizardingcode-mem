@@ -64,7 +64,7 @@ export async function run(argv: string[]): Promise<number> {
       },
     );
     process.stdout.write(
-      `history: ${report.transcripts} transcripts, ${report.queued} queued, ${report.known} known, ${report.skipped} skipped, ${report.distilled} distilled, ${report.replaced} imports replaced, ${report.remaining} remaining\n`,
+      `history: ${report.transcripts} transcripts, ${report.queued} queued, ${report.known} known, ${report.skipped} skipped (window ${report.skippedBy.window}, host ${report.skippedBy.host}, disabled ${report.skippedBy.disabled}, unresolved ${report.skippedBy.unresolved}), ${report.distilled} distilled, ${report.replaced} imports replaced, ${report.remaining} remaining\n`,
     );
     return 0;
   } catch (error) {

@@ -15,6 +15,8 @@ export interface EnqueueReport {
   known: number;
   /** Outside the window, from the host, from a disabled project, or from a folder that cannot be resolved. */
   skipped: number;
+  /** The same turns, by reason. */
+  skippedBy: { window: number; host: number; disabled: number; unresolved: number };
 }
 
 const list = (values: string[], redacted: boolean) =>
@@ -30,17 +32,30 @@ export function enqueueHistory(
   turns: HistoryTurn[],
   options: { sinceMs: number; now: number; projects?: Map<string, ProjectRef> },
 ): EnqueueReport {
-  const report: EnqueueReport = { queued: 0, known: 0, skipped: 0 };
+  const report: EnqueueReport = {
+    queued: 0,
+    known: 0,
+    skipped: 0,
+    skippedBy: { window: 0, host: 0, disabled: 0, unresolved: 0 },
+  };
+  const skip = (reason: keyof EnqueueReport["skippedBy"]): void => {
+    report.skipped++;
+    report.skippedBy[reason]++;
+  };
   const projects = options.projects ?? new Map<string, ProjectRef>();
   const ordered = [...turns].sort((a, b) => a.startedAt - b.startedAt);
   for (const turn of ordered) {
+    if (turn.startedAt < options.sinceMs) {
+      skip("window");
+      continue;
+    }
+    if (isFromTheHost(turn.prompt)) {
+      skip("host");
+      continue;
+    }
     if (turn.detail.savedMemory) {
       // What the agent saved itself is already a memory.
       report.known++;
-      continue;
-    }
-    if (turn.startedAt < options.sinceMs || isFromTheHost(turn.prompt)) {
-      report.skipped++;
       continue;
     }
     let project = projects.get(turn.cwd);
@@ -48,13 +63,13 @@ export function enqueueHistory(
       try {
         project = resolveProject(db, turn.cwd, options.now);
       } catch {
-        report.skipped++;
+        skip("unresolved");
         continue;
       }
       projects.set(turn.cwd, project);
     }
     if (project.disabled) {
-      report.skipped++;
+      skip("disabled");
       continue;
     }
     const projectId = project.id;

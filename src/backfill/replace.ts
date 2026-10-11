@@ -21,19 +21,30 @@ export function projectsReadyForReplacement(db: Db): number[] {
     .map((row) => row.id);
 }
 
-export function replaceImports(
-  db: Db,
-  projectId: number,
-  options: { sinceMs: number; now: number },
-): number {
+/**
+ * Archives the project's active imports created inside the period its history covers
+ * (earliest start to latest end of its history turns). Imports from periods whose
+ * transcripts were never read stay. No history turns: nothing is archived.
+ */
+export function replaceImports(db: Db, projectId: number, options: { now: number }): number {
   return withWrite(db, () => {
-    const ids = db
-      .query<{ id: number }, [number, number]>(
-        `SELECT id FROM memories
-          WHERE project_id = ? AND origin = 'imported' AND status = 'active' AND created_at >= ?`,
+    const span = db
+      .query<{ first: number | null; last: number | null }, [number]>(
+        `SELECT MIN(started_at) AS first, MAX(COALESCE(ended_at, started_at)) AS last
+           FROM turns WHERE project_id = ? AND origin = 'history'`,
       )
-      .all(projectId, options.sinceMs)
-      .map((row) => row.id);
+      .get(projectId);
+    const ids =
+      span?.first == null || span.last == null
+        ? []
+        : db
+            .query<{ id: number }, [number, number, number]>(
+              `SELECT id FROM memories
+                WHERE project_id = ? AND origin = 'imported' AND status = 'active'
+                  AND created_at BETWEEN ? AND ?`,
+            )
+            .all(projectId, span.first, span.last)
+            .map((row) => row.id);
     for (const id of ids) {
       db.run("UPDATE memories SET status = 'archived', updated_at = ? WHERE id = ?", [
         options.now,
