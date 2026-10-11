@@ -181,6 +181,21 @@ describe("restoreBackup", () => {
     expect(memories(join(storeDir, DB_FILE))).toBe(4);
   });
 
+  test("refuses while a history run holds its lease, and leaves the store as it was", async () => {
+    await run();
+    claimLease(db, "history.lease", `${process.pid}-h`, NOW, 60_000);
+    db.close();
+    const outcome = await restoreBackup({
+      storeDir,
+      target: folderTarget(folder),
+      name: backupName(NOW, LATEST_VERSION),
+      now: NOW + 1000,
+    });
+    expect(outcome).toMatchObject({ ok: false, reason: "busy" });
+    expect(readdirSync(storeDir).filter((n) => /\.replaced-\d+$/.test(n))).toHaveLength(0);
+    db = openDb({ dataDir: storeDir, busyTimeoutMs: 2000 });
+  });
+
   test("removes the history index, whose project ids may name other projects in the copy", async () => {
     await run();
     const index = join(storeDir, "history.db");

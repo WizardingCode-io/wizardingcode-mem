@@ -16,7 +16,7 @@ import { pipeline } from "node:stream/promises";
 import { createGunzip, createGzip } from "node:zlib";
 import { historyDbPath } from "../history/path.ts";
 import { DB_FILE, type Db, LATEST_VERSION } from "../store/db.ts";
-import { BACKUP_LEASE, claimLease, drainActive, releaseLease, setMeta } from "../store/meta.ts";
+import { anyLeaseActive, BACKUP_LEASE, claimLease, releaseLease, setMeta } from "../store/meta.ts";
 import { logError } from "../util/log.ts";
 import { BACKUP_LAST, type LastBackup } from "./schedule.ts";
 import { type BackupTarget, backupName, parseBackupName } from "./target.ts";
@@ -131,7 +131,7 @@ export async function restoreBackup(options: RestoreOptions): Promise<RestoreOut
     let frozen = false;
     try {
       lock.run(`PRAGMA busy_timeout = ${FREEZE_WAIT_MS}`);
-      if (drainActive(lock, now)) {
+      if (anyLeaseActive(lock, now)) {
         return {
           ok: false,
           reason: "busy",

@@ -21,33 +21,58 @@ export async function withHistoryRun<T extends object>(
 ): Promise<{ report: T } | null> {
   const owner = `${process.pid}-${crypto.randomUUID()}`;
   if (!claimLease(db, HISTORY_LEASE, owner, now(), LEASE_MS)) return null;
+  let lost = false;
   const renew = () => {
-    try {
-      claimLease(db, HISTORY_LEASE, owner, now(), LEASE_MS);
-    } catch (error) {
-      logError("history-lease", error);
+    if (lost) throw new Error("history lease lost: another run took over");
+    if (!claimLease(db, HISTORY_LEASE, owner, now(), LEASE_MS)) {
+      lost = true;
+      logError("history-lease", new Error("the history lease was taken by another run"));
+      throw new Error("history lease lost: another run took over");
     }
   };
-  const timer = setInterval(renew, RENEW_EVERY_MS);
+  const timer = setInterval(() => {
+    try {
+      renew();
+    } catch {
+      // Already logged; the work's next renew() call (or its end) stops the run.
+    }
+  }, RENEW_EVERY_MS);
   timer.unref?.();
-  setMeta(db, RUN_STATE, "running");
-  setMeta(db, RUN_STARTED_AT, String(now()));
   try {
+    // A new run starts from a clean slate: `last` never shows the previous one.
+    for (const key of [RUN_REPORT, RUN_FINISHED_AT])
+      db.run("DELETE FROM meta WHERE key = ?", [key]);
+    setMeta(db, RUN_STATE, "running");
+    setMeta(db, RUN_STARTED_AT, String(now()));
     const report = await work(renew);
+    if (lost) throw new Error("history lease lost: another run took over");
     setMeta(db, RUN_REPORT, JSON.stringify(report));
     setMeta(db, RUN_STATE, "done");
     return { report };
   } catch (error) {
-    setMeta(
-      db,
-      RUN_REPORT,
-      JSON.stringify({ error: error instanceof Error ? error.message : String(error) }),
-    );
-    setMeta(db, RUN_STATE, "failed");
+    // A run that lost the lease must not overwrite the state of the one that has it.
+    if (!lost) {
+      try {
+        setMeta(
+          db,
+          RUN_REPORT,
+          JSON.stringify({ error: error instanceof Error ? error.message : String(error) }),
+        );
+        setMeta(db, RUN_STATE, "failed");
+      } catch (recording) {
+        logError("history-run-state", recording);
+      }
+    }
     throw error;
   } finally {
     clearInterval(timer);
-    setMeta(db, RUN_FINISHED_AT, String(now()));
+    if (!lost) {
+      try {
+        setMeta(db, RUN_FINISHED_AT, String(now()));
+      } catch (recording) {
+        logError("history-run-state", recording);
+      }
+    }
     releaseLease(db, HISTORY_LEASE, owner);
   }
 }

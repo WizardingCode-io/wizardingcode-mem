@@ -15,7 +15,7 @@ import {
 import { isAbsolute, join, resolve, win32 } from "node:path";
 import { ENV_FILE, writeEnvFile } from "../settings/env-file.ts";
 import { DB_FILE, LATEST_VERSION } from "./db.ts";
-import { drainActive } from "./meta.ts";
+import { anyLeaseActive } from "./meta.ts";
 
 export interface TargetReport {
   path: string;
@@ -159,7 +159,7 @@ export async function moveStore(options: MoveOptions): Promise<MoveOutcome> {
   let frozen = false;
   try {
     lock.run(`PRAGMA busy_timeout = ${FREEZE_WAIT_MS}`);
-    if (drainActive(lock, now)) {
+    if (anyLeaseActive(lock, now)) {
       return {
         ok: false,
         reason: "busy",

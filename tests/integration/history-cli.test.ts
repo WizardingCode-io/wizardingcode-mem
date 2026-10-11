@@ -259,6 +259,22 @@ describe("wizardingcode-mem history", () => {
       expect(meta("history.lease")).toBeNull();
     });
 
+    test("forget refuses while a run holds the lease, and works after", async () => {
+      await history("import");
+      const index = join(base, "home", "mem", "history.db");
+      expect(existsSync(index)).toBe(true);
+      setLease(Date.now() + 60_000);
+      const refused = await history("forget");
+      expect(refused.exitCode).toBe(1);
+      expect(refused.stderr).toContain(
+        "history forget: a history run is going; try again when it finishes",
+      );
+      expect(existsSync(index)).toBe(true);
+      setLease(Date.now() - 1000);
+      expect((await history("forget")).exitCode).toBe(0);
+      expect(existsSync(index)).toBe(false);
+    });
+
     test("an index run is recorded too", async () => {
       await history("import");
       expect((await history("index")).exitCode).toBe(0);
