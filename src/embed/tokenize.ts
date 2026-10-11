@@ -17,12 +17,18 @@ const UNK_PENALTY = 10;
 const encoder = new TextEncoder();
 
 export function tokenize(pack: Pack, text: string, maxTokens = 512): number[] {
+  const { unkId } = pack.header;
+  return tokenizeIndexes(pack, text, maxTokens).map((i) => (i < 0 ? unkId : pack.idOf(i)));
+}
+
+/** Same segmentation as `tokenize`, as pack indexes (what `addRow` takes); -1 is [UNK]. */
+export function tokenizeIndexes(pack: Pack, text: string, maxTokens = 512): number[] {
   const ids: number[] = [];
   if (maxTokens <= 0) return ids;
   const normalized = normalize(text, pack.charsmap);
   if (normalized === "") return ids;
   const bytes = encoder.encode(METASPACE + normalized.replaceAll(" ", METASPACE));
-  const { unkId, minScore, maxPieceChars } = pack.header;
+  const { minScore, maxPieceChars } = pack.header;
   const unkScore = minScore - UNK_PENALTY;
 
   // Buffers sized for the longest word, reused across words.
@@ -91,10 +97,10 @@ export function tokenize(pack: Pack, text: string, maxTokens = 512): number[] {
     for (let k = path.length - 1; k >= 0; k--) {
       const index = path[k]!;
       if (index < 0) {
-        if (!lastUnk) ids.push(unkId);
+        if (!lastUnk) ids.push(-1);
         lastUnk = true;
       } else {
-        ids.push(pack.idOf(index));
+        ids.push(index);
         lastUnk = false;
       }
     }
