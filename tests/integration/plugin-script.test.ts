@@ -121,7 +121,6 @@ describe("what the agents install", () => {
       "Stop",
       "SessionEnd",
       "PostToolUse",
-      "PostToolUseFailure",
     ]);
     expect(events("plugins/codex/hooks/hooks.json")).toEqual([
       "SessionStart",

@@ -185,7 +185,7 @@ lists every agent and app it found, how each is installed, and what to do about 
 
 At the start of a session, a short brief of where things stood. Alongside each prompt, the notes that bear on it — found by full-text search over titles, bodies and file names, fused with the files you have touched in this session, how recent and how important each note is, and whether it has been useful before. Never the same note twice in one session.
 
-In Claude Code, two more moments: when the agent reads a file, the gotchas, fixes, conventions and decisions saved about that file; when a shell command fails, the fixes and gotchas that share enough of its error. At most two notes each, next to the tool's result, and only when there is something to say ([ADR 0015](docs/adr/0015-remember-moments.md)).
+In Claude Code, one more moment: when the agent reads a file, the gotchas, fixes, conventions and decisions saved about that file. At most two notes, next to the file's contents, and only when there is something to say. Notes after a failed command are built but held back until they are less noisy ([ADR 0015](docs/adr/0015-remember-moments.md)).
 
 ```xml
 <wizardingcode-mem-notes>
@@ -360,7 +360,7 @@ The importer can only map claude-mem's types onto ours and give every memory of 
 
 | Agent | Installed as | Captures | Injects | Status |
 |---|---|---|---|---|
-| Claude Code | plugin, from the marketplace | hooks + transcript | session start, every prompt, file reads, failed commands | in daily use; file reads and failed commands from the documentation |
+| Claude Code | plugin, from the marketplace | hooks + transcript | session start, every prompt, file reads | in daily use; file reads from the documentation |
 | Claude Desktop, Cowork and Code tab | plugin, added in the app | hooks | session start, every prompt | Code tab in use; Cowork from the documentation |
 | Claude Desktop, chat | MCP server in its config, across every project | `memory_save` when Claude saves | `memory_search` when Claude asks | in use |
 | Codex | plugin, from the marketplace | hooks + rollout | session start, every prompt | verified up to the prompt; turn end as documented |

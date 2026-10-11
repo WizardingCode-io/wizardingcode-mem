@@ -176,15 +176,14 @@ describe("the OpenCode npm plugin", () => {
 });
 
 describe("generated Claude Code hooks", () => {
-  test("hooks.json scopes the file-read and tool-failed events to their tools, with the short timeout", () => {
+  test("hooks.json scopes the file-read event to Read, with the short timeout, and holds tool-failed back", () => {
     const { hooks } = JSON.parse(readFileSync(join(ROOT, "hooks", "hooks.json"), "utf8"));
     expect(hooks.PostToolUse).toHaveLength(1);
     expect(hooks.PostToolUse[0].matcher).toBe("Read");
     expect(hooks.PostToolUse[0].hooks[0].args.slice(-1)).toEqual(["file-read"]);
     expect(hooks.PostToolUse[0].hooks[0].timeout).toBe(5);
-    expect(hooks.PostToolUseFailure[0].matcher).toBe("Bash");
-    expect(hooks.PostToolUseFailure[0].hooks[0].args.slice(-1)).toEqual(["tool-failed"]);
-    expect(hooks.PostToolUseFailure[0].hooks[0].timeout).toBe(5);
+    // Held: too noisy on real history (ADR 0015).
+    expect(hooks.PostToolUseFailure).toBeUndefined();
     expect(hooks.Stop[0].matcher).toBeUndefined();
   });
 });

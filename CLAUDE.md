@@ -32,7 +32,7 @@ The `bun` the scripts use is the one pinned in `devDependencies`, not the global
 ## Conventions
 
 - TDD: the test is written and seen failing before the code.
-- Hooks never exit with code 2 (in the agents, 2 blocks the action). They fail open: code 0 and empty stdout. In tests, `WIZARDINGCODE_MEM_DISTILL=off` and `WIZARDINGCODE_MEM_UI_AUTO_OPEN=off` keep hooks from starting background work, `WIZARDINGCODE_MEM_MIGRATE=off` keeps them away from a real `~/.shibaox`; `WIZARDINGCODE_MEM_UI_BROWSER=none` keeps the browser closed. Claude Code also gets notes on `file-read` (`PostToolUse`, matcher `Read`) and `tool-failed` (`PostToolUseFailure`, matcher `Bash`): at most two each, once per context, no background work (ADR 0015).
+- Hooks never exit with code 2 (in the agents, 2 blocks the action). They fail open: code 0 and empty stdout. In tests, `WIZARDINGCODE_MEM_DISTILL=off` and `WIZARDINGCODE_MEM_UI_AUTO_OPEN=off` keep hooks from starting background work, `WIZARDINGCODE_MEM_MIGRATE=off` keeps them away from a real `~/.shibaox`; `WIZARDINGCODE_MEM_UI_BROWSER=none` keeps the browser closed. Claude Code also gets notes on `file-read` (`PostToolUse`, matcher `Read`): at most two, once per context, no background work. `tool-failed` (`PostToolUseFailure`) is built but held, not installed, until a narrower version passes ADR 0015's bar.
 - No heavy SDKs on the hook path; use `await import()` per command.
 - Semantic judgements go through the `Judge` interface (TypeSafe opt-in, heuristics as the fallback). Exact rules and calculations stay in code.
 - Imports with an explicit `.ts` extension.

@@ -28,7 +28,7 @@ export const CLAUDE_CODE: HostSpec = {
     ["SessionEnd", "session-end"],
     // Matchers: without one, Claude Code would call us after every tool.
     ["PostToolUse", "file-read", "Read"],
-    ["PostToolUseFailure", "tool-failed", "Bash"],
+    // ["PostToolUseFailure", "tool-failed", "Bash"] is held: on real history 83% of failures injected, with unrelated notes (ADR 0015); it returns only once a narrowed version passes the bar set there.
   ],
   entry: (binaryPath, event) => ({
     type: "command",

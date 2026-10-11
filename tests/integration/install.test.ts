@@ -77,9 +77,24 @@ describe("install claude-code", () => {
         Stop: [ours("turn-end")],
         SessionEnd: [ours("session-end")],
         PostToolUse: [ours("file-read", "Read")],
-        PostToolUseFailure: [ours("tool-failed", "Bash")],
       },
     });
+  });
+
+  test("a tool-failed hook left by a development install is removed by uninstall", () => {
+    const theirs = { matcher: "Bash", hooks: [{ type: "command", command: "notify" }] };
+    writeFileSync(
+      settingsPath,
+      JSON.stringify({
+        hooks: {
+          SessionStart: [ours("session-start")],
+          PostToolUse: [ours("file-read", "Read")],
+          PostToolUseFailure: [theirs, ours("tool-failed", "Bash")],
+        },
+      }),
+    );
+    uninstallClaudeCode(context());
+    expect(settings().hooks).toEqual({ PostToolUseFailure: [theirs] });
   });
 
   test("keeps a user's own PostToolUse group, and uninstall removes only ours", () => {

@@ -91,7 +91,6 @@ function installHooks(binary: string): void {
         Stop: [hook("turn-end")],
         SessionEnd: [hook("session-end")],
         PostToolUse: [{ matcher: "Read", ...hook("file-read") }],
-        PostToolUseFailure: [{ matcher: "Bash", ...hook("tool-failed") }],
       },
     }),
   );
@@ -115,7 +114,7 @@ describe("wizardingcode-mem doctor", () => {
     expect(result.stdout).toEndWith("All checks passed.\n");
   });
 
-  test("an install from before the file-read and tool-failed hooks is a warning, not an error", async () => {
+  test("an install from before the file-read hook is a warning, not an error", async () => {
     const binary = join(home, "wizardingcode-mem");
     writeFileSync(binary, "");
     const hook = (event: string) => ({
@@ -140,7 +139,8 @@ describe("wizardingcode-mem doctor", () => {
     expect(result.exitCode).toBe(0);
     const claude = line(result.stdout, "Claude Code");
     expect(claude).toStartWith("warn");
-    expect(claude).toContain("no PostToolUse, PostToolUseFailure hook");
+    expect(claude).toContain("no PostToolUse hook");
+    expect(claude).not.toContain("PostToolUseFailure");
     expect(claude).toContain("wizardingcode-mem install claude-code");
   });
 
