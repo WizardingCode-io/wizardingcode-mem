@@ -17,6 +17,7 @@ const COMMANDS: Record<string, () => Promise<CommandModule>> = {
   install: () => import("./commands/install.ts"),
   uninstall: () => import("./commands/uninstall.ts"),
   import: () => import("./commands/import.ts"),
+  history: () => import("./commands/history.ts"),
   rejudge: () => import("./commands/rejudge.ts"),
   compact: () => import("./commands/compact.ts"),
   backup: () => import("./commands/backup.ts"),

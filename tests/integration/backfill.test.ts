@@ -64,6 +64,11 @@ describe("enqueueHistory", () => {
     ]);
   });
 
+  test("a turn in which the agent saved a memory itself is not queued", () => {
+    expect(run([history("p1", 5, { detail: { ...EMPTY, savedMemory: true } })]).known).toBe(1);
+    expect(rows()).toEqual([]);
+  });
+
   test("running it twice queues nothing new", () => {
     run([history("p1", 20)]);
     expect(run([history("p1", 20)])).toEqual({ queued: 0, known: 1, skipped: 0 });

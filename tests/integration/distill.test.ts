@@ -96,6 +96,18 @@ const FIX =
   "Fixed: the root cause was the busy timeout being set after the first query. Moved the pragma to the top of `openDb` in src/store/db.ts.";
 
 describe("distill: from a queued turn to a memory", () => {
+  test("a history turn's files come from what was stored with it", async () => {
+    turn("the tests fail with a timeout", FIX);
+    db.run(
+      "UPDATE turns SET origin = 'history', ended_at = ?, transcript_path = NULL, files_changed = ?",
+      [clock, JSON.stringify([join(project, "src/store/db.ts")])],
+    );
+    await drain();
+    expect(db.query("SELECT path, role FROM memory_files").all()).toEqual([
+      { path: "src/store/db.ts", role: "changed" },
+    ]);
+  });
+
   test("a turn worth keeping becomes one memory", async () => {
     turn("the tests fail with a timeout", FIX);
     expect(await drain()).toEqual({ claimed: 1, done: 1, skipped: 0, failed: 0 });

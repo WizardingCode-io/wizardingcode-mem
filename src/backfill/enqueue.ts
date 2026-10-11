@@ -34,6 +34,11 @@ export function enqueueHistory(
   const projects = options.projects ?? new Map<string, ProjectRef>();
   const ordered = [...turns].sort((a, b) => a.startedAt - b.startedAt);
   for (const turn of ordered) {
+    if (turn.detail.savedMemory) {
+      // What the agent saved itself is already a memory.
+      report.known++;
+      continue;
+    }
     if (turn.startedAt < options.sinceMs || isFromTheHost(turn.prompt)) {
       report.skipped++;
       continue;

@@ -18,11 +18,18 @@ const dir = (env = "") => {
 };
 
 describe("loadSettings", () => {
+  test("history days default to 180 and accept 1 to 3650", () => {
+    expect(loadSettings({}, dir()).historyDays).toBe(180);
+    expect(loadSettings({ WIZARDINGCODE_MEM_HISTORY_DAYS: "30" }, dir()).historyDays).toBe(30);
+    expect(loadSettings({ WIZARDINGCODE_MEM_HISTORY_DAYS: "0" }, dir()).historyDays).toBe(180);
+  });
+
   test("has sensible defaults with no file and no environment", () => {
     expect(loadSettings({}, dir())).toEqual({
       typesafeKey: null,
       typesafe: "on",
       retentionDays: 90,
+      historyDays: 180,
       uiAutoOpen: true,
       storeDir: null,
       backup: {
@@ -58,6 +65,7 @@ describe("loadSettings", () => {
       typesafeKey: "sk-file",
       typesafe: "off",
       retentionDays: 30,
+      historyDays: 180,
       uiAutoOpen: false,
       storeDir: "/Volumes/Ext/mem",
       backup: {

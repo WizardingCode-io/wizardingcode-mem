@@ -11,6 +11,7 @@ export const SETTING_KEYS = [
   "TYPESAFE_API_KEY",
   "WIZARDINGCODE_MEM_TYPESAFE",
   "WIZARDINGCODE_MEM_RETENTION_DAYS",
+  "WIZARDINGCODE_MEM_HISTORY_DAYS",
   "WIZARDINGCODE_MEM_UI_AUTO_OPEN",
   "WIZARDINGCODE_MEM_STORE_DIR",
   "WIZARDINGCODE_MEM_BACKUP_TO",
@@ -34,6 +35,8 @@ export interface Settings {
   /** `off` keeps the heuristic judge even with a key configured. */
   typesafe: "on" | "off";
   retentionDays: number;
+  /** How far back history is distilled. Older history is only indexed. */
+  historyDays: number;
   uiAutoOpen: boolean;
   /** Where the database lives when it was moved away from the data directory. */
   storeDir: string | null;
@@ -55,12 +58,14 @@ export interface Settings {
 export const DEFAULTS = {
   typesafe: "on",
   retentionDays: 90,
+  historyDays: 180,
   uiAutoOpen: true,
   backupEveryHours: 24,
   backupKeep: 10,
 } as const;
 
 const RETENTION = { min: 7, max: 3650 };
+const HISTORY_DAYS = { min: 1, max: 3650 };
 const EVERY_HOURS = { min: 0, max: 24 * 30 };
 const KEEP = { min: 1, max: 1000 };
 
@@ -108,6 +113,11 @@ export function loadSettings(env: Env = process.env, dataDir: string): Settings 
       RETENTION,
       DEFAULTS.retentionDays,
     ),
+    historyDays: integer(
+      value("WIZARDINGCODE_MEM_HISTORY_DAYS"),
+      HISTORY_DAYS,
+      DEFAULTS.historyDays,
+    ),
     uiAutoOpen: onOff(value("WIZARDINGCODE_MEM_UI_AUTO_OPEN"), DEFAULTS.uiAutoOpen),
     storeDir: value("WIZARDINGCODE_MEM_STORE_DIR"),
     backup: {
@@ -147,6 +157,10 @@ const RULES: Record<SettingKey, (value: string) => string | null> = {
     /^\d+$/.test(v) && Number(v) >= RETENTION.min && Number(v) <= RETENTION.max
       ? null
       : `a whole number of days from ${RETENTION.min} to ${RETENTION.max}`,
+  WIZARDINGCODE_MEM_HISTORY_DAYS: (v) =>
+    /^\d+$/.test(v) && Number(v) >= HISTORY_DAYS.min && Number(v) <= HISTORY_DAYS.max
+      ? null
+      : `a whole number of days from ${HISTORY_DAYS.min} to ${HISTORY_DAYS.max}`,
   WIZARDINGCODE_MEM_UI_AUTO_OPEN: (v) => (v === "on" || v === "off" ? null : "on or off"),
   WIZARDINGCODE_MEM_STORE_DIR: () => "the store directory is changed by moving the store, not here",
   WIZARDINGCODE_MEM_BACKUP_TO: (v) =>
@@ -231,6 +245,7 @@ export function publicSettings(env: Env = process.env, dataDir: string): PublicS
   const defaults: Partial<Record<SettingKey, string>> = {
     WIZARDINGCODE_MEM_TYPESAFE: settings.typesafe,
     WIZARDINGCODE_MEM_RETENTION_DAYS: String(settings.retentionDays),
+    WIZARDINGCODE_MEM_HISTORY_DAYS: String(settings.historyDays),
     WIZARDINGCODE_MEM_UI_AUTO_OPEN: settings.uiAutoOpen ? "on" : "off",
     WIZARDINGCODE_MEM_BACKUP_EVERY_HOURS: String(settings.backup.everyHours),
     WIZARDINGCODE_MEM_BACKUP_KEEP: String(settings.backup.keep),

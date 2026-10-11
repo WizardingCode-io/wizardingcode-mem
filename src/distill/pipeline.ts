@@ -71,10 +71,40 @@ function relativeTo(roots: string[], paths: string[]): string[] {
   return [...relative];
 }
 
+/** What a history turn was queued with: its transcript's tail no longer holds an old turn. */
+function storedDetail(db: Db, turnId: number): TurnDetail {
+  const row = db
+    .query<{ filesRead: string; filesChanged: string; commands: string; errors: string }, [number]>(
+      `SELECT files_read AS filesRead, files_changed AS filesChanged, commands, errors
+         FROM turns WHERE id = ?`,
+    )
+    .get(turnId);
+  const parse = (json: string | undefined): string[] => {
+    try {
+      const value: unknown = JSON.parse(json ?? "[]");
+      return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
+    } catch {
+      return [];
+    }
+  };
+  return {
+    filesRead: parse(row?.filesRead),
+    filesChanged: parse(row?.filesChanged),
+    commands: parse(row?.commands),
+    errors: parse(row?.errors),
+    savedMemory: false,
+  };
+}
+
 function readDetail(deps: DistillDeps, turn: QueuedTurn): TurnDetail {
   const adapter = deps.adapters[turn.agent];
-  if (adapter === undefined || turn.transcriptPath === null) return EMPTY;
-  const raw = adapter.readTurnDetail(turn.transcriptPath, turn.agentTurnId);
+  const raw =
+    turn.origin === "history"
+      ? storedDetail(deps.db, turn.id)
+      : adapter !== undefined && turn.transcriptPath !== null
+        ? adapter.readTurnDetail(turn.transcriptPath, turn.agentTurnId)
+        : null;
+  if (raw === null) return EMPTY;
   const cwd = realpath(turn.cwd);
   const roots = [...new Set([readGitInfo(cwd)?.root ?? cwd, cwd, turn.cwd])].map((root) =>
     root.replaceAll("\\", "/"),
