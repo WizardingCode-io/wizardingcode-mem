@@ -111,6 +111,20 @@ export function indexAll(
     failed: 0,
   };
   const deadline = Date.now() + options.maxMs;
+  try {
+    // A project turned off after its turns were indexed takes them out of the index.
+    const disabled = main
+      .query<{ id: number }, []>("SELECT id FROM projects WHERE disabled = 1")
+      .all()
+      .map((row) => row.id);
+    if (disabled.length > 0) {
+      hdb.run("DELETE FROM turns WHERE project_id IN (SELECT value FROM json_each(?))", [
+        JSON.stringify(disabled),
+      ]);
+    }
+  } catch (error) {
+    logError("history-index", error);
+  }
   const projects = new Map<string, ProjectRef>();
   const known = hdb.query<{ size: number; mtime: number }, [string]>(
     "SELECT size, mtime FROM files WHERE path = ?",

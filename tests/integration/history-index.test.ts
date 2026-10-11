@@ -196,6 +196,15 @@ describe("the history index", () => {
     expect(run()).toMatchObject({ indexed: 2, failed: 0, turns: 3 });
   });
 
+  test("a project turned off after indexing loses its turns at the next pass", () => {
+    files();
+    run();
+    expect(count()).toBe(3);
+    main.run("UPDATE projects SET disabled = 1");
+    expect(run()).toMatchObject({ indexed: 0, unchanged: 2 });
+    expect(count()).toBe(0);
+  });
+
   test("two passes at once leave one copy of each turn", async () => {
     files();
     const worker = new URL("../helpers/history-index-worker.ts", import.meta.url).pathname;
