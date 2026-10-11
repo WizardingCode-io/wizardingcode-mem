@@ -9,7 +9,7 @@ import { claudeCodeRoot } from "../adapters/claude-code/history.ts";
 import { codexRoot } from "../adapters/codex/history.ts";
 import { runChecks } from "../doctor/checks.ts";
 import { doctorContext } from "../doctor/context.ts";
-import { previewReplaceImports, replaceAllImports, restoreImports } from "../backfill/replace.ts";
+import { replaceAllImports, restoreImports } from "../backfill/replace.ts";
 import { openHistoryDb } from "../history/db.ts";
 import { forgetHistoryIndex } from "../history/run-state.ts";
 import { historyReadFailure, recentHistory, searchHistory } from "../history/search.ts";
@@ -508,11 +508,13 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
       const body = await jsonObject(request);
       if (body instanceof Response) return body;
       if (typeof body.expected !== "number") return problem(400, "expected is required");
-      const count = previewReplaceImports(db);
-      if (body.expected !== count) return json({ count }, 409);
-      return json(replaceAllImports(db, { now: now() }));
+      if (historyRunning()) return problem(409, "a history run is going; wait for it to finish");
+      const outcome = replaceAllImports(db, { now: now(), expected: body.expected });
+      if ("stale" in outcome) return json({ count: outcome.count }, 409);
+      return json(outcome);
     }
     if (path === "/api/history/restore-imports" && request.method === "POST") {
+      if (historyRunning()) return problem(409, "a history run is going; wait for it to finish");
       return json({ restored: restoreImports(db) });
     }
     if (path === "/api/history/offer/dismiss" && request.method === "POST") {

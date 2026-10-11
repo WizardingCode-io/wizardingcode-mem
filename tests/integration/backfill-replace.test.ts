@@ -182,3 +182,19 @@ describe("replacing claude-mem imports", () => {
     expect(replaceAllImports(db, { now: NOW })).toEqual({ projects: 1, archived: 0, spared: 0 });
   });
 });
+
+describe("replacing with the count the user saw", () => {
+  test("the count is checked inside the write: a different one archives nothing and says the new count", () => {
+    covered(60, 10);
+    const a = memory("imported", 30);
+    memory("imported", 20);
+    expect(replaceAllImports(db, { now: NOW, expected: 1 })).toEqual({ stale: true, count: 2 });
+    expect(status(a)).toBe("active");
+    expect(replaceAllImports(db, { now: NOW, expected: 2 })).toEqual({
+      projects: 1,
+      archived: 2,
+      spared: 0,
+    });
+    expect(status(a)).toBe("archived");
+  });
+});

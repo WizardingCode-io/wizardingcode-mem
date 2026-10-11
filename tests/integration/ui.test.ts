@@ -596,6 +596,49 @@ describe("wizardingcode-mem ui: history runs", () => {
     expect(await ok.json()).toMatchObject({ archived: 0, projects: 0 });
   });
 
+  test("replace then restore, with a real count; both refused while a run is going", async () => {
+    const db = openDb({ dataDir, busyTimeoutMs: 2000 });
+    const session = db
+      .query<{ id: number }, [number, number, number]>(
+        `INSERT INTO sessions (agent, agent_session_id, project_id, cwd, started_at, last_seen_at)
+         VALUES ('claude-code', 'h1', ?, '/shop', ?, ?) RETURNING id`,
+      )
+      .get(projectId, NOW, NOW)?.id as number;
+    db.run(
+      `INSERT INTO turns (session_id, project_id, seq, state, origin, prompt, started_at, ended_at)
+       VALUES (?, ?, 1, 'done', 'history', 'q', ?, ?)`,
+      [session, projectId, NOW - 60 * DAY, NOW - 10 * DAY],
+    );
+    // seed() dates memories two days ago: move them inside the covered span, as imports.
+    db.run(
+      "UPDATE memories SET origin = 'imported', created_at = ? WHERE project_id = ? AND status = 'active'",
+      [NOW - 30 * DAY, projectId],
+    );
+    db.close();
+    const { s } = await startSpying();
+    const preview = (await (await api(s, "/api/history")).json()) as {
+      replace: { wouldArchive: number };
+    };
+    expect(preview.replace.wouldArchive).toBe(2);
+
+    holdLease(NOW + 60_000);
+    expect((await post(s, "/api/history/replace-imports", { expected: 2 })).status).toBe(409);
+    expect((await post(s, "/api/history/restore-imports")).status).toBe(409);
+    holdLease(NOW - 1000);
+
+    const replaced = await post(s, "/api/history/replace-imports", { expected: 2 });
+    expect(replaced.status).toBe(200);
+    expect(await replaced.json()).toEqual({ projects: 1, archived: 2, spared: 0 });
+    expect(await (await post(s, "/api/history/replace-imports", { expected: 2 })).json()).toEqual({
+      count: 0,
+    });
+    expect(await (await post(s, "/api/history/restore-imports")).json()).toEqual({ restored: 2 });
+    const after = (await (await api(s, "/api/history")).json()) as {
+      replace: { wouldArchive: number; replaced: number };
+    };
+    expect(after.replace).toMatchObject({ wouldArchive: 2, replaced: 0 });
+  });
+
   test("restore-imports and the offer dismissal", async () => {
     const { s } = await startSpying();
     expect(await (await post(s, "/api/history/restore-imports")).json()).toEqual({ restored: 0 });

@@ -66,18 +66,21 @@ function selectImports(db: Db, projectId: number): { archive: number[]; spared: 
  * stay. Idempotent: what is archived is no longer active.
  */
 export function replaceImports(db: Db, projectId: number, options: { now: number }): Replacement {
-  return withWrite(db, () => {
-    const { archive, spared } = selectImports(db, projectId);
-    for (const id of archive) {
-      // Status only: the memory itself did not change.
-      db.run("UPDATE memories SET status = 'archived' WHERE id = ?", [id]);
-      db.run(
-        "INSERT OR REPLACE INTO history_replacements (memory_id, project_id, run_at) VALUES (?, ?, ?)",
-        [id, projectId, options.now],
-      );
-    }
-    return { archived: archive.length, spared };
-  });
+  return withWrite(db, () => replaceIn(db, projectId, options.now));
+}
+
+/** `replaceImports` inside a write the caller holds. */
+function replaceIn(db: Db, projectId: number, now: number): Replacement {
+  const { archive, spared } = selectImports(db, projectId);
+  for (const id of archive) {
+    // Status only: the memory itself did not change.
+    db.run("UPDATE memories SET status = 'archived' WHERE id = ?", [id]);
+    db.run(
+      "INSERT OR REPLACE INTO history_replacements (memory_id, project_id, run_at) VALUES (?, ?, ?)",
+      [id, projectId, now],
+    );
+  }
+  return { archived: archive.length, spared };
 }
 
 /** How many imports `replaceAllImports` would archive now. Writes nothing. */
@@ -89,19 +92,36 @@ export function previewReplaceImports(db: Db): number {
   return total;
 }
 
-/** Replaces the imports of every ready project. */
+export type ReplaceAll = Replacement & { projects: number };
+
+/**
+ * Replaces the imports of every ready project, in one write. With `expected` (the count the
+ * user was shown), nothing is archived unless the count is still that, checked inside the
+ * same write: otherwise `{ stale: true, count }` with the count as it is now.
+ */
+export function replaceAllImports(db: Db, options: { now: number }): ReplaceAll;
 export function replaceAllImports(
   db: Db,
-  options: { now: number },
-): Replacement & { projects: number } {
-  const total = { projects: 0, archived: 0, spared: 0 };
-  for (const projectId of projectsReadyForReplacement(db)) {
-    const replaced = replaceImports(db, projectId, options);
-    total.projects++;
-    total.archived += replaced.archived;
-    total.spared += replaced.spared;
-  }
-  return total;
+  options: { now: number; expected: number },
+): ReplaceAll | { stale: true; count: number };
+export function replaceAllImports(
+  db: Db,
+  options: { now: number; expected?: number },
+): ReplaceAll | { stale: true; count: number } {
+  return withWrite(db, () => {
+    if (options.expected !== undefined) {
+      const count = previewReplaceImports(db);
+      if (count !== options.expected) return { stale: true as const, count };
+    }
+    const total = { projects: 0, archived: 0, spared: 0 };
+    for (const projectId of projectsReadyForReplacement(db)) {
+      const replaced = replaceIn(db, projectId, options.now);
+      total.projects++;
+      total.archived += replaced.archived;
+      total.spared += replaced.spared;
+    }
+    return total;
+  });
 }
 
 /** Reactivates what replacement archived and is still archived, then forgets the list. */
