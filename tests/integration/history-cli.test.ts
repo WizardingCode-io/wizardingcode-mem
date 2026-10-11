@@ -275,6 +275,24 @@ describe("wizardingcode-mem history", () => {
       expect(existsSync(index)).toBe(false);
     });
 
+    test("forget with no main database leaves none behind, and a newer one does not stop it", async () => {
+      const store = join(base, "home", "mem");
+      mkdirSync(store, { recursive: true });
+      writeFileSync(join(store, "history.db"), "");
+      const out = await history("forget");
+      expect(out.exitCode).toBe(0);
+      expect(existsSync(dbPath())).toBe(false);
+      expect(existsSync(join(store, "history.db"))).toBe(false);
+      // A database from a newer version is only read for its lease, never refused or migrated.
+      const newer = new Database(dbPath());
+      newer.run("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
+      newer.run("PRAGMA user_version = 999");
+      newer.close();
+      writeFileSync(join(store, "history.db"), "");
+      expect((await history("forget")).exitCode).toBe(0);
+      expect(existsSync(join(store, "history.db"))).toBe(false);
+    });
+
     test("an index run is recorded too", async () => {
       await history("import");
       expect((await history("index")).exitCode).toBe(0);

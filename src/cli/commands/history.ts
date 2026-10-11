@@ -9,7 +9,7 @@ import { forgetHistoryIndex, withHistoryRun } from "../../history/run-state.ts";
 import { historyReadFailure, renderHits, searchHistory } from "../../history/search.ts";
 import { makeJudge } from "../../judge/index.ts";
 import { loadSettings } from "../../settings/settings.ts";
-import { type Db, openDb } from "../../store/db.ts";
+import { type Db, openDb, openExisting } from "../../store/db.ts";
 import { HISTORY_LEASE, leaseActive } from "../../store/meta.ts";
 import { logError } from "../../util/log.ts";
 import { resolvePaths } from "../../util/paths.ts";
@@ -91,16 +91,17 @@ export async function run(argv: string[]): Promise<number> {
   try {
     const { dataDir, storeDir } = resolvePaths();
     if (sub === "forget") {
-      const probe = openDb({ dataDir: storeDir, busyTimeoutMs: 2000 });
+      // Only read for the lease: no main database means no run, and none is created.
+      const probe = openExisting(storeDir, { allowNewer: true });
       try {
-        if (leaseActive(probe, HISTORY_LEASE, Date.now())) {
+        if (probe !== null && leaseActive(probe, HISTORY_LEASE, Date.now())) {
           process.stderr.write(
             "history forget: a history run is going; try again when it finishes\n",
           );
           return 1;
         }
       } finally {
-        probe.close();
+        probe?.close();
       }
       forgetHistoryIndex(storeDir);
       process.stdout.write("history forget: index deleted\n");
