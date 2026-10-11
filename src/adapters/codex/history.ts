@@ -60,8 +60,28 @@ function userWords(item: Json): string | null {
   return parts.length === 0 ? null : parts.join("\n");
 }
 
+/**
+ * What the user typed in a turn, from its UserMessage texts. Codex also stores injected
+ * context and automation there; those contribute nothing. The last typed text wins.
+ */
+export function typedPrompt(texts: string[]): string | null {
+  const typed: string[] = [];
+  for (const raw of texts) {
+    const body = raw.trim();
+    if (body.startsWith("<realtime_delegation>")) {
+      const from = body.indexOf("<input>");
+      const to = body.indexOf("</input>");
+      const input = from === -1 || to < from ? "" : body.slice(from + 7, to).trim();
+      if (input !== "") typed.push(input);
+    } else if (body !== "" && !body.startsWith("<") && !body.startsWith("# ")) {
+      typed.push(body);
+    }
+  }
+  return typed.at(-1) ?? null;
+}
+
 type Open = {
-  prompt: string | null;
+  messages: string[];
   cwd: string;
   startedAt: number | null;
   events: (Json & { turn_id: string })[];
@@ -94,20 +114,23 @@ export function readCodexHistory(
       if (payload === null || turnId === null) continue;
       let entry = open.get(turnId);
       if (entry === undefined) {
-        entry = { prompt: null, cwd: sessionCwd ?? "", startedAt: time(line), events: [] };
+        entry = { messages: [], cwd: sessionCwd ?? "", startedAt: time(line), events: [] };
         open.set(turnId, entry);
       }
       if (line.type === "turn_context") entry.cwd = text(payload.cwd) ?? entry.cwd;
       const event = turnEvent(line);
       if (event === null) continue;
-      entry.events.push(event);
       if (event.type === "item_completed" && isObject(event.item)) {
-        entry.prompt ??= userWords(event.item);
+        entry.events.push(event);
+        const words = userWords(event.item);
+        if (words !== null) entry.messages.push(words);
       }
+      if (event.type === "turn_aborted") open.delete(turnId);
       if (event.type !== "task_complete") continue;
       open.delete(turnId);
       const endedAt = time(line);
-      if (sessionId === null || sessionCwd === null || entry.prompt === null || endedAt === null)
+      const prompt = typedPrompt(entry.messages);
+      if (sessionId === null || sessionCwd === null || prompt === null || endedAt === null)
         continue;
       turns.push({
         agent: "codex",
@@ -115,7 +138,7 @@ export function readCodexHistory(
         turnId,
         cwd: entry.cwd || sessionCwd,
         branch: null,
-        prompt: entry.prompt,
+        prompt,
         finalText: text(event.last_agent_message),
         startedAt: entry.startedAt ?? endedAt,
         endedAt,
@@ -124,7 +147,7 @@ export function readCodexHistory(
       });
     }
   } catch {
-    return [];
+    // Unreadable from here on: keep the turns already built.
   }
   return turns;
 }

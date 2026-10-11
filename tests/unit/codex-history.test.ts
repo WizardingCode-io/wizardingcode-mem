@@ -2,7 +2,11 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { listCodexTranscripts, readCodexHistory } from "../../src/adapters/codex/history.ts";
+import {
+  listCodexTranscripts,
+  readCodexHistory,
+  typedPrompt,
+} from "../../src/adapters/codex/history.ts";
 
 let dir: string;
 beforeEach(() => {
@@ -108,6 +112,58 @@ describe("readCodexHistory streaming", () => {
       complete("a", "A", "2026-09-25T14:00:03.000Z"),
     ]);
     expect(readCodexHistory(path).map((t) => t.turnId)).toEqual(["b", "a"]);
+  });
+});
+
+describe("typedPrompt", () => {
+  test("a realtime delegation contributes its input", () => {
+    expect(
+      typedPrompt([
+        "<realtime_delegation>\n<context>x</context>\n<input>\n fix the build \n</input>\n</realtime_delegation>",
+      ]),
+    ).toBe("fix the build");
+  });
+  test("a delegation without input, or tag blocks only, give null", () => {
+    expect(typedPrompt(["<realtime_delegation>nothing</realtime_delegation>"])).toBeNull();
+    expect(
+      typedPrompt(["<heartbeat>tick</heartbeat>", "<scheduled-task id=1>go</scheduled-task>"]),
+    ).toBeNull();
+  });
+  test("a context block before typed text gives the typed text", () => {
+    expect(typedPrompt(["# Files mentioned by the user:\n- a.ts", "  why is it slow?  "])).toBe(
+      "why is it slow?",
+    );
+  });
+  test("two typed texts give the last", () => {
+    expect(typedPrompt(["first", "second"])).toBe("second");
+  });
+  test("plain text is itself", () => {
+    expect(typedPrompt(["hello"])).toBe("hello");
+  });
+});
+
+describe("readCodexHistory wrappers and aborts", () => {
+  test("the prompt is the last typed message; only item events are kept", () => {
+    const path = write([
+      meta,
+      userMessage("t1", "<heartbeat>tick</heartbeat>", "2026-09-25T14:00:00.000Z"),
+      userMessage("t1", "real question", "2026-09-25T14:00:01.000Z"),
+      complete("t1", "ok", "2026-09-25T14:00:02.000Z"),
+      userMessage("t2", "<heartbeat>tick</heartbeat>", "2026-09-25T14:01:00.000Z"),
+      complete("t2", "ok", "2026-09-25T14:01:02.000Z"),
+    ]);
+    const turns = readCodexHistory(path);
+    expect(turns.map((t) => [t.turnId, t.prompt])).toEqual([["t1", "real question"]]);
+  });
+
+  test("an aborted turn is left out", () => {
+    const path = write([
+      meta,
+      userMessage("t1", "start", "2026-09-25T14:00:00.000Z"),
+      event("2026-09-25T14:00:01.000Z", { type: "turn_aborted", turn_id: "t1" }),
+      complete("t1", "late", "2026-09-25T14:00:02.000Z"),
+    ]);
+    expect(readCodexHistory(path)).toEqual([]);
   });
 });
 

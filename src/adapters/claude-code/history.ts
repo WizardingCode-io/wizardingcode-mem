@@ -135,7 +135,7 @@ export function readClaudeCodeHistory(
       }
     }
   } catch {
-    return [];
+    return turns;
   }
   close();
   return turns;
