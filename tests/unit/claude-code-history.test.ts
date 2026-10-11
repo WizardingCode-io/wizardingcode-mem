@@ -124,6 +124,57 @@ describe("readClaudeCodeHistory", () => {
     expect(turns[0]?.finalText).toBe("Done.");
   });
 
+  test("a slash command's typed arguments are the prompt, without the wrapper", () => {
+    const path = write("command.jsonl", [
+      prompt(
+        "p1",
+        "<command-message>arka</command-message>\n<command-name>/arka</command-name>\n<command-args>update the hooks to the new events</command-args>",
+        "2026-09-01T10:00:00.000Z",
+      ),
+      assistant([{ type: "text", text: "Hooks updated." }], "2026-09-01T10:00:05.000Z"),
+    ]);
+    const turns = readClaudeCodeHistory(path);
+    expect(turns.map((t) => [t.turnId, t.prompt, t.finalText])).toEqual([
+      ["p1", "update the hooks to the new events", "Hooks updated."],
+    ]);
+  });
+
+  test("commands with nothing typed, their output and shell mode do not open turns", () => {
+    const path = write("local.jsonl", [
+      prompt("p1", "why is the build slow?", "2026-09-01T10:00:00.000Z"),
+      assistant([{ type: "text", text: "The cache was cold." }], "2026-09-01T10:00:05.000Z"),
+      prompt("p2", "/compact", "2026-09-01T10:01:00.000Z"),
+      prompt(
+        "p2",
+        "<command-name>/compact</command-name>\n            <command-message>compact</command-message>\n            <command-args></command-args>",
+        "2026-09-01T10:01:01.000Z",
+      ),
+      prompt(
+        "p2",
+        "<local-command-stdout>\u001b[2mCompacted\u001b[22m</local-command-stdout>",
+        "2026-09-01T10:01:02.000Z",
+      ),
+      prompt(
+        "p3",
+        "<command-name>/login</command-name>\n<command-message>login</command-message>\n<command-args>  </command-args>",
+        "2026-09-01T10:02:00.000Z",
+      ),
+      prompt("p4", "<bash-input>git status</bash-input>", "2026-09-01T10:03:00.000Z"),
+      prompt(
+        "p4",
+        "<bash-stdout>nothing to commit</bash-stdout><bash-stderr></bash-stderr>",
+        "2026-09-01T10:03:01.000Z",
+      ),
+      prompt("p5", "now add a test for it", "2026-09-01T10:04:00.000Z"),
+      assistant([{ type: "text", text: "Test added." }], "2026-09-01T10:04:05.000Z"),
+    ]);
+    const turns = readClaudeCodeHistory(path);
+    expect(turns.map((t) => [t.turnId, t.prompt, t.finalText])).toEqual([
+      ["p1", "why is the build slow?", "The cache was cold."],
+      ["p5", "now add a test for it", "Test added."],
+    ]);
+  });
+
   test("claude-mem's own sessions are skipped, lookalike paths are not", () => {
     const mem = write("mem.jsonl", [
       prompt("p1", "observe", "2026-09-01T10:00:00.000Z", {

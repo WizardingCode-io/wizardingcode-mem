@@ -84,9 +84,31 @@ function said(line: Json): string | null {
   return parts.length === 0 ? null : parts.join("\n");
 }
 
+const COMMAND_ARGS = /<command-args>([\s\S]*?)<\/command-args>/;
+const BARE_COMMAND = /^\/[\w:.-]+$/;
+
+/**
+ * What the user typed in a prompt line, or null when the line is not their words: a slash
+ * command is recorded wrapped (`<command-name>…<command-args>…`), and only its arguments
+ * were typed; a command with none (`/login`, `/compact`), a local command's output and
+ * shell mode (`!cmd`) share the turn's id and say nothing worth keeping.
+ */
+function typed(content: string): string | null {
+  const trimmed = content.trim();
+  if (trimmed.startsWith("<local-command-") || trimmed.startsWith("<bash-")) return null;
+  if (trimmed.includes("<command-name>")) {
+    const args = COMMAND_ARGS.exec(trimmed)?.[1]?.trim() ?? "";
+    return args === "" ? null : args;
+  }
+  return BARE_COMMAND.test(trimmed) ? null : content;
+}
+
 /** A line where the user typed: not a subagent's, not an injected notice or a compaction summary. */
 const opensTurn = (line: Json): boolean =>
-  isPrompt(line) && line.isMeta !== true && line.isCompactSummary !== true;
+  isPrompt(line) &&
+  line.isMeta !== true &&
+  line.isCompactSummary !== true &&
+  typed((line.message as Json).content as string) !== null;
 
 /** claude-mem's own observer sessions run under ~/.claude-mem; they are not the user's work. */
 const isOtherMemory = (cwd: string): boolean => cwd.split(/[\\/]/).includes(".claude-mem");
@@ -119,7 +141,7 @@ function finish(path: string, body: Json[]): HistoryTurn | null {
     turnId,
     cwd,
     branch: text(open.gitBranch),
-    prompt: (open.message as Json).content as string,
+    prompt: typed((open.message as Json).content as string) as string,
     finalText,
     startedAt,
     endedAt,
