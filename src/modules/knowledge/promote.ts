@@ -92,6 +92,15 @@ export function projectRoot(db: Db, projectId: number): string | null {
   }
 }
 
+/**
+ * In how many contexts each memory (ids given as a list of integers) was shown. Contexts,
+ * not rows: a heading at session start, the note on a prompt and any number of fetches in
+ * one context are one showing.
+ */
+export const SHOWN_CONTEXTS_SQL = (ids: string) =>
+  `SELECT memory_id AS id, count(DISTINCT session_id || ':' || context_epoch) AS n
+     FROM injections WHERE memory_id IN (${ids}) GROUP BY memory_id`;
+
 /** The basic rule, on one memory row `m`: what a candidate must be whatever it was shown. */
 const ELIGIBLE = `m.status = 'active' AND m.kind IN ${KINDS} AND m.importance >= ${MIN_IMPORTANCE}`;
 
@@ -195,12 +204,7 @@ function propose(
     const times = new Map<number, number>();
     if (counted.length > 0) {
       for (const row of db
-        .query<{ id: number; n: number }, []>(
-          // Contexts, not rows: a heading at session start, the note on a prompt and any
-          // number of fetches in one context are one showing.
-          `SELECT memory_id AS id, count(DISTINCT session_id || ':' || context_epoch) AS n
-             FROM injections WHERE memory_id IN (${counted.join(", ")}) GROUP BY memory_id`,
-        )
+        .query<{ id: number; n: number }, []>(SHOWN_CONTEXTS_SQL(counted.join(", ")))
         .all()) {
         times.set(row.id, row.n);
       }
@@ -273,14 +277,21 @@ export interface Promotion {
   createdAt: number;
 }
 
-/** The open proposals, newest first; of one project when given. */
+/**
+ * The open proposals that could still be accepted, newest first; of one project when given.
+ * One whose memory is no longer an active decision or convention, or whose project has
+ * memory off, is left out (accepting it would be refused); it stays open, and comes back
+ * if its memory does.
+ */
 export function listPromotions(db: Db, projectId?: number): Promotion[] {
   return db
     .query<Promotion, [number | null]>(
       `SELECT k.id AS id, k.project_id AS projectId, k.memory_id AS memoryId, k.slug AS slug,
               m.title AS title, m.body AS body, m.kind AS kind, k.created_at AS createdAt
          FROM knowledge_proposals k JOIN memories m ON m.id = k.memory_id
+         JOIN projects p ON p.id = k.project_id AND p.disabled = 0
         WHERE k.status = 'proposed' AND (?1 IS NULL OR k.project_id = ?1)
+          AND m.status = 'active' AND m.kind IN ${KINDS}
         ORDER BY k.created_at DESC, k.id DESC`,
     )
     .all(projectId ?? null);

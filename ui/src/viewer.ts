@@ -5,7 +5,7 @@ import { api, type Kind, type LinkView, type RulesList, type MemoryDetail, type 
 import { crossHash, visibleFrom } from "./links";
 import { type ModuleViewInfo, railOrMemory } from "./modules";
 
-export type Tab = "memories" | "turns" | "overview" | "history" | "settings" | "projects" | "you";
+export type Tab = "memories" | "turns" | "overview" | "history" | "settings" | "projects" | "you" | "knowledge";
 /** The tabs of the machine's pages: no project in the breadcrumb, the projects panel steps aside. */
 export const MACHINE_TABS: Tab[] = ["settings", "projects", "you"];
 export type Status = "active" | "archived" | "superseded" | "all";
@@ -41,6 +41,8 @@ const state = reactive({
   /** The Projects view's open project, and the You view's open rule ("p<id>" or "r<id>"). */
   linkProject: null as number | null,
   rule: null as string | null,
+  /** The Knowledge view's open item: an entry ("e:<slug>") or a proposal ("p<id>"). */
+  knowledgeOpen: null as string | null,
   /** The ids in the order the list shows them (grouped by kind or not), for ↑ and ↓. */
   order: [] as number[],
   selected: null as number | null,
@@ -101,6 +103,8 @@ export async function loadOverview(): Promise<void> {
 
 export async function selectProject(id: number): Promise<void> {
   if (state.projectId !== id) {
+    // Another project closes the open entry; the first one chosen keeps what the address opened.
+    if (state.projectId !== null) state.knowledgeOpen = null;
     state.projectId = id;
     closeDetail();
   }
@@ -144,7 +148,8 @@ export async function select(id: number): Promise<void> {
 export function closeDetail(): void {
   state.selected = null;
   state.detail = null;
-  history.replaceState(null, "", "#");
+  // The memory's address (#m<id>) goes with it; another view keeps its own.
+  if (state.tab === "memories") history.replaceState(null, "", "#");
 }
 
 /** After a change to a memory: counts, list and detail again, without losing the place. */

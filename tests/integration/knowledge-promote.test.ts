@@ -10,6 +10,7 @@ import {
   realpathSync,
   rmSync,
   symlinkSync,
+  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -27,6 +28,7 @@ import {
   PROMOTE_LEASE,
   proposePromotions,
   rejectPromotion,
+  SHOWN_CONTEXTS_SQL,
 } from "../../src/modules/knowledge/promote.ts";
 import { sessionBrief } from "../../src/retrieve/brief.ts";
 import { notesForFailure } from "../../src/retrieve/failure.ts";
@@ -265,6 +267,35 @@ describe("which memories are proposed", () => {
     db.run("UPDATE memories SET body = 'Edited.', updated_at = ? WHERE id = ?", [NOW + 5000, id]);
     propose();
     expect(proposals()).toEqual([{ ...proposal, status: "rejected" }]);
+    expect(listPromotions(db, projectId)).toEqual([]);
+  });
+
+  test("the shown count reads an index, not every injection record (task 4 minor 3)", () => {
+    const plan = db
+      .query<{ detail: string }, []>(`EXPLAIN QUERY PLAN ${SHOWN_CONTEXTS_SQL("1, 2, 3")}`)
+      .all()
+      .map((row) => row.detail)
+      .join("\n");
+    expect(plan).not.toMatch(/SCAN injections/);
+    expect(plan).toMatch(/SEARCH injections USING COVERING INDEX/);
+  });
+
+  test("a proposal whose memory is no longer active, or whose project has memory off, is not listed (task 4 minor 4)", () => {
+    const archived = memory({ title: "Orders are cancelled through the saga" });
+    const superseded = memory({ title: "Handlers return problem details", kind: "convention" });
+    const kept = memory({ title: "Sagas own their compensation" });
+    for (const id of [archived, superseded, kept]) show(id, 3);
+    propose();
+    expect(
+      listPromotions(db, projectId)
+        .map((p) => p.memoryId)
+        .sort(),
+    ).toEqual([archived, superseded, kept].sort());
+    db.run("UPDATE memories SET status = 'archived' WHERE id = ?", [archived]);
+    db.run("UPDATE memories SET status = 'superseded' WHERE id = ?", [superseded]);
+    expect(listPromotions(db, projectId).map((p) => p.memoryId)).toEqual([kept]);
+    expect(listPromotions(db).map((p) => p.memoryId)).toEqual([kept]);
+    db.run("UPDATE projects SET disabled = 1 WHERE id = ?", [projectId]);
     expect(listPromotions(db, projectId)).toEqual([]);
   });
 
@@ -565,6 +596,22 @@ describe("a promoted memory's notes (Review Focus 5)", () => {
     expect(briefIds().sort()).toEqual([promoted, other].sort());
     expect(promptIds().sort()).toEqual([promoted, other].sort());
     expect(fileIds().sort()).toEqual([promoted, other].sort());
+  });
+
+  test("its entry retired by the author (draft or superseded): the notes come back (task 4 minor 5)", () => {
+    const file = join(dir, "orders-are-cancelled-through-the-saga-orchestrator.md");
+    const text = readFileSync(file, "utf8");
+    for (const status of ["superseded", "draft"]) {
+      writeFileSync(file, text.replace("status: active", `status: ${status}`));
+      refreshIndex(db, projectId, dir, { force: true });
+      expect(briefIds().sort()).toEqual([promoted, other].sort());
+      expect(promptIds().sort()).toEqual([promoted, other].sort());
+      expect(fileIds().sort()).toEqual([promoted, other].sort());
+    }
+    // Made active again: the entry says it once more.
+    writeFileSync(file, text);
+    refreshIndex(db, projectId, dir, { force: true });
+    expect(briefIds()).toEqual([other]);
   });
 
   test("through the hooks: the knowledge module notices the deletion on the next prompt", () => {

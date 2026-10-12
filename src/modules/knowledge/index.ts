@@ -8,6 +8,7 @@ import { KNOWLEDGE_MIGRATIONS } from "./migrations.ts";
 import { freshenForHook } from "./refresh.ts";
 import { isRelevant } from "./relevance.ts";
 import { renderEssential, renderRelevant } from "./render.ts";
+import { KNOWLEDGE_VIEWS } from "./views.ts";
 
 // Knowledge as a module: the project's curated entries (its `.wizardingcode/knowledge`
 // folder) put in front of the agent, the essential ones at session start and the relevant
@@ -93,4 +94,6 @@ export const knowledge: EngineModule = {
   // Loaded only when a server or the bridge asks: the hooks never pay for zod or the tools.
   tools: async (mode) => (await import("./tools.ts")).knowledgeTools(mode),
   migrations: KNOWLEDGE_MIGRATIONS,
+  // The Knowledge view: the entries, read only, and the proposals to accept or reject.
+  views: [...KNOWLEDGE_VIEWS],
 };

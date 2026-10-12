@@ -65,9 +65,10 @@ let promotedFailed = false;
 
 /**
  * The project's memories made knowledge whose entry is still in the project's knowledge
- * index: the entry says them now, so memory leaves them out. One indexed lookup; when the
- * entry is gone (its file deleted, the index refreshed) the memory's notes come back. On
- * any error, none: memory then shows everything, as it did before knowledge.
+ * index and active: the entry says them now, so memory leaves them out. One indexed lookup;
+ * when the entry is gone (its file deleted, the index refreshed) or retired by the author
+ * (draft or superseded, which knowledge never shows), the memory's notes come back. On any
+ * error, none: memory then shows everything, as it did before knowledge.
  */
 export function promotedIds(db: Db, projectId: number): number[] {
   try {
@@ -75,7 +76,7 @@ export function promotedIds(db: Db, projectId: number): number[] {
       .query<{ id: number }, [number]>(
         `SELECT p.memory_id AS id FROM promoted_memories p
            JOIN knowledge_entries e ON e.project_id = p.project_id AND e.slug = p.slug
-          WHERE p.project_id = ?`,
+          WHERE p.project_id = ? AND e.status = 'active'`,
       )
       .all(projectId)
       .map((row) => row.id);
