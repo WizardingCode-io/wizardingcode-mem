@@ -38,7 +38,7 @@ export function sessionBrief(
   const rank = (rows: MemoryRow[]) =>
     rows.sort((a, b) => prior(b, input) - prior(a, input) || b.id - a.id);
   const extra = extraPools(db, input.projectId);
-  const mine = new Set(extra.user.map((row) => row.id));
+  const rules = new Set(extra.user.map((row) => row.id));
 
   // Memories whose files are gone are left out here: unprompted, they are more likely
   // to mislead than to help.
@@ -50,7 +50,7 @@ export function sessionBrief(
           ORDER BY m.importance DESC, m.updated_at DESC LIMIT ?`,
       )
       .all(input.projectId, POOL),
-  ).filter((row) => !mine.has(row.id));
+  );
 
   // The author's rules and the linked projects' notes come after the project's own, so
   // the top of the brief reads as it always has; each takes at most its share.
@@ -81,17 +81,21 @@ export function sessionBrief(
     rank(extra.user).map((row) => ({ row, origin: "you" })),
     USER_SHARE * BUDGET_CHARS,
   );
+  // Only the rules shown in their share are left out of the other parts: a rule the share
+  // had no room for is still one of its project's memories, labelled as the author's.
+  const shown = new Set(user.map((note) => note.id));
+  const label = (row: MemoryRow, origin?: string) => (rules.has(row.id) ? "you" : origin);
   fill(
     linked,
-    rank(extra.linked.filter((row) => !mine.has(row.id))).map((row) => ({
+    rank(extra.linked.filter((row) => !shown.has(row.id))).map((row) => ({
       row,
-      origin: `from ${extra.names.get(row.id)}`,
+      origin: label(row, `from ${extra.names.get(row.id)}`),
     })),
     LINKED_SHARE * BUDGET_CHARS,
   );
   fill(
     own,
-    ranked.map((row) => ({ row })),
+    ranked.filter((row) => !shown.has(row.id)).map((row) => ({ row, origin: label(row) })),
     BUDGET_CHARS,
   );
   return { text, notes: [...own, ...linked, ...user] };

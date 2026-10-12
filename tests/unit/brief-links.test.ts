@@ -142,6 +142,25 @@ describe("session brief with the author's rules", () => {
     expect(lines(text, "you").length).toBe(1);
   });
 
+  test("one of the project's own rules that does not fit the share stays among the project's notes", () => {
+    for (const id of important(f.other, 20)) f.userRule(id);
+    // Older than the other rules, so it ranks after them and the full share leaves it out.
+    const own = f.memory(f.app, {
+      kind: "convention",
+      title: "Keep the queue retries bounded",
+      importance: 5,
+      ageDays: 30,
+    });
+    f.userRule(own);
+    const { notes } = brief();
+    const shown = notes.filter((note) => note.id === own);
+    expect(shown.length).toBe(1);
+    // Shown in the project's part of the list, before anything from outside it.
+    const firstOutside = notes.findIndex((note) => note.origin !== undefined && note.id !== own);
+    expect(notes.indexOf(shown[0] as (typeof notes)[number])).toBeLessThan(firstOutside);
+    expect(shown[0]?.origin).toBe("you");
+  });
+
   test("an archived rule is not shown", () => {
     const before = pinned();
     const [id] = important(f.other, 1) as [number];
