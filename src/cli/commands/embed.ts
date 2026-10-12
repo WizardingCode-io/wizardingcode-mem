@@ -4,7 +4,16 @@ import { deleteModel, downloadModel } from "../../embed/download.ts";
 import { loadModel, modelState } from "../../embed/model.ts";
 import { DOWNLOAD_ERROR, PROGRESS_DONE, PROGRESS_TOTAL } from "../../embed/status.ts";
 import { openDb } from "../../store/db.ts";
-import { claimLease, EMBED_DOWNLOAD_LEASE, releaseLease, setMeta } from "../../store/meta.ts";
+import {
+  claimLease,
+  EMBED_DOWNLOAD_LEASE,
+  EMBED_LEASE,
+  HISTORY_LEASE,
+  handOverLease,
+  leaseActive,
+  releaseLease,
+  setMeta,
+} from "../../store/meta.ts";
 import { resolvePaths } from "../../util/paths.ts";
 import { EXIT_USAGE } from "../exit.ts";
 
@@ -41,6 +50,13 @@ export async function run(argv: string[]): Promise<number> {
     } catch {
       // No database to clean: removing the file is still worth doing.
     }
+    if (db && leaseActive(db, HISTORY_LEASE, Date.now())) {
+      db.close();
+      process.stderr.write(
+        "wizardingcode-mem embed: a history run is going; wait for it to finish, then delete the model\n",
+      );
+      return 1;
+    }
     let removed: boolean;
     try {
       removed = deleteModel(dataDir, db, storeDir);
@@ -61,11 +77,14 @@ export async function run(argv: string[]): Promise<number> {
     process.stderr.write(USAGE);
     return EXIT_USAGE;
   }
-  const code = await download(dataDir, storeDir);
+  const owner = `${process.pid}-${crypto.randomUUID()}`;
+  const then = rest.includes("--backfill");
+  const code = await download(dataDir, storeDir, owner, then);
   if (code === null) return 0;
   if (code !== 0) return code;
-  // Asked by the viewer and the install: the memories already there get their vectors now.
-  if (rest.includes("--backfill")) return backfill([], dataDir, storeDir);
+  // Asked by the viewer and the install: the memories already there get their vectors now,
+  // under the lease the download handed over (a poll never sees a gap between the two).
+  if (then) return backfill([], dataDir, storeDir, owner);
   process.stdout.write(
     "embed: memories saved before now get a vector with: wizardingcode-mem embed backfill\n",
   );
@@ -73,15 +92,20 @@ export async function run(argv: string[]): Promise<number> {
 }
 
 /** The exit code, or null when another download holds the lease. */
-async function download(dataDir: string, storeDir: string): Promise<number | null> {
+async function download(
+  dataDir: string,
+  storeDir: string,
+  owner: string,
+  handOver: boolean,
+): Promise<number | null> {
   let db: ReturnType<typeof openDb> | undefined;
   try {
     db = openDb({ dataDir: storeDir, busyTimeoutMs: 250 });
   } catch {
     // Progress is a courtesy; the download does not need the database.
   }
-  const owner = `${process.pid}-${crypto.randomUUID()}`;
   let renewedAt = Date.now();
+  let ok = false;
   try {
     if (db && !claimLease(db, EMBED_DOWNLOAD_LEASE, owner, renewedAt, LEASE_MS)) {
       process.stdout.write("embed: a download is already running\n");
@@ -154,6 +178,7 @@ async function download(dataDir: string, storeDir: string): Promise<number | nul
       return 1;
     }
     process.stdout.write(out.alreadyPresent ? "embed: already present\n" : "embed: model ready\n");
+    ok = true;
     return 0;
   } finally {
     dropPart();
@@ -161,14 +186,21 @@ async function download(dataDir: string, storeDir: string): Promise<number | nul
     process.off("SIGTERM", sigterm);
     try {
       db?.run("DELETE FROM meta WHERE key IN (?, ?)", [PROGRESS_DONE, PROGRESS_TOTAL]);
-      if (db) releaseLease(db, EMBED_DOWNLOAD_LEASE, owner);
+      if (db && ok && handOver) {
+        handOverLease(db, EMBED_DOWNLOAD_LEASE, EMBED_LEASE, owner, Date.now(), LEASE_MS);
+      } else if (db) releaseLease(db, EMBED_DOWNLOAD_LEASE, owner);
     } catch {}
     db?.close();
   }
 }
 
 /** `embed backfill [--limit n]`: a vector for every memory that lacks one of the present model. */
-async function backfill(args: string[], dataDir: string, storeDir: string): Promise<number> {
+async function backfill(
+  args: string[],
+  dataDir: string,
+  storeDir: string,
+  handedOver?: string,
+): Promise<number> {
   let limit: number | undefined;
   if (args.length > 0) {
     const n = Number(args[1]);
@@ -180,6 +212,13 @@ async function backfill(args: string[], dataDir: string, storeDir: string): Prom
   }
   const model = loadModel({ dataDir });
   if (model === null) {
+    if (handedOver !== undefined) {
+      try {
+        const db = openDb({ dataDir: storeDir, busyTimeoutMs: 2000 });
+        releaseLease(db, EMBED_LEASE, handedOver);
+        db.close();
+      } catch {}
+    }
     process.stderr.write(
       "wizardingcode-mem embed: no semantic model (run `wizardingcode-mem embed download`, and check it is switched on)\n",
     );
@@ -187,7 +226,11 @@ async function backfill(args: string[], dataDir: string, storeDir: string): Prom
   }
   const db = openDb({ dataDir: storeDir, busyTimeoutMs: 2000 });
   try {
-    const out = await runEmbedBackfill(db, model, { now: Date.now, ...(limit ? { limit } : {}) });
+    const out = await runEmbedBackfill(db, model, {
+      now: Date.now,
+      ...(limit ? { limit } : {}),
+      ...(handedOver ? { owner: handedOver } : {}),
+    });
     process.stdout.write(
       out === null
         ? "embed backfill: already running in another process\n"

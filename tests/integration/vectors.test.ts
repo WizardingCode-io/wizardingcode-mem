@@ -17,6 +17,9 @@ import {
   claimLease,
   EMBED_DOWNLOAD_LEASE,
   EMBED_LEASE,
+  HISTORY_LEASE,
+  handOverLease,
+  leaseActive,
   releaseLease,
 } from "../../src/store/meta.ts";
 import { setMemoryStatus, updateMemory } from "../../src/ui/api.ts";
@@ -364,6 +367,14 @@ describe("embed backfill and delete commands", () => {
     expect(existsSync(modelPath(dataDir))).toBe(false);
   });
 
+  test("embed delete is refused while a history run holds its lease", async () => {
+    claimLease(db, HISTORY_LEASE, `${process.pid}-other`, Date.now(), 60_000);
+    const refused = await embed("delete");
+    expect(refused.exitCode).toBe(1);
+    expect(refused.stderr).toContain("history run");
+    expect(existsSync(modelPath(dataDir))).toBe(true);
+  });
+
   test("a second download says so while one holds the download lease", async () => {
     claimLease(db, EMBED_DOWNLOAD_LEASE, `${process.pid}-other`, Date.now(), 60_000);
     const busy = await embed("download");
@@ -425,5 +436,56 @@ describe("vectorIndex stamp", () => {
     expect(committed).toBe(true);
     // Whatever the first build saw, the next call must see the commit made during it.
     expect(vectorIndex(db, model).ids.length).toBe(2);
+  });
+});
+
+describe("the download hands its lease to the backfill", () => {
+  test("in one write: a reader never sees neither lease held", () => {
+    const owner = `${process.pid}-dl`;
+    const reader = openDb({ dataDir, busyTimeoutMs: 2000 });
+    const seen: boolean[] = [];
+    const look = () =>
+      seen.push(
+        leaseActive(reader, EMBED_DOWNLOAD_LEASE, NOW) || leaseActive(reader, EMBED_LEASE, NOW),
+      );
+    expect(claimLease(db, EMBED_DOWNLOAD_LEASE, owner, NOW, 60_000)).toBe(true);
+    look();
+    // Every statement of the hand-over runs in one transaction: look between each of them.
+    const original = db.run.bind(db);
+    (db as { run: unknown }).run = (...args: Parameters<typeof db.run>) => {
+      const out = original(...args);
+      look();
+      return out;
+    };
+    try {
+      expect(handOverLease(db, EMBED_DOWNLOAD_LEASE, EMBED_LEASE, owner, NOW, 60_000)).toBe(true);
+    } finally {
+      (db as { run: unknown }).run = original;
+    }
+    look();
+    reader.close();
+    expect(seen.every(Boolean)).toBe(true);
+    expect(leaseActive(db, EMBED_DOWNLOAD_LEASE, NOW)).toBe(false);
+    expect(leaseActive(db, EMBED_LEASE, NOW)).toBe(true);
+  });
+
+  test("the backfill runs under the lease it was handed, and releases it", async () => {
+    const owner = `${process.pid}-dl`;
+    memory(0, null);
+    claimLease(db, EMBED_LEASE, owner, NOW, 60_000);
+    expect(await runEmbedBackfill(db, model, { now: () => NOW, owner })).toEqual({
+      written: 1,
+      remaining: 0,
+    });
+    expect(leaseActive(db, EMBED_LEASE, NOW)).toBe(false);
+  });
+
+  test("a backfill already running elsewhere keeps its lease; the download's is released", () => {
+    const owner = `${process.pid}-dl`;
+    claimLease(db, EMBED_LEASE, `${process.pid}-other`, NOW, 60_000);
+    claimLease(db, EMBED_DOWNLOAD_LEASE, owner, NOW, 60_000);
+    expect(handOverLease(db, EMBED_DOWNLOAD_LEASE, EMBED_LEASE, owner, NOW, 60_000)).toBe(false);
+    expect(leaseActive(db, EMBED_DOWNLOAD_LEASE, NOW)).toBe(false);
+    expect(leaseActive(db, EMBED_LEASE, NOW)).toBe(true);
   });
 });

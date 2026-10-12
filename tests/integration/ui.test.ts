@@ -1026,6 +1026,24 @@ describe("wizardingcode-mem ui: semantic search", () => {
     after.close();
   });
 
+  test("delete is refused while a history run holds its lease", async () => {
+    placeModel();
+    const { s } = await startSpying();
+    hold("history.lease");
+    const refused = await post(s, "/api/semantic/delete");
+    expect(refused.status).toBe(409);
+    expect(((await refused.json()) as { error: string }).error).toContain("history run");
+    expect(existsSync(modelPath(dataDir))).toBe(true);
+  });
+
+  test("download honours the switch: refused while semantic search is off", async () => {
+    const { s, spawned } = await startSpying({ WIZARDINGCODE_MEM_SEMANTIC: "off" });
+    const refused = await post(s, "/api/semantic/download");
+    expect(refused.status).toBe(409);
+    expect(((await refused.json()) as { error: string }).error).toContain("turned off");
+    expect(spawned).toEqual([]);
+  });
+
   test("delete never creates the history index", async () => {
     placeModel();
     const { s } = await startSpying();

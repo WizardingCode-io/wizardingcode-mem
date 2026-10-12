@@ -20,9 +20,10 @@ const TODO = `FROM memories m LEFT JOIN memory_vectors v ON v.memory_id = m.id
 export async function runEmbedBackfill(
   db: Db,
   model: Model,
-  options: { limit?: number; now: () => number },
+  /** `owner`: the holder of a lease handed over to this run (a download that came first). */
+  options: { limit?: number; now: () => number; owner?: string },
 ): Promise<{ written: number; remaining: number } | null> {
-  const owner = `${process.pid}-${crypto.randomUUID()}`;
+  const owner = options.owner ?? `${process.pid}-${crypto.randomUUID()}`;
   if (!claimLease(db, EMBED_LEASE, owner, options.now(), LEASE_MS)) return null;
   let written = 0;
   let selected = 0;

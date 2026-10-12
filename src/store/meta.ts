@@ -91,6 +91,26 @@ export function releaseLease(db: Db, key: string, owner: string): void {
   });
 }
 
+/**
+ * Passes work from one lease to the next in a single write: `to` is claimed for `owner`
+ * before `from` is released, so no reader ever sees neither held. False when another process
+ * holds `to` (`from` is released all the same).
+ */
+export function handOverLease(
+  db: Db,
+  from: string,
+  to: string,
+  owner: string,
+  now: number,
+  leaseMs: number,
+): boolean {
+  return withWrite(db, () => {
+    const claimed = claimLease(db, to, owner, now, leaseMs);
+    releaseLease(db, from, owner);
+    return claimed;
+  });
+}
+
 export const drainActive = (db: Db, now: number): boolean => leaseActive(db, DRAIN_LEASE, now);
 export const claimDrain = (db: Db, owner: string, now: number, leaseMs: number): boolean =>
   claimLease(db, DRAIN_LEASE, owner, now, leaseMs);

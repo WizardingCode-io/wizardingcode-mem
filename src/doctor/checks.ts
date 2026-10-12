@@ -431,10 +431,14 @@ function semanticSearch(context: DoctorContext, db: Db | null): Check {
   const s = semanticStatus(db, context.dataDir, process.env, context.now);
   const size = `${Math.round(s.model.bytes / MB)} MB`;
   if (!s.model.enabled) {
+    const by =
+      s.model.source === "env"
+        ? "by WIZARDINGCODE_MEM_SEMANTIC in the environment"
+        : "in the settings";
     return {
       name,
       status: "ok",
-      detail: `turned off in the settings; searches match words only${s.model.present ? ` (the model is kept, ${size})` : ""}`,
+      detail: `turned off ${by}; searches match words only${s.model.present ? ` (the model is kept, ${size})` : ""}`,
     };
   }
   if (s.download.running) {
@@ -448,7 +452,7 @@ function semanticSearch(context: DoctorContext, db: Db | null): Check {
     return {
       name,
       status: "ok",
-      detail: `not downloaded; searches match words only. To find notes by meaning too, run: wizardingcode-mem embed download`,
+      detail: `not downloaded; searches match words only. To find notes by meaning too, run: wizardingcode-mem embed download${s.download.error ? `; the last download failed (${s.download.error})` : ""}`,
     };
   }
   if (s.model.problem !== null) {

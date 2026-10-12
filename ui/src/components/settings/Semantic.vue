@@ -4,7 +4,7 @@
 // right, a 4px bar with the percentage while something runs). Polls only while it runs.
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { api, type SemanticStatus } from "../../api";
-import { downloadPercent, modelLine, modelPill, SEMANTIC_POLL_MS, semanticBusy, vectorsLine, vectorsPercent, vectorsPill } from "../../semantic";
+import { awaitingBackfill, downloadPercent, modelLine, modelPill, SEMANTIC_POLL_MS, semanticBusy, vectorsLine, vectorsPercent, vectorsPill } from "../../semantic";
 import Confirm from "../Confirm.vue";
 import Card from "./Card.vue";
 
@@ -40,9 +40,12 @@ function schedule() {
 
 async function poll() {
   const was = running.value;
+  const before = s.value;
   await load();
   const now = s.value;
   if (!now) return;
+  // The download hands over to the backfill: wait for it rather than stop polling in between.
+  if (before && awaitingBackfill(before, now)) requestedAt = Date.now();
   if (semanticBusy(now, requestedAt, Date.now())) {
     if (now.download.running || now.backfill.running) requestedAt = null;
     schedule();

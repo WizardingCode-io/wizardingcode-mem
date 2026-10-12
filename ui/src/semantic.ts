@@ -81,3 +81,15 @@ export const SEMANTIC_POLL_MS = 2000;
 /** Poll while a download or a backfill runs, or one was asked for moments ago. */
 export const semanticBusy = (s: SemanticStatus, requestedAt: number | null, now: number): boolean =>
   s.download.running || s.backfill.running || (requestedAt !== null && now - requestedAt < START_GRACE_MS);
+
+/**
+ * A download that just ended with memories still lacking vectors: the backfill it hands over to
+ * is about to show, so the poll keeps waiting for it (a grace, like a run just asked for).
+ */
+export const awaitingBackfill = (before: SemanticStatus, after: SemanticStatus): boolean =>
+  before.download.running &&
+  !after.download.running &&
+  !after.backfill.running &&
+  after.model.present &&
+  after.model.enabled &&
+  after.memories.withVectors < after.memories.active;

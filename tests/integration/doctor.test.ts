@@ -593,10 +593,40 @@ describe("doctor: semantic search", () => {
     expect(found).toContain("wizardingcode-mem embed backfill");
   });
 
-  test("turned off: says so, and keeps the model", async () => {
+  test("turned off by the environment: names the variable", async () => {
     placeModel();
     const result = await cliWith({ WIZARDINGCODE_MEM_SEMANTIC: "off" }, "doctor");
-    expect(result.stdout).toMatch(/ok {2}\s+semantic search: turned off/);
+    const found = line(result.stdout, "semantic search");
+    expect(found).toMatch(/ok {2}\s+semantic search: turned off by WIZARDINGCODE_MEM_SEMANTIC/);
+  });
+
+  test("turned off in the settings: says so, and that the model is kept", async () => {
+    placeModel();
+    mkdirSync(dataDir, { recursive: true });
+    writeFileSync(join(dataDir, "env"), "WIZARDINGCODE_MEM_SEMANTIC=off\n", { mode: 0o600 });
+    const result = await cliWith({ WIZARDINGCODE_MEM_SEMANTIC: "" }, "doctor");
+    const found = line(result.stdout, "semantic search");
+    expect(found).toMatch(/ok {2}\s+semantic search: turned off in the settings/);
+    expect(found).toContain("the model is kept");
+  });
+
+  test("not downloaded after a failed download: shows the error", async () => {
+    seed((db) => setMeta(db, "embed.download.error", "download failed: offline"));
+    const found = line((await cli("doctor")).stdout, "semantic search");
+    expect(found).toMatch(/ok {2}\s+semantic search: not downloaded/);
+    expect(found).toContain("the last download failed (download failed: offline)");
+  });
+
+  test("while a download runs: says so", async () => {
+    seed((db) =>
+      setMeta(
+        db,
+        "embed.download.lease",
+        JSON.stringify({ owner: `${process.pid}-x`, until: Date.now() + 600_000 }),
+      ),
+    );
+    const found = line((await cli("doctor")).stdout, "semantic search");
+    expect(found).toMatch(/ok {2}\s+semantic search: the search model is downloading/);
   });
 
   test("a model that cannot be read is a warning, with the way out", async () => {

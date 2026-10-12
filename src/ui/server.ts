@@ -564,6 +564,9 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
       return json(semanticStatus(db, options.dataDir, env, now()));
     }
     if (path === "/api/semantic/download" && request.method === "POST") {
+      if (loadSettings(env, options.dataDir).semantic === "off") {
+        return problem(409, "semantic search is turned off; turn it on first");
+      }
       const at = now();
       if (leaseActive(db, EMBED_DOWNLOAD_LEASE, at) || leaseActive(db, EMBED_LEASE, at)) {
         return json({ started: false });
@@ -588,6 +591,7 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
       const at = now();
       if (leaseActive(db, EMBED_DOWNLOAD_LEASE, at)) return problem(409, "a download is going; wait for it to finish");
       if (leaseActive(db, EMBED_LEASE, at)) return problem(409, "memories are getting their vectors; wait for it to finish");
+      if (historyRunning()) return problem(409, "a history run is going; wait for it to finish");
       if (!deleteModel(options.dataDir, db, storeDir)) return problem(500, "the model could not be removed");
       return json(semanticStatus(db, options.dataDir, env, now()));
     }

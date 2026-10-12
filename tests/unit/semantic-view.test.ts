@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  awaitingBackfill,
   downloadPercent,
   modelLine,
   modelPill,
@@ -93,5 +94,30 @@ describe("polling", () => {
     expect(semanticBusy(status({ backfill: { running: true } }), null, 0)).toBe(true);
     expect(semanticBusy(status(), 1000, 5000)).toBe(true);
     expect(semanticBusy(status(), 1000, 1000 + 16_000)).toBe(false);
+  });
+});
+
+describe("the hand-over from download to backfill", () => {
+  test("a download that just ended with memories still missing vectors keeps the poll waiting", () => {
+    const before = status({ download: { running: true } });
+    const after = status({ model: { present: true }, memories: { active: 10, withVectors: 0 } });
+    expect(awaitingBackfill(before, after)).toBe(true);
+    expect(
+      awaitingBackfill(
+        before,
+        status({ model: { present: true }, memories: { active: 3, withVectors: 3 } }),
+      ),
+    ).toBe(false);
+    expect(awaitingBackfill(before, status())).toBe(false);
+    expect(awaitingBackfill(status(), after)).toBe(false);
+    expect(
+      awaitingBackfill(
+        before,
+        status({
+          model: { present: true, enabled: false },
+          memories: { active: 10, withVectors: 0 },
+        }),
+      ),
+    ).toBe(false);
   });
 });
