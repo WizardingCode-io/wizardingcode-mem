@@ -1,5 +1,6 @@
 import { explicitMatch } from "../../retrieve/query.ts";
 import { type Db, withWrite } from "../../store/db.ts";
+import { anyOf, STOPWORDS, searchTokens, stem } from "../../util/words.ts";
 import {
   fingerprint,
   type KnowledgeEntry,
@@ -133,18 +134,48 @@ export function refreshIndex(
   });
 }
 
+/** Terms in a prefix search; the rest of a long query is dropped. */
+const MAX_PREFIX_TERMS = 32;
+
+/**
+ * The match for a search the agent asked for: each word, and its stem, as a prefix, so
+ * that "order" finds "orders" and "policy" finds "policies" in an index that stores words
+ * as written. Common words are left out unless there is nothing else; words of one or two
+ * letters must match whole. Null when there is nothing searchable.
+ */
+export function prefixMatch(query: string): string | null {
+  const words = [...new Set(searchTokens(query).filter((token) => token.length >= 2))];
+  const meaningful = words.filter((word) => !STOPWORDS.has(word));
+  const terms: string[] = [];
+  for (const word of meaningful.length > 0 ? meaningful : words) {
+    if (word.length <= 2) {
+      terms.push(anyOf([word]));
+      continue;
+    }
+    // "policy" and "policies" share "polic"; a stem is never shorter than three letters.
+    const root = stem(word).replace(/y$/, "");
+    for (const prefix of new Set([word, root.length >= 3 ? root : word])) {
+      terms.push(`${anyOf([prefix])}*`);
+    }
+  }
+  return terms.length === 0 ? null : terms.slice(0, MAX_PREFIX_TERMS).join(" OR ");
+}
+
 /**
  * The project's entries matching the query (title, tags and body, title weighed most),
  * best first, every status included: the caller decides what may be shown. `score` is
  * the negated bm25, so higher is better. Empty when the query has nothing searchable.
+ * The hooks match whole words and their stems; `prefix` (the agent's own search) also
+ * matches every word that starts with one of the query's words or stems.
  */
 export function searchKnowledge(
   db: Db,
   projectId: number,
   query: string,
   limit: number,
+  options: { prefix?: boolean } = {},
 ): (KnowledgeEntry & { score: number })[] {
-  const match = explicitMatch(query);
+  const match = options.prefix === true ? prefixMatch(query) : explicitMatch(query);
   if (match === null || limit <= 0) return [];
   try {
     return searchIndex(db, projectId, match, limit);
@@ -170,6 +201,32 @@ function searchIndex(
     )
     .all(`{title tags body} : (${match}) AND project_id : "${projectId}"`, projectId, limit)
     .map(({ bm25, ...row }) => ({ ...toEntry(row), score: -bm25 }));
+}
+
+/** The project's entries in title order, every status, at most `limit` (a search with no words). */
+export function listEntries(db: Db, projectId: number, limit: number): KnowledgeEntry[] {
+  return db
+    .query<EntryRow, [number, number]>(
+      `SELECT ${COLUMNS} FROM knowledge_entries e WHERE e.project_id = ?
+        ORDER BY e.essential DESC, e.title COLLATE NOCASE, e.slug LIMIT ?`,
+    )
+    .all(projectId, limit)
+    .map(toEntry);
+}
+
+/** The project's entries with these slugs, in the order asked; unknown slugs are left out. */
+export function entriesBySlug(
+  db: Db,
+  projectId: number,
+  slugs: readonly string[],
+): KnowledgeEntry[] {
+  const get = db.query<EntryRow, [number, string]>(
+    `SELECT ${COLUMNS} FROM knowledge_entries e WHERE e.project_id = ? AND e.slug = ?`,
+  );
+  return slugs.flatMap((slug) => {
+    const row = get.get(projectId, slug);
+    return row === null ? [] : [toEntry(row)];
+  });
 }
 
 /** The project's essential, active entries, most recently updated first (undated last). */

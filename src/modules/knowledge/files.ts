@@ -205,7 +205,9 @@ function stripComment(raw: string): string {
   for (let i = 0; i < raw.length; i++) {
     const c = raw[i] as string;
     if (quote !== null) {
-      if (c === quote) quote = null;
+      // A double-quoted value may escape its quote (`\"`), as `unquote` reads it.
+      if (quote === '"' && c === "\\") i++;
+      else if (c === quote) quote = null;
     } else if ((c === '"' || c === "'") && (i === 0 || /\s|\[|,/.test(raw[i - 1] as string))) {
       quote = c;
     } else if (c === "#" && (i === 0 || /\s/.test(raw[i - 1] as string))) {

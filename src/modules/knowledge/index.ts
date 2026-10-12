@@ -90,5 +90,7 @@ export const knowledge: EngineModule = {
   // A fifth of session start and prompt; file reads and failures get nothing (K4).
   share: 0.2,
   contribute,
+  // Loaded only when a server or the bridge asks: the hooks never pay for zod or the tools.
+  tools: async (mode) => (await import("./tools.ts")).knowledgeTools(mode),
   migrations: KNOWLEDGE_MIGRATIONS,
 };

@@ -77,6 +77,13 @@ describe("knowledge/files", () => {
     expect(entry.problem).toBeNull();
   });
 
+  test("an escaped quote inside double quotes does not end the value", () => {
+    write("escaped.md", '---\ntitle: "Say \\"hi\\" # not a comment"\nkind: rule\n---\nText.\n');
+    const entry = only();
+    expect(entry.title).toBe('Say "hi" # not a comment');
+    expect(entry.problem).toBeNull();
+  });
+
   test("defaults: active, not essential, no tags", () => {
     write("plain.md", "---\ntitle: Plain\nkind: howto\n---\nHow to.\n");
     const entry = only();

@@ -184,6 +184,10 @@ describe("the OpenCode plugin", () => {
     const hooks = await load();
     expect(Object.keys(hooks.tool).sort()).toEqual([
       "history_search",
+      "knowledge_get",
+      "knowledge_save",
+      "knowledge_search",
+      "knowledge_update",
       "memory_get",
       "memory_save",
       "memory_search",
@@ -219,6 +223,37 @@ describe("the OpenCode plugin", () => {
       args: [BIN, "tool", "history_search", "--project", "/Users/dev/project"],
       stdin: { query: "zebra", limit: 3 },
     });
+  });
+
+  test("defines knowledge's tools with the spec's arguments, each running the binary", async () => {
+    const hooks = await load();
+    const args = (name: string) => Object.keys(hooks.tool[name]?.definition.args ?? {}).sort();
+    expect(args("knowledge_search")).toEqual(["limit", "query"]);
+    expect(args("knowledge_get")).toEqual(["slugs"]);
+    expect(args("knowledge_save")).toEqual(["body", "essential", "kind", "slug", "tags", "title"]);
+    expect(args("knowledge_update")).toEqual([
+      "body",
+      "essential",
+      "kind",
+      "slug",
+      "status",
+      "tags",
+      "title",
+    ]);
+    for (const name of [
+      "knowledge_search",
+      "knowledge_get",
+      "knowledge_save",
+      "knowledge_update",
+    ]) {
+      const tool = hooks.tool[name];
+      if (tool === undefined) throw new Error(`${name} missing`);
+      await tool.definition.execute({ slug: "x" }, { sessionID: SESSION });
+      expect(calls.at(-1)).toEqual({
+        args: [BIN, "tool", name, "--project", "/Users/dev/project"],
+        stdin: { slug: "x" },
+      });
+    }
   });
 });
 

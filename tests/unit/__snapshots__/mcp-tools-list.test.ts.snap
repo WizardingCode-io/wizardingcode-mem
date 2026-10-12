@@ -1,6 +1,6 @@
 // Bun Snapshot v1, https://bun.sh/docs/test/snapshots
 
-exports[`MCP tool list with memory alone inside a project 1`] = `
+exports[`MCP tool list with the default modules inside a project 1`] = `
 {
   "tools": [
     {
@@ -210,11 +210,199 @@ exports[`MCP tool list with memory alone inside a project 1`] = `
       "name": "project_links",
       "title": "Link projects",
     },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true,
+      },
+      "description": "Search this project's curated knowledge (decisions, rules, glossary, architecture, how-tos kept in its repository), by words and their forms; returns one heading per entry.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "limit": {
+            "maximum": 25,
+            "minimum": 1,
+            "type": "integer",
+          },
+          "query": {
+            "description": "Words, names or file names; their other forms are found too. Empty lists the entries.",
+            "maxLength": 500,
+            "type": "string",
+          },
+        },
+        "required": [
+          "query",
+        ],
+        "type": "object",
+      },
+      "name": "knowledge_search",
+      "title": "Search knowledge",
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true,
+      },
+      "description": "Read knowledge entries in full, by the slugs that knowledge_search returned.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "slugs": {
+            "items": {
+              "description": "The entry's file name without .md.",
+              "maxLength": 200,
+              "type": "string",
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "type": "array",
+          },
+        },
+        "required": [
+          "slugs",
+        ],
+        "type": "object",
+      },
+      "name": "knowledge_get",
+      "title": "Read knowledge",
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false,
+      },
+      "description": "Write a new knowledge entry into the project's repository (.wizardingcode/knowledge), only when the user asks to keep something as knowledge; never replaces an existing entry.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "body": {
+            "description": "Markdown: the why, the consequences, links to code.",
+            "maxLength": 50000,
+            "minLength": 1,
+            "type": "string",
+          },
+          "essential": {
+            "description": "Shown at every session start; for the few that always matter.",
+            "type": "boolean",
+          },
+          "kind": {
+            "enum": [
+              "decision",
+              "rule",
+              "glossary",
+              "architecture",
+              "howto",
+            ],
+            "type": "string",
+          },
+          "slug": {
+            "description": "The file name without .md; from the title when left out.",
+            "maxLength": 200,
+            "type": "string",
+          },
+          "tags": {
+            "items": {
+              "maxLength": 60,
+              "type": "string",
+            },
+            "maxItems": 20,
+            "type": "array",
+          },
+          "title": {
+            "description": "One line; it also names the file.",
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string",
+          },
+        },
+        "required": [
+          "title",
+          "kind",
+          "body",
+        ],
+        "type": "object",
+      },
+      "name": "knowledge_save",
+      "title": "Save knowledge",
+    },
+    {
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": false,
+      },
+      "description": "Change an existing knowledge entry's fields or body (for example mark it superseded), only when the user asks.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "body": {
+            "description": "Replaces the whole body.",
+            "maxLength": 50000,
+            "minLength": 1,
+            "type": "string",
+          },
+          "essential": {
+            "type": "boolean",
+          },
+          "kind": {
+            "enum": [
+              "decision",
+              "rule",
+              "glossary",
+              "architecture",
+              "howto",
+            ],
+            "type": "string",
+          },
+          "slug": {
+            "description": "The entry's file name without .md.",
+            "maxLength": 200,
+            "type": "string",
+          },
+          "status": {
+            "description": "superseded when it no longer holds.",
+            "enum": [
+              "active",
+              "draft",
+              "superseded",
+            ],
+            "type": "string",
+          },
+          "tags": {
+            "description": "Replaces the tags.",
+            "items": {
+              "maxLength": 60,
+              "type": "string",
+            },
+            "maxItems": 20,
+            "type": "array",
+          },
+          "title": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string",
+          },
+        },
+        "required": [
+          "slug",
+        ],
+        "type": "object",
+      },
+      "name": "knowledge_update",
+      "title": "Update knowledge",
+    },
   ],
 }
 `;
 
-exports[`MCP tool list with memory alone with --global 1`] = `
+exports[`MCP tool list with the default modules with --global 1`] = `
 {
   "tools": [
     {
@@ -404,9 +592,9 @@ exports[`MCP tool list with memory alone with --global 1`] = `
 }
 `;
 
-exports[`the OpenCode bridge's names with memory alone an unknown name is refused with the names it accepts 1`] = `
+exports[`the OpenCode bridge's names with the default modules an unknown name is refused with the names it accepts 1`] = `
 "wizardingcode-mem tool: unknown tool "nope"
-Usage: wizardingcode-mem tool <memory_search|memory_get|memory_save|history_search|project_links> --project <dir>  (JSON arguments on stdin)
+Usage: wizardingcode-mem tool <memory_search|memory_get|memory_save|history_search|project_links|knowledge_search|knowledge_get|knowledge_save|knowledge_update> --project <dir>  (JSON arguments on stdin)
        wizardingcode-mem tool <memory_search|memory_get|memory_save|history_search|memory_projects> --global   (every project)
 "
 `;
