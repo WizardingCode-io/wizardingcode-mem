@@ -1,3 +1,4 @@
+import { withWrite } from "../store/db.ts";
 import { decideLink, type Link, linkProjects, linksOf, unlinkProjects } from "../store/links.ts";
 import type { ToolContext } from "./tools.ts";
 
@@ -119,10 +120,12 @@ export function projectLinksTool(context: ToolContext, args: LinksAction): strin
       }
       const other = findProject(context, args.project);
       if (typeof other === "string") return other;
-      const ended = linksOf(db, projectId)
-        .filter((l) => l.status === "confirmed" && otherOf(l) === other.id)
-        .map((l) => unlinkProjects(db, l.id, now))
-        .filter((l): l is Link => l !== null);
+      const ended = withWrite(db, () =>
+        linksOf(db, projectId)
+          .filter((l) => l.status === "confirmed" && otherOf(l) === other.id)
+          .map((l) => unlinkProjects(db, l.id, now))
+          .filter((l): l is Link => l !== null),
+      );
       if (ended.length === 0) return `${here} is not linked to ${other.name}.`;
       return `Unlinked ${here} and ${other.name} (${ended.map((l) => `#${l.id}`).join(", ")}).`;
     }
@@ -131,21 +134,26 @@ export function projectLinksTool(context: ToolContext, args: LinksAction): strin
       if (typeof args.id !== "number" || !Number.isInteger(args.id)) {
         return `${args.action} needs id (from list).`;
       }
-      const link = linksOf(db, projectId).find((l) => l.id === args.id);
-      if (link === undefined) return `No link #${args.id} for ${here}.`;
-      const other = nameOf(otherOf(link));
-      if (link.status === "confirmed") {
-        return `#${link.id} is confirmed, not a suggestion. To end it, unlink ${other}.`;
-      }
-      if (link.status === "rejected") {
-        return `#${link.id} is rejected, not a suggestion. To link them after all, link ${other}.`;
-      }
-      if (args.action === "confirm") {
-        decideLink(db, link.id, "confirmed", now);
-        return `Confirmed #${link.id}: ${describe(link)}.`;
-      }
-      decideLink(db, link.id, "rejected", now);
-      return `Rejected #${link.id}: it will not be suggested again.`;
+      const action = args.action;
+      const id = args.id;
+      // The check and the write in one transaction: the viewer cannot decide it in between.
+      return withWrite(db, () => {
+        const link = linksOf(db, projectId).find((l) => l.id === id);
+        if (link === undefined) return `No link #${id} for ${here}.`;
+        const other = nameOf(otherOf(link));
+        if (link.status === "confirmed") {
+          return `#${link.id} is confirmed, not a suggestion. To end it, unlink ${other}.`;
+        }
+        if (link.status === "rejected") {
+          return `#${link.id} is rejected, not a suggestion. To link them after all, link ${other}.`;
+        }
+        if (action === "confirm") {
+          decideLink(db, link.id, "confirmed", now);
+          return `Confirmed #${link.id}: ${describe(link)}.`;
+        }
+        decideLink(db, link.id, "rejected", now);
+        return `Rejected #${link.id}: it will not be suggested again.`;
+      });
     }
     default:
       return "action must be one of list, link, unlink, confirm, reject.";

@@ -198,4 +198,73 @@ describe("store/links", () => {
     expect(suggestLink(db, d, c, "uses", ["z"], 3)).toBeNull();
     expect(suggestLink(db, c, d, "product", ["z"], 3)).toBeNull();
   });
+
+  describe("deciding one row decides the pair", () => {
+    const status = (id: number) =>
+      db
+        .query<{ status: string }, [number]>("SELECT status FROM project_links WHERE id = ?")
+        .get(id)?.status;
+    const pending = (id: number) => linksOf(db, id).filter((l) => l.status === "suggested");
+    function pair() {
+      const web = project("acme-web");
+      const lib = project("acme-shared");
+      const product = suggestLink(db, lib, web, "product", ["same owner"], 1) as number;
+      const uses = suggestLink(db, web, lib, "uses", ["package.json depends on acme-shared"], 1);
+      return { web, lib, product, uses: uses as number };
+    }
+
+    test("confirming uses rejects the product sibling: the library still sees nothing", () => {
+      const { web, lib, product, uses } = pair();
+      decideLink(db, uses, "confirmed", 2);
+      expect(status(product)).toBe("rejected");
+      expect(pending(web)).toEqual([]);
+      expect(visibleProjects(db, lib)).toEqual([]);
+      expect(names(web)).toEqual(["acme-shared"]);
+    });
+
+    test("rejecting one rejects the other", () => {
+      const { web, product, uses } = pair();
+      decideLink(db, product, "rejected", 2);
+      expect(status(uses)).toBe("rejected");
+      expect(pending(web)).toEqual([]);
+    });
+
+    test("a link by hand rejects the pair's pending suggestions", () => {
+      const { web, lib, product, uses } = pair();
+      linkProjects(db, web, lib, "uses", 2);
+      expect(status(uses)).toBe("confirmed");
+      expect(status(product)).toBe("rejected");
+      expect(visibleProjects(db, lib)).toEqual([]);
+    });
+
+    test("unlinking rejects a sibling still pending", () => {
+      const { web, product, uses } = pair();
+      db.run("UPDATE project_links SET status = 'confirmed' WHERE id = ?", [uses]);
+      unlinkProjects(db, uses, 3);
+      expect(status(uses)).toBe("rejected");
+      expect(status(product)).toBe("rejected");
+      expect(pending(web)).toEqual([]);
+    });
+
+    test("other pairs are untouched", () => {
+      const { web, uses } = pair();
+      const other = project("other");
+      const kept = suggestLink(db, web, other, "uses", ["x"], 1) as number;
+      decideLink(db, uses, "confirmed", 2);
+      expect(status(kept)).toBe("suggested");
+    });
+
+    test("a pair confirmed both ways reads as product, whatever the row order", () => {
+      const a = project("a");
+      const b = project("b");
+      linkProjects(db, a, b, "uses", 1);
+      linkProjects(db, a, b, "product", 2);
+      expect(visibleProjects(db, a)).toEqual([{ id: b, name: "b", relation: "product" }]);
+      const c = project("c");
+      const d = project("d");
+      linkProjects(db, c, d, "product", 1);
+      linkProjects(db, c, d, "uses", 2);
+      expect(visibleProjects(db, c)).toEqual([{ id: d, name: "d", relation: "product" }]);
+    });
+  });
 });

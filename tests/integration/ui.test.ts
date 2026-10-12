@@ -1176,6 +1176,24 @@ describe("wizardingcode-mem ui: linked projects", () => {
     expect(withDb((db) => visibleProjects(db, projectId))).toEqual([]);
   });
 
+  test("confirming one kind of a pair rejects the other: it leaves the list and the count", async () => {
+    const { lib } = ids();
+    const [uses, product] = withDb((db) => [
+      suggestLink(db, projectId, lib, "uses", ["package.json depends on lib"], NOW) as number,
+      suggestLink(db, lib, projectId, "product", ["same owner"], NOW) as number,
+    ]);
+    const s = await start();
+    expect((await post(s, `/api/links/${uses}/confirm`)).status).toBe(200);
+    const body = (await (await api(s, "/api/links")).json()) as {
+      links: LinkView[];
+      pending: { total: number };
+    };
+    expect(body.links.find((l) => l.id === product)?.status).toBe("rejected");
+    expect(body.pending.total).toBe(0);
+    expect((await post(s, `/api/links/${product}/confirm`)).status).toBe(409);
+    expect(withDb((db) => visibleProjects(db, lib))).toEqual([]);
+  });
+
   test("the memory list takes its linked projects on request; the palette searches a project's group", async () => {
     const { lib } = ids();
     withDb((db) => linkProjects(db, projectId, lib, "uses", NOW));

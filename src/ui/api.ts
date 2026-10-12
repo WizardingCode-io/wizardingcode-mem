@@ -11,6 +11,7 @@ import {
   decideLink,
   type Link,
   type LinkKind,
+  linkById,
   linkProjects,
   parseSignals,
   unlinkProjects,
@@ -673,16 +674,20 @@ export function changeLink(
   change: "confirm" | "reject" | "unlink",
   now: number,
 ): LinkView | "not-found" | "conflict" {
-  const link = linkView(db, id);
-  if (link === null) return "not-found";
-  if (change === "unlink") {
-    if (link.status !== "confirmed") return "conflict";
-    unlinkProjects(db, id, now);
-  } else {
-    if (link.status !== "suggested") return "conflict";
-    decideLink(db, id, change === "confirm" ? "confirmed" : "rejected", now);
-  }
-  return linkView(db, id) as LinkView;
+  // The check and the write in one transaction: a second tab or the agent cannot slip between.
+  const outcome = withWrite(db, () => {
+    const link = linkById(db, id);
+    if (link === null) return "not-found" as const;
+    if (change === "unlink") {
+      if (link.status !== "confirmed") return "conflict" as const;
+      unlinkProjects(db, id, now);
+    } else {
+      if (link.status !== "suggested") return "conflict" as const;
+      decideLink(db, id, change === "confirm" ? "confirmed" : "rejected", now);
+    }
+    return "done" as const;
+  });
+  return outcome === "done" ? (linkView(db, id) as LinkView) : outcome;
 }
 
 export interface ProposedRule {

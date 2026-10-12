@@ -142,6 +142,15 @@ describe("project_links", () => {
     expect(seen(shop)).toEqual(["api"]);
   });
 
+  test("confirming one kind of a pair rejects its other suggestion", () => {
+    const lib = project("lib");
+    const uses = suggestLink(db, shop, lib, "uses", ["package.json depends on lib"], NOW) as number;
+    const product = suggestLink(db, shop, lib, "product", ["same owner"], NOW) as number;
+    tool({ action: "confirm", id: uses });
+    expect(linksOf(db, shop).find((l) => l.id === product)?.status).toBe("rejected");
+    expect(seen(lib)).toEqual([]);
+  });
+
   test("confirm and reject refuse an unknown id or another project's link", () => {
     const x = project("x");
     const y = project("y");

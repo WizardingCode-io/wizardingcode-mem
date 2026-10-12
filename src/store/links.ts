@@ -1,5 +1,5 @@
 import { logError } from "../util/log.ts";
-import type { Db } from "./db.ts";
+import { type Db, withWrite } from "./db.ts";
 
 export type LinkKind = "product" | "uses";
 export type LinkStatus = "suggested" | "confirmed" | "rejected";
@@ -72,19 +72,23 @@ function find(db: Db, from: number, to: number, kind: LinkKind): Row | null {
     .get(f, t, kind);
 }
 
-function byId(db: Db, id: number): Link | null {
+export function linkById(db: Db, id: number): Link | null {
   const row = db.query<Row, [number]>(`SELECT ${COLUMNS} FROM project_links WHERE id = ?`).get(id);
   return row ? toLink(row) : null;
 }
 
 let logged = false;
 
-/** Projects the current one may read besides itself: confirmed 'product' either way, confirmed 'uses' from it. No chaining. [] on any error. */
+/**
+ * Projects the current one may read besides itself: confirmed 'product' either way, confirmed
+ * 'uses' from it. No chaining. A pair with both reads as 'product'. [] on any error.
+ */
 export function visibleProjects(db: Db, projectId: number): Visible[] {
   try {
     const rows = db
       .query<{ id: number; name: string; relation: "product" | "uses" }, [number]>(
-        `SELECT p.id AS id, p.name AS name, l.kind AS relation
+        `SELECT p.id AS id, p.name AS name,
+                CASE WHEN MAX(l.kind = 'product') = 1 THEN 'product' ELSE 'uses' END AS relation
            FROM project_links l
            JOIN projects p ON p.id = CASE WHEN l.from_project = ?1 THEN l.to_project ELSE l.from_project END
           WHERE l.status = 'confirmed'
@@ -144,49 +148,76 @@ export function suggestLink(
   return find(db, f, t, kind)?.id ?? null;
 }
 
+/**
+ * Once a row of a pair is decided, the pair is decided: its other suggestions (either direction,
+ * any kind) are rejected, so a second kind can never undo the first (a 'product' sibling
+ * confirmed after a one-way 'uses' would let the library see the app).
+ */
+function rejectSiblings(db: Db, keep: number, now: number): void {
+  db.run(
+    `UPDATE project_links SET status = 'rejected', decided_at = ?1
+      WHERE status = 'suggested' AND id <> ?2
+        AND EXISTS (SELECT 1 FROM project_links k WHERE k.id = ?2
+          AND ((project_links.from_project = k.from_project AND project_links.to_project = k.to_project)
+            OR (project_links.from_project = k.to_project AND project_links.to_project = k.from_project)))`,
+    [now, keep],
+  );
+}
+
 /** A link made by hand: confirmed at once (a rejected row for the pair becomes confirmed). Throws on from === to or unknown projects. */
 export function linkProjects(db: Db, from: number, to: number, kind: LinkKind, now: number): Link {
   if (from === to) throw new Error("A project cannot be linked to itself");
-  const [f, t] = normalise(from, to, kind);
-  const existing = find(db, f, t, kind);
-  if (existing) {
-    if (existing.status !== "confirmed") {
-      db.run(
-        "UPDATE project_links SET status = 'confirmed', origin = 'manual', decided_at = ? WHERE id = ?",
-        [now, existing.id],
-      );
+  return withWrite(db, () => {
+    const [f, t] = normalise(from, to, kind);
+    const existing = find(db, f, t, kind);
+    if (existing) {
+      if (existing.status !== "confirmed") {
+        db.run(
+          "UPDATE project_links SET status = 'confirmed', origin = 'manual', decided_at = ? WHERE id = ?",
+          [now, existing.id],
+        );
+      }
+      rejectSiblings(db, existing.id, now);
+      return linkById(db, existing.id) as Link;
     }
-    return byId(db, existing.id) as Link;
-  }
-  for (const id of [f, t]) {
-    if (!db.query("SELECT 1 FROM projects WHERE id = ?").get(id)) {
-      throw new Error(`Unknown project ${id}`);
+    for (const id of [f, t]) {
+      if (!db.query("SELECT 1 FROM projects WHERE id = ?").get(id)) {
+        throw new Error(`Unknown project ${id}`);
+      }
     }
-  }
-  db.run(
-    `INSERT INTO project_links (from_project, to_project, kind, status, origin, signals, created_at, decided_at)
-     VALUES (?, ?, ?, 'confirmed', 'manual', '[]', ?, ?)`,
-    [f, t, kind, now, now],
-  );
-  return toLink(find(db, f, t, kind) as Row);
+    db.run(
+      `INSERT INTO project_links (from_project, to_project, kind, status, origin, signals, created_at, decided_at)
+       VALUES (?, ?, ?, 'confirmed', 'manual', '[]', ?, ?)`,
+      [f, t, kind, now, now],
+    );
+    const link = toLink(find(db, f, t, kind) as Row);
+    rejectSiblings(db, link.id, now);
+    return link;
+  });
 }
 
+/** Decides one row, and with it the pair's other suggestions (rejected). */
 export function decideLink(
   db: Db,
   id: number,
   decision: "confirmed" | "rejected",
   now: number,
 ): Link | null {
-  db.run("UPDATE project_links SET status = ?, decided_at = ? WHERE id = ?", [decision, now, id]);
-  return byId(db, id);
+  return withWrite(db, () => {
+    db.run("UPDATE project_links SET status = ?, decided_at = ? WHERE id = ?", [decision, now, id]);
+    rejectSiblings(db, id, now);
+    return linkById(db, id);
+  });
 }
 
 /** A confirmed link goes back to rejected (so it is not suggested again). */
 export function unlinkProjects(db: Db, id: number, now: number): Link | null {
-  const link = byId(db, id);
-  if (!link) return null;
-  if (link.status === "confirmed") return decideLink(db, id, "rejected", now);
-  return link;
+  return withWrite(db, () => {
+    const link = linkById(db, id);
+    if (!link) return null;
+    if (link.status === "confirmed") return decideLink(db, id, "rejected", now);
+    return link;
+  });
 }
 
 export function linksOf(db: Db, projectId: number): Link[] {
