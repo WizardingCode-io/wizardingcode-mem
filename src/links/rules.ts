@@ -219,17 +219,27 @@ export async function proposeRules(
   const model = deps.model?.id ?? null;
   const stored = readCursor(db);
   const cursor = stored !== null && stored.model === model ? stored : null;
-  // The quiet drain: nothing written or reinforced since the cursor.
-  if (
-    cursor !== null &&
-    db
-      .query(
-        `SELECT 1 FROM memories m WHERE m.status = 'active' AND m.kind IN ${RULE_KINDS}
-          AND (m.updated_at, m.id) > (?, ?) LIMIT 1`,
+  // The quiet drain: nothing written or reinforced since the cursor. Read from the ranking
+  // index (a few ms on a store of 90k memories); a tie on the cursor's millisecond is looked up
+  // by id.
+  if (cursor !== null) {
+    const top = db
+      .query<{ u: number | null }, []>(
+        "SELECT max(updated_at) AS u FROM memories WHERE status = 'active'",
       )
-      .get(cursor.updatedAt, cursor.id) === null
-  ) {
-    return none;
+      .get()?.u;
+    if (top === null || top === undefined || top < cursor.updatedAt) return none;
+    if (
+      top === cursor.updatedAt &&
+      db
+        .query(
+          `SELECT 1 FROM memories m WHERE m.id > ? AND m.updated_at = ? AND m.status = 'active'
+            AND m.kind IN ${RULE_KINDS} LIMIT 1`,
+        )
+        .get(cursor.id, cursor.updatedAt) === null
+    ) {
+      return none;
+    }
   }
   const maxMs = deps.maxMs ?? MAX_MS;
   const owner = deps.owner ?? `${process.pid}-${crypto.randomUUID()}`;
@@ -262,16 +272,34 @@ async function propose(
 ): Promise<{ proposed: number; scanned: number }> {
   const deadline = performance.now() + maxMs;
   const model = from.model;
-  const candidates = db
-    .query<Candidate, [number, number, number]>(
-      `SELECT ${COLUMNS}, t.prompt AS prompt, m.source_turn_id AS turnId
-         FROM memories m LEFT JOIN turns t ON t.id = m.source_turn_id
-        WHERE ${ELIGIBLE} AND (m.updated_at, m.id) > (?, ?)
-        ORDER BY m.updated_at ASC, m.id ASC LIMIT ?`,
-    )
-    .all(from.updatedAt, from.id, deps.batch ?? WINDOW);
+  const batch = deps.batch ?? WINDOW;
+  // One snapshot: the newest active memory, of any kind, and the candidates after the cursor.
+  // Once every candidate is reached, the cursor may move to that newest memory, so that the
+  // memories that are not candidates (a fix, a rule already proposed) do not keep the quiet
+  // drain busy.
+  const [newest, candidates] = db.transaction(
+    () =>
+      [
+        db
+          .query<{ updatedAt: number; id: number }, []>(
+            `SELECT updated_at AS updatedAt, id FROM memories WHERE status = 'active'
+              ORDER BY updated_at DESC, id DESC LIMIT 1`,
+          )
+          .get(),
+        db
+          .query<Candidate, [number, number, number]>(
+            `SELECT ${COLUMNS}, t.prompt AS prompt, m.source_turn_id AS turnId
+               FROM memories m LEFT JOIN turns t ON t.id = m.source_turn_id
+              WHERE ${ELIGIBLE} AND (m.updated_at, m.id) > (?, ?)
+              ORDER BY m.updated_at ASC, m.id ASC LIMIT ?`,
+          )
+          .all(from.updatedAt, from.id, batch),
+      ] as const,
+  )();
+  const furthest = (cursor: Cursor): Cursor =>
+    newest && after({ ...newest, model }, cursor) ? { ...newest, model } : cursor;
   if (candidates.length === 0) {
-    advanceCursor(db, from);
+    advanceCursor(db, furthest(from));
     return { proposed: 0, scanned: 0 };
   }
 
@@ -462,7 +490,9 @@ async function propose(
     proposed += changes;
   }
   const last = until >= 0 ? (candidates[until] as Candidate) : null;
-  advanceCursor(db, last ? { updatedAt: last.updatedAt, id: last.id, model } : from);
+  const reachedAll = until === candidates.length - 1 && candidates.length < batch;
+  const next = last ? { updatedAt: last.updatedAt, id: last.id, model } : from;
+  advanceCursor(db, reachedAll ? furthest(next) : next);
   return { proposed, scanned: reached };
 }
 

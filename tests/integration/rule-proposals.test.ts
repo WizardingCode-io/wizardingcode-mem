@@ -414,6 +414,29 @@ describe("the cursor", () => {
     expect(await propose()).toMatchObject({ scanned: 1 });
   });
 
+  test("newer memories that are not candidates move the cursor past them", async () => {
+    memory(a, { title: RULE, body: RULE_BODY, at: NOW - 5000 });
+    await propose();
+    const fix = memory(b, { kind: "fix", title: "Fixed the retry loop", at: NOW + 5000 });
+    expect(await propose()).toMatchObject({ scanned: 0 });
+    const cursor = JSON.parse(
+      db.query<{ value: string }, []>("SELECT value FROM meta WHERE key = 'rules.cursor'").get()
+        ?.value ?? "{}",
+    );
+    expect(cursor).toMatchObject({ updatedAt: NOW + 5000, id: fix });
+  });
+
+  test("memories written in the same millisecond are all reached", async () => {
+    memory(a, { title: "Convention about the queue worker", at: NOW });
+    memory(b, { title: "Convention about the cache worker", at: NOW });
+    memory(c, { title: "Convention about the lease worker", at: NOW });
+    const run = () => proposeRules(db, { judge: heuristicJudge, now: NOW, batch: 1 });
+    expect((await run()).scanned).toBe(1);
+    expect((await run()).scanned).toBe(1);
+    expect((await run()).scanned).toBe(1);
+    expect((await run()).scanned).toBe(0);
+  });
+
   test("another process proposing holds the lease: this one leaves at once", async () => {
     memory(a, { title: RULE, body: RULE_BODY });
     memory(b, { title: RULE, body: RULE_BODY });
