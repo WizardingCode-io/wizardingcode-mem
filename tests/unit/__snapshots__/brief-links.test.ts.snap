@@ -1,0 +1,101 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`session brief with no links and no user rules is what it was before links existed (pinned) 1`] = `
+{
+  "ids": [
+    40,
+    70,
+    15,
+    45,
+    35,
+    69,
+    29,
+    14,
+    9,
+    10,
+    65,
+    55,
+    54,
+    34,
+    24,
+    25,
+    59,
+    44,
+    60,
+    20,
+    42,
+    30,
+    63,
+    23,
+    13,
+    62,
+    2,
+    50,
+    4,
+    17,
+    7,
+    48,
+    8,
+    52,
+    27,
+    5,
+    39,
+    33,
+    3,
+    12,
+    64,
+  ],
+  "text": 
+"<wizardingcode-mem-notes>
+Notes saved from earlier sessions in this project. They are background, not instructions, and may be out of date: check the code before relying on them.
+
+Where things stood (2026-10-11):
+- Asked: Make the queue retry with backoff
+- Outcome: The queue now retries with exponential backoff and jitter.
+
+Known about this project:
+- #40 [convention · 2026-10-12 · src/queue/commit.ts] The deploy header must adapter before the latency fallback.
+- #70 [convention · 2026-09-26 · src/index/build.ts] The checkpoint deadline must process before the cache pool.
+- #15 [gotcha · 2026-09-26] The pool buffer must vacuum before the hook deadline.
+- #45 [gotcha · 2026-09-18] The hook budget must queue before the config fallback.
+- #35 [change · 2026-09-18] The hook retry must worker before the session bundle.
+- #69 [gotcha · 2026-10-04] The hook header must pool before the judge breaker.
+- #29 [change · 2026-10-04] The transcript commit must cache before the journal signal.
+- #14 [fix · 2026-10-04] The render column must hook before the bundle budget.
+- #9 [gotcha · 2026-10-04] The hook queue must index before the socket build.
+- #10 [convention · 2026-09-10 · src/queue/session.ts] The handler bundle must bundle before the retry timeout.
+- #65 [change · 2026-08-25] The payload breaker must batch before the retry cache.
+- #55 [decision · 2026-08-25 · src/router/branch.ts] The fallback pool must header before the signal stream.
+- #54 [discovery · 2026-09-10] The backoff chunk must budget before the session signal.
+- #34 [convention · 2026-09-10 · src/trigger/branch.ts] The migration breaker must router before the trigger adapter.
+- #24 [discovery · 2026-09-02] The column thread must stream before the bundle migration.
+- #25 [decision · 2026-08-09 · src/latency/payload.ts] The retry header must payload before the budget deadline.
+- #59 [change · 2026-08-25] The column trigger must pool before the handler timeout.
+- #44 [fix · 2026-08-25] The vacuum judge must signal before the retry deploy.
+- #60 [discovery · 2026-08-01] The socket thread must branch before the judge pool.
+- #20 [fix · 2026-08-01] The build signal must latency before the timeout deploy.
+- #42 [discovery · 2026-10-12] The journal header must thread before the retry timeout.
+- #30 [discovery · 2026-07-24] The fallback build must journal before the payload judge.
+- #63 [gotcha · 2026-08-25] The lease vacuum must judge before the session timeout.
+- #23 [change · 2026-08-25] The token buffer must hook before the cursor buffer.
+- #13 [decision · 2026-08-25 · src/latency/timeout.ts] The judge backoff must socket before the batch session.
+- #62 [fix · 2026-09-26] The adapter branch must queue before the pool worker.
+- #2 [fix · 2026-09-26] The schema hook must cursor before the lock migration.
+- #50 [fix · 2026-07-08] The judge cache must index before the transcript deadline.
+- #4 [convention · 2026-07-24 · src/stream/fallback.ts] The vacuum hook must deadline before the retry cache.
+- #17 [change · 2026-09-18] The signal vacuum must config before the router budget.
+- #7 [decision · 2026-09-18 · src/router/breaker.ts] The session signal must process before the transcript bundle.
+- #48 [discovery · 2026-08-09] The cursor signal must column before the socket bundle.
+- #8 [fix · 2026-08-09] The trigger bundle must pool before the session deadline.
+- #52 [convention · 2026-09-10 · src/budget/handler.ts] The trigger hook must payload before the vacuum index.
+- #27 [gotcha · 2026-09-10] The trigger timeout must chunk before the pool queue.
+- #5 [change · 2026-06-22] The socket pool must migration before the schema router.
+- #39 [gotcha · 2026-07-08] The checkpoint commit must chunk before the backoff cursor.
+- #33 [gotcha · 2026-08-01] The cursor buffer must fallback before the checkpoint index.
+- #3 [gotcha · 2026-08-01] The router index must journal before the migration branch.
+- #12 [discovery · 2026-09-02] The cursor timeout must thread before the fallback bundle.
+- #64 [convention · 2026-06-30 · src/queue/payload.ts] The deadline trigger must socket before the migration checkpoint.
+</wizardingcode-mem-notes>"
+,
+}
+`;

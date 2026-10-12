@@ -46,8 +46,8 @@ export function filesOf(db: Db, memoryId: number): string[] {
     .map((row) => row.path);
 }
 
-export function toNote(db: Db, row: MemoryRow): Note {
-  return {
+export function toNote(db: Db, row: MemoryRow, origin?: string): Note {
+  const note: Note = {
     id: row.id,
     kind: row.kind,
     title: row.title,
@@ -56,6 +56,8 @@ export function toNote(db: Db, row: MemoryRow): Note {
     files: filesOf(db, row.id),
     stale: row.stale === 1,
   };
+  if (origin !== undefined) note.origin = origin;
+  return note;
 }
 
 /**

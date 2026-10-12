@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveProject } from "../../src/core/project.ts";
@@ -37,9 +37,18 @@ const WORDS = [
   ...BASE_WORDS.flatMap((a) => BASE_WORDS.slice(0, 12).map((b) => `${a}${b}`)),
 ];
 
+// The same store again, the project now linked to ten projects of 2,000 memories each
+// (confirmed, some as one product, the rest as libraries it uses), with twenty of the
+// author's own rules: what the brief and the prompt read beyond the project must not
+// cost the budget.
+const LINKED_PROJECTS = 10;
+const LINKED_MEMORIES_EACH = 2000;
+const USER_RULES = 20;
+
 let binary: string;
 let base: string;
 let dataDir: string;
+let linkedDataDir: string;
 let project: string;
 
 /** The file the agent reads: three memories about it sit among the 65,000. */
@@ -117,7 +126,48 @@ beforeAll(() => {
     }
   });
   db.close();
-}, 180_000);
+
+  linkedDataDir = join(base, "data-linked");
+  cpSync(dataDir, linkedDataDir, { recursive: true });
+  const linkedDb = openDb({ dataDir: linkedDataDir, busyTimeoutMs: 5000 });
+  const linkedIds = Array.from({ length: LINKED_PROJECTS }, (_, i) => {
+    const dir = join(base, `linked-${i}`);
+    mkdirSync(dir);
+    return resolveProject(linkedDb, dir).id;
+  });
+  withWrite(linkedDb, () => {
+    const memory = (projectId: number, i: number, importance: number) =>
+      insertMemory(linkedDb, {
+        projectId,
+        kind: MEMORY_KINDS[i % MEMORY_KINDS.length] as (typeof MEMORY_KINDS)[number],
+        title: `The ${word()} ${word()} must ${word()} before the ${word()} ${word()}${i}.`,
+        body: `Because the ${word()} ${word()} would otherwise ${word()} the ${word()}.` as Redacted,
+        terms: `src/${word()}/${word()}.ts`,
+        importance,
+        branch: null,
+        commit: null,
+        origin: "manual",
+        judge: "heuristic",
+        judgeVersion: "1",
+        sourceTurnId: null,
+        files: [],
+        now: now - next(200) * 86_400_000,
+      });
+    for (const [n, linked] of linkedIds.entries()) {
+      for (let i = 0; i < LINKED_MEMORIES_EACH; i++) memory(linked, i, 1 + (i % 5));
+      linkedDb.run(
+        `INSERT INTO project_links (from_project, to_project, kind, status, origin, signals, created_at)
+         VALUES (?, ?, ?, 'confirmed', 'manual', '[]', ?)`,
+        [projectId, linked, n < 3 ? "product" : "uses", now],
+      );
+    }
+    for (let i = 0; i < USER_RULES; i++) {
+      const id = memory(others[i % OTHER_PROJECTS] as number, i, 5);
+      linkedDb.run("INSERT INTO user_memories (memory_id, created_at) VALUES (?, ?)", [id, now]);
+    }
+  });
+  linkedDb.close();
+}, 240_000);
 
 afterAll(() => {
   rmSync(base, { recursive: true, force: true });
@@ -144,6 +194,7 @@ async function measure(
   payload: (run: number) => Record<string, unknown>,
   agent = "claude-code",
   common: Record<string, unknown> | null = null,
+  store: string = dataDir,
 ): Promise<{ shown: string; value: number; outputs: string[] }> {
   const samples: number[] = [];
   const outputs: string[] = [];
@@ -155,7 +206,7 @@ async function measure(
         ...payload(run),
       }),
       env: {
-        WIZARDINGCODE_MEM_DATA_DIR: dataDir,
+        WIZARDINGCODE_MEM_DATA_DIR: store,
         WIZARDINGCODE_MEM_DISTILL: "off",
         WIZARDINGCODE_MEM_UI_AUTO_OPEN: "off",
       },
@@ -319,6 +370,43 @@ describe(`hook latency of the newer agents with ${MEMORIES} memories`, () => {
     console.log(`antigravity pre-invocation: ${result.shown}`);
     expect(
       result.outputs.every((out) => out.includes("injectSteps") && out.includes("Known about")),
+    ).toBe(true);
+    expect(result.value).toBeLessThanOrEqual(BUDGET_MS["session-start"]);
+  }, 120_000);
+});
+
+describe(`hook latency with ${LINKED_PROJECTS} linked projects of ${LINKED_MEMORIES_EACH} memories and ${USER_RULES} rules of the author`, () => {
+  test(`a prompt is answered within ${BUDGET_MS.prompt} ms`, async () => {
+    const next = generator(7);
+    const word = () => WORDS[next(WORDS.length)] as string;
+    const result = await measure(
+      "prompt",
+      (run) => ({
+        prompt_id: `p${run}`,
+        prompt: `why does the ${word()} ${word()} ${word()} when the ${word()} ${word()} is slow? I checked the ${word()} and the ${word()}, the ${word()} looks fine, but the ${word()} ${word()} keeps hitting the ${word()} ${word()} and then the ${word()} ${word()} fails on the ${word()} ${word()}. Could the ${word()} ${word()} be the problem?`,
+      }),
+      "claude-code",
+      { session_id: "perf-linked-prompt", cwd: project },
+      linkedDataDir,
+    );
+    const outside = result.outputs.filter((out) => /\((?:from [^)]+|you)\)/.test(out)).length;
+    console.log(`linked prompt: ${result.shown} (${outside} of ${RUNS} with a note from outside)`);
+    expect(result.outputs.filter((out) => out !== "").length).toBeGreaterThan(RUNS / 2);
+    expect(result.value).toBeLessThanOrEqual(BUDGET_MS.prompt);
+  }, 120_000);
+
+  test(`a session start is answered within ${BUDGET_MS["session-start"]} ms`, async () => {
+    const result = await measure(
+      "session-start",
+      () => ({ source: "startup" }),
+      "claude-code",
+      { session_id: "perf-linked-start", cwd: project },
+      linkedDataDir,
+    );
+    console.log(`linked session-start: ${result.shown}`);
+    // The measurement only means something if both shares were filled.
+    expect(
+      result.outputs.every((out) => out.includes("(from linked-") && out.includes("(you)")),
     ).toBe(true);
     expect(result.value).toBeLessThanOrEqual(BUDGET_MS["session-start"]);
   }, 120_000);

@@ -1,7 +1,10 @@
 import { isFromTheHost } from "../core/host-prompt.ts";
 import type { MemoryKind } from "../core/types.ts";
 import type { Db } from "../store/db.ts";
+import { visibleProjects } from "../store/links.ts";
+import { logError } from "../util/log.ts";
 import { anyOf, inProject, isGeneric, stem } from "../util/words.ts";
+import { LINKED_POOL, MAX_LINKED_NOTES } from "./brief.ts";
 import { MEMORY_COLUMNS, type MemoryRow, prior, ranks, toNote } from "./notes.ts";
 import { buildQuery, type Query, searchTokens } from "./query.ts";
 import { type Note, renderNote, renderNotes } from "./render.ts";
@@ -17,6 +20,155 @@ const RRF_K = 60;
 const EVIDENCE_WEIGHT = 3;
 const RECENT_TURNS = 5;
 const MAX_SESSION_FILES = 50;
+
+/**
+ * Reciprocal rank fusion over three orderings: how well the text matches, how many of the
+ * session's files it is about, and how much it matters regardless of the query.
+ */
+function fusion(candidates: Candidate[], context: Context): (candidate: Candidate) => number {
+  const byText = ranks(
+    candidates.filter((candidate) => candidate.bm25 !== undefined),
+    (candidate) => -(candidate.bm25 as number),
+  );
+  const byFiles = ranks(
+    candidates.filter((candidate) => candidate.overlap > 0),
+    (candidate) => candidate.overlap,
+  );
+  const byPrior = ranks(candidates, (candidate) => prior(candidate.row, context));
+  return (candidate) =>
+    [byText, byFiles, byPrior].reduce((sum, ranking) => {
+      const rank = ranking.get(candidate);
+      return rank === undefined ? sum : sum + 1 / (RRF_K + rank);
+    }, 0);
+}
+
+interface Extra {
+  /** The author's rules outside the project's own candidates, not yet scored for text. */
+  rules: MemoryRow[];
+  /** Matches in the linked projects, kept apart from the project's own. */
+  linked: Candidate[];
+  /** The label of each note from outside the project, or of the author's, by id. */
+  origins: Map<number, string>;
+}
+
+const NO_EXTRA: Extra = { rules: [], linked: [], origins: new Map() };
+/** The author's rules scored for text on one prompt: each is a full-text lookup of its own. */
+const MAX_RULE_LOOKUPS = 5;
+/**
+ * The linked matches read, newest first, before the best LINKED_POOL of them are kept: the
+ * cost of a prompt must not grow with the size of the projects it is linked to.
+ */
+const LINKED_SCAN = 10 * LINKED_POOL;
+let extraFailed = false;
+
+function failOpen(error: unknown): void {
+  if (!extraFailed) {
+    extraFailed = true;
+    logError("prompt.links", error);
+  }
+}
+
+const FTS_MATCH = (match: string) => `{title body terms} : (${match})`;
+
+/**
+ * The author's rules and the prompt's matches in the projects linked to this one, each
+ * read up to a fixed count. Nothing at all on any error, so the notes are the project's own.
+ */
+function extraCandidates(
+  db: Db,
+  input: {
+    projectId: number;
+    query: Query;
+    unseen: string;
+    kindFilter: string;
+    known: Map<number, Candidate>;
+  },
+): Extra {
+  try {
+    const origins = new Map<number, string>();
+    const rules = db
+      .query<MemoryRow, [number]>(
+        `SELECT ${MEMORY_COLUMNS} FROM user_memories u CROSS JOIN memories m ON m.id = u.memory_id
+          WHERE m.status = 'active' AND ${input.unseen} AND ${input.kindFilter}
+          ORDER BY m.importance DESC, m.updated_at DESC LIMIT ?`,
+      )
+      .all(LINKED_POOL);
+    // Labelled wherever they are found, the project's own candidates included.
+    for (const { id } of db
+      .query<{ id: number }, []>("SELECT memory_id AS id FROM user_memories")
+      .all()) {
+      origins.set(id, "you");
+    }
+
+    const linked: Candidate[] = [];
+    const visible = visibleProjects(db, input.projectId);
+    // Searched for the prompt's telling words only: the words found in any talk about
+    // code would match most of the linked projects, and ranking them all costs the budget.
+    const telling = [
+      ...input.query.identifiers,
+      ...input.query.words.filter((word) => !isGeneric(word)),
+    ];
+    if (visible.length > 0 && telling.length > 0) {
+      const names = new Map(visible.map((project) => [project.id, project.name]));
+      const match = anyOf(
+        new Set([...telling, ...telling.map((word) => stem(searchTokens(word)[0] ?? word))]),
+      );
+      const projects = visible.map((project) => `"${project.id}"`).join(" OR ");
+      const rows = db
+        .query<MemoryRow & { bm25: number; projectId: number }, [string, number, number]>(
+          `SELECT ${MEMORY_COLUMNS}, m.project_id AS projectId, f.bm25
+             FROM (SELECT rowid AS id, bm25(memories_fts, 4.0, 1.0, 2.0, 0.0) AS bm25
+                     FROM memories_fts WHERE memories_fts MATCH ? ORDER BY rowid DESC LIMIT ?) f
+             CROSS JOIN memories m ON m.id = f.id
+            WHERE m.status = 'active' AND ${input.unseen} AND ${input.kindFilter}
+            ORDER BY f.bm25 LIMIT ?`,
+        )
+        .all(`${FTS_MATCH(match)} AND project_id : (${projects})`, LINKED_SCAN, LINKED_POOL);
+      for (const { bm25, projectId, ...row } of rows) {
+        if (origins.has(row.id)) continue; // one of the author's rules, weighed as such
+        origins.set(row.id, `from ${names.get(projectId)}`);
+        linked.push({ row, bm25, overlap: 0 });
+      }
+    }
+    return { rules: rules.filter((row) => !input.known.has(row.id)), linked, origins };
+  } catch (error) {
+    failOpen(error);
+    return NO_EXTRA;
+  }
+}
+
+/**
+ * The author's rules that share enough with the prompt, scored for text like the project's
+ * own candidates. The score is the same bm25 the project's search gives: a term the rule
+ * does not contain adds nothing to it, so only the terms it contains are looked up.
+ */
+function scoredRules(db: Db, rules: Candidate[], query: Query, context: Context): Candidate[] {
+  if (rules.length === 0) return [];
+  try {
+    const terms = [...query.match.matchAll(/"((?:[^"]|"")*)"/g)].map((found) =>
+      (found[1] as string).replaceAll('""', '"'),
+    );
+    const lookup = db.query<{ bm25: number }, [string, number]>(
+      `SELECT bm25(memories_fts, 4.0, 1.0, 2.0, 0.0) AS bm25 FROM memories_fts
+        WHERE memories_fts MATCH ? AND rowid = ?`,
+    );
+    return [...rules]
+      .sort((a, b) => prior(b.row, context) - prior(a.row, context) || b.row.id - a.row.id)
+      .slice(0, MAX_RULE_LOOKUPS)
+      .map((candidate) => {
+        const { row } = candidate;
+        const tokens = new Set(searchTokens(`${row.title} ${row.body} ${row.terms}`));
+        const own = terms.filter((term) => searchTokens(term).every((token) => tokens.has(token)));
+        const bm25 = own.length === 0 ? undefined : lookup.get(FTS_MATCH(anyOf(own)), row.id)?.bm25;
+        return bm25 === undefined ? candidate : { ...candidate, bm25 };
+      });
+  } catch (error) {
+    failOpen(error);
+    return [];
+  }
+}
+
+type Context = { branch: string | null; now: number };
 
 interface Candidate {
   row: MemoryRow;
@@ -165,7 +317,16 @@ export function retrieveForPrompt(
       else known.overlap = overlap;
     }
   }
-  if (candidates.size === 0) return [];
+  // The author's rules join the project's candidates; linked projects' are kept apart and
+  // must earn their place. Any error here leaves the project's own candidates, as before.
+  const extra = extraCandidates(db, {
+    projectId: input.projectId,
+    query,
+    unseen,
+    kindFilter,
+    known: candidates,
+  });
+  if (candidates.size === 0 && extra.rules.length === 0 && extra.linked.length === 0) return [];
 
   // A word is rare when few of the project's memories contain it. CROSS JOIN, here and
   // in every full-text query, pins the join order: left to itself the planner may walk
@@ -197,35 +358,40 @@ export function retrieveForPrompt(
     return rare;
   };
 
-  const eligible = [...candidates.values()].filter((candidate) =>
-    hasEvidence(candidate, query, isRare),
-  );
+  const evident = (candidate: Candidate) => hasEvidence(candidate, query, isRare);
+  const eligible = [
+    ...[...candidates.values()].filter(evident),
+    ...scoredRules(
+      db,
+      extra.rules.map((row) => ({ row, overlap: 0 })).filter(evident),
+      query,
+      input,
+    ),
+  ];
+  const linked = extra.linked.filter(evident);
 
-  // Reciprocal rank fusion over three orderings: how well the text matches, how many
-  // of the session's files it is about, and how much it matters regardless of the query.
-  const byText = ranks(
-    eligible.filter((candidate) => candidate.bm25 !== undefined),
-    (candidate) => -(candidate.bm25 as number),
-  );
-  const byFiles = ranks(
-    eligible.filter((candidate) => candidate.overlap > 0),
-    (candidate) => candidate.overlap,
-  );
-  const byPrior = ranks(eligible, (candidate) => prior(candidate.row, input));
-  const fused = (candidate: Candidate) =>
-    [byText, byFiles, byPrior].reduce((sum, ranking) => {
-      const rank = ranking.get(candidate);
-      return rank === undefined ? sum : sum + 1 / (RRF_K + rank);
-    }, 0);
+  const fused = fusion(eligible, input);
+  const ordered = eligible.sort((a, b) => fused(b) - fused(a) || b.row.id - a.row.id);
+  if (linked.length > 0) {
+    // A linked note is weighed against the project's own on the same scale, and shown
+    // only when it is better than the best of them.
+    const all = fusion([...eligible, ...linked], input);
+    const best = eligible.reduce((top, candidate) => Math.max(top, all(candidate)), 0);
+    const better = linked
+      .filter((candidate) => eligible.length === 0 || all(candidate) > best)
+      .sort((a, b) => all(b) - all(a) || b.row.id - a.row.id)
+      .slice(0, MAX_LINKED_NOTES);
+    ordered.unshift(...better);
+  }
 
   const notes: Note[] = [];
   let size = renderNotes([]).length;
   const overhead = renderNotes([
     { id: 0, kind: "fix", title: "", body: "", createdAt: 0, files: [], stale: false },
   ]).length;
-  for (const candidate of eligible.sort((a, b) => fused(b) - fused(a) || b.row.id - a.row.id)) {
+  for (const candidate of ordered) {
     if (notes.length === maxNotes) break;
-    const note = toNote(db, candidate.row);
+    const note = toNote(db, candidate.row, extra.origins.get(candidate.row.id));
     const cost = renderNote(note).length + 1 + (notes.length === 0 ? overhead : 0);
     if (size + cost > budgetChars) continue;
     notes.push(note);
