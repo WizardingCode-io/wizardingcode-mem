@@ -38,6 +38,8 @@ export function notesForFailure(
     error: string;
     branch: string | null;
     now: number;
+    /** Default 1,200 characters. */
+    budgetChars?: number;
   },
 ): Note[] {
   const prompt = failureQuery(input.error);
@@ -51,6 +53,6 @@ export function notesForFailure(
     now: input.now,
     kinds: ["fix", "gotcha"],
     maxNotes: MAX_NOTES,
-    budgetChars: BUDGET_CHARS,
+    budgetChars: input.budgetChars ?? BUDGET_CHARS,
   });
 }

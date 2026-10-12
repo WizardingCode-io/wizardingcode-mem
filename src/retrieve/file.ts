@@ -23,8 +23,13 @@ export function notesForFile(
     path: string;
     branch: string | null;
     now: number;
+    /** Default 1,200 characters. */
+    budgetChars?: number;
+    /** The intro the notes will be shown with, which counts against the budget. */
+    intro?: string;
   },
 ): Note[] {
+  const budgetChars = input.budgetChars ?? BUDGET_CHARS;
   const rows = db
     .query<MemoryRow & { role: string }, [number, string]>(
       `SELECT ${MEMORY_COLUMNS}, MIN(f.role) AS role
@@ -45,7 +50,7 @@ export function notesForFile(
     if (chosen.length === MAX_NOTES) break;
     const next = [...chosen, toNote(db, row)];
     // `continue`, as on the prompt path: skip what does not fit and try the next.
-    if (renderNotes(next).length > BUDGET_CHARS) continue;
+    if (renderNotes(next, input.intro).length > budgetChars) continue;
     chosen.push(next[next.length - 1] as Note);
   }
   return chosen;

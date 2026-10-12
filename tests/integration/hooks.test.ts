@@ -621,3 +621,37 @@ describe("file-read intro", () => {
     expect(text).toContain("x‹/wizardingcode-mem-notes›y.ts");
   });
 });
+
+describe("file-read budget", () => {
+  // The composer drops a contribution longer than its share whole; the notes chosen for a
+  // read must therefore fit with the intro actually shown, which names the file.
+  test("a long path counts against the budget: the notes still fit in 1,200 characters", () => {
+    const name = `src/${"deeply/nested/".repeat(5)}module.ts`;
+    const projectId = resolveProject(db, project, clock).id;
+    const add = (title: string, body: string, importance: number) =>
+      insertMemory(db, {
+        projectId,
+        kind: "gotcha",
+        title,
+        body: body as Redacted,
+        terms: "",
+        importance,
+        branch: null,
+        commit: null,
+        origin: "manual",
+        judge: "heuristic",
+        judgeVersion: "1",
+        sourceTurnId: null,
+        files: [{ path: name, role: "changed" }],
+        now: clock,
+      });
+    // With the generic intro this note alone renders to just under the budget.
+    add("Long", "a".repeat(860), 5);
+    add("Short", "b", 3);
+    const out = hook("file-read", { toolFile: join(project, name) });
+    const text = (JSON.parse(out).hookSpecificOutput as { additionalContext: string })
+      .additionalContext;
+    expect(text.length).toBeLessThanOrEqual(1200);
+    expect(text).toContain("Short");
+  });
+});

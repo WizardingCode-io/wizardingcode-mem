@@ -24,8 +24,15 @@ export const LINKED_POOL = 50;
  */
 export function sessionBrief(
   db: Db,
-  input: { projectId: number; branch: string | null; now: number },
+  input: {
+    projectId: number;
+    branch: string | null;
+    now: number;
+    /** Default 4,200 characters. */
+    budgetChars?: number;
+  },
 ): { text: string; notes: Note[] } {
+  const budgetChars = input.budgetChars ?? BUDGET_CHARS;
   const last = db
     .query<LastTurn, [number]>(
       `SELECT prompt, final_text AS finalText, COALESCE(ended_at, started_at) AS endedAt, branch
@@ -68,7 +75,7 @@ export function sessionBrief(
       into.push(note);
       const next = render();
       // One note that does not fit must not keep out the smaller ones after it.
-      if (next.length > BUDGET_CHARS) {
+      if (next.length > budgetChars) {
         into.pop();
         continue;
       }
@@ -79,7 +86,7 @@ export function sessionBrief(
   fill(
     user,
     rank(extra.user).map((row) => ({ row, origin: "you" })),
-    USER_SHARE * BUDGET_CHARS,
+    USER_SHARE * budgetChars,
   );
   // Only the rules shown in their share are left out of the other parts: a rule the share
   // had no room for is still one of its project's memories, labelled as the author's.
@@ -91,12 +98,12 @@ export function sessionBrief(
       row,
       origin: label(row, `from ${extra.names.get(row.id)}`),
     })),
-    LINKED_SHARE * BUDGET_CHARS,
+    LINKED_SHARE * budgetChars,
   );
   fill(
     own,
     ranked.filter((row) => !shown.has(row.id)).map((row) => ({ row, origin: label(row) })),
-    BUDGET_CHARS,
+    budgetChars,
   );
   return { text, notes: [...own, ...linked, ...user] };
 }
