@@ -1,3 +1,4 @@
+import { lstatSync, rmSync } from "node:fs";
 import { readGitInfo } from "../../core/git.ts";
 import type { MemoryKind } from "../../core/types.ts";
 import { type Db, withWrite } from "../../store/db.ts";
@@ -195,8 +196,10 @@ function propose(
     if (counted.length > 0) {
       for (const row of db
         .query<{ id: number; n: number }, []>(
-          `SELECT memory_id AS id, count(*) AS n FROM injections
-            WHERE memory_id IN (${counted.join(", ")}) GROUP BY memory_id`,
+          // Contexts, not rows: a heading at session start, the note on a prompt and any
+          // number of fetches in one context are one showing.
+          `SELECT memory_id AS id, count(DISTINCT session_id || ':' || context_epoch) AS n
+             FROM injections WHERE memory_id IN (${counted.join(", ")}) GROUP BY memory_id`,
         )
         .all()) {
         times.set(row.id, row.n);
@@ -296,10 +299,15 @@ function nameFor(slug: string, n: number): string | null {
 /**
  * Makes a proposal knowledge, on the author's click: writes the entry file (the memory's
  * title and body as they are now, decision→decision, convention→rule, `source:
- * memory:<id>`) under a name no file has, indexes it, and marks the memory promoted, so
- * memory leaves its notes to the entry while the entry exists. Refused, with nothing
- * written, where knowledge is off (the home folder, the brand's home, a linked folder),
- * where memory is off, or when the memory is no longer an active decision or convention.
+ * memory:<id>`) under a name no file has, marks the memory promoted, so memory leaves its
+ * notes to the entry while the entry exists, and indexes it. Refused, with nothing written,
+ * where knowledge is off (the home folder, the brand's home, a linked folder), where memory
+ * is off, or when the memory is no longer an active decision or convention.
+ *
+ * The write lock is held only for two short transactions, never across the disk: hooks
+ * wait at most 100–150 ms for it. (a) reads what to write; (b) writes the file, outside any
+ * transaction; (c) records the decision only if the proposal is still open, and removes the
+ * file just written when it is not, or when recording fails; (d) re-indexes after.
  */
 export function acceptPromotion(
   db: Db,
@@ -312,80 +320,140 @@ export function acceptPromotion(
   },
 ): { slug: string; path: string } | { refused: string } {
   const env = options.env ?? process.env;
-  // One decision at a time: a second click waits, then finds the proposal decided.
-  return withWrite(db, () => {
-    const proposal = db
-      .query<{ projectId: number; memoryId: number; slug: string; status: string }, [number]>(
-        `SELECT project_id AS projectId, memory_id AS memoryId, slug, status
-           FROM knowledge_proposals WHERE id = ?`,
-      )
-      .get(id);
-    if (proposal === null) return { refused: `No proposal #${id}.` };
-    if (proposal.status !== "proposed") {
-      return { refused: `Proposal #${id} is already ${proposal.status}.` };
-    }
-    const memory = db
-      .query<
-        { title: string; body: string; kind: string; status: string; disabled: number },
-        [number]
-      >(
-        `SELECT m.title, m.body, m.kind, m.status, p.disabled
-           FROM memories m JOIN projects p ON p.id = m.project_id WHERE m.id = ?`,
-      )
-      .get(proposal.memoryId);
-    if (memory === null) return { refused: `The memory behind proposal #${id} is gone.` };
-    if (memory.disabled === 1) {
-      return { refused: "Memory is off for this project; nothing was written." };
-    }
-    const kind = ENTRY_KIND[memory.kind];
-    if (memory.status !== "active" || kind === undefined) {
-      return {
-        refused: `The memory behind proposal #${id} is no longer an active decision or convention; nothing was written.`,
-      };
-    }
-    const root = options.root ?? projectRoot(db, proposal.projectId);
-    if (root === null) {
-      return { refused: "Where this project lives is not known yet; nothing was written." };
-    }
-    const problem = folderProblem(root, env);
-    if (problem !== null) return { refused: `${problem} Nothing was written.` };
-    const prepared = prepareFolder(root, env);
-    if ("refused" in prepared) return prepared;
-    const { dir } = prepared;
-    const text = renderEntry(
-      {
-        title: memory.title,
-        kind,
-        essential: false,
-        status: "active",
-        updated: today(options.now),
-        source: `memory:${proposal.memoryId}`,
-      },
-      memory.body,
-    );
-    let written: { slug: string; path: string } | null = null;
-    for (let n = 1; n <= MAX_TRIES && written === null; n++) {
-      const slug = nameFor(proposal.slug, n);
-      if (slug === null) continue;
-      const result = writeNewEntry(dir, slug, text, () => folderProblem(root, env));
-      if ("refused" in result) return result;
-      if ("path" in result) written = { slug, path: result.path };
-    }
-    if (written === null) {
-      return { refused: `No free name for "${proposal.slug}" in ${dir}; nothing was written.` };
-    }
-    refreshIndex(db, proposal.projectId, knowledgeDir(root), { force: true });
-    db.run(
-      `INSERT OR REPLACE INTO promoted_memories (memory_id, project_id, slug, promoted_at)
-       VALUES (?, ?, ?, ?)`,
-      [proposal.memoryId, proposal.projectId, written.slug, options.now],
-    );
-    db.run(
-      "UPDATE knowledge_proposals SET status = 'accepted', slug = ?, decided_at = ? WHERE id = ?",
-      [written.slug, options.now, id],
-    );
-    return written;
-  });
+  // (a) What to write, as the proposal and the memory are now.
+  const read = withWrite(db, () => readForAccept(db, id));
+  if ("refused" in read) return read;
+  const { projectId, memoryId, slug: wanted, title, body, kind } = read;
+  const root = options.root ?? projectRoot(db, projectId);
+  if (root === null) {
+    return { refused: "Where this project lives is not known yet; nothing was written." };
+  }
+  const problem = folderProblem(root, env);
+  if (problem !== null) return { refused: `${problem} Nothing was written.` };
+  const prepared = prepareFolder(root, env);
+  if ("refused" in prepared) return prepared;
+  const { dir } = prepared;
+  const text = renderEntry(
+    {
+      title,
+      kind,
+      essential: false,
+      status: "active",
+      updated: today(options.now),
+      source: `memory:${memoryId}`,
+    },
+    body,
+  );
+  // (b) The file, never over another.
+  let written: { slug: string; path: string } | null = null;
+  for (let n = 1; n <= MAX_TRIES && written === null; n++) {
+    const slug = nameFor(wanted, n);
+    if (slug === null) continue;
+    const result = writeNewEntry(dir, slug, text, () => folderProblem(root, env));
+    if ("refused" in result) return result;
+    if ("path" in result) written = { slug, path: result.path };
+  }
+  if (written === null) {
+    return { refused: `No free name for "${wanted}" in ${dir}; nothing was written.` };
+  }
+  const mine = identity(written.path);
+  // (c) The decision, only if nobody decided meanwhile; otherwise the file goes again.
+  let recorded: boolean;
+  try {
+    recorded = withWrite(db, () => {
+      const changes = db.run(
+        `UPDATE knowledge_proposals SET status = 'accepted', slug = ?, decided_at = ?
+          WHERE id = ? AND status = 'proposed'`,
+        [written.slug, options.now, id],
+      ).changes;
+      if (changes === 0) return false;
+      db.run(
+        `INSERT OR REPLACE INTO promoted_memories (memory_id, project_id, slug, promoted_at)
+         VALUES (?, ?, ?, ?)`,
+        [memoryId, projectId, written.slug, options.now],
+      );
+      return true;
+    });
+  } catch (error) {
+    removeOwn(written.path, mine);
+    throw error;
+  }
+  if (!recorded) {
+    removeOwn(written.path, mine);
+    const status =
+      db
+        .query<{ status: string }, [number]>("SELECT status FROM knowledge_proposals WHERE id = ?")
+        .get(id)?.status ?? "gone";
+    return { refused: `Proposal #${id} is already ${status}.` };
+  }
+  // (d) The index follows, outside the lock (it reads the folder first, then writes briefly).
+  try {
+    refreshIndex(db, projectId, knowledgeDir(root), { force: true });
+  } catch (error) {
+    // The file and the decision stand; the next hook or drain indexes it.
+    logError("knowledge.promote", error);
+  }
+  return written;
+}
+
+interface ToWrite {
+  projectId: number;
+  memoryId: number;
+  slug: string;
+  title: string;
+  body: string;
+  kind: KnowledgeKind;
+}
+
+function readForAccept(db: Db, id: number): ToWrite | { refused: string } {
+  const proposal = db
+    .query<{ projectId: number; memoryId: number; slug: string; status: string }, [number]>(
+      `SELECT project_id AS projectId, memory_id AS memoryId, slug, status
+         FROM knowledge_proposals WHERE id = ?`,
+    )
+    .get(id);
+  if (proposal === null) return { refused: `No proposal #${id}.` };
+  if (proposal.status !== "proposed") {
+    return { refused: `Proposal #${id} is already ${proposal.status}.` };
+  }
+  const memory = db
+    .query<
+      { title: string; body: string; kind: string; status: string; disabled: number },
+      [number]
+    >(
+      `SELECT m.title, m.body, m.kind, m.status, p.disabled
+         FROM memories m JOIN projects p ON p.id = m.project_id WHERE m.id = ?`,
+    )
+    .get(proposal.memoryId);
+  if (memory === null) return { refused: `The memory behind proposal #${id} is gone.` };
+  if (memory.disabled === 1) {
+    return { refused: "Memory is off for this project; nothing was written." };
+  }
+  const kind = ENTRY_KIND[memory.kind];
+  if (memory.status !== "active" || kind === undefined) {
+    return {
+      refused: `The memory behind proposal #${id} is no longer an active decision or convention; nothing was written.`,
+    };
+  }
+  return { ...proposal, title: memory.title, body: memory.body, kind };
+}
+
+/** The file's identity on disk, so that only the file this call wrote is ever removed. */
+function identity(path: string): string | null {
+  try {
+    const stat = lstatSync(path);
+    return `${stat.dev}:${stat.ino}`;
+  } catch {
+    return null;
+  }
+}
+
+function removeOwn(path: string, mine: string | null): void {
+  try {
+    if (mine !== null && identity(path) === mine) rmSync(path);
+  } catch (error) {
+    logError("knowledge.promote", error);
+  }
 }
 
 /** True when the proposal was open and is now rejected; its memory is never proposed again. */

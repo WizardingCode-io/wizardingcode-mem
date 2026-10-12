@@ -1,4 +1,6 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
+import * as fs from "node:fs";
 import {
   existsSync,
   mkdirSync,
@@ -171,6 +173,22 @@ describe("which memories are proposed", () => {
     ]);
     // Proposing writes nothing anywhere.
     expect(filesIn()).toEqual([]);
+  });
+
+  test("shown counts contexts: one context's heading, note and fetches count once", () => {
+    const once = memory({ title: "Webhooks are verified before parsing" });
+    epoch++;
+    for (const event of ["session-start", "prompt", "mcp", "mcp", "mcp"]) {
+      db.run(
+        `INSERT INTO injections (session_id, context_epoch, memory_id, event, tokens, at)
+         VALUES (?, ?, ?, ?, 10, ?)`,
+        [sessionId, 1000 + epoch, once, event, NOW],
+      );
+    }
+    show(once, 1);
+    expect(propose().proposed).toBe(0);
+    show(once, 1);
+    expect(propose().proposed).toBe(1);
   });
 
   test("one of the author's own rules qualifies without being shown", () => {
@@ -370,6 +388,102 @@ describe("accepting a proposal", () => {
     db.run("UPDATE projects SET disabled = 1 WHERE id = ?", [projectId]);
     expect(accept(id)).toEqual({ refused: expect.stringMatching(/off/) });
     expect(filesIn()).toEqual([]);
+  });
+});
+
+describe("accepting holds the write lock only briefly (fix round 1)", () => {
+  const ready = (title: string) => {
+    const id = memory({ title });
+    show(id, 3);
+    propose();
+    return proposalFor(id);
+  };
+  const storeFile = () => join(base, "store", "wizardingcode-mem.db");
+
+  test("no file work happens inside a transaction; another writer gets the lock meanwhile", () => {
+    const proposal = ready("Use the outbox");
+    const seen: string[] = [];
+    const watch = (name: "linkSync" | "readdirSync" | "mkdirSync" | "openSync") => {
+      const original = fs[name] as (...args: unknown[]) => unknown;
+      return spyOn(fs, name).mockImplementation(((...args: unknown[]) => {
+        if (db.inTransaction) seen.push(name);
+        return original(...args);
+      }) as never);
+    };
+    let other = "not tried";
+    const original = fs.linkSync;
+    const spies = [watch("readdirSync"), watch("mkdirSync"), watch("openSync")];
+    const link = spyOn(fs, "linkSync").mockImplementation(((from: string, to: string) => {
+      if (db.inTransaction) seen.push("linkSync");
+      // A hook in another process taking the write lock while the file is written.
+      const hook = new Database(storeFile());
+      try {
+        hook.run("PRAGMA busy_timeout = 0");
+        hook.run("BEGIN IMMEDIATE");
+        hook.run("COMMIT");
+        other = "got the lock";
+      } catch (error) {
+        other = String(error);
+      } finally {
+        hook.close();
+      }
+      return original(from, to);
+    }) as never);
+    try {
+      expect(acceptPromotion(db, proposal.id, { now: NOW, env })).toEqual({
+        slug: "use-the-outbox",
+        path: join(dir, "use-the-outbox.md"),
+      });
+    } finally {
+      link.mockRestore();
+      for (const spy of spies) spy.mockRestore();
+    }
+    expect(seen).toEqual([]);
+    expect(other).toBe("got the lock");
+  });
+
+  test("a failure recording the decision leaves no file; a retry writes the original name", () => {
+    const proposal = ready("Use the outbox");
+    db.run(
+      "CREATE TEMP TRIGGER boom BEFORE INSERT ON promoted_memories BEGIN SELECT RAISE(ABORT, 'boom'); END",
+    );
+    expect(() => acceptPromotion(db, proposal.id, { now: NOW, env })).toThrow(/boom/);
+    expect(existsSync(dir) ? readdirSync(dir) : []).toEqual([]);
+    expect(proposals()[0]?.status).toBe("proposed");
+    db.run("DROP TRIGGER boom");
+    expect(acceptPromotion(db, proposal.id, { now: NOW, env })).toEqual({
+      slug: "use-the-outbox",
+      path: join(dir, "use-the-outbox.md"),
+    });
+    expect(readdirSync(dir)).toEqual(["use-the-outbox.md"]);
+  });
+
+  test("two accepts of one proposal at once write one file", () => {
+    const proposal = ready("Use the outbox");
+    const original = fs.linkSync;
+    let second: ReturnType<typeof acceptPromotion> | null = null;
+    // The second click lands while the first is writing its file.
+    const link = spyOn(fs, "linkSync").mockImplementation(((from: string, to: string) => {
+      if (second === null) {
+        second = { refused: "running" };
+        second = acceptPromotion(db, proposal.id, { now: NOW, env });
+      }
+      return original(from, to);
+    }) as never);
+    let first: ReturnType<typeof acceptPromotion>;
+    try {
+      first = acceptPromotion(db, proposal.id, { now: NOW, env });
+    } finally {
+      link.mockRestore();
+    }
+    const outcomes = [first, second].map((r) =>
+      r !== null && "slug" in r ? "accepted" : "refused",
+    );
+    expect(outcomes.sort()).toEqual(["accepted", "refused"]);
+    expect(readdirSync(dir)).toEqual(["use-the-outbox.md"]);
+    expect(db.query<{ slug: string }, []>("SELECT slug FROM promoted_memories").all()).toEqual([
+      { slug: "use-the-outbox" },
+    ]);
   });
 });
 
