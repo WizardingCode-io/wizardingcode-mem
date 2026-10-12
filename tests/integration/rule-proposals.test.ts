@@ -423,7 +423,7 @@ describe("the cursor", () => {
       db.query<{ value: string }, []>("SELECT value FROM meta WHERE key = 'rules.cursor'").get()
         ?.value ?? "{}",
     );
-    expect(cursor).toMatchObject({ updatedAt: NOW + 5000, id: fix });
+    expect(cursor).toMatchObject({ maxId: fix });
   });
 
   test("memories written in the same millisecond are all reached", async () => {
@@ -435,6 +435,60 @@ describe("the cursor", () => {
     expect((await run()).scanned).toBe(1);
     expect((await run()).scanned).toBe(1);
     expect((await run()).scanned).toBe(0);
+  });
+
+  test("with a slow judge and a scan past the budget, the cursor moves every drain and proposals come", async () => {
+    const words =
+      "amber birch cedar delta ember fjord glade harbor indigo juniper kestrel lagoon meadow nectar orchid pebble quartz raven sierra tundra umber violet willow xenon yarrow zephyr anchor beacon cobalt dune".split(
+        " ",
+      );
+    // Ten rules that share no word with each other.
+    const rules = Array.from({ length: 10 }, (_, i) => words.slice(i * 3, i * 3 + 3).join(" "));
+    const n = rules.length;
+    for (const rule of rules) {
+      memory(a, { title: `Keep ${rule} together`, body: rule });
+      memory(b, { title: `Keep ${rule} together`, body: rule });
+    }
+    // Enough after them that a run's scan never reaches the end within the budget.
+    for (let i = 0; i < 400; i++) memory(c, { title: `Filler record ${i} for the archive` });
+    const judge: Judge = {
+      ...heuristicJudge,
+      personal: async () => {
+        await Bun.sleep(5);
+        return { personal: true, confidence: 0.9 };
+      },
+    };
+    const cursorId = () =>
+      JSON.parse(
+        db.query<{ value: string }, []>("SELECT value FROM meta WHERE key = 'rules.cursor'").get()
+          ?.value ?? "{}",
+      ).maxId as number | undefined;
+    let before = -1;
+    for (let run = 0; run < 100 && proposals().length < n; run++) {
+      const { scanned } = await proposeRules(db, { judge, now: NOW, maxMs: 10, maxMemories: 2000 });
+      const at = cursorId() ?? -1;
+      if (scanned > 0) expect(at).toBeGreaterThan(before);
+      before = at;
+    }
+    expect(proposals()).toHaveLength(n);
+  });
+
+  test("history read back later, dated in the past, is still looked at", async () => {
+    memory(c, { title: "Something recent about naming", at: NOW });
+    await propose();
+    const days = 86_400_000 * 90;
+    const one = memory(a, { title: RULE, body: RULE_BODY, at: NOW - days });
+    const two = memory(b, { title: RULE, body: RULE_BODY, at: NOW - days });
+    const said = memory(c, {
+      kind: "decision",
+      title: "Os changelogs são escritos à mão",
+      prompt: "a partir de agora os changelogs são escritos à mão",
+      at: NOW - days,
+    });
+    expect(await propose()).toMatchObject({ proposed: 2 });
+    expect(proposals().map((p) => JSON.parse(p.memory_ids))).toEqual(
+      expect.arrayContaining([[one, two], [said]]),
+    );
   });
 
   test("another process proposing holds the lease: this one leaves at once", async () => {

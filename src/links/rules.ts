@@ -111,6 +111,11 @@ const NOT_PERSONAL_KEY = "rules.not-personal";
 const MAX_REMEMBERED = 1000;
 /** Where the last run stopped: memories at or before it were already looked at. */
 const CURSOR_KEY = "rules.cursor";
+/** Groups the judge had no time for, asked first on a later run without holding the cursor. */
+const PENDING_KEY = "rules.pending";
+const MAX_PENDING = 100;
+/** With a judge, the share of the budget the scan may use: the rest is for its questions. */
+const SCAN_SHARE = 0.6;
 /** One proposing process at a time: two distills must not do the same work twice. */
 export const RULES_LEASE = "rules.lease";
 
@@ -126,11 +131,24 @@ interface Candidate {
   turnId: number | null;
 }
 
+/**
+ * Two walks. New rows by id, which follows commit order, so a memory dated in the past (history
+ * read back later, ADR 0013) is still reached. Changed rows (an edit, a reinforcement, a status
+ * set again: `updated_at` past `created_at`) by `(updated_at, id)`.
+ */
 interface Cursor {
+  /** Every row with an id up to this one was looked at. */
+  maxId: number;
+  /** Every change up to this `(updated_at, id)` was looked at. */
   updatedAt: number;
   id: number;
   /** The semantic model the run had: a new model looks at the window again, by meaning. */
   model: string | null;
+}
+
+interface Pending {
+  ids: number[];
+  reason: "repeated" | "said-always";
 }
 
 /** Active conventions and decisions, in a project with memory on, not one of the author's rules, in no proposal yet. */
@@ -170,24 +188,50 @@ function rememberedNotPersonal(db: Db): string[] {
 function readCursor(db: Db): Cursor | null {
   try {
     const value = JSON.parse(getMeta(db, CURSOR_KEY) ?? "null") as Partial<Cursor> | null;
-    return value && typeof value.updatedAt === "number" && typeof value.id === "number"
-      ? { updatedAt: value.updatedAt, id: value.id, model: value.model ?? null }
+    return value &&
+      typeof value.maxId === "number" &&
+      typeof value.updatedAt === "number" &&
+      typeof value.id === "number"
+      ? { maxId: value.maxId, updatedAt: value.updatedAt, id: value.id, model: value.model ?? null }
       : null;
   } catch {
     return null;
   }
 }
 
-const after = (a: Cursor, b: Cursor) =>
+function readPending(db: Db): Pending[] {
+  try {
+    const value: unknown = JSON.parse(getMeta(db, PENDING_KEY) ?? "[]");
+    return Array.isArray(value)
+      ? value.filter(
+          (v): v is Pending =>
+            Array.isArray(v?.ids) && (v.reason === "repeated" || v.reason === "said-always"),
+        )
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+const later = (a: { updatedAt: number; id: number }, b: { updatedAt: number; id: number }) =>
   a.updatedAt > b.updatedAt || (a.updatedAt === b.updatedAt && a.id > b.id);
 
-/** Compare-and-set: the cursor only moves forward, unless the model changed. */
+/** Compare-and-set: each walk only moves forward, unless the model changed. */
 function advanceCursor(db: Db, next: Cursor): void {
   withWrite(db, () => {
     const stored = readCursor(db);
-    if (stored === null || stored.model !== next.model || after(next, stored)) {
+    if (stored === null || stored.model !== next.model) {
       setMeta(db, CURSOR_KEY, JSON.stringify(next));
+      return;
     }
+    const merged: Cursor = {
+      maxId: Math.max(stored.maxId, next.maxId),
+      ...(later(next, stored)
+        ? { updatedAt: next.updatedAt, id: next.id }
+        : { updatedAt: stored.updatedAt, id: stored.id }),
+      model: next.model,
+    };
+    setMeta(db, CURSOR_KEY, JSON.stringify(merged));
   });
 }
 
@@ -219,27 +263,29 @@ export async function proposeRules(
   const model = deps.model?.id ?? null;
   const stored = readCursor(db);
   const cursor = stored !== null && stored.model === model ? stored : null;
-  // The quiet drain: nothing written or reinforced since the cursor. Read from the ranking
-  // index (a few ms on a store of 90k memories); a tie on the cursor's millisecond is looked up
-  // by id.
-  if (cursor !== null) {
+  // The quiet drain: no new row, nothing changed since the cursor, no group waiting for the
+  // judge. Read from the rowid and the ranking index (a few ms on a store of 90k memories); a
+  // tie on the cursor's millisecond is looked up by id.
+  if (cursor !== null && readPending(db).length === 0) {
+    const maxId = db.query<{ n: number | null }, []>("SELECT max(id) AS n FROM memories").get()?.n;
     const top = db
       .query<{ u: number | null }, []>(
         "SELECT max(updated_at) AS u FROM memories WHERE status = 'active'",
       )
       .get()?.u;
-    if (top === null || top === undefined || top < cursor.updatedAt) return none;
-    if (
-      top === cursor.updatedAt &&
-      db
-        .query(
-          `SELECT 1 FROM memories m WHERE m.id > ? AND m.updated_at = ? AND m.status = 'active'
-            AND m.kind IN ${RULE_KINDS} LIMIT 1`,
-        )
-        .get(cursor.id, cursor.updatedAt) === null
-    ) {
-      return none;
-    }
+    const nothingNew = (maxId ?? 0) <= cursor.maxId;
+    const nothingChanged =
+      top === null ||
+      top === undefined ||
+      top < cursor.updatedAt ||
+      (top === cursor.updatedAt &&
+        db
+          .query(
+            `SELECT 1 FROM memories m WHERE m.id > ? AND m.updated_at = ? AND m.status = 'active'
+              AND m.kind IN ${RULE_KINDS} LIMIT 1`,
+          )
+          .get(cursor.id, cursor.updatedAt) === null);
+    if (nothingNew && nothingChanged) return none;
   }
   const maxMs = deps.maxMs ?? MAX_MS;
   const owner = deps.owner ?? `${process.pid}-${crypto.randomUUID()}`;
@@ -251,17 +297,28 @@ export async function proposeRules(
   }
 }
 
-/** The first run's cursor: just before the newest `window` eligible memories. */
+/**
+ * The first run's cursor: just before the newest `window` eligible rows; changes up to now count
+ * as seen (a change is a row the first walk reaches anyway, or an old one).
+ */
 function start(db: Db, window: number, model: string | null): Cursor {
   const edge = db
-    .query<{ updatedAt: number; id: number }, [number]>(
-      `SELECT m.updated_at AS updatedAt, m.id AS id FROM memories m WHERE ${ELIGIBLE}
-        ORDER BY m.updated_at DESC, m.id DESC LIMIT 1 OFFSET ?`,
+    .query<{ id: number }, [number]>(
+      `SELECT m.id AS id FROM memories m WHERE ${ELIGIBLE} ORDER BY m.id DESC LIMIT 1 OFFSET ?`,
     )
     .get(Math.max(0, window - 1));
-  return edge === null
-    ? { updatedAt: Number.MIN_SAFE_INTEGER, id: 0, model }
-    : { updatedAt: edge.updatedAt, id: edge.id - 1, model };
+  const newest = db
+    .query<{ updatedAt: number; id: number }, []>(
+      `SELECT updated_at AS updatedAt, id FROM memories WHERE status = 'active'
+        ORDER BY updated_at DESC, id DESC LIMIT 1`,
+    )
+    .get();
+  return {
+    maxId: edge === null ? 0 : edge.id - 1,
+    updatedAt: newest?.updatedAt ?? Number.MIN_SAFE_INTEGER,
+    id: newest?.id ?? 0,
+    model,
+  };
 }
 
 async function propose(
@@ -270,36 +327,52 @@ async function propose(
   from: Cursor,
   maxMs: number,
 ): Promise<{ proposed: number; scanned: number }> {
-  const deadline = performance.now() + maxMs;
+  const began = performance.now();
+  const deadline = began + maxMs;
+  // With a judge, the scan leaves part of the budget to its questions: a scan that used it all
+  // would leave every group unasked, drain after drain.
+  const scanDeadline = began + (deps.judge.personal ? SCAN_SHARE : 1) * maxMs;
   const model = from.model;
   const batch = deps.batch ?? WINDOW;
-  // One snapshot: the newest active memory, of any kind, and the candidates after the cursor.
-  // Once every candidate is reached, the cursor may move to that newest memory, so that the
-  // memories that are not candidates (a fix, a rule already proposed) do not keep the quiet
-  // drain busy.
-  const [newest, candidates] = db.transaction(
-    () =>
-      [
-        db
-          .query<{ updatedAt: number; id: number }, []>(
-            `SELECT updated_at AS updatedAt, id FROM memories WHERE status = 'active'
-              ORDER BY updated_at DESC, id DESC LIMIT 1`,
-          )
-          .get(),
-        db
-          .query<Candidate, [number, number, number]>(
-            `SELECT ${COLUMNS}, t.prompt AS prompt, m.source_turn_id AS turnId
-               FROM memories m LEFT JOIN turns t ON t.id = m.source_turn_id
-              WHERE ${ELIGIBLE} AND (m.updated_at, m.id) > (?, ?)
-              ORDER BY m.updated_at ASC, m.id ASC LIMIT ?`,
-          )
-          .all(from.updatedAt, from.id, batch),
-      ] as const,
-  )();
-  const furthest = (cursor: Cursor): Cursor =>
-    newest && after({ ...newest, model }, cursor) ? { ...newest, model } : cursor;
-  if (candidates.length === 0) {
-    advanceCursor(db, furthest(from));
+  // One snapshot: the newest row and the newest change, and the candidates after the cursor:
+  // new rows first (by id), then changed ones.
+  const [maxId, newest, fresh, changed] = db.transaction(() => {
+    const top = db.query<{ n: number | null }, []>("SELECT max(id) AS n FROM memories").get()?.n;
+    const latest = db
+      .query<{ updatedAt: number; id: number }, []>(
+        `SELECT updated_at AS updatedAt, id FROM memories WHERE status = 'active'
+          ORDER BY updated_at DESC, id DESC LIMIT 1`,
+      )
+      .get();
+    const rows = db
+      .query<Candidate, [number, number]>(
+        `SELECT ${COLUMNS}, t.prompt AS prompt, m.source_turn_id AS turnId
+           FROM memories m LEFT JOIN turns t ON t.id = m.source_turn_id
+          WHERE ${ELIGIBLE} AND m.id > ? ORDER BY m.id ASC LIMIT ?`,
+      )
+      .all(from.maxId, batch);
+    const edits =
+      rows.length < batch
+        ? db
+            .query<Candidate, [number, number, number, number]>(
+              `SELECT ${COLUMNS}, t.prompt AS prompt, m.source_turn_id AS turnId
+                 FROM memories m LEFT JOIN turns t ON t.id = m.source_turn_id
+                WHERE ${ELIGIBLE} AND m.id <= ? AND m.updated_at > m.created_at
+                  AND (m.updated_at, m.id) > (?, ?)
+                ORDER BY m.updated_at ASC, m.id ASC LIMIT ?`,
+            )
+            .all(from.maxId, from.updatedAt, from.id, batch - rows.length)
+        : [];
+    return [top ?? 0, latest, rows, edits] as const;
+  })();
+  const candidates = [...fresh, ...changed];
+  const pending = readPending(db);
+  if (candidates.length === 0 && pending.length === 0) {
+    advanceCursor(db, {
+      maxId: Math.max(from.maxId, maxId),
+      ...(newest && later(newest, from) ? newest : { updatedAt: from.updatedAt, id: from.id }),
+      model,
+    });
     return { proposed: 0, scanned: 0 };
   }
 
@@ -339,11 +412,11 @@ async function propose(
     if (ra !== rb) parent.set(ra, rb);
   };
 
-  // Grouping is symmetric: a new memory's search reaches every older one in the other
-  // projects, so what is behind the cursor never needs looking at again.
+  // Grouping is symmetric: a memory's search reaches every eligible one in the other projects,
+  // whatever its date, so a row reached once needs looking at again only when it changes.
   let reached = 0;
   for (const memory of candidates) {
-    if (performance.now() > deadline) break;
+    if (performance.now() > scanDeadline) break;
     const others = projects.filter((p) => unlinked(memory.projectId, p));
     if (others.length > 0) {
       const text = `${memory.title} ${memory.body}`;
@@ -393,6 +466,17 @@ async function propose(
     groups.set(r, [...(groups.get(r) ?? []), memory]);
   }
   const proposals: { members: Candidate[]; reason: "repeated" | "said-always" }[] = [];
+  // Groups the judge had no time for on an earlier run come first, as they are now.
+  for (const waiting of pending) {
+    const members = waiting.ids.map(lookup).filter((m): m is Candidate => m !== null);
+    const projectIds = [...new Set(members.map((m) => m.projectId))];
+    const still =
+      waiting.reason === "said-always"
+        ? members.length === 1
+        : projectIds.length >= 2 &&
+          projectIds.every((p, i) => projectIds.slice(i + 1).every((q) => unlinked(p, q)));
+    if (still) proposals.push({ members, reason: waiting.reason });
+  }
   const grouped = new Set<number>();
   for (const members of groups.values()) {
     const projectIds = [...new Set(members.map((m) => m.projectId))];
@@ -436,29 +520,26 @@ async function propose(
       .map((row) => [row.id, row.name]),
   );
   const exists = db.query("SELECT 1 FROM rule_proposals WHERE memory_ids = ?");
-  const position = new Map(candidates.map((c, i) => [c.id, i]));
-  // Where the cursor may move to: the last memory reached, held back before any group the
-  // judge had no time for, so the next run finds it again.
-  let until = reached - 1;
+  const left: Pending[] = [];
   let proposed = 0;
-  for (const [index, { members, reason }] of proposals.entries()) {
-    const key = JSON.stringify(members.map((m) => m.id).sort((a, b) => a - b));
+  let asked = 0;
+  for (const { members, reason } of proposals) {
+    const ids = members.map((m) => m.id).sort((a, b) => a - b);
+    const key = JSON.stringify(ids);
     if (exists.get(key) !== null || notPersonal.includes(key)) continue;
-    // Each question is a request: past the budget, the groups left wait for the next drain.
-    if (deps.judge.personal && performance.now() > deadline) {
-      for (const rest of proposals.slice(index)) {
-        for (const m of rest.members) {
-          const at = position.get(m.id);
-          if (at !== undefined) until = Math.min(until, at - 1);
-        }
-      }
-      break;
+    // Each question is a request: past the budget, the groups left wait for a later run,
+    // without holding the cursor. One question is always asked, so the waiting list drains even
+    // when the scan used the whole budget.
+    if (deps.judge.personal && asked > 0 && performance.now() > deadline) {
+      left.push({ ids, reason });
+      continue;
     }
     // The proposal's text is one memory's own, the most important (consolidation never writes text).
     const lead = [...members].sort(
       (a, b) => b.importance - a.importance || b.updatedAt - a.updatedAt || a.id - b.id,
     )[0] as Candidate;
     if (deps.judge.personal) {
+      asked++;
       try {
         const verdict = await deps.judge.personal({
           title: lead.title,
@@ -489,10 +570,34 @@ async function propose(
     ).changes;
     proposed += changes;
   }
-  const last = until >= 0 ? (candidates[until] as Candidate) : null;
-  const reachedAll = until === candidates.length - 1 && candidates.length < batch;
-  const next = last ? { updatedAt: last.updatedAt, id: last.id, model } : from;
-  advanceCursor(db, reachedAll ? furthest(next) : next);
+  const kept = new Set<string>();
+  const waiting = left.filter((p) => {
+    const key = JSON.stringify(p.ids);
+    if (kept.has(key)) return false;
+    kept.add(key);
+    return true;
+  });
+  setMeta(db, PENDING_KEY, JSON.stringify(waiting.slice(0, MAX_PENDING)));
+
+  // The cursor moves past every candidate reached; once a walk reached all it was given, to
+  // the newest row or change, so rows that are not candidates do not keep the next run busy.
+  const freshReached = fresh.slice(0, Math.min(reached, fresh.length));
+  const changedReached = changed.slice(0, Math.max(0, reached - fresh.length));
+  const allReached = reached === candidates.length;
+  const lastFresh = freshReached.at(-1);
+  const lastChanged = changedReached.at(-1);
+  advanceCursor(db, {
+    maxId:
+      allReached && fresh.length < batch
+        ? Math.max(from.maxId, maxId)
+        : (lastFresh?.id ?? from.maxId),
+    ...(allReached && candidates.length < batch && newest && later(newest, from)
+      ? newest
+      : lastChanged
+        ? { updatedAt: lastChanged.updatedAt, id: lastChanged.id }
+        : { updatedAt: from.updatedAt, id: from.id }),
+    model,
+  });
   return { proposed, scanned: reached };
 }
 
