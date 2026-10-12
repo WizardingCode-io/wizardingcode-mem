@@ -17,6 +17,7 @@ import { loadModel, modelPath } from "../../src/embed/model.ts";
 import { writeMemoryVector } from "../../src/embed/vectors.ts";
 import { openHistoryDb } from "../../src/history/db.ts";
 import { type Db, openDb } from "../../src/store/db.ts";
+import { linkProjects, suggestLink, visibleProjects } from "../../src/store/links.ts";
 import { insertMemory } from "../../src/store/memories.ts";
 import { setMeta } from "../../src/store/meta.ts";
 import { startUi, type UiServer } from "../../src/ui/server.ts";
@@ -1049,5 +1050,161 @@ describe("wizardingcode-mem ui: semantic search", () => {
     const { s } = await startSpying();
     expect((await post(s, "/api/semantic/delete")).status).toBe(200);
     expect(existsSync(join(dataDir, "history.db"))).toBe(false);
+  });
+});
+
+describe("wizardingcode-mem ui: linked projects", () => {
+  const ids = () => {
+    const db = openDb({ dataDir, busyTimeoutMs: 2000 });
+    try {
+      const of = (name: string) =>
+        db.query<{ id: number }, [string]>("SELECT id FROM projects WHERE name = ?").get(name)
+          ?.id as number;
+      mkdirSync(join(base, "lib"));
+      const lib = resolveProject(db, join(base, "lib"), NOW).id;
+      seed(db, "The library rotates its cache weekly.", "", { projectId: lib, kind: "gotcha" });
+      return { other: of("other"), lib };
+    } finally {
+      db.close();
+    }
+  };
+  const withDb = <T>(fn: (db: Db) => T): T => {
+    const db = openDb({ dataDir, busyTimeoutMs: 2000 });
+    try {
+      return fn(db);
+    } finally {
+      db.close();
+    }
+  };
+  const post = (s: UiServer, path: string, body?: unknown) =>
+    api(s, path, {
+      method: "POST",
+      ...(body === undefined
+        ? {}
+        : { body: JSON.stringify(body), headers: { "content-type": "application/json" } }),
+    });
+  interface LinkView {
+    id: number;
+    from: number;
+    fromName: string;
+    to: number;
+    toName: string;
+    kind: string;
+    status: string;
+    signals: string[];
+  }
+
+  test("every links route needs the token", async () => {
+    const s = await start();
+    expect((await fetch(`${s.origin}/api/links`)).status).toBe(401);
+    for (const path of [
+      "/api/links",
+      "/api/links/1/confirm",
+      "/api/links/1/reject",
+      "/api/links/1/unlink",
+    ]) {
+      expect((await fetch(`${s.origin}${path}`, { method: "POST" })).status).toBe(401);
+    }
+  });
+
+  test("lists every link with its projects' names and signals, and the pending suggestions", async () => {
+    const { other, lib } = ids();
+    const suggested = withDb((db) => {
+      linkProjects(db, projectId, lib, "uses", NOW);
+      return suggestLink(db, projectId, other, "product", ["remote owner + “shop”"], NOW) as number;
+    });
+    const s = await start();
+    const body = (await (await api(s, "/api/links")).json()) as {
+      links: LinkView[];
+      pending: { total: number; byProject: Record<string, number> };
+    };
+    expect(body.links).toEqual([
+      expect.objectContaining({
+        from: projectId,
+        fromName: "shop",
+        to: lib,
+        toName: "lib",
+        kind: "uses",
+        status: "confirmed",
+      }),
+      expect.objectContaining({
+        id: suggested,
+        fromName: "shop",
+        toName: "other",
+        kind: "product",
+        status: "suggested",
+        signals: ["remote owner + “shop”"],
+      }),
+    ]);
+    expect(body.pending).toEqual({
+      total: 1,
+      byProject: { [String(projectId)]: 1, [String(other)]: 1 },
+    });
+  });
+
+  test("links by hand; refuses itself, an unknown project and an unknown kind", async () => {
+    const { lib } = ids();
+    const s = await start();
+    const made = await post(s, "/api/links", { from: projectId, to: lib, kind: "uses" });
+    expect(made.status).toBe(200);
+    expect(await made.json()).toEqual(
+      expect.objectContaining({ from: projectId, to: lib, kind: "uses", status: "confirmed" }),
+    );
+    expect(withDb((db) => visibleProjects(db, projectId).map((v) => v.name))).toEqual(["lib"]);
+    expect((await post(s, "/api/links", { from: lib, to: lib, kind: "product" })).status).toBe(400);
+    expect((await post(s, "/api/links", { from: lib, to: 999, kind: "product" })).status).toBe(400);
+    expect((await post(s, "/api/links", { from: lib, to: projectId, kind: "x" })).status).toBe(400);
+  });
+
+  test("confirms or rejects a suggestion only; unlinks a confirmed link only", async () => {
+    const { other, lib } = ids();
+    const [a, b] = withDb((db) => [
+      suggestLink(db, projectId, other, "product", [], NOW) as number,
+      suggestLink(db, projectId, lib, "uses", [], NOW) as number,
+    ]);
+    const s = await start();
+    const confirmed = await post(s, `/api/links/${a}/confirm`);
+    expect(confirmed.status).toBe(200);
+    expect(await confirmed.json()).toEqual(expect.objectContaining({ id: a, status: "confirmed" }));
+    expect((await post(s, `/api/links/${a}/reject`)).status).toBe(409);
+    expect((await post(s, `/api/links/${b}/reject`)).status).toBe(200);
+    expect((await post(s, `/api/links/${b}/confirm`)).status).toBe(409);
+    expect((await post(s, `/api/links/${b}/unlink`)).status).toBe(409);
+    expect((await post(s, "/api/links/999/confirm")).status).toBe(404);
+    const unlinked = await post(s, `/api/links/${a}/unlink`);
+    expect(await unlinked.json()).toEqual(expect.objectContaining({ id: a, status: "rejected" }));
+    expect(withDb((db) => visibleProjects(db, projectId))).toEqual([]);
+  });
+
+  test("the memory list takes its linked projects on request; the palette searches a project's group", async () => {
+    const { lib } = ids();
+    withDb((db) => linkProjects(db, projectId, lib, "uses", NOW));
+    const s = await start();
+    type List = { total: number; items: { title: string; projectId: number }[] };
+    const own = (await (await api(s, `/api/memories?project=${projectId}`)).json()) as List;
+    expect(own.total).toBe(2);
+    const linked = (await (
+      await api(s, `/api/memories?project=${projectId}&scope=linked`)
+    ).json()) as List;
+    expect(linked.total).toBe(3);
+    expect(linked.items.find((m) => m.projectId === lib)?.title).toBe(
+      "The library rotates its cache weekly.",
+    );
+    const searched = (await (
+      await api(s, `/api/memories?project=${projectId}&scope=linked&q=rotates`)
+    ).json()) as List;
+    expect(searched.items.map((m) => m.title)).toEqual(["The library rotates its cache weekly."]);
+    // From the library, the consumer stays out.
+    const fromLib = (await (
+      await api(s, `/api/memories?project=${lib}&scope=linked`)
+    ).json()) as List;
+    expect(fromLib.total).toBe(1);
+
+    const hits = (await (await api(s, `/api/search?q=rotates&project=${projectId}`)).json()) as {
+      projectName: string;
+    }[];
+    expect(hits.map((h) => h.projectName)).toEqual(["lib"]);
+    const everywhere = (await (await api(s, "/api/search?q=rotates")).json()) as unknown[];
+    expect(everywhere).toHaveLength(2);
   });
 });

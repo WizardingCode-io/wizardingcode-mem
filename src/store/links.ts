@@ -35,7 +35,7 @@ interface Row {
 const COLUMNS =
   "id, from_project, to_project, kind, status, origin, signals, created_at, decided_at";
 
-function parseSignals(text: string): string[] {
+export function parseSignals(text: string): string[] {
   try {
     const value: unknown = JSON.parse(text);
     return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];

@@ -7,7 +7,16 @@ import { explicitMatch } from "../retrieve/query.ts";
 import { fuseRanks, SEMANTIC_POOL, semanticCandidates } from "../retrieve/semantic.ts";
 import { hookLatency } from "../status/report.ts";
 import { type Db, withWrite } from "../store/db.ts";
-import { inProject } from "../util/words.ts";
+import {
+  decideLink,
+  type Link,
+  type LinkKind,
+  linkProjects,
+  parseSignals,
+  unlinkProjects,
+  visibleProjects,
+} from "../store/links.ts";
+import { inProjects } from "../util/words.ts";
 
 // What the viewer reads and the little it may change, as plain functions over the
 // database. The server turns these into HTTP; nothing here knows about requests.
@@ -83,6 +92,8 @@ function attachFiles(db: Db, rows: Row[]): MemoryItem[] {
 
 export interface ListOptions {
   projectId: number;
+  /** `linked`: the project and the projects it sees through confirmed links. */
+  scope?: string;
   q?: string;
   kind?: string;
   status?: string;
@@ -90,6 +101,11 @@ export interface ListOptions {
   minImportance?: number;
   limit?: number;
   offset?: number;
+}
+
+/** A project alone, or with the projects it sees through confirmed links. */
+function groupOf(db: Db, projectId: number, linked: boolean): number[] {
+  return linked ? [projectId, ...visibleProjects(db, projectId).map((v) => v.id)] : [projectId];
 }
 
 /**
@@ -110,8 +126,9 @@ export function listMemories(
   const limit = Math.min(MAX_LIMIT, Math.max(1, options.limit ?? 50));
   const offset = Math.max(0, options.offset ?? 0);
   const floor = Math.min(5, Math.max(1, Math.trunc(options.minImportance ?? 1)));
-  const where = `m.project_id = ? AND (? = 'all' OR m.status = ?) AND (? IS NULL OR m.kind = ?) AND m.importance >= ?`;
-  const params: (string | number | null)[] = [options.projectId, status, status, kind, kind, floor];
+  const projects = groupOf(db, options.projectId, options.scope === "linked");
+  const where = `m.project_id IN (${projects.map(() => "?").join(", ")}) AND (? = 'all' OR m.status = ?) AND (? IS NULL OR m.kind = ?) AND m.importance >= ?`;
+  const params: (string | number | null)[] = [...projects, status, status, kind, kind, floor];
 
   const q = (options.q ?? "").trim();
   if (q !== "") {
@@ -120,7 +137,8 @@ export function listMemories(
     const meaning =
       status === "active"
         ? semanticCandidates(db, model, q, {
-            projectId: options.projectId,
+            projectId: null,
+            projectIds: projects,
             kind,
             limit: SEMANTIC_POOL,
           })
@@ -137,7 +155,7 @@ export function listMemories(
                   WHERE memories_fts MATCH ? AND ${where}
                   ORDER BY bm25(memories_fts, 4.0, 1.0, 2.0, 0.0) LIMIT ?`,
               )
-              .all(inProject(words, options.projectId), ...params, LIST_FUSION_WORDS)
+              .all(inProjects(words, projects), ...params, LIST_FUSION_WORDS)
               .map((row) => row.id);
       // Found by meaning but outside the list's filters (importance) is dropped.
       const ids = meaning.map((hit) => hit.id);
@@ -159,7 +177,7 @@ export function listMemories(
       return { total: fused.length, items: attachFiles(db, rows) };
     }
     if (words === null) return { total: 0, items: [] };
-    const match = inProject(words, options.projectId);
+    const match = inProjects(words, projects);
     const total =
       db
         .query<{ n: number }, (string | number | null)[]>(
@@ -517,12 +535,21 @@ const HIT_COLUMNS =
  * Active memories of every project matching a query, best first; for the command palette.
  * With the model, those that mean what was typed are fused in.
  */
-export function searchAll(db: Db, q: string, limit = 20, model: Model | null = null): SearchHit[] {
+export function searchAll(
+  db: Db,
+  q: string,
+  limit = 20,
+  model: Model | null = null,
+  projectId: number | null = null,
+): SearchHit[] {
   const query = q.trim();
   const match = explicitMatch(query);
   const max = Math.min(MAX_LIMIT, Math.max(1, limit));
+  // With a project: that project and the projects it sees; without, every project.
+  const projects = projectId === null ? null : groupOf(db, projectId, true);
   const meaning = semanticCandidates(db, model, query, {
     projectId: null,
+    ...(projects === null ? {} : { projectIds: projects }),
     limit: Math.max(max, SEMANTIC_POOL),
   });
   if (match === null && meaning.length === 0) return [];
@@ -538,7 +565,7 @@ export function searchAll(db: Db, q: string, limit = 20, model: Model | null = n
               ORDER BY bm25(memories_fts, 4.0, 1.0, 2.0, 0.0) LIMIT ?`,
           )
           .all(
-            `{title body terms} : (${match})`,
+            projects === null ? `{title body terms} : (${match})` : inProjects(match, projects),
             meaning.length === 0 ? max : Math.max(max, SEMANTIC_POOL),
           );
   if (meaning.length === 0) return lexical;
@@ -572,4 +599,87 @@ export function projectRef(db: Db, id: number): ProjectRef | null {
       .get(id)
       ?.alias.slice("path:".length) ?? "";
   return { ...row, root, branch: null, commit: null, disabled: row.disabled === 1 };
+}
+
+export interface LinkView extends Link {
+  fromName: string;
+  toName: string;
+}
+
+/** Every link, with its projects' names, and the suggestions waiting for a decision. */
+export function listLinks(db: Db): {
+  links: LinkView[];
+  pending: { total: number; byProject: Record<string, number> };
+} {
+  const links = db
+    .query<
+      {
+        id: number;
+        from: number;
+        fromName: string;
+        to: number;
+        toName: string;
+        kind: LinkKind;
+        status: Link["status"];
+        origin: Link["origin"];
+        signals: string;
+        createdAt: number;
+        decidedAt: number | null;
+      },
+      []
+    >(
+      `SELECT l.id, l.from_project AS "from", f.name AS fromName, l.to_project AS "to", t.name AS toName,
+              l.kind, l.status, l.origin, l.signals, l.created_at AS createdAt, l.decided_at AS decidedAt
+         FROM project_links l JOIN projects f ON f.id = l.from_project JOIN projects t ON t.id = l.to_project
+        ORDER BY l.id`,
+    )
+    .all()
+    .map((row) => ({ ...row, signals: parseSignals(row.signals) }));
+  const byProject: Record<string, number> = {};
+  let total = 0;
+  for (const link of links) {
+    if (link.status !== "suggested") continue;
+    total++;
+    for (const id of [link.from, link.to]) byProject[id] = (byProject[id] ?? 0) + 1;
+  }
+  return { links, pending: { total, byProject } };
+}
+
+function linkView(db: Db, id: number): LinkView | null {
+  return listLinks(db).links.find((link) => link.id === id) ?? null;
+}
+
+/** A link made in the viewer: confirmed at once. A string is the reason it was refused. */
+export function addLink(db: Db, body: Record<string, unknown>, now: number): LinkView | string {
+  const { from, to, kind } = body;
+  if (!Number.isInteger(from) || !Number.isInteger(to)) return "from and to must be project ids";
+  if (kind !== "product" && kind !== "uses") return "kind must be product or uses";
+  if (from === to) return "a project cannot be linked to itself";
+  try {
+    return linkView(db, linkProjects(db, from as number, to as number, kind, now).id) as LinkView;
+  } catch {
+    return "no such project";
+  }
+}
+
+/**
+ * Confirm or reject a suggestion, or end a confirmed link. Only a suggestion can be decided,
+ * only a confirmed link unlinked: linking a rejected pair again goes through addLink.
+ */
+export function changeLink(
+  db: Db,
+  id: number,
+  change: "confirm" | "reject" | "unlink",
+  now: number,
+): LinkView | "not-found" | "conflict" {
+  const link = linkView(db, id);
+  if (link === null) return "not-found";
+  if (change === "unlink") {
+    if (link.status !== "confirmed") return "conflict";
+    unlinkProjects(db, id, now);
+  } else {
+    if (link.status !== "suggested") return "conflict";
+    decideLink(db, id, change === "confirm" ? "confirmed" : "rejected", now);
+  }
+  return linkView(db, id) as LinkView;
 }

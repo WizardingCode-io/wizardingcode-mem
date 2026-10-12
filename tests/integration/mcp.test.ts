@@ -7,9 +7,11 @@ import type { Redacted } from "../../src/core/redact.ts";
 import type { MemoryKind } from "../../src/core/types.ts";
 import { loadModel, modelPath } from "../../src/embed/model.ts";
 import { heuristicJudge } from "../../src/judge/heuristic.ts";
+import { globalSearch } from "../../src/mcp/global.ts";
 import { getMemories, saveMemory, searchMemories } from "../../src/mcp/tools.ts";
 import { refreshStaleness } from "../../src/retrieve/staleness.ts";
 import { type Db, openDb } from "../../src/store/db.ts";
+import { linkProjects } from "../../src/store/links.ts";
 import { insertMemory } from "../../src/store/memories.ts";
 
 const NOW = Date.UTC(2026, 9, 5, 12);
@@ -124,6 +126,93 @@ describe("memory_search", () => {
   test("a query made only of punctuation or query syntax is harmless", () => {
     memory("The pragma busy_timeout must come first.");
     expect(search('") OR NOT * ^ (')).toBe("No memories match.");
+  });
+});
+
+describe("memory_search over linked projects", () => {
+  const other = (name: string) => {
+    mkdirSync(join(base, name));
+    return resolveProject(db, join(base, name), NOW).id;
+  };
+
+  test("finds a linked project's memory, and names the project of every result", () => {
+    const web = other("web");
+    linkProjects(db, web, projectId, "product", NOW);
+    const own = memory("The pragma order matters here.");
+    const theirs = memory("The pragma order matters on the web too.", "", { projectId: web });
+    const out = search("pragma").split("\n");
+    expect(out).toHaveLength(2);
+    expect(out).toContainEqual(expect.stringMatching(new RegExp(`^\\[project\\] #${own} `)));
+    expect(out).toContainEqual(expect.stringMatching(new RegExp(`^\\[web\\] #${theirs} `)));
+  });
+
+  test("a consumer sees its library; the library does not see its consumer", () => {
+    const lib = other("lib");
+    linkProjects(db, projectId, lib, "uses", NOW);
+    const libNote = memory("The pragma helper lives in the library.", "", { projectId: lib });
+    expect(search("pragma")).toStartWith(`[lib] #${libNote} `);
+    memory("The pragma of the consumer.");
+    const fromLib = searchMemories({ ...context(), projectId: lib }, { query: "pragma" });
+    expect(fromLib).toBe(
+      `#${libNote} [decision · 2026-10-03] The pragma helper lives in the library.`,
+    );
+  });
+
+  test("a suggested or rejected link adds nothing", () => {
+    const web = other("web");
+    db.run(
+      "INSERT INTO project_links (from_project, to_project, kind, status, origin, signals, created_at) VALUES (?, ?, 'product', 'suggested', 'suggested', '[]', 1)",
+      [projectId, web],
+    );
+    memory("The pragma order matters on the web.", "", { projectId: web });
+    expect(search("pragma")).toBe("No memories match.");
+  });
+
+  test("an empty query lists the group's most important notes", () => {
+    const web = other("web");
+    linkProjects(db, projectId, web, "product", NOW);
+    const major = memory("Never mock the database.", "", { importance: 5, projectId: web });
+    expect(search("").split("\n")[0]).toStartWith(`[web] #${major} `);
+  });
+
+  test("the project argument narrows to this project or one linked project", () => {
+    const web = other("web");
+    linkProjects(db, projectId, web, "product", NOW);
+    const own = memory("The pragma order matters here.");
+    const theirs = memory("The pragma order matters on the web.", "", { projectId: web });
+    expect(searchMemories(context(), { query: "pragma", project: "web" })).toBe(
+      search("pragma")
+        .split("\n")
+        .filter((line) => line.includes(`#${theirs} `))
+        .join("\n"),
+    );
+    // This project alone reads as it always has, without a label.
+    expect(searchMemories(context(), { query: "pragma", project: "Project" })).toStartWith(
+      `#${own} `,
+    );
+    const stranger = other("stranger");
+    memory("The pragma of a stranger.", "", { projectId: stranger });
+    expect(searchMemories(context(), { query: "pragma", project: "stranger" })).toBe(
+      "No project called “stranger” here. This project and its linked ones: project, web.",
+    );
+  });
+
+  test("--global is unchanged: a named project is searched alone", () => {
+    const web = other("web");
+    linkProjects(db, projectId, web, "product", NOW);
+    memory("The pragma order matters here.");
+    memory("The pragma order matters on the web.", "", { projectId: web });
+    const out = globalSearch(db, NOW, { query: "pragma", project: "project" });
+    expect(out.split("\n")).toHaveLength(1);
+    expect(out).toStartWith("#");
+    expect(out).toContain("matters here");
+  });
+
+  test("memory_get reads a linked project's memory and names it", () => {
+    const web = other("web");
+    linkProjects(db, projectId, web, "product", NOW);
+    const theirs = memory("The web caches for a day.", "", { projectId: web });
+    expect(getMemories(context(), { ids: [theirs] })).toStartWith(`[web] - #${theirs} `);
   });
 });
 
@@ -335,6 +424,7 @@ describe("wizardingcode-mem mcp", () => {
         "memory_get",
         "memory_save",
         "memory_search",
+        "project_links",
       ]);
 
       expect(
@@ -345,6 +435,9 @@ describe("wizardingcode-mem mcp", () => {
       ).toBe("Saved as #1.");
       expect(await call("memory_search", { query: "staging" })).toStartWith("#1 [gotcha");
       expect(await call("memory_get", { ids: [1] })).toContain("Never keep data there.");
+      expect(await call("project_links", { action: "list" })).toBe(
+        "No linked projects and no suggestions for project.",
+      );
     } finally {
       proc.stdin.end();
     }

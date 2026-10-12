@@ -40,8 +40,11 @@ import { storeDirOf } from "../util/paths.ts";
 import { spawnDetached } from "../util/self.ts";
 import { clearUiState, writeUiState } from "./state.ts";
 import {
+  addLink,
+  changeLink,
   getMemory,
   getTurn,
+  listLinks,
   listMemories,
   listProjects,
   projectRef,
@@ -413,6 +416,7 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
           db,
           {
             projectId,
+            scope: url.searchParams.get("scope") ?? undefined,
             q: url.searchParams.get("q") ?? undefined,
             kind: url.searchParams.get("kind") ?? undefined,
             status: url.searchParams.get("status") ?? undefined,
@@ -475,14 +479,44 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
     }
     if (path === "/api/search" && request.method === "GET") {
       const limit = Number(url.searchParams.get("limit") ?? 20);
+      const project = url.searchParams.get("project");
+      const projectId = project === null ? null : Number(project);
+      if (projectId !== null && !Number.isInteger(projectId)) {
+        return problem(400, "project must be an id");
+      }
       return json(
         searchAll(
           db,
           url.searchParams.get("q") ?? "",
           Number.isFinite(limit) ? limit : 20,
           loadModel({ dataDir: options.dataDir, env }),
+          projectId,
         ),
       );
+    }
+    if (path === "/api/links" && request.method === "GET") {
+      return json(listLinks(db));
+    }
+    if (path === "/api/links" && request.method === "POST") {
+      const body = await jsonObject(request);
+      if (body instanceof Response) return body;
+      const made = addLink(db, body, now());
+      return typeof made === "string" ? problem(400, made) : json(made);
+    }
+    const linkChange = /^\/api\/links\/(\d+)\/(confirm|reject|unlink)$/.exec(path);
+    if (linkChange !== null && request.method === "POST") {
+      const change = linkChange[2] as "confirm" | "reject" | "unlink";
+      const outcome = changeLink(db, Number(linkChange[1]), change, now());
+      if (outcome === "not-found") return problem(404, "no such link");
+      if (outcome === "conflict") {
+        return problem(
+          409,
+          change === "unlink"
+            ? "only a confirmed link can be unlinked"
+            : "only a suggestion can be confirmed or rejected; link the projects to link them again",
+        );
+      }
+      return json(outcome);
     }
     if (path === "/api/status" && request.method === "GET") {
       const projectId = Number(url.searchParams.get("project"));

@@ -30,7 +30,14 @@ export function semanticCandidates(
   db: Db,
   model: Model | null,
   query: string,
-  filter: { projectId: number | null; kind?: string | null; limit: number; floor?: number },
+  filter: {
+    projectId: number | null;
+    /** Several projects instead of one (a project and its linked ones); overrides projectId. */
+    projectIds?: readonly number[];
+    kind?: string | null;
+    limit: number;
+    floor?: number;
+  },
 ): { id: number; score: number }[] {
   if (model === null || query.trim() === "" || filter.limit <= 0) return [];
   try {
@@ -40,9 +47,12 @@ export function semanticCandidates(
     const index = vectorIndex(db, model);
     if (index.dims !== q.length) return [];
     const project = filter.projectId;
+    const several = filter.projectIds === undefined ? null : new Set(filter.projectIds);
     const kind = filter.kind ?? null;
     return rankPacked(q, index, floor, filter.limit, (r) => {
-      if (project !== null && index.projects[r] !== project) return false;
+      if (several !== null) {
+        if (!several.has(index.projects[r] as number)) return false;
+      } else if (project !== null && index.projects[r] !== project) return false;
       return kind === null || index.kinds[r] === kind;
     });
   } catch (error) {

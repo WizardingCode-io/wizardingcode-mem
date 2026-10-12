@@ -7,6 +7,7 @@ import { openDb } from "../store/db.ts";
 import { logError } from "../util/log.ts";
 import { resolvePaths } from "../util/paths.ts";
 import { globalGet, globalSave, globalSearch, listProjects } from "./global.ts";
+import { type LinksAction, projectLinksTool } from "./links-tool.ts";
 import { getMemories, saveMemory, searchMemories, type ToolContext } from "./tools.ts";
 
 // The tools, reachable from the MCP server and from `wizardingcode-mem tool` alike.
@@ -14,7 +15,12 @@ import { getMemories, saveMemory, searchMemories, type ToolContext } from "./too
 export const TOOL_NAMES = ["memory_search", "memory_get", "memory_save", "history_search"] as const;
 /** Claude Desktop's chat has no project folder: there the tools span every project, plus a list of them. */
 export const GLOBAL_TOOL_NAMES = [...TOOL_NAMES, "memory_projects"] as const;
-export type ToolName = (typeof GLOBAL_TOOL_NAMES)[number];
+/**
+ * What the MCP server offers inside a project: the tools, and linking projects by hand. The
+ * `tool` command (OpenCode's way in) keeps to TOOL_NAMES: linking is the agent's, through MCP.
+ */
+export const PROJECT_TOOL_NAMES = [...TOOL_NAMES, "project_links"] as const;
+export type ToolName = (typeof GLOBAL_TOOL_NAMES)[number] | "project_links";
 
 /** Tool argument schemas; zod is loaded here and nowhere a hook runs. */
 export async function toolSchemas(global = false) {
@@ -35,7 +41,11 @@ export async function toolSchemas(global = false) {
               .optional()
               .describe("Only this project (its name); every project when left out."),
           }
-        : {}),
+        : {
+            project: project
+              .optional()
+              .describe("Only this project or one linked project (its name)."),
+          }),
     }),
     memory_get: z.object({ ids: z.array(z.number().int()).min(1).max(20) }),
     memory_save: z.object({
@@ -68,20 +78,39 @@ export async function toolSchemas(global = false) {
         : {}),
     }),
     memory_projects: z.object({ limit: z.number().int().min(1).max(50).optional() }),
+    project_links: z.object({
+      action: z.enum(["list", "link", "unlink", "confirm", "reject"]),
+      project: project
+        .optional()
+        .describe("For link and unlink: the other project, by name or key."),
+      kind: z
+        .enum(["product", "uses"])
+        .optional()
+        .describe(
+          "For link: product (one product, both see each other) or uses (this project uses it, one way).",
+        ),
+      id: z
+        .number()
+        .int()
+        .optional()
+        .describe("For confirm and reject: a suggestion's id from list."),
+    }),
   };
 }
 
-export const TOOL_DESCRIPTIONS: Record<(typeof TOOL_NAMES)[number], string> = {
+export const TOOL_DESCRIPTIONS: Record<(typeof PROJECT_TOOL_NAMES)[number], string> = {
   memory_search:
-    "Search notes saved from earlier sessions in this project, by words and, when the optional model is installed, by meaning; returns one heading per note.",
+    "Search notes saved from earlier sessions in this project and its linked projects, by words and, when the optional model is installed, by meaning; returns one heading per note.",
   memory_get: "Read saved notes in full, by the ids that memory_search returned.",
   memory_save:
     "Save something worth knowing in later sessions: a decision and its reason, a rule the user stated, a pitfall, a fix.",
   history_search:
     "Search what was said in this project's past agent sessions, word for word, including before wizardingcode-mem was installed. Use it when memory_search finds nothing and the user refers to an earlier conversation.",
+  project_links:
+    "List, link or unlink the projects whose notes this project reads (same product, or one it uses), and confirm or reject suggested links; only when the user asks.",
 };
 
-export const GLOBAL_TOOL_DESCRIPTIONS: Record<ToolName, string> = {
+export const GLOBAL_TOOL_DESCRIPTIONS: Record<(typeof GLOBAL_TOOL_NAMES)[number], string> = {
   memory_search:
     "Search notes saved while working on any of the user's projects, by words and, when the optional model is installed, by meaning; each heading names its project.",
   memory_get: "Read saved notes in full, by the ids that memory_search returned.",
@@ -142,6 +171,15 @@ export const TOOL_META: Record<
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
+      openWorldHint: false,
+    },
+  },
+  project_links: {
+    title: "Link projects",
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
       openWorldHint: false,
     },
   },
@@ -226,6 +264,8 @@ export async function runGlobalTool(name: ToolName, args: unknown): Promise<stri
         );
       case "memory_projects":
         return listProjects(db, now, args as Parameters<typeof listProjects>[2]);
+      case "project_links":
+        return "project_links answers only inside a project.";
     }
   } finally {
     db.close();
@@ -275,6 +315,8 @@ export async function runTool(name: ToolName, args: unknown, projectDir: string)
         );
       case "memory_projects":
         return "memory_projects answers only without a project folder (wizardingcode-mem mcp --global).";
+      case "project_links":
+        return projectLinksTool(context, args as LinksAction);
     }
   } finally {
     db.close();
