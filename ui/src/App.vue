@@ -2,6 +2,9 @@
 import { computed, onBeforeUnmount, onMounted, ref, watchEffect } from "vue";
 import { api } from "./api";
 import HistoryOffer from "./components/HistoryOffer.vue";
+import LinksOffer from "./components/LinksOffer.vue";
+import ProjectsView from "./components/ProjectsView.vue";
+import RulesView from "./components/RulesView.vue";
 import MemoryDetail from "./components/MemoryDetail.vue";
 import MemoryList from "./components/MemoryList.vue";
 import Palette from "./components/Palette.vue";
@@ -13,7 +16,7 @@ import TopBar from "./components/TopBar.vue";
 import HistoryView from "./components/HistoryView.vue";
 import TurnsView from "./components/TurnsView.vue";
 import { ago, hue } from "./format";
-import { closeDetail, loadList, loadOverview, move, project, reload, select, selectProject, sidebarOpen, startHeartbeat, state, type Tab } from "./viewer";
+import { closeDetail, loadLinks, loadList, loadOverview, loadRules, MACHINE_TABS, move, project, reload, select, selectProject, sidebarOpen, startHeartbeat, state, type Tab } from "./viewer";
 
 // The view tabs (Sales OS page header, second row): a 10px square each, in the brand's hues.
 const tabs: { label: string; value: Tab; hue: string }[] = [
@@ -22,11 +25,18 @@ const tabs: { label: string; value: Tab; hue: string }[] = [
   { label: "Overview", value: "overview", hue: "#2EE6C8" },
   { label: "History", value: "history", hue: "#FF3DCB" },
 ];
+// The machine's page across projects: its two views, with what waits in each.
+const crossTabs = computed(() => [
+  { label: "Projects", value: "projects" as Tab, hue: "#9B5CFF", n: state.links.filter((l) => l.status === "suggested").length },
+  { label: "You", value: "you" as Tab, hue: "#FF3DCB", n: state.rules?.proposed.length ?? 0 },
+]);
+const machine = computed(() => MACHINE_TABS.includes(state.tab));
 const tab = computed({
   get: () => state.tab,
   set: (t: Tab) => {
     state.tab = t;
     history.replaceState(null, "", t === "memories" ? "#" : `#${t}`);
+    if (t === "projects" || t === "you") void Promise.all([loadLinks(), loadRules()]);
     void reload();
   },
 });
@@ -86,6 +96,8 @@ function onKey(e: KeyboardEvent) {
     if (typing) (target as HTMLElement).blur();
     else if (state.tab === "turns" && state.turnId !== null) state.turnId = null;
     else if (state.tab === "history" && state.pastId !== null) state.pastId = null;
+    else if (state.tab === "projects" && state.linkProject !== null) state.linkProject = null;
+    else if (state.tab === "you" && state.rule !== null) state.rule = null;
     else if (state.selected !== null) closeDetail();
     return;
   }
@@ -95,7 +107,7 @@ function onKey(e: KeyboardEvent) {
       sidebarOpen.value = !sidebarOpen.value;
       return;
     }
-    const views: Record<string, Tab> = { "1": "memories", "2": "turns", "3": "overview", "4": "history", "5": "settings" };
+    const views: Record<string, Tab> = { "1": "memories", "2": "turns", "3": "overview", "4": "history", "5": "settings", "6": "projects" };
     const view = views[e.key];
     if (view) {
       e.preventDefault();
@@ -118,8 +130,17 @@ onMounted(async () => {
   onBeforeUnmount(startHeartbeat());
   const deep = /^#m(\d+)$/.exec(location.hash);
   if (location.hash === "#search") palette.value = true;
-  const hashTab = (/^#(turns|overview|history|settings)$/.exec(location.hash)?.[1] ?? (/^#settings\/[a-z]+$/.test(location.hash) ? "settings" : undefined)) as Tab | undefined;
+  const hashTab = (/^#(turns|overview|history|settings|projects|you)$/.exec(location.hash)?.[1] ?? (/^#settings\/[a-z]+$/.test(location.hash) ? "settings" : undefined)) as Tab | undefined;
   if (hashTab) state.tab = hashTab;
+  // A project's links (#projects/12) or a rule (#you/p3, #you/r45) open with their dock.
+  const crossDeep = /^#(projects)\/(\d+)$|^#(you)\/([pr]\d+)$/.exec(location.hash);
+  if (crossDeep?.[1]) {
+    state.tab = "projects";
+    state.linkProject = Number(crossDeep[2]);
+  } else if (crossDeep?.[3]) {
+    state.tab = "you";
+    state.rule = crossDeep[4] ?? null;
+  }
   try {
     await loadOverview();
     if (deep) await openMemory(Number(deep[1]));
@@ -137,7 +158,7 @@ onMounted(async () => {
         <Rail :tab="state.tab" @go="tab = $event" />
         <!-- The projects panel folds to nothing (240ms) and keeps its width while it moves. Settings are the
              machine's, not a project's: the panel steps aside there and comes back as it was. -->
-        <div class="flex-none overflow-hidden transition-[width] duration-[240ms] ease-out motion-reduce:transition-none" :class="sidebarOpen && state.tab !== 'settings' ? 'w-[216px]' : 'w-0'" :inert="!sidebarOpen || state.tab === 'settings'">
+        <div class="flex-none overflow-hidden transition-[width] duration-[240ms] ease-out motion-reduce:transition-none" :class="sidebarOpen && !machine ? 'w-[216px]' : 'w-0'" :inert="!sidebarOpen || machine">
           <Sidebar class="h-full" />
         </div>
         <main class="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -147,6 +168,11 @@ onMounted(async () => {
               <span aria-hidden="true" class="flex size-4 flex-none items-center justify-center rounded bg-(--ink) text-(--paper)"><UIcon name="i-lucide-settings" class="size-2.5" /></span>
               <nav aria-label="Breadcrumb" class="flex items-center gap-1 text-[13px] leading-[18px] whitespace-nowrap"><h1 class="m-0 text-[13px] font-semibold">Settings</h1></nav>
               <span class="ml-2 text-xs text-(--ink-muted)">For every project and every agent on this machine</span>
+            </template>
+            <template v-else-if="machine">
+              <span aria-hidden="true" class="flex size-4 flex-none items-center justify-center rounded bg-(--ink) text-(--paper)"><UIcon name="i-lucide-link-2" class="size-2.5" /></span>
+              <nav aria-label="Breadcrumb" class="flex items-center gap-1 text-[13px] leading-[18px] whitespace-nowrap"><h1 class="m-0 text-[13px] font-semibold">Across projects</h1></nav>
+              <span class="ml-2 truncate text-xs text-(--ink-muted)">What your projects share, and the rules that are yours in all of them</span>
             </template>
             <template v-else>
               <span aria-hidden="true" class="flex size-4 flex-none items-center justify-center rounded font-display text-[9px] font-bold text-[#100E0D] uppercase" :style="{ background: project ? hue(project.name) : 'var(--line)' }">{{ project?.name.charAt(0) }}</span>
@@ -166,7 +192,20 @@ onMounted(async () => {
           </div>
           <!-- Row 2, 36px: the views. -->
           <div role="navigation" aria-label="Views" class="flex h-9 flex-none items-center gap-4 border-b border-(--line) px-4">
-            <template v-if="state.tab !== 'settings'">
+            <template v-if="machine && state.tab !== 'settings'">
+              <button
+                v-for="t in crossTabs"
+                :key="t.value"
+                type="button"
+                :aria-current="state.tab === t.value ? 'page' : undefined"
+                class="flex h-9 items-center gap-2 border-b-2 pt-0.5 text-[12.5px] whitespace-nowrap"
+                :class="state.tab === t.value ? 'border-(--ink) font-semibold text-(--ink)' : 'border-transparent text-(--ink-muted) hover:text-(--ink)'"
+                @click="tab = t.value"
+              >
+                <span aria-hidden="true" class="size-2.5 rounded-[3px]" :style="{ background: t.hue }" />{{ t.label }}<span v-if="t.n" class="font-mono text-[10.5px] text-(--ink-muted)">{{ t.n }}</span>
+              </button>
+            </template>
+            <template v-else-if="state.tab !== 'settings'">
               <button
                 v-for="t in tabs"
                 :key="t.value"
@@ -182,6 +221,7 @@ onMounted(async () => {
             <span v-else class="flex h-9 items-center gap-2 border-b-2 border-(--ink) pt-0.5 text-[12.5px] font-semibold"><span aria-hidden="true" class="size-2.5 rounded-[3px] bg-[#FFC53D]" />This machine</span>
           </div>
           <HistoryOffer v-if="state.tab === 'memories' && !failed" @progress="openSettings('history')" />
+          <LinksOffer v-if="state.tab === 'memories' && !failed" @review="tab = $event" />
           <div v-if="failed" class="m-4 rounded-xl border border-(--danger) bg-(--danger-soft) px-3.5 py-3 text-[13px] text-(--danger)">Could not reach wizardingcode-mem: {{ failed }}</div>
           <div v-else-if="state.tab === 'memories'" class="flex min-h-0 flex-1">
             <div class="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -192,6 +232,8 @@ onMounted(async () => {
           <TurnsView v-else-if="state.tab === 'turns'" @open-memory="openMemory" />
           <HistoryView v-else-if="state.tab === 'history'" @settings="openSettings" />
           <Settings v-else-if="state.tab === 'settings'" />
+          <ProjectsView v-else-if="state.tab === 'projects'" :docked="isWide && state.linkProject !== null" />
+          <RulesView v-else-if="state.tab === 'you'" :docked="isWide && state.rule !== null" />
           <ProjectStats v-else />
         </main>
       </div>

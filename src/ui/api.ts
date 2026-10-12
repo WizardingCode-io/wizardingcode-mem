@@ -16,6 +16,7 @@ import {
   unlinkProjects,
   visibleProjects,
 } from "../store/links.ts";
+import { getMeta, setMeta } from "../store/meta.ts";
 import { inProjects } from "../util/words.ts";
 
 // What the viewer reads and the little it may change, as plain functions over the
@@ -682,4 +683,129 @@ export function changeLink(
     decideLink(db, id, change === "confirm" ? "confirmed" : "rejected", now);
   }
   return linkView(db, id) as LinkView;
+}
+
+export interface ProposedRule {
+  id: number;
+  title: string;
+  body: string;
+  reason: "repeated" | "said-always";
+  /** The kind of its most important source. */
+  kind: MemoryKind;
+  /** The projects its sources live in, by name. */
+  projects: string[];
+  createdAt: number;
+}
+export interface AcceptedRule {
+  memoryId: number;
+  proposalId: number | null;
+  title: string;
+  body: string;
+  kind: MemoryKind;
+  importance: number;
+  reason: "repeated" | "said-always" | null;
+  /** The projects of the copies it replaced, by name. */
+  projects: string[];
+  createdAt: number;
+}
+
+const ids = (json: string): number[] => {
+  try {
+    const value: unknown = JSON.parse(json);
+    return Array.isArray(value) ? value.filter((v): v is number => Number.isInteger(v)) : [];
+  } catch {
+    return [];
+  }
+};
+const names = (rows: { name: string }[]) => [...new Set(rows.map((r) => r.name))].sort();
+
+/** The author's rules: the proposals waiting for a decision, and the rules made theirs. */
+export function listRules(db: Db): { proposed: ProposedRule[]; accepted: AcceptedRule[] } {
+  const sources = db.query<{ name: string; kind: MemoryKind; importance: number }, [string]>(
+    `SELECT p.name AS name, m.kind AS kind, m.importance AS importance
+       FROM json_each(?) j JOIN memories m ON m.id = j.value JOIN projects p ON p.id = m.project_id
+      ORDER BY m.importance DESC, m.id`,
+  );
+  const proposed = db
+    .query<
+      { id: number; memoryIds: string; title: string; body: string; reason: ProposedRule["reason"]; createdAt: number },
+      []
+    >(
+      `SELECT id, memory_ids AS memoryIds, title, body, reason, created_at AS createdAt
+         FROM rule_proposals WHERE status = 'proposed' ORDER BY created_at DESC, id DESC`,
+    )
+    .all()
+    .map(({ memoryIds, ...row }) => {
+      const found = sources.all(JSON.stringify(ids(memoryIds)));
+      return { ...row, kind: found[0]?.kind ?? "convention", projects: names(found) };
+    });
+  const copies = db.query<{ name: string }, [number]>(
+    `SELECT p.name AS name FROM memories m JOIN projects p ON p.id = m.project_id
+      WHERE m.superseded_by = ? ORDER BY p.name`,
+  );
+  const accepted = db
+    .query<Omit<AcceptedRule, "projects">, []>(
+      `SELECT u.memory_id AS memoryId, u.proposal_id AS proposalId, m.title, m.body, m.kind,
+              m.importance, r.reason, u.created_at AS createdAt
+         FROM user_memories u JOIN memories m ON m.id = u.memory_id
+         LEFT JOIN rule_proposals r ON r.id = u.proposal_id
+        WHERE m.status = 'active' ORDER BY u.created_at DESC, u.memory_id DESC`,
+    )
+    .all()
+    .map((row) => ({ ...row, projects: names(copies.all(row.memoryId)) }));
+  return { proposed, accepted };
+}
+
+/** The status of a proposal, or null when there is none with that id. */
+export function proposalStatus(db: Db, id: number): string | null {
+  return (
+    db.query<{ status: string }, [number]>("SELECT status FROM rule_proposals WHERE id = ?").get(id)
+      ?.status ?? null
+  );
+}
+
+/** What the links offer last saw when it was dismissed: the highest ids then. */
+export const LINKS_OFFER_SEEN = "links.offer.seen";
+export interface LinksOffer {
+  show: boolean;
+  /** Suggested links that came after the last dismissal. */
+  suggestions: number;
+  /** Open rule proposals that came after the last dismissal. */
+  proposals: number;
+}
+
+function offerSeen(db: Db): { link: number; rule: number } {
+  try {
+    const value = JSON.parse(getMeta(db, LINKS_OFFER_SEEN) ?? "{}") as { link?: unknown; rule?: unknown };
+    return {
+      link: typeof value.link === "number" ? value.link : 0,
+      rule: typeof value.rule === "number" ? value.rule : 0,
+    };
+  } catch {
+    return { link: 0, rule: 0 };
+  }
+}
+
+/** The quiet banner: shown while there are suggestions or proposals newer than its last dismissal. */
+export function linksOffer(db: Db): LinksOffer {
+  const seen = offerSeen(db);
+  const count = (sql: string, after: number) =>
+    db.query<{ n: number }, [number]>(sql).get(after)?.n ?? 0;
+  const suggestions = count(
+    "SELECT count(*) AS n FROM project_links WHERE status = 'suggested' AND id > ?",
+    seen.link,
+  );
+  const proposals = count(
+    "SELECT count(*) AS n FROM rule_proposals WHERE status = 'proposed' AND id > ?",
+    seen.rule,
+  );
+  const show = suggestions + proposals > 0;
+  return show ? { show, suggestions, proposals } : { show: false, suggestions: 0, proposals: 0 };
+}
+
+/** Dismissing remembers what there is now; only what comes later shows the banner again. */
+export function dismissLinksOffer(db: Db): void {
+  const max = (table: string) =>
+    db.query<{ n: number | null }, []>(`SELECT max(id) AS n FROM ${table}`).get()?.n ?? 0;
+  setMeta(db, LINKS_OFFER_SEEN, JSON.stringify({ link: max("project_links"), rule: max("rule_proposals") }));
 }

@@ -39,9 +39,14 @@ import { logError } from "../util/log.ts";
 import { storeDirOf } from "../util/paths.ts";
 import { spawnDetached } from "../util/self.ts";
 import { clearUiState, writeUiState } from "./state.ts";
+import { acceptProposal, rejectProposal, undoUserRule } from "../links/rules.ts";
 import {
   addLink,
   changeLink,
+  dismissLinksOffer,
+  linksOffer,
+  listRules,
+  proposalStatus,
   getMemory,
   getTurn,
   listLinks,
@@ -493,6 +498,39 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
           projectId,
         ),
       );
+    }
+    // The quiet banner for new link suggestions and rule proposals, like the history offer.
+    if (path === "/api/links/offer" && request.method === "GET") {
+      return json(linksOffer(db));
+    }
+    if (path === "/api/links/offer/dismiss" && request.method === "POST") {
+      dismissLinksOffer(db);
+      return json({ dismissed: true });
+    }
+    // The author's rules: proposals to make theirs or reject, and rules to take back.
+    if (path === "/api/rules" && request.method === "GET") {
+      return json(listRules(db));
+    }
+    const ruleChange = /^\/api\/rules\/(\d+)\/(accept|reject|undo)$/.exec(path);
+    if (ruleChange !== null && request.method === "POST") {
+      const id = Number(ruleChange[1]);
+      const change = ruleChange[2];
+      if (change === "undo") {
+        // The id is the rule's memory: only an active rule of the author's can be taken back.
+        return undoUserRule(db, id, now())
+          ? json({ undone: true })
+          : problem(404, "no such rule of yours");
+      }
+      const status = proposalStatus(db, id);
+      if (status === null) return problem(404, "no such proposal");
+      if (status !== "proposed") return problem(409, `this proposal is already ${status}`);
+      if (change === "reject") {
+        return rejectProposal(db, id, now())
+          ? json({ rejected: true })
+          : problem(409, "this proposal was decided meanwhile");
+      }
+      const outcome = acceptProposal(db, id, now(), loadModel({ dataDir: options.dataDir, env }));
+      return "refused" in outcome ? problem(409, outcome.refused) : json(outcome);
     }
     if (path === "/api/links" && request.method === "GET") {
       return json(listLinks(db));

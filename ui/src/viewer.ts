@@ -1,9 +1,12 @@
 // The viewer's state, shared by every component: one project, one list, one selection.
 import { useDark } from "@vueuse/core";
 import { computed, reactive, ref } from "vue";
-import { api, type Kind, type MemoryDetail, type MemoryItem, type Project, type TurnItem } from "./api";
+import { api, type Kind, type LinkView, type RulesList, type MemoryDetail, type MemoryItem, type Project, type TurnItem } from "./api";
+import { visibleFrom } from "./links";
 
-export type Tab = "memories" | "turns" | "overview" | "history" | "settings";
+export type Tab = "memories" | "turns" | "overview" | "history" | "settings" | "projects" | "you";
+/** The tabs of the machine's pages: no project in the breadcrumb, the projects panel steps aside. */
+export const MACHINE_TABS: Tab[] = ["settings", "projects", "you"];
 export type Status = "active" | "archived" | "superseded" | "all";
 
 export const PAGE = 50;
@@ -28,6 +31,15 @@ const state = reactive({
   pastQ: "",
   pastAll: false,
   pastId: null as number | null,
+  /** Every link between projects, as `/api/links` lists them. */
+  links: [] as LinkView[],
+  /** The memory list: this project alone, or with the projects linked to it (the default). */
+  scope: "linked" as "linked" | "project",
+  /** The author's rules: proposed and accepted (null until asked). */
+  rules: null as RulesList | null,
+  /** The Projects view's open project, and the You view's open rule ("p<id>" or "r<id>"). */
+  linkProject: null as number | null,
+  rule: null as string | null,
   /** The ids in the order the list shows them (grouped by kind or not), for ↑ and ↓. */
   order: [] as number[],
   selected: null as number | null,
@@ -36,6 +48,26 @@ const state = reactive({
 });
 
 export const project = computed(() => state.projects.find((p) => p.id === state.projectId) ?? null);
+/** The projects the current one reads besides itself. */
+export const linked = computed(() => (state.projectId === null ? [] : visibleFrom(state.links, state.projectId)));
+
+/** The rules again; null stays null on a failure. */
+export async function loadRules(): Promise<void> {
+  try {
+    state.rules = await api.rules();
+  } catch {
+    // Shown as not loaded.
+  }
+}
+
+/** The links again; on a failure the list stays as it was (the memory list then reads one project). */
+export async function loadLinks(): Promise<void> {
+  try {
+    state.links = (await api.links()).links;
+  } catch {
+    // Links are an extra: the page works without them.
+  }
+}
 
 export async function loadOverview(): Promise<void> {
   const overview = await api.overview();
@@ -43,6 +75,7 @@ export async function loadOverview(): Promise<void> {
   state.dataDir = overview.dataDir;
   state.storeDir = overview.storeDir;
   state.projects = overview.projects;
+  await Promise.all([loadLinks(), loadRules()]);
   if (state.projectId === null && overview.projects.length > 0) {
     // ?project=<id> opens that project (a link from elsewhere); otherwise the most recent.
     const asked = Number(new URLSearchParams(location.search).get("project"));
@@ -78,6 +111,7 @@ export async function loadList(offset = 0): Promise<void> {
     };
     if (state.q) params.q = state.q;
     if (state.kind) params.kind = state.kind;
+    if (state.scope === "linked" && linked.value.length > 0) params.scope = "linked";
     const page = await api.memories(params);
     state.items = offset ? state.items.concat(page.items) : page.items;
     state.total = page.total;

@@ -1208,3 +1208,183 @@ describe("wizardingcode-mem ui: linked projects", () => {
     expect(everywhere).toHaveLength(2);
   });
 });
+
+describe("wizardingcode-mem ui: your rules and the links offer", () => {
+  const withDb = <T>(fn: (db: Db) => T): T => {
+    const db = openDb({ dataDir, busyTimeoutMs: 2000 });
+    try {
+      return fn(db);
+    } finally {
+      db.close();
+    }
+  };
+  const post = (s: UiServer, path: string) => api(s, path, { method: "POST" });
+  const otherId = () =>
+    withDb(
+      (db) =>
+        db.query<{ id: number }, []>("SELECT id FROM projects WHERE name = 'other'").get()
+          ?.id as number,
+    );
+  /** The Friday rule in shop, a copy in other, and a proposal of the pair. */
+  const proposeFriday = () =>
+    withDb((db) => {
+      const other = otherId();
+      const shopCopy = db
+        .query<{ id: number }, []>(
+          "SELECT id FROM memories WHERE title = 'Never deploy on Fridays.'",
+        )
+        .get()?.id as number;
+      const otherCopy = seed(db, "Never deploy on Fridays.", "Nobody is around to fix it.", {
+        kind: "convention",
+        importance: 3,
+        projectId: other,
+      });
+      const ids = [shopCopy, otherCopy].sort((a, b) => a - b);
+      const proposal = db
+        .query<{ id: number }, [string, number]>(
+          `INSERT INTO rule_proposals (memory_ids, title, body, reason, status, created_at)
+           VALUES (?, 'Never deploy on Fridays.', 'Support is thin at the weekend.', 'repeated', 'proposed', ?)
+           RETURNING id`,
+        )
+        .get(JSON.stringify(ids), NOW)?.id as number;
+      return { proposal, copies: ids, other };
+    });
+  const statusOf = (id: number) =>
+    withDb(
+      (db) =>
+        db.query<{ status: string }, [number]>("SELECT status FROM memories WHERE id = ?").get(id)
+          ?.status,
+    );
+  interface Rules {
+    proposed: {
+      id: number;
+      title: string;
+      body: string;
+      reason: string;
+      kind: string;
+      projects: string[];
+    }[];
+    accepted: { memoryId: number; title: string; kind: string; projects: string[] }[];
+  }
+
+  test("every rules and offer route needs the token", async () => {
+    const s = await start();
+    expect((await fetch(`${s.origin}/api/rules`)).status).toBe(401);
+    expect((await fetch(`${s.origin}/api/links/offer`)).status).toBe(401);
+    for (const path of [
+      "/api/rules/1/accept",
+      "/api/rules/1/reject",
+      "/api/rules/1/undo",
+      "/api/links/offer/dismiss",
+    ]) {
+      expect((await fetch(`${s.origin}${path}`, { method: "POST" })).status).toBe(401);
+    }
+  });
+
+  test("lists proposals with the projects they came from; nothing accepted yet", async () => {
+    const { proposal } = proposeFriday();
+    const s = await start();
+    const rules = (await (await api(s, "/api/rules")).json()) as Rules;
+    expect(rules.proposed).toEqual([
+      expect.objectContaining({
+        id: proposal,
+        title: "Never deploy on Fridays.",
+        reason: "repeated",
+        kind: "convention",
+        projects: ["other", "shop"],
+      }),
+    ]);
+    expect(rules.accepted).toEqual([]);
+  });
+
+  test("make mine supersedes the copies; undo archives the rule and brings them back", async () => {
+    const { proposal, copies } = proposeFriday();
+    const s = await start();
+    const made = await post(s, `/api/rules/${proposal}/accept`);
+    expect(made.status).toBe(200);
+    const { userMemoryId } = (await made.json()) as { userMemoryId: number };
+    expect(copies.map(statusOf)).toEqual(["superseded", "superseded"]);
+    const rules = (await (await api(s, "/api/rules")).json()) as Rules;
+    expect(rules.proposed).toEqual([]);
+    expect(rules.accepted).toEqual([
+      expect.objectContaining({
+        memoryId: userMemoryId,
+        title: "Never deploy on Fridays.",
+        kind: "convention",
+        projects: ["other", "shop"],
+      }),
+    ]);
+    expect((await post(s, `/api/rules/${proposal}/accept`)).status).toBe(409);
+
+    const undone = await post(s, `/api/rules/${userMemoryId}/undo`);
+    expect(undone.status).toBe(200);
+    expect(await undone.json()).toEqual({ undone: true });
+    expect(statusOf(userMemoryId)).toBe("archived");
+    expect(copies.map(statusOf)).toEqual(["active", "active"]);
+    expect(((await (await api(s, "/api/rules")).json()) as Rules).accepted).toEqual([]);
+    expect((await post(s, `/api/rules/${userMemoryId}/undo`)).status).toBe(404);
+  });
+
+  test("reject is for open proposals only; unknown ones are not found", async () => {
+    const { proposal, copies } = proposeFriday();
+    const s = await start();
+    expect(await (await post(s, `/api/rules/${proposal}/reject`)).json()).toEqual({
+      rejected: true,
+    });
+    expect((await post(s, `/api/rules/${proposal}/reject`)).status).toBe(409);
+    expect((await post(s, `/api/rules/${proposal}/accept`)).status).toBe(409);
+    expect((await post(s, "/api/rules/999/accept")).status).toBe(404);
+    expect((await post(s, "/api/rules/999/reject")).status).toBe(404);
+    // A memory that is not one of the author's rules cannot be undone.
+    expect((await post(s, `/api/rules/${copies[0]}/undo`)).status).toBe(404);
+    expect(((await (await api(s, "/api/rules")).json()) as Rules).proposed).toEqual([]);
+  });
+
+  test("a proposal whose sources changed is refused with the reason", async () => {
+    const { proposal, copies } = proposeFriday();
+    withDb((db) =>
+      db.run("UPDATE memories SET status = 'archived' WHERE id = ?", [copies[1] as number]),
+    );
+    const s = await start();
+    const refused = await post(s, `/api/rules/${proposal}/accept`);
+    expect(refused.status).toBe(409);
+    expect(((await refused.json()) as { error: string }).error).toContain("still state");
+  });
+
+  test("the offer counts new suggestions and proposals, and stays quiet once dismissed until more come", async () => {
+    const s = await start();
+    expect(await (await api(s, "/api/links/offer")).json()).toEqual({
+      show: false,
+      suggestions: 0,
+      proposals: 0,
+    });
+    proposeFriday();
+    mkdirSync(join(base, "lib"));
+    const lib = withDb((db) => resolveProject(db, join(base, "lib"), NOW).id);
+    const decided = withDb((db) => suggestLink(db, projectId, lib, "uses", [], NOW) as number);
+    withDb((db) => suggestLink(db, projectId, otherId(), "product", [], NOW));
+    await post(s, `/api/links/${decided}/reject`);
+    expect(await (await api(s, "/api/links/offer")).json()).toEqual({
+      show: true,
+      suggestions: 1,
+      proposals: 1,
+    });
+    expect(await (await post(s, "/api/links/offer/dismiss")).json()).toEqual({ dismissed: true });
+    expect(await (await api(s, "/api/links/offer")).json()).toEqual({
+      show: false,
+      suggestions: 0,
+      proposals: 0,
+    });
+    // Something new after the dismissal brings it back, counting only what is new.
+    mkdirSync(join(base, "api"));
+    withDb((db) => {
+      const apiProject = resolveProject(db, join(base, "api"), NOW).id;
+      suggestLink(db, apiProject, lib, "uses", [], NOW);
+    });
+    expect(await (await api(s, "/api/links/offer")).json()).toEqual({
+      show: true,
+      suggestions: 1,
+      proposals: 0,
+    });
+  });
+});

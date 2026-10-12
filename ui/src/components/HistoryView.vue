@@ -5,7 +5,7 @@
 // project pill). The selected turn opens in the app's 320px dock: the prompt and the answer.
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { api, type PastSearch, type PastTurn } from "../api";
-import { AGENT_TILE, hue } from "../format";
+import { AGENT_TILE, projectTone } from "../format";
 import { agentName, dayGroups } from "../history";
 import { firstLine, pastBody, pastLine, tidyPaths } from "../prompt";
 import { project, state } from "../viewer";
@@ -82,15 +82,6 @@ function clearSearch() {
 const COLS = "grid-template-columns: 52px 120px minmax(0, 1fr) 112px;";
 const time = (ms: number) => new Date(ms).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 const tile = (agent: string) => AGENT_TILE[agent] ?? { letter: agent.charAt(0), bg: "#D9D4CD" };
-// A project's pill in the tone of its tile hue: the soft fill and the readable text.
-const SOFT: Record<string, { bg: string; fg: string }> = {
-  "#FF3DCB": { bg: "var(--magenta-soft)", fg: "var(--magenta-text)" },
-  "#9B5CFF": { bg: "var(--violet-soft)", fg: "var(--violet-text)" },
-  "#2E7BFF": { bg: "var(--blue-soft)", fg: "var(--blue-text)" },
-  "#FFC53D": { bg: "var(--warn-soft)", fg: "var(--warn)" },
-  "#2EE6C8": { bg: "var(--ok-soft)", fg: "var(--ok)" },
-};
-const projectTone = (name: string) => SOFT[hue(name)] ?? { bg: "var(--paper-sunken)", fg: "var(--ink-muted)" };
 /** The row's muted part: what the line already says about itself, or the answer's first line. */
 const sub = (h: PastTurn) => pastLine(h.prompt).sub || (h.answer === null ? "No answer recorded" : firstLine(h.answer));
 
