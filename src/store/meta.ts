@@ -122,6 +122,9 @@ export function anyLeaseActive(db: Db, now: number): boolean {
     leaseActive(db, DRAIN_LEASE, now) ||
     leaseActive(db, BACKUP_LEASE, now) ||
     leaseActive(db, HISTORY_LEASE, now) ||
-    leaseActive(db, EMBED_LEASE, now)
+    leaseActive(db, EMBED_LEASE, now) ||
+    // A download ends in a backfill on this store: moving it mid-download would leave the
+    // backfill a stale path.
+    leaseActive(db, EMBED_DOWNLOAD_LEASE, now)
   );
 }

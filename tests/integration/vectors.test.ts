@@ -2,25 +2,29 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { abandonDownload, backfillAfterDownload } from "../../src/cli/commands/embed.ts";
 import { resolveProject } from "../../src/core/project.ts";
 import type { Redacted } from "../../src/core/redact.ts";
 import { runEmbedBackfill } from "../../src/embed/backfill.ts";
 import { deleteModel } from "../../src/embed/download.ts";
 import { cosine } from "../../src/embed/embed.ts";
 import { loadModel, type Model, modelPath } from "../../src/embed/model.ts";
+import { PROGRESS_DONE, PROGRESS_TOTAL } from "../../src/embed/status.ts";
 import { memoryVectors, vectorIndex, writeMemoryVector } from "../../src/embed/vectors.ts";
 import { historyDbPath, openHistoryDb } from "../../src/history/db.ts";
-import { type Db, openDb } from "../../src/store/db.ts";
+import { DB_FILE, type Db, openDb } from "../../src/store/db.ts";
 import { insertMemory, supersede } from "../../src/store/memories.ts";
 import {
   anyLeaseActive,
   claimLease,
   EMBED_DOWNLOAD_LEASE,
   EMBED_LEASE,
+  getMeta,
   HISTORY_LEASE,
   handOverLease,
   leaseActive,
   releaseLease,
+  setMeta,
 } from "../../src/store/meta.ts";
 import { setMemoryStatus, updateMemory } from "../../src/ui/api.ts";
 import { runCliWith } from "../helpers/cli.ts";
@@ -375,6 +379,21 @@ describe("embed backfill and delete commands", () => {
     expect(existsSync(modelPath(dataDir))).toBe(true);
   });
 
+  for (const [key, says] of [
+    [EMBED_DOWNLOAD_LEASE, "a download is going"],
+    [EMBED_LEASE, "memories are getting their vectors"],
+  ] as const) {
+    test(`embed delete is refused while ${key} is held`, async () => {
+      memory(0, model);
+      claimLease(db, key, `${process.pid}-other`, Date.now(), 60_000);
+      const refused = await embed("delete");
+      expect(refused.exitCode).toBe(1);
+      expect(refused.stderr).toContain(says);
+      expect(existsSync(modelPath(dataDir))).toBe(true);
+      expect(rows()).toHaveLength(1);
+    });
+  }
+
   test("a second download says so while one holds the download lease", async () => {
     claimLease(db, EMBED_DOWNLOAD_LEASE, `${process.pid}-other`, Date.now(), 60_000);
     const busy = await embed("download");
@@ -478,6 +497,56 @@ describe("the download hands its lease to the backfill", () => {
       remaining: 0,
     });
     expect(leaseActive(db, EMBED_LEASE, NOW)).toBe(false);
+  });
+
+  test("the download lease blocks a move, a restore and a compact like the others", () => {
+    expect(anyLeaseActive(db, NOW)).toBe(false);
+    claimLease(db, EMBED_DOWNLOAD_LEASE, `${process.pid}-dl`, NOW, 60_000);
+    expect(anyLeaseActive(db, NOW)).toBe(true);
+  });
+
+  test("after the hand-over, a store that is not there is never created, and the lease is let go", async () => {
+    const owner = `${process.pid}-dl`;
+    claimLease(db, EMBED_LEASE, owner, Date.now(), 60_000);
+    const elsewhere = join(base, "elsewhere");
+    const code = await backfillAfterDownload(dataDir, { started: dataDir, now: elsewhere }, owner);
+    expect(code).toBe(1);
+    expect(existsSync(join(elsewhere, DB_FILE))).toBe(false);
+    expect(leaseActive(db, EMBED_LEASE, Date.now())).toBe(false);
+  });
+
+  test("after the hand-over, the lease is let go even when the store cannot be opened", async () => {
+    const owner = `${process.pid}-dl`;
+    memory(0, null);
+    claimLease(db, EMBED_LEASE, owner, Date.now(), 60_000);
+    // A newer version's database: openDb refuses it.
+    db.run("PRAGMA user_version = 999");
+    await expect(
+      backfillAfterDownload(dataDir, { started: dataDir, now: dataDir }, owner),
+    ).rejects.toThrow();
+    expect(leaseActive(db, EMBED_LEASE, Date.now())).toBe(false);
+  });
+
+  test("after the hand-over, the backfill runs on the store and releases the lease", async () => {
+    const owner = `${process.pid}-dl`;
+    memory(0, null);
+    claimLease(db, EMBED_LEASE, owner, Date.now(), 60_000);
+    expect(await backfillAfterDownload(dataDir, { started: dataDir, now: dataDir }, owner)).toBe(0);
+    expect(rows()).toHaveLength(1);
+    expect(leaseActive(db, EMBED_LEASE, Date.now())).toBe(false);
+  });
+
+  test("a stopped download leaves neither its lease nor its progress", () => {
+    const owner = `${process.pid}-dl`;
+    claimLease(db, EMBED_DOWNLOAD_LEASE, owner, Date.now(), 60_000);
+    setMeta(db, PROGRESS_DONE, "10");
+    setMeta(db, PROGRESS_TOTAL, "100");
+    abandonDownload(db, owner);
+    expect(leaseActive(db, EMBED_DOWNLOAD_LEASE, Date.now())).toBe(false);
+    expect(getMeta(db, PROGRESS_DONE)).toBeNull();
+    expect(getMeta(db, PROGRESS_TOTAL)).toBeNull();
+    // Nothing to hold on to: still quiet.
+    abandonDownload(undefined, owner);
   });
 
   test("a backfill already running elsewhere keeps its lease; the download's is released", () => {

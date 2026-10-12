@@ -50,7 +50,7 @@ The spec said backups would not carry vectors, as they do not carry `history.db`
 
 ## Deleting the model
 
-`embed delete` and the viewer's Delete remove the file and drop `memory_vectors` and, when `history.db` exists, its `turn_vectors`: the rows are harmless (scoped to the model's id) but deleting the model should give their space back. A re-download re-embeds (memories: about 0.15 ms each on the author's copy; turns: about 0.3 ms). The viewer refuses while a download, a backfill or a history run holds its lease; the command refuses during a history run.
+`embed delete` and the viewer's Delete remove the file and drop `memory_vectors` and, when `history.db` exists, its `turn_vectors`: the rows are harmless (scoped to the model's id) but deleting the model should give their space back. A re-download re-embeds (memories: about 0.15 ms each on the author's copy; turns: about 0.3 ms). The viewer and the command refuse while a download, a backfill or a history run holds its lease. A download's lease, like the backfill's, keeps a store move, a restore and a compact away (the backfill it hands over to works on the store as it is resolved then, and never creates one); a download stopped by a signal lets go of its lease and progress before it exits.
 
 ## Latency
 

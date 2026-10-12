@@ -1,9 +1,11 @@
-import { unlinkSync } from "node:fs";
+import { Database } from "bun:sqlite";
+import { existsSync, unlinkSync } from "node:fs";
+import { join } from "node:path";
 import { runEmbedBackfill } from "../../embed/backfill.ts";
 import { deleteModel, downloadModel } from "../../embed/download.ts";
 import { loadModel, modelState } from "../../embed/model.ts";
 import { DOWNLOAD_ERROR, PROGRESS_DONE, PROGRESS_TOTAL } from "../../embed/status.ts";
-import { openDb } from "../../store/db.ts";
+import { DB_FILE, type Db, openDb } from "../../store/db.ts";
 import {
   claimLease,
   EMBED_DOWNLOAD_LEASE,
@@ -50,10 +52,21 @@ export async function run(argv: string[]): Promise<number> {
     } catch {
       // No database to clean: removing the file is still worth doing.
     }
-    if (db && leaseActive(db, HISTORY_LEASE, Date.now())) {
-      db.close();
+    const at = Date.now();
+    // The viewer's refusals, in the same order.
+    const busy = !db
+      ? null
+      : leaseActive(db, EMBED_DOWNLOAD_LEASE, at)
+        ? "a download is going"
+        : leaseActive(db, EMBED_LEASE, at)
+          ? "memories are getting their vectors"
+          : leaseActive(db, HISTORY_LEASE, at)
+            ? "a history run is going"
+            : null;
+    if (busy !== null) {
+      db?.close();
       process.stderr.write(
-        "wizardingcode-mem embed: a history run is going; wait for it to finish, then delete the model\n",
+        `wizardingcode-mem embed: ${busy}; wait for it to finish, then delete the model\n`,
       );
       return 1;
     }
@@ -84,7 +97,14 @@ export async function run(argv: string[]): Promise<number> {
   if (code !== 0) return code;
   // Asked by the viewer and the install: the memories already there get their vectors now,
   // under the lease the download handed over (a poll never sees a gap between the two).
-  if (then) return backfill([], dataDir, storeDir, owner);
+  if (then) {
+    // Resolved again: the store is where it is now, not where it was when the download began.
+    return backfillAfterDownload(
+      dataDir,
+      { started: storeDir, now: resolvePaths().storeDir },
+      owner,
+    );
+  }
   process.stdout.write(
     "embed: memories saved before now get a vector with: wizardingcode-mem embed backfill\n",
   );
@@ -129,8 +149,10 @@ async function download(
       unlinkSync(partPath);
     } catch {}
   };
+  // process.exit skips the finally below: let go of the lease and the progress here.
   const onSignal = (code: number) => () => {
     dropPart();
+    abandonDownload(db, owner);
     process.exit(code);
   };
   const sigint = onSignal(130);
@@ -187,10 +209,58 @@ async function download(
     try {
       db?.run("DELETE FROM meta WHERE key IN (?, ?)", [PROGRESS_DONE, PROGRESS_TOTAL]);
       if (db && ok && handOver) {
+        // The download's short wait suits its progress writes, not the one write that matters.
+        db.run("PRAGMA busy_timeout = 2000");
         handOverLease(db, EMBED_DOWNLOAD_LEASE, EMBED_LEASE, owner, Date.now(), LEASE_MS);
       } else if (db) releaseLease(db, EMBED_DOWNLOAD_LEASE, owner);
     } catch {}
     db?.close();
+  }
+}
+
+/** What a stopped download must not leave behind: its lease and its progress. Best effort. */
+export function abandonDownload(db: Db | undefined, owner: string): void {
+  if (!db) return;
+  try {
+    db.run("DELETE FROM meta WHERE key IN (?, ?)", [PROGRESS_DONE, PROGRESS_TOTAL]);
+    releaseLease(db, EMBED_DOWNLOAD_LEASE, owner);
+  } catch {}
+}
+
+/** Lets go of `owner`'s embed lease in the store at `dir`, if there is one; never creates it. */
+function releaseHandedOver(dir: string, owner: string): void {
+  const path = join(dir, DB_FILE);
+  if (!existsSync(path)) return;
+  try {
+    const db = new Database(path, { readwrite: true, create: false });
+    try {
+      db.run("PRAGMA busy_timeout = 2000");
+      releaseLease(db, EMBED_LEASE, owner);
+    } finally {
+      db.close();
+    }
+  } catch {}
+}
+
+/**
+ * The backfill a download hands its lease to. It works on the store where it is `now` and never
+ * creates one there; whatever happens, the lease does not outlive it, in either place.
+ */
+export async function backfillAfterDownload(
+  dataDir: string,
+  stores: { started: string; now: string },
+  owner: string,
+): Promise<number> {
+  try {
+    if (!existsSync(join(stores.now, DB_FILE))) {
+      process.stderr.write(
+        `wizardingcode-mem embed: no database in ${stores.now}; run \`wizardingcode-mem embed backfill\` once it is there\n`,
+      );
+      return 1;
+    }
+    return await backfill([], dataDir, stores.now, owner);
+  } finally {
+    for (const dir of new Set([stores.started, stores.now])) releaseHandedOver(dir, owner);
   }
 }
 
@@ -212,13 +282,6 @@ async function backfill(
   }
   const model = loadModel({ dataDir });
   if (model === null) {
-    if (handedOver !== undefined) {
-      try {
-        const db = openDb({ dataDir: storeDir, busyTimeoutMs: 2000 });
-        releaseLease(db, EMBED_LEASE, handedOver);
-        db.close();
-      } catch {}
-    }
     process.stderr.write(
       "wizardingcode-mem embed: no semantic model (run `wizardingcode-mem embed download`, and check it is switched on)\n",
     );
