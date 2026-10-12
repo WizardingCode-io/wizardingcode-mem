@@ -184,4 +184,18 @@ describe("store/links", () => {
     db.run("DROP TABLE project_links");
     expect(visibleProjects(db, a)).toEqual([]);
   });
+
+  test("a pair decided in any kind or direction is never suggested again", () => {
+    const a = project("pa");
+    const b = project("pb");
+    const id = suggestLink(db, a, b, "product", ["x"], 1) as number;
+    decideLink(db, id, "rejected", 2);
+    expect(suggestLink(db, a, b, "uses", ["y"], 3)).toBeNull();
+    expect(suggestLink(db, b, a, "uses", ["y"], 3)).toBeNull();
+    const c = project("pc");
+    const d = project("pd");
+    linkProjects(db, c, d, "uses", 1);
+    expect(suggestLink(db, d, c, "uses", ["z"], 3)).toBeNull();
+    expect(suggestLink(db, c, d, "product", ["z"], 3)).toBeNull();
+  });
 });

@@ -29,6 +29,12 @@ describe("stems", () => {
     expect(nameStems("Shop-API_web.v2")).toEqual(["shop"]);
     expect(nameStems("client-a-api")).toEqual([]);
   });
+  test("agency words are generic; every shared stem is considered", () => {
+    expect(sharedStem("acme-admin", "beta-admin")).toBeNull();
+    expect(sharedStem("a-wordpress-theme", "b-wordpress-theme")).toBeNull();
+    expect(sharedStem("acme-shop-api", "acme-shop-web")).toBe("acme");
+    expect(sharedStem("acme-shop-api", "acme-shop-web", new Set(["acme"]))).toBe("shop");
+  });
   test("shared stem", () => {
     expect(sharedStem("shop-api", "shop-web")).toBe("shop");
     expect(sharedStem("acme-api", "zeta-web")).toBeNull();
@@ -89,6 +95,18 @@ describe("readManifests", () => {
     expect(r.packageName).toBe("x");
     expect(r.deps).toEqual(expect.arrayContaining(["y", "z"]));
     expect(r.localPaths).toEqual(["../y"]);
+  });
+  test("exclusions and bare wildcards are not workspace patterns", () => {
+    writeFileSync(
+      join(root, "pnpm-workspace.yaml"),
+      "packages:\n  - 'apps/*'\n  - '!**/test/**'\n  - '**'\n  - '*'\n  - '**/*'\n",
+    );
+    expect(readManifests(root).workspaces).toEqual(["apps/*"]);
+    writeFileSync(
+      join(root, "package.json"),
+      JSON.stringify({ workspaces: ["!x", "**", "pkgs/*"] }),
+    );
+    expect(readManifests(root).workspaces).toEqual(["pkgs/*", "apps/*"]);
   });
   test("pnpm-workspace.yaml", () => {
     writeFileSync(join(root, "pnpm-workspace.yaml"), "packages:\n  - 'apps/*'\n  - libs/*\n");

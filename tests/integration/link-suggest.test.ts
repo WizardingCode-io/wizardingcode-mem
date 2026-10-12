@@ -50,7 +50,7 @@ function project(rel: string, opts: Opts = {}): number {
   }
   return id;
 }
-const run = () => suggestLinks(db, { now: 10 });
+const run = () => suggestLinks(db, { now: 10, home: join(dir, "home") });
 const all = () =>
   db.query("SELECT from_project, to_project, kind, status, signals FROM project_links").all();
 
@@ -117,6 +117,55 @@ describe("suggestLinks", () => {
     expect(links).toHaveLength(1);
     expect(links[0]).toMatchObject({ from: a, to: b, kind: "product" });
     expect(links[0]?.signals).toEqual([`one workspace ${root}`]);
+  });
+  test("a stray '**' or negated workspace pattern links nothing", () => {
+    for (const [file, text] of [
+      ["pnpm-workspace.yaml", "packages:\n  - '!**/test/**'\n  - '**'\n"],
+      ["package.json", JSON.stringify({ workspaces: ["**", "!x"] })],
+    ] as const) {
+      mkdirSync(join(dir, "code"), { recursive: true });
+      writeFileSync(join(dir, "code", file), text);
+      project("clienta/api");
+      project("clientb/web");
+      expect(run().suggested).toBe(0);
+      rmSync(join(dir, "code", file));
+      db.run("DELETE FROM projects");
+    }
+  });
+  test("a workspace file in the home directory is never read", () => {
+    const home = join(dir, "home");
+    mkdirSync(home, { recursive: true });
+    writeFileSync(join(home, "package.json"), JSON.stringify({ workspaces: ["code/*"] }));
+    mkdirSync(join(home, "code"), { recursive: true });
+    const a = join(home, "code", "one");
+    const b = join(home, "code", "two");
+    for (const [n, root] of [
+      ["one", a],
+      ["two", b],
+    ] as const) {
+      mkdirSync(root, { recursive: true });
+      db.run("INSERT INTO projects (key, name, created_at) VALUES (?, ?, 1)", [`path:${root}`, n]);
+      const id = db.query<{ id: number }, [string]>("SELECT id FROM projects WHERE name = ?").get(n)
+        ?.id as number;
+      db.run("INSERT INTO project_aliases VALUES (?, ?)", [`path:${root}`, id]);
+    }
+    expect(run().suggested).toBe(0);
+  });
+  test("a workspace root that covers fewer than two known projects is ignored", () => {
+    const root = join(dir, "code", "mono2");
+    mkdirSync(root, { recursive: true });
+    writeFileSync(join(root, "package.json"), JSON.stringify({ workspaces: ["pkgs/*"] }));
+    project("mono2/pkgs/only");
+    expect(run().suggested).toBe(0);
+  });
+  test("same-named admin repos of one owner, unrelated otherwise: nothing; owner-named shop pair: product", () => {
+    project("acme-admin", { remote: "github.com/acme/acme-admin" });
+    project("beta-admin", { remote: "github.com/acme/beta-admin" });
+    expect(run().suggested).toBe(0);
+    const a = project("acme-shop-api", { remote: "github.com/acme/acme-shop-api" });
+    project("acme-shop-web", { remote: "github.com/acme/acme-shop-web" });
+    expect(run().suggested).toBe(1);
+    expect(linksOf(db, a)[0]?.signals).toEqual(["same owner github.com/acme", "shared name shop"]);
   });
   test("a confirmed or rejected pair is not touched", () => {
     const a = project("shop-api", { remote: "github.com/acme/shop-api" });

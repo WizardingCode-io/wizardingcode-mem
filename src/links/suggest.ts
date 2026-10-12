@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, relative, resolve } from "node:path";
 import { normalizeRemote } from "../core/git.ts";
 import type { Db } from "../store/db.ts";
@@ -51,17 +52,48 @@ function ownerStems(owner: string): Set<string> {
   return new Set([owner, ...nameStems(owner)]);
 }
 
-/** A project's workspace root: the nearest ancestor whose manifest declares workspaces covering it. */
-function workspaceRoot(p: Known): string | null {
-  let dir = dirname(p.root);
-  for (let i = 0; i < 6 && dir !== dirname(dir); i++, dir = dirname(dir)) {
+const MAX_LEVELS = 6;
+
+/**
+ * Workspace roots: ancestors (never the home directory or above) whose declared workspaces cover at
+ * least two known project roots. Each project belongs to its nearest such root. Manifests are
+ * read once per directory.
+ */
+function workspaceGroups(projects: Known[], home: string): Map<string, Known[]> {
+  const cache = new Map<string, string[]>();
+  const globsOf = (dir: string) => {
+    const known = cache.get(dir);
+    if (known) return known;
     const globs = readManifests(dir).workspaces;
-    if (globs.length === 0) continue;
-    const rel = relative(dir, p.root);
-    if (globs.some((g) => new Bun.Glob(g.replace(/^\.\//, "").replace(/\/+$/, "")).match(rel)))
-      return dir;
+    cache.set(dir, globs);
+    return globs;
+  };
+  const inside = (dir: string) => dir !== home && !home.startsWith(`${dir}/`) && dir !== "/";
+  const covered = new Map<string, Known[]>();
+  const nearest = new Map<number, string[]>();
+  for (const p of projects) {
+    const dirs: string[] = [];
+    let dir = dirname(p.root);
+    for (
+      let i = 0;
+      i < MAX_LEVELS && inside(dir) && dir !== dirname(dir);
+      i++, dir = dirname(dir)
+    ) {
+      const globs = globsOf(dir);
+      const rel = relative(dir, p.root);
+      if (globs.some((g) => new Bun.Glob(g).match(rel))) {
+        dirs.push(dir);
+        covered.set(dir, [...(covered.get(dir) ?? []), p]);
+      }
+    }
+    nearest.set(p.id, dirs);
   }
-  return null;
+  const groups = new Map<string, Known[]>();
+  for (const p of projects) {
+    const root = (nearest.get(p.id) ?? []).find((d) => (covered.get(d)?.length ?? 0) >= 2);
+    if (root) groups.set(root, [...(groups.get(root) ?? []), p]);
+  }
+  return groups;
 }
 
 /**
@@ -71,7 +103,7 @@ function workspaceRoot(p: Known): string | null {
  */
 export function suggestLinks(
   db: Db,
-  options: { now: number; maxProjects?: number },
+  options: { now: number; maxProjects?: number; home?: string },
 ): { suggested: number } {
   let suggested = 0;
   const projects = load(db, options.maxProjects ?? 200);
@@ -91,8 +123,8 @@ export function suggestLinks(
         for (const rb of b.remotes) {
           const pb = parseRemote(rb);
           if (!pb || pa.host !== pb.host || pa.owner !== pb.owner) continue;
-          const stem = sharedStem(pa.name, pb.name);
-          if (stem !== null && !ownerStems(pa.owner).has(stem)) {
+          const stem = sharedStem(pa.name, pb.name, ownerStems(pa.owner));
+          if (stem !== null) {
             hit = [`same owner ${pa.host}/${pa.owner}`, `shared name ${stem}`];
             break;
           }
@@ -128,11 +160,7 @@ export function suggestLinks(
   }
 
   // 3. One workspace.
-  const byWorkspace = new Map<string, Known[]>();
-  for (const p of projects) {
-    const root = workspaceRoot(p);
-    if (root) byWorkspace.set(root, [...(byWorkspace.get(root) ?? []), p]);
-  }
+  const byWorkspace = workspaceGroups(projects, options.home ?? homedir());
   for (const [root, members] of byWorkspace) {
     const some = members.slice(0, MAX_WORKSPACE_MEMBERS);
     for (let i = 0; i < some.length; i++) {

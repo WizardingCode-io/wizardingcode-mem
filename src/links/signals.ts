@@ -15,6 +15,43 @@ const GENERIC = new Set([
   "service",
   "lib",
   "mobile",
+  // Words every agency repo carries; one owner's unrelated client repos must never match on them.
+  ...[
+    "admin",
+    "site",
+    "website",
+    "theme",
+    "docs",
+    "doc",
+    "infra",
+    "config",
+    "gateway",
+    "cms",
+    "dashboard",
+    "portal",
+    "landing",
+    "plugin",
+    "sdk",
+    "cli",
+    "tools",
+    "test",
+    "tests",
+    "e2e",
+    "deploy",
+    "ops",
+    "data",
+    "assets",
+    "static",
+    "www",
+    "wp",
+    "wordpress",
+    "laravel",
+    "react",
+    "vue",
+    "next",
+    "nuxt",
+    "node",
+  ],
 ]);
 
 /** Splits a normalised `host/owner/name` remote (SSH and HTTPS alike) or null when it is not one. */
@@ -39,9 +76,17 @@ export function nameStems(name: string): string[] {
     .filter((part) => part.length >= 3 && !GENERIC.has(part));
 }
 
-export function sharedStem(a: string, b: string): string | null {
+/** The first stem both names have that is not in `exclude` (the owner's own name, for one). */
+export function sharedStem(a: string, b: string, exclude?: ReadonlySet<string>): string | null {
   const other = new Set(nameStems(b));
-  return nameStems(a).find((stem) => other.has(stem)) ?? null;
+  return nameStems(a).find((stem) => other.has(stem) && !exclude?.has(stem)) ?? null;
+}
+
+/** A usable workspace glob: not an exclusion, not a bare wildcard that would cover everything. */
+export function workspacePattern(pattern: string): string | null {
+  const clean = pattern.trim().replace(/^\.\//, "").replace(/\/+$/, "");
+  if (!clean || clean.startsWith("!") || /^[*/]+$/.test(clean)) return null;
+  return clean;
 }
 
 export interface Manifest {
@@ -94,7 +139,10 @@ function fromPackageJson(m: Manifest, text: string): void {
   const ws = json.workspaces;
   const list = Array.isArray(ws) ? ws : (ws as { packages?: unknown } | undefined)?.packages;
   if (Array.isArray(list))
-    m.workspaces.push(...list.filter((w): w is string => typeof w === "string"));
+    for (const w of list) {
+      const ok = typeof w === "string" ? workspacePattern(w) : null;
+      if (ok) m.workspaces.push(ok);
+    }
 }
 
 function fromComposer(m: Manifest, text: string): void {
@@ -163,7 +211,8 @@ function fromPnpm(m: Manifest, text: string): void {
     else if (/^\S/.test(raw)) inPackages = false;
     else if (inPackages) {
       const item = raw.match(/^\s*-\s*['"]?([^'"#\s]+)['"]?/);
-      if (item?.[1]) m.workspaces.push(item[1]);
+      const ok = item?.[1] ? workspacePattern(item[1]) : null;
+      if (ok) m.workspaces.push(ok);
     }
   }
 }

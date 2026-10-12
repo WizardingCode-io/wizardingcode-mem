@@ -114,6 +114,16 @@ export function suggestLink(
   now: number,
 ): number | null {
   if (from === to) return null;
+  // A pair someone decided on (either direction, any kind) is never suggested again.
+  const decided = db
+    .query(
+      `SELECT 1 FROM project_links
+        WHERE status IN ('confirmed', 'rejected')
+          AND ((from_project = ?1 AND to_project = ?2) OR (from_project = ?2 AND to_project = ?1))
+        LIMIT 1`,
+    )
+    .get(from, to);
+  if (decided) return null;
   const existing = find(db, from, to, kind);
   const json = JSON.stringify(signals);
   if (existing) {
