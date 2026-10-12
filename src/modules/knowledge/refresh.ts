@@ -15,6 +15,8 @@ export const INLINE_MAX_FILES = 50;
 const ACTIVE_WITHIN_MS = 24 * 3_600_000;
 /** And at most this many of them, the most recent first. */
 const MAX_PROJECTS = 10;
+/** And within this time: the drain also asks the judge after it, so the refresh must not eat its budget. */
+const MAX_MS = 1000;
 
 /**
  * Brings the index up to date if that is cheap, for a hook: false when the project has no
@@ -47,14 +49,15 @@ export function freshenForHook(
 /**
  * For the background drain: refreshes the index of each project with a session seen
  * lately, most recent first, at most `maxProjects`. The project's folder is found from the
- * session's working directory. Never throws; a project that fails is logged and skipped.
+ * session's working directory. Stops starting projects after `maxMs` (1 s). Never throws; a project that fails is logged and skipped.
  * `refreshed` counts the projects whose index was rebuilt (not skipped as current).
  */
 export function refreshActiveProjects(
   db: Db,
   now: number,
-  options: { maxProjects?: number; withinMs?: number } = {},
+  options: { maxProjects?: number; withinMs?: number; maxMs?: number } = {},
 ): { refreshed: number } {
+  const deadline = performance.now() + (options.maxMs ?? MAX_MS);
   const maxProjects = options.maxProjects ?? MAX_PROJECTS;
   if (maxProjects <= 0) return { refreshed: 0 };
   let refreshed = 0;
@@ -70,6 +73,8 @@ export function refreshActiveProjects(
       )
       .all(now - (options.withinMs ?? ACTIVE_WITHIN_MS), maxProjects);
     for (const { project_id: projectId, cwd } of active) {
+      // Past the deadline the rest wait for the next drain (or a hook, a tool, the viewer).
+      if (performance.now() >= deadline) break;
       try {
         const root = readGitInfo(cwd)?.root ?? cwd;
         if (folderProblem(root) !== null) continue;

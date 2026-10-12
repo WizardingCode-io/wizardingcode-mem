@@ -763,6 +763,19 @@ describe("the drain's refresh", () => {
     expect(refreshActiveProjects(db, NOW, { maxProjects: 0 }).refreshed).toBe(0);
   });
 
+  test("bounded in time: past its deadline no further project is refreshed (final review)", () => {
+    const db = store();
+    realisticFolder();
+    const other = join(base, "other");
+    mkdirSync(other);
+    realisticFolder(knowledgeDir(other));
+    start({ db, session: "one" });
+    start({ db, cwd: other, session: "two" });
+    db.run("DELETE FROM knowledge_state");
+    expect(refreshActiveProjects(db, NOW, { maxMs: 0 }).refreshed).toBe(0);
+    expect(refreshActiveProjects(db, NOW).refreshed).toBe(2);
+  });
+
   test("a project whose folder is gone gets an empty index", () => {
     const db = store();
     realisticFolder();
