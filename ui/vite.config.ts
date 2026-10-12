@@ -30,6 +30,15 @@ export default defineConfig({
               md: { base: "h-8 px-4 text-[13px] leading-4 gap-1.5", leadingIcon: "size-4", trailingIcon: "size-4" },
             },
           },
+          // The DS secondary: the raised surface (white, or the dark theme's raised panel), not the page's,
+          // disabled too (Nuxt UI's own disabled state would put the page's surface back).
+          compoundVariants: [
+            {
+              color: "neutral",
+              variant: "outline",
+              class: "bg-(--paper-raised) hover:bg-(--surface-hover) disabled:bg-(--paper-raised) aria-disabled:bg-(--paper-raised)",
+            },
+          ],
           defaultVariants: { size: "sm" },
         },
         input: {

@@ -19,7 +19,7 @@ export function sessionBrief(
       `SELECT prompt, final_text AS finalText, COALESCE(ended_at, started_at) AS endedAt, branch
          FROM turns
         WHERE project_id = ? AND final_text IS NOT NULL AND final_text <> ''
-        ORDER BY id DESC LIMIT 1`,
+        ORDER BY COALESCE(ended_at, started_at) DESC, id DESC LIMIT 1`,
     )
     .get(input.projectId);
 

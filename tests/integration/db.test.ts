@@ -55,6 +55,105 @@ const search = (db: Database, term: string) =>
     .map((row) => row.rowid);
 
 describe("store/db", () => {
+  test("turns record where they came from, live by default", () => {
+    const db = open();
+    const columns = db
+      .query<{ name: string; dflt_value: string | null }, []>("PRAGMA table_info(turns)")
+      .all();
+    expect(columns.find((c) => c.name === "origin")?.dflt_value).toBe("'live'");
+    expect(
+      db.query("SELECT name FROM sqlite_master WHERE name = 'history_replacements'").all(),
+    ).toHaveLength(1);
+    db.close();
+  });
+
+  test("migration 4 keeps every turn and memory of a version-3 database, as live, and adds no queue index", () => {
+    const before = open(MIGRATIONS.slice(0, 3));
+    const { projectId } = seed(before);
+    const now = Date.now();
+    before.run(
+      `INSERT INTO sessions (agent, agent_session_id, project_id, cwd, started_at, last_seen_at)
+       VALUES ('claude-code', 's1', ?, '/p', ?, ?)`,
+      [projectId, now, now],
+    );
+    for (const [seq, state] of [
+      [1, "done"],
+      [2, "pending"],
+    ] as const) {
+      before.run(
+        `INSERT INTO turns (session_id, project_id, seq, state, prompt, started_at)
+         VALUES (1, ?, ?, ?, 'q', ?)`,
+        [projectId, seq, state, now],
+      );
+    }
+    const dump = (db: Database) => ({
+      turns: db.query("SELECT id, seq, state, prompt FROM turns ORDER BY id").all(),
+      memories: db.query("SELECT id, title, body FROM memories ORDER BY id").all(),
+    });
+    const was = dump(before);
+    before.close();
+
+    const db = open();
+    expect(version(db)).toBe(LATEST_VERSION);
+    expect(dump(db)).toEqual(was);
+    expect(db.query("SELECT DISTINCT origin FROM turns").all()).toEqual([{ origin: "live" }]);
+    expect(
+      db.query("SELECT name FROM sqlite_master WHERE name = 'turns_queue_origin'").all(),
+    ).toEqual([]);
+    db.close();
+  });
+
+  test("migration 5 keeps the injections of a version-4 database and accepts the two new events", () => {
+    const before = open(MIGRATIONS.slice(0, 4));
+    const { projectId, memoryId } = seed(before);
+    const now = Date.now();
+    before.run(
+      `INSERT INTO sessions (agent, agent_session_id, project_id, cwd, started_at, last_seen_at)
+       VALUES ('claude-code', 's1', ?, '/p', ?, ?)`,
+      [projectId, now, now],
+    );
+    for (const event of ["session-start", "prompt", "mcp", "mcp"]) {
+      before.run(
+        `INSERT INTO injections (session_id, context_epoch, memory_id, event, tokens, at)
+         VALUES (1, 0, ?, ?, 5, ?)`,
+        [memoryId, event, now],
+      );
+    }
+    const dump = (db: Database) =>
+      db.query("SELECT id, memory_id, event, tokens FROM injections ORDER BY id").all();
+    const was = dump(before);
+    before.close();
+
+    const db = open();
+    expect(version(db)).toBe(LATEST_VERSION);
+    expect(dump(db)).toEqual(was);
+    for (const event of ["file-read", "tool-failed"]) {
+      db.run(
+        `INSERT INTO injections (session_id, context_epoch, memory_id, event, tokens, at)
+         VALUES (1, 0, ?, ?, 5, ?)`,
+        [memoryId, event, now],
+      );
+    }
+    expect(() =>
+      db.run(
+        `INSERT INTO injections (session_id, context_epoch, memory_id, event, tokens, at)
+         VALUES (1, 0, ?, 'bogus', 5, ?)`,
+        [memoryId, now],
+      ),
+    ).toThrow();
+    // The once-per-context rule survives the rebuild.
+    expect(() =>
+      db.run(
+        `INSERT INTO injections (session_id, context_epoch, memory_id, event, tokens, at)
+         VALUES (1, 0, ?, 'file-read', 5, ?)`,
+        [memoryId, now],
+      ),
+    ).toThrow();
+    db.close();
+    open().close();
+    expect(version(open())).toBe(LATEST_VERSION);
+  });
+
   test("a new database ends at the latest schema version, in WAL mode", () => {
     const db = open();
     expect(version(db)).toBe(LATEST_VERSION);

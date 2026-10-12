@@ -5,6 +5,8 @@ import { resolvePaths } from "../util/paths.ts";
 import init from "./migrations/0001_init.sql" with { type: "text" };
 import ftsProject from "./migrations/0002_fts_project.sql" with { type: "text" };
 import { dropHostContext } from "./migrations/0003_host_context.ts";
+import history from "./migrations/0004_history.sql" with { type: "text" };
+import moments from "./migrations/0005_moments.sql" with { type: "text" };
 
 export type Db = Database;
 
@@ -21,6 +23,8 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: "init", sql: init },
   { version: 2, name: "fts_project", sql: ftsProject },
   { version: 3, name: "host_context", run: dropHostContext },
+  { version: 4, name: "history", sql: history },
+  { version: 5, name: "moments", sql: moments },
 ];
 export const LATEST_VERSION = MIGRATIONS.length;
 
@@ -51,7 +55,7 @@ function userVersion(db: Db): number {
   return db.query<{ user_version: number }, []>("PRAGMA user_version").get()?.user_version ?? 0;
 }
 
-function restrict(path: string, mode: number): void {
+export function restrict(path: string, mode: number): void {
   if (process.platform === "win32" || !existsSync(path)) return;
   try {
     chmodSync(path, mode);
@@ -81,7 +85,7 @@ function backup(db: Db, dir: string, version: number): void {
  * fails at once instead of waiting for `busy_timeout`. Several processes creating the
  * database together therefore have to retry by hand.
  */
-function enableWal(db: Db, busyTimeoutMs: number): void {
+export function enableWal(db: Db, busyTimeoutMs: number): void {
   const deadline = Date.now() + Math.max(busyTimeoutMs, 1000);
   for (;;) {
     try {
@@ -179,14 +183,20 @@ export function withWrite<T>(db: Db, fn: () => T): T {
  * Opens the database for reading only, without creating or migrating anything.
  * Null when there is no database yet. For commands that inspect: status and doctor.
  */
-export function openExisting(dataDir: string = resolvePaths().storeDir): Db | null {
+export function openExisting(
+  dataDir: string = resolvePaths().storeDir,
+  options: { allowNewer?: boolean } = {},
+): Db | null {
   const path = join(dataDir, DB_FILE);
   if (!existsSync(path)) return null;
   const db = new Database(path, { readonly: true });
   try {
     db.run("PRAGMA busy_timeout = 2000");
     const found = userVersion(db);
-    if (found > LATEST_VERSION) throw new SchemaTooNewError(found, LATEST_VERSION);
+    // `allowNewer`: for a caller that reads only the meta table, the same in every version.
+    if (found > LATEST_VERSION && options.allowNewer !== true) {
+      throw new SchemaTooNewError(found, LATEST_VERSION);
+    }
   } catch (error) {
     db.close();
     throw error;

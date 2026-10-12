@@ -20,8 +20,8 @@ export function run(argv: string[]): number {
   try {
     const { dataDir, storeDir } = resolvePaths();
     db = openDb({ dataDir: storeDir, busyTimeoutMs: 5000 });
-    const { retentionDays } = loadSettings(process.env, dataDir);
-    const report = compact(db, { now: Date.now(), dryRun, retentionDays });
+    const { retentionDays, historyDays } = loadSettings(process.env, dataDir);
+    const report = compact(db, { now: Date.now(), dryRun, retentionDays, historyDays });
     const what = `${plural(report.turns, "turn")}, ${plural(report.sessions, "session")}, ${plural(report.hookRuns, "hook run")}`;
     process.stdout.write(
       dryRun

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watchEffect } from "vue";
 import { api } from "./api";
+import HistoryOffer from "./components/HistoryOffer.vue";
 import MemoryDetail from "./components/MemoryDetail.vue";
 import MemoryList from "./components/MemoryList.vue";
 import Palette from "./components/Palette.vue";
@@ -9,6 +10,7 @@ import Rail from "./components/Rail.vue";
 import Settings from "./components/Settings.vue";
 import Sidebar from "./components/Sidebar.vue";
 import TopBar from "./components/TopBar.vue";
+import HistoryView from "./components/HistoryView.vue";
 import TurnsView from "./components/TurnsView.vue";
 import { ago, hue } from "./format";
 import { closeDetail, loadList, loadOverview, move, project, reload, select, selectProject, sidebarOpen, startHeartbeat, state, type Tab } from "./viewer";
@@ -18,6 +20,7 @@ const tabs: { label: string; value: Tab; hue: string }[] = [
   { label: "Memories", value: "memories", hue: "#9B5CFF" },
   { label: "Turns", value: "turns", hue: "#2E7BFF" },
   { label: "Overview", value: "overview", hue: "#2EE6C8" },
+  { label: "History", value: "history", hue: "#FF3DCB" },
 ];
 const tab = computed({
   get: () => state.tab,
@@ -43,6 +46,12 @@ const palette = ref(false);
 watchEffect(() => {
   document.title = project.value ? `${project.value.name} · wizardingcode-mem` : "wizardingcode-mem";
 });
+
+/** Settings, on one of its pages: the page reads the hash when it opens. */
+function openSettings(page: string) {
+  tab.value = "settings";
+  history.replaceState(null, "", `#settings/${page}`);
+}
 
 function openTurn(id: number) {
   state.turnId = id;
@@ -76,6 +85,7 @@ function onKey(e: KeyboardEvent) {
   if (e.key === "Escape") {
     if (typing) (target as HTMLElement).blur();
     else if (state.tab === "turns" && state.turnId !== null) state.turnId = null;
+    else if (state.tab === "history" && state.pastId !== null) state.pastId = null;
     else if (state.selected !== null) closeDetail();
     return;
   }
@@ -85,7 +95,7 @@ function onKey(e: KeyboardEvent) {
       sidebarOpen.value = !sidebarOpen.value;
       return;
     }
-    const views: Record<string, Tab> = { "1": "memories", "2": "turns", "3": "overview", "4": "settings" };
+    const views: Record<string, Tab> = { "1": "memories", "2": "turns", "3": "overview", "4": "history", "5": "settings" };
     const view = views[e.key];
     if (view) {
       e.preventDefault();
@@ -108,7 +118,7 @@ onMounted(async () => {
   onBeforeUnmount(startHeartbeat());
   const deep = /^#m(\d+)$/.exec(location.hash);
   if (location.hash === "#search") palette.value = true;
-  const hashTab = /^#(turns|overview|settings)$/.exec(location.hash)?.[1] as Tab | undefined;
+  const hashTab = (/^#(turns|overview|history|settings)$/.exec(location.hash)?.[1] ?? (/^#settings\/[a-z]+$/.test(location.hash) ? "settings" : undefined)) as Tab | undefined;
   if (hashTab) state.tab = hashTab;
   try {
     await loadOverview();
@@ -171,6 +181,7 @@ onMounted(async () => {
             </template>
             <span v-else class="flex h-9 items-center gap-2 border-b-2 border-(--ink) pt-0.5 text-[12.5px] font-semibold"><span aria-hidden="true" class="size-2.5 rounded-[3px] bg-[#FFC53D]" />This machine</span>
           </div>
+          <HistoryOffer v-if="state.tab === 'memories' && !failed" @progress="openSettings('history')" />
           <div v-if="failed" class="m-4 rounded-xl border border-(--danger) bg-(--danger-soft) px-3.5 py-3 text-[13px] text-(--danger)">Could not reach wizardingcode-mem: {{ failed }}</div>
           <div v-else-if="state.tab === 'memories'" class="flex min-h-0 flex-1">
             <div class="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -179,6 +190,7 @@ onMounted(async () => {
             <MemoryDetail v-if="isWide && state.detail" @open-turn="openTurn" />
           </div>
           <TurnsView v-else-if="state.tab === 'turns'" @open-memory="openMemory" />
+          <HistoryView v-else-if="state.tab === 'history'" @settings="openSettings" />
           <Settings v-else-if="state.tab === 'settings'" />
           <ProjectStats v-else />
         </main>

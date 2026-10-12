@@ -91,6 +91,11 @@ body { background: var(--bg); color: var(--ink); font-family: var(--font-sans); 
 /* The detail dock slides in (240ms ease-out). */
 @keyframes dock-in { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
 /* Skeleton bars while a list loads. */
+/* A running thing's dot (Sales OS: 1.4s pulse), and the moving stripes of a bar that is filling. */
+.wz-pulse::before { animation: pulse-dot 1.4s ease-in-out infinite; }
+@keyframes pulse-dot { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.7); opacity: .4; } }
+.wz-stripes { background-image: linear-gradient(135deg, rgba(255,255,255,.35) 25%, transparent 25%, transparent 50%, rgba(255,255,255,.35) 50%, rgba(255,255,255,.35) 75%, transparent 75%); background-size: 12px 12px; animation: stripes 1s linear infinite; }
+@keyframes stripes { 0% { background-position: 0 0; } 100% { background-position: 24px 0; } }
 @keyframes shimmer { 0% { background-position: -200px 0; } 100% { background-position: 200px 0; } }
 .skeleton { border-radius: 4px; background: linear-gradient(90deg, var(--paper-sunken), var(--paper), var(--paper-sunken)); background-size: 400px 100%; animation: shimmer 1.2s linear infinite; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }

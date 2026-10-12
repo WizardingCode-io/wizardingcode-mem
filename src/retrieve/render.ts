@@ -31,7 +31,7 @@ const OWN_TAG = /<(\s*\/?\s*(?:wizardingcode|shibaox)-mem-notes\s*)>/gi;
  * Stored text is shown inside our wrapper and must not be able to close or reopen it:
  * our own tag, wherever it appears in that text, loses its angle brackets.
  */
-const inert = (text: string) => text.replace(OWN_TAG, "‹$1›");
+export const inert = (text: string) => text.replace(OWN_TAG, "‹$1›");
 
 /** One line that identifies a note: its id, kind, date, files and title. */
 export function renderHeading(note: Note): string {
@@ -53,9 +53,9 @@ export function renderNote(note: Note): string {
 }
 
 /** Notes relevant to a prompt, in full. An empty list renders as nothing. */
-export function renderNotes(notes: Note[]): string {
+export function renderNotes(notes: Note[], intro: string = INTRO): string {
   if (notes.length === 0) return "";
-  return [OPEN, INTRO, "", ...notes.map(renderNote), CLOSE].join("\n");
+  return [OPEN, intro, "", ...notes.map(renderNote), CLOSE].join("\n");
 }
 
 export interface LastTurn {

@@ -1,4 +1,5 @@
 import { isFromTheHost } from "../core/host-prompt.ts";
+import type { MemoryKind } from "../core/types.ts";
 import type { Db } from "../store/db.ts";
 import { anyOf, inProject, isGeneric, stem } from "../util/words.ts";
 import { MEMORY_COLUMNS, type MemoryRow, prior, ranks, toNote } from "./notes.ts";
@@ -29,15 +30,17 @@ interface Candidate {
  * A condition that leaves out the notes this context has already been given.
  *
  * A note is owed in full once per context. The session brief only names notes, so one
- * it named still counts as unseen, unless its title is all there is to it. The ids are
+ * it named still counts as unseen, unless its title is all there is to it. A note given
+ * on a prompt, a file read or a failure was given in full. Also what the lookups for a
+ * file and for a failure share, so none of them repeats another. The ids are
  * looked up first and inlined: a subquery here would be re-run for every candidate row.
  */
-function notYetShown(db: Db, sessionId: number, epoch: number): string {
+export function notYetShown(db: Db, sessionId: number, epoch: number): string {
   const shown = db
     .query<{ id: number }, [number, number]>(
       `SELECT DISTINCT i.memory_id AS id FROM injections i JOIN memories m ON m.id = i.memory_id
         WHERE i.session_id = ? AND i.context_epoch = ?
-          AND (i.event = 'prompt' OR (i.event = 'session-start' AND m.body = ''))`,
+          AND (i.event IN ('prompt', 'file-read', 'tool-failed') OR (i.event = 'session-start' AND m.body = ''))`,
     )
     .all(sessionId, epoch);
   return shown.length === 0 ? "1" : `m.id NOT IN (${shown.map((row) => row.id).join(", ")})`;
@@ -47,7 +50,9 @@ function sessionFiles(db: Db, sessionId: number): string[] {
   const files = new Set<string>();
   const turns = db
     .query<{ files_changed: string; files_read: string }, [number, number]>(
-      "SELECT files_changed, files_read FROM turns WHERE session_id = ? ORDER BY id DESC LIMIT ?",
+      // By time: history read back later can hold older turns of the same session.
+      `SELECT files_changed, files_read FROM turns WHERE session_id = ?
+        ORDER BY COALESCE(ended_at, started_at) DESC, id DESC LIMIT ?`,
     )
     .all(sessionId, RECENT_TURNS);
   for (const turn of turns) {
@@ -110,8 +115,22 @@ export function retrieveForPrompt(
     prompt: string;
     branch: string | null;
     now: number;
+    /** Only memories of these kinds; default all. */
+    kinds?: readonly MemoryKind[];
+    /** Default 5. */
+    maxNotes?: number;
+    /** Default 2,400 characters. */
+    budgetChars?: number;
   },
 ): Note[] {
+  const maxNotes = input.maxNotes ?? MAX_NOTES;
+  const budgetChars = input.budgetChars ?? BUDGET_CHARS;
+  const kindFilter =
+    input.kinds === undefined
+      ? "1"
+      : input.kinds.length === 0
+        ? "0"
+        : `m.kind IN (${input.kinds.map((kind) => `'${kind.replaceAll("'", "''")}'`).join(", ")})`;
   // Its ids and paths only make for a slow search.
   if (isFromTheHost(input.prompt)) return [];
   const query = buildQuery(input.prompt);
@@ -123,7 +142,7 @@ export function retrieveForPrompt(
     .query<MemoryRow & { bm25: number }, [string, number, number]>(
       `SELECT ${MEMORY_COLUMNS}, bm25(memories_fts, 4.0, 1.0, 2.0, 0.0) AS bm25
          FROM memories_fts CROSS JOIN memories m ON m.id = memories_fts.rowid
-        WHERE memories_fts MATCH ? AND m.project_id = ? AND m.status = 'active' AND ${unseen}
+        WHERE memories_fts MATCH ? AND m.project_id = ? AND m.status = 'active' AND ${unseen} AND ${kindFilter}
         ORDER BY bm25 LIMIT ?`,
     )
     .all(inProject(query.match, input.projectId), input.projectId, CANDIDATES_PER_CHANNEL);
@@ -136,7 +155,7 @@ export function retrieveForPrompt(
         `SELECT ${MEMORY_COLUMNS}, count(*) AS overlap
            FROM memory_files f JOIN memories m ON m.id = f.memory_id
           WHERE f.path IN (${files.map(() => "?").join(", ")})
-            AND m.project_id = ? AND m.status = 'active' AND ${unseen}
+            AND m.project_id = ? AND m.status = 'active' AND ${unseen} AND ${kindFilter}
           GROUP BY m.id ORDER BY overlap DESC LIMIT ?`,
       )
       .all(...files, input.projectId, CANDIDATES_PER_CHANNEL);
@@ -205,10 +224,10 @@ export function retrieveForPrompt(
     { id: 0, kind: "fix", title: "", body: "", createdAt: 0, files: [], stale: false },
   ]).length;
   for (const candidate of eligible.sort((a, b) => fused(b) - fused(a) || b.row.id - a.row.id)) {
-    if (notes.length === MAX_NOTES) break;
+    if (notes.length === maxNotes) break;
     const note = toNote(db, candidate.row);
     const cost = renderNote(note).length + 1 + (notes.length === 0 ? overhead : 0);
-    if (size + cost > BUDGET_CHARS) continue;
+    if (size + cost > budgetChars) continue;
     notes.push(note);
     size += cost;
   }

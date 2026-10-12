@@ -42,3 +42,29 @@ export function parseLines(raw: string): Json[] {
   }
   return lines;
 }
+
+export const DEFAULT_CHUNK_BYTES = 1024 * 1024;
+
+/** Lines of a file, read in fixed-size chunks so a huge transcript is never held whole. */
+export function* readLines(path: string, chunkBytes: number): Generator<string> {
+  const fd = openSync(path, "r");
+  try {
+    const buffer = Buffer.alloc(chunkBytes);
+    let pending: Buffer[] = [];
+    for (;;) {
+      const read = readSync(fd, buffer, 0, chunkBytes, null);
+      if (read === 0) break;
+      let from = 0;
+      for (let at = buffer.indexOf(10, 0); at !== -1 && at < read; at = buffer.indexOf(10, from)) {
+        pending.push(Buffer.from(buffer.subarray(from, at)));
+        yield Buffer.concat(pending).toString("utf8");
+        pending = [];
+        from = at + 1;
+      }
+      if (from < read) pending.push(Buffer.from(buffer.subarray(from, read)));
+    }
+    if (pending.length > 0) yield Buffer.concat(pending).toString("utf8");
+  } finally {
+    closeSync(fd);
+  }
+}

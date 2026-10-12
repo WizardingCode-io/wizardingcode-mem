@@ -1,0 +1,1 @@
+{"session_id":"abc123","transcript_path":"/tmp/t.jsonl","cwd":"/work/shop","permission_mode":"default","hook_event_name":"PostToolUseFailure","tool_name":"Bash","tool_input":{"command":"bun test","description":"Run tests"},"tool_use_id":"toolu_02","error":"Exit code 1\nSQLITE_BUSY: database is locked","is_interrupt":false,"duration_ms":4187}

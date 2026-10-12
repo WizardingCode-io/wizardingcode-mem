@@ -1,5 +1,6 @@
 import pkg from "../../package.json" with { type: "json" };
 import type { ProjectRef } from "../core/project.ts";
+import type { HistoryStatus } from "../history/status.ts";
 import { USAGE_KEYS } from "../judge/index.ts";
 import { loadSettings } from "../settings/settings.ts";
 import type { Db } from "../store/db.ts";
@@ -22,9 +23,18 @@ export interface StatusReport {
   modelCalls: number;
   judge: JudgeReport;
   dataDir: string;
+  /** The history import across projects; set by callers that look at the transcripts. */
+  history?: HistoryStatus;
 }
 
-const EVENT_ORDER = ["session-start", "prompt", "turn-end", "session-end"];
+const EVENT_ORDER = [
+  "session-start",
+  "prompt",
+  "file-read",
+  "tool-failed",
+  "turn-end",
+  "session-end",
+];
 
 /** Nearest-rank percentile of an ascending list. */
 export function percentile(sorted: number[], p: number): number {
@@ -32,13 +42,16 @@ export function percentile(sorted: number[], p: number): number {
   return sorted[Math.max(0, Math.ceil((p / 100) * sorted.length) - 1)] ?? 0;
 }
 
-/** Runs considered for latency: enough for a percentile, few enough to be about now. */
+/** Runs per event considered for latency: enough for a percentile, few enough to be about now.
+ *  Per event, so that frequent file reads do not push out the rarer prompt and session samples. */
 const RECENT_RUNS = 200;
 
 export function hookLatency(db: Db): StatusReport["hooks"] {
   const rows = db
     .query<{ event: string; ms: number; outcome: string }, [number]>(
-      `SELECT event, ms, outcome FROM (SELECT * FROM hook_runs ORDER BY id DESC LIMIT ?) ORDER BY ms`,
+      `SELECT event, ms, outcome FROM (
+         SELECT *, row_number() OVER (PARTITION BY event ORDER BY id DESC) AS recent FROM hook_runs
+       ) WHERE recent <= ? ORDER BY ms`,
     )
     .all(RECENT_RUNS);
   const byEvent = new Map<string, number[]>();
@@ -122,6 +135,40 @@ export function statusReport(
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
+const megabytes = (bytes: number) => `${(bytes / 1_048_576).toFixed(1)} MB`;
+
+function formatHistory(h: HistoryStatus): string[] {
+  const { queue, index, replace, run } = h;
+  const quiet =
+    h.transcripts.claudeCode +
+      h.transcripts.codex +
+      queue.pending +
+      queue.done +
+      queue.skipped +
+      queue.failed ===
+      0 &&
+    !index.exists &&
+    run.state === "never" &&
+    replace.replaced === 0;
+  // The import line reports the last import; a later index run does not stand for it.
+  if (quiet) return [];
+  const lines = [
+    "History",
+    `  found     ${h.transcripts.claudeCode} Claude Code · ${h.transcripts.codex} Codex transcripts`,
+    `  import    ${h.import.state} · ${queue.pending} queued · ${queue.done} distilled · ${queue.skipped} skipped · ${queue.failed} failed`,
+    index.exists
+      ? `  index     ${plural(index.files, "file")} · ${plural(index.turns, "turn")} · ${megabytes(index.bytes)}`
+      : "  index     none yet",
+  ];
+  if (replace.replaced > 0)
+    lines.push(`  replaced  ${replace.replaced} imported memories archived`);
+  if (replace.wouldArchive > 0)
+    lines.push(
+      `  replace   ${replace.wouldArchive} imported memories ready to replace (${plural(replace.projectsReady, "project")})`,
+    );
+  return lines;
+}
+
 export function formatStatus(report: StatusReport): string {
   const lines = [`wizardingcode-mem ${report.version}`];
   const { memories, turns, hooks } = report;
@@ -161,5 +208,6 @@ export function formatStatus(report: StatusReport): string {
       : `judge     heuristic only (no TypeSafe key) · model calls made by wizardingcode-mem: ${report.modelCalls}`,
     `data      ${report.dataDir}`,
   );
+  if (report.history) lines.push(...formatHistory(report.history));
   return `${lines.join("\n")}\n`;
 }

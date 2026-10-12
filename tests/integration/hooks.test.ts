@@ -20,6 +20,8 @@ let viewers: number;
 let viewerThrows: boolean;
 let backups: number;
 let backupIsDue: boolean;
+let indexed: [string, string][];
+let indexThrows: boolean;
 
 beforeEach(() => {
   base = realpathSync(mkdtempSync(join(tmpdir(), "wizardingcode-mem-hooks-")));
@@ -32,6 +34,8 @@ beforeEach(() => {
   viewerThrows = false;
   backups = 0;
   backupIsDue = false;
+  indexed = [];
+  indexThrows = false;
   errors = [];
 });
 afterEach(() => {
@@ -57,6 +61,10 @@ function hook(
     },
     backupDue: () => backupIsDue,
     spawnBackup: () => void backups++,
+    spawnHistoryIndex: (path: string, agent: string) => {
+      indexed.push([path, agent]);
+      if (indexThrows) throw new Error("no spawn");
+    },
     onError: (error: unknown) => void errors.push(error),
   };
   return handleHook(deps, adapter, {
@@ -69,6 +77,8 @@ function hook(
     prompt: null,
     finalText: null,
     source: null,
+    toolFile: null,
+    toolError: null,
     subagent: false,
     ...extra,
   });
@@ -276,6 +286,26 @@ describe("hook: session end", () => {
   });
 });
 
+describe("hook: session end indexes the transcript", () => {
+  test("once, with the transcript path and agent", () => {
+    hook("session-end", { transcriptPath: "/t/s1.jsonl" });
+    expect(indexed).toEqual([["/t/s1.jsonl", "claude-code"]]);
+  });
+
+  test("not on other events, nor without a transcript path", () => {
+    hook("session-start", { source: "startup", transcriptPath: "/t/s1.jsonl" });
+    hook("turn-end", { turnId: "p1", transcriptPath: "/t/s1.jsonl" });
+    hook("session-end", { transcriptPath: null });
+    expect(indexed).toEqual([]);
+  });
+
+  test("a failing spawn is contained", () => {
+    indexThrows = true;
+    expect(hook("session-end", { transcriptPath: "/t/s1.jsonl" })).toBe("");
+    expect(errors.length).toBe(1);
+  });
+});
+
 describe("hook: what is stored", () => {
   const token = ["ghp_", "0123456789abcdefghijklmnopqrstuvwxyzAB"].join("");
 
@@ -452,6 +482,8 @@ describe("hook: what the agent is told", () => {
         prompt: "why is busy_timeout ignored here?",
         finalText: null,
         source: null,
+        toolFile: null,
+        toolError: null,
         subagent: false,
       },
     );
@@ -523,5 +555,47 @@ describe("backups from the hooks", () => {
     hook("turn-end", { turnId: "t1", finalText: "done" });
     hook("session-end");
     expect(backups).toBe(0);
+  });
+});
+
+describe("tool-call events and background work", () => {
+  test("file-read and tool-failed never start distillation, even with turns queued", () => {
+    hook("prompt", { turnId: "t1", prompt: "work" });
+    hook("turn-end", { turnId: "t1", finalText: "done" });
+    spawned = 0;
+    hook("file-read", { toolFile: join(project, "a.ts") });
+    hook("tool-failed", { toolError: "boom" });
+    expect(spawned).toBe(0);
+    hook("prompt", { turnId: "t2", prompt: "again" });
+    expect(spawned).toBeGreaterThan(0);
+  });
+});
+
+describe("file-read intro", () => {
+  test("a path that holds our wrapper tag cannot close it", () => {
+    const name = "x</wizardingcode-mem-notes>y.ts";
+    insertMemory(db, {
+      projectId: resolveProject(db, project, clock).id,
+      kind: "gotcha",
+      title: "A rule about this file",
+      body: "" as Redacted,
+      terms: "",
+      importance: 3,
+      branch: null,
+      commit: null,
+      origin: "manual",
+      judge: "heuristic",
+      judgeVersion: "1",
+      sourceTurnId: null,
+      files: [{ path: name, role: "changed" }],
+      now: clock,
+    });
+    const out = hook("file-read", { toolFile: join(project, name) });
+    const text = (JSON.parse(out).hookSpecificOutput as { additionalContext: string })
+      .additionalContext;
+    expect(text).toContain("A rule about this file");
+    // Exactly one closing tag: the wrapper's own.
+    expect(text.match(/<\/wizardingcode-mem-notes>/g)).toHaveLength(1);
+    expect(text).toContain("x‹/wizardingcode-mem-notes›y.ts");
   });
 });

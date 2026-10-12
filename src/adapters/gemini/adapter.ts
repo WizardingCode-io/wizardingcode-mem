@@ -42,6 +42,8 @@ function parse(event: HookEvent, stdin: string): HookInput | null {
           ? (source as HookInput["source"])
           : "other"
         : null,
+    toolFile: null,
+    toolError: null,
     subagent: false,
   };
 }

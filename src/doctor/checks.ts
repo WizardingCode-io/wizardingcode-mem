@@ -322,7 +322,7 @@ function hooksHost(
     return {
       name,
       status: "warn",
-      detail: `partly installed (no ${missing.join(", ")} hook); ${install}`,
+      detail: `partly installed or out of date (no ${missing.join(", ")} hook); ${install}`,
     };
   }
   return { name, status: "ok", detail: `installed, running ${found.binaries.join(", ")}` };

@@ -63,41 +63,7 @@ export const shortPath = (path: string): string => {
   return (parts.length > 2 ? "…/" : "/") + parts.slice(-2).join("/");
 };
 
-/** What a prompt was, for a one-line title: the agent's own notifications and hand-backs
- *  arrive as XML-ish envelopes and are named for what they are; the full text stays in the trace. */
-export interface PromptLine {
-  title: string;
-  sub: string;
-  kind: "prompt" | "task" | "subagent";
-}
-const squash = (text: string) => text.replace(/\s+/g, " ").trim();
-/** A one-line title from Markdown: no emphasis markers, list bullets or heading hashes. */
-const plainLine = (text: string) =>
-  squash(text.replace(/^\s*(?:[-*+]|#{1,6}|\d+\.)\s+/gm, "").replace(/(\*\*|__)(.*?)\1/g, "$2").replace(/\*\*|__/g, ""));
-/** A subagent's report without the harness's envelope and preamble: Markdown as it was written. */
-export function subagentReport(prompt: string): string {
-  const body = prompt.trim().replace(/^<agent-message[^>]*>/, "").replace(/<\/agent-message>\s*$/, "");
-  return (/\n\s*\n([\s\S]*)/.exec(body)?.[1] ?? body).replace(/^ {2,4}/gm, "").trim();
-}
-
-export function describePrompt(prompt: string): PromptLine {
-  const text = prompt.trim();
-  if (text.startsWith("<task-notification>")) {
-    const summary = /<summary>([\s\S]*?)<\/summary>/.exec(text)?.[1];
-    const status = /<status>([\s\S]*?)<\/status>/.exec(text)?.[1];
-    return { title: summary ? squash(summary) : "Background task", sub: summary ? `Background task${status ? ` · ${squash(status)}` : ""}` : status ? squash(status) : "", kind: "task" };
-  }
-  if (text.startsWith("<agent-message")) {
-    // The harness's preamble is one paragraph; the report starts after the first blank line.
-    const body = text.replace(/^<agent-message[^>]*>/, "").replace(/<\/agent-message>\s*$/, "");
-    const report = /\n\s*\n([\s\S]*)/.exec(body)?.[1] ?? "";
-    const title = plainLine(report).slice(0, 160).replace(/\s+\S*$/, (tail) => (report.length > 160 ? "…" : tail));
-    return { title: title || "Subagent report", sub: title ? "Subagent report" : "", kind: "subagent" };
-  }
-  const images = (text.match(/\[Image #\d+\]/g) ?? []).length;
-  const plain = squash(text.replace(/\[Image #\d+\]/g, ""));
-  return { title: plain || "(no prompt)", sub: images ? `${images} image${images > 1 ? "s" : ""}` : "", kind: "prompt" };
-}
+export { describePrompt, type PromptLine, subagentReport } from "./prompt";
 
 /** A turn's state as the Runs log shows it: sentence case, a dot whose shape carries it too. */
 export const TURN_STATUS: Record<string, { label: string; tone: Tone; shape: "" | "square" | "diamond" }> = {

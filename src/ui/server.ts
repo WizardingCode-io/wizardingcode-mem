@@ -5,16 +5,30 @@ import pkg from "../../package.json" with { type: "json" };
 import { lastBackup, restoreBackup, runBackup } from "../backup/backup.ts";
 import { backupDue } from "../backup/schedule.ts";
 import { targetFor } from "../backup/target.ts";
+import { claudeCodeRoot } from "../adapters/claude-code/history.ts";
+import { codexRoot } from "../adapters/codex/history.ts";
 import { runChecks } from "../doctor/checks.ts";
 import { doctorContext } from "../doctor/context.ts";
+import { replaceAllImports, restoreImports } from "../backfill/replace.ts";
+import { openHistoryDb } from "../history/db.ts";
+import { forgetHistoryIndex } from "../history/run-state.ts";
+import { historyReadFailure, recentHistory, searchHistory } from "../history/search.ts";
+import {
+  HISTORY_LEASE,
+  HISTORY_OFFER_DISMISSED,
+  historyOffer,
+  historyProgress,
+  historyStatus,
+} from "../history/status.ts";
 import { loadSettings, publicSettings, saveSettings, validatePatch } from "../settings/settings.ts";
 import { statusReport } from "../status/report.ts";
-import { compact } from "../store/compact.ts";
+import { CompactBusyError, compact } from "../store/compact.ts";
 import { DB_FILE, type Db, openDb } from "../store/db.ts";
-import { drainActive } from "../store/meta.ts";
+import { drainActive, leaseActive, setMeta } from "../store/meta.ts";
 import { inspectTarget, moveStore } from "../store/move.ts";
 import { logError } from "../util/log.ts";
 import { storeDirOf } from "../util/paths.ts";
+import { spawnDetached } from "../util/self.ts";
 import { clearUiState, writeUiState } from "./state.ts";
 import {
   getMemory,
@@ -54,6 +68,8 @@ export interface UiOptions {
   openBrowser?: (url: string) => void;
   /** Refuse to start when another viewer is already on record (see `UiClaimedError`). */
   exclusive?: boolean;
+  /** How a background run is started (`history import`, ...); tests record instead. */
+  spawn?: (...args: string[]) => void;
 }
 
 /** Thrown by an exclusive start that lost the race to another viewer. */
@@ -82,6 +98,31 @@ const FONTS: Record<string, string> = {
   "instrument-sans-variable.woff2": instrumentSans,
   "jetbrains-mono-variable.woff2": jetbrainsMono,
 };
+
+/**
+ * The page's Content-Security-Policy: every load stays on this origin (images and fonts
+ * may also be `data:`), so nothing a transcript contains can reach the network. The two
+ * inline scripts of the single-file build run by their hashes; styles are inline too,
+ * and Vue and Nuxt UI set some at run time.
+ */
+export function pageCsp(html: string): string {
+  const hashes = [...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].map(
+    (match) => `'sha256-${new Bun.CryptoHasher("sha256").update(match[1] ?? "").digest("base64")}'`,
+  );
+  return [
+    "default-src 'self'",
+    `script-src 'self' ${hashes.join(" ")}`.trim(),
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data:",
+    "font-src 'self' data:",
+    "connect-src 'self'",
+    "object-src 'none'",
+    "base-uri 'none'",
+    "form-action 'none'",
+    "frame-ancestors 'none'",
+  ].join("; ");
+}
+const PAGE_CSP = pageCsp(page as unknown as string);
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -141,6 +182,8 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
   let stopped = false;
 
   const open = options.openBrowser ?? openBrowser;
+  const spawn = options.spawn ?? spawnDetached;
+  const historyRunning = () => leaseActive(db, HISTORY_LEASE, now());
   // When a tab last said it was there, and when a browser was last opened.
   let lastPingAt: number | null = null;
   let openedAt: number | null = null;
@@ -189,7 +232,11 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
 
     if (request.method === "GET" && path === "/") {
       return new Response(page as unknown as string, {
-        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+        headers: {
+          "content-type": "text/html; charset=utf-8",
+          "cache-control": "no-store",
+          "content-security-policy": PAGE_CSP,
+        },
       });
     }
     // Presence: who is here, a tab's heartbeat, and whether to open a browser.
@@ -337,8 +384,13 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
       const body = await jsonObject(request);
       if (body instanceof Response) return body;
       const dryRun = body.dryRun === true;
-      const { retentionDays } = loadSettings(env, options.dataDir);
-      return json(compact(db, { now: now(), dryRun, retentionDays }));
+      const { retentionDays, historyDays } = loadSettings(env, options.dataDir);
+      try {
+        return json(compact(db, { now: now(), dryRun, retentionDays, historyDays }));
+      } catch (error) {
+        if (error instanceof CompactBusyError) return problem(409, error.message);
+        throw error;
+      }
     }
     if (path === "/api/memories" && request.method === "GET") {
       const projectId = Number(url.searchParams.get("project"));
@@ -412,6 +464,71 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
       const projectId = Number(url.searchParams.get("project"));
       const project = Number.isInteger(projectId) ? projectRef(db, projectId) : null;
       return json(statusReport(db, project, options.dataDir));
+    }
+    if (path === "/api/history" && request.method === "GET") {
+      return json(
+        historyStatus(
+          db,
+          storeDir,
+          { claudeCode: claudeCodeRoot(env), codex: codexRoot(env) },
+          now(),
+        ),
+      );
+    }
+    // Past conversations: the history index, read only and never created here.
+    if (path === "/api/history/search" && request.method === "GET") {
+      const q = (url.searchParams.get("q") ?? "").trim();
+      const projectParam = url.searchParams.get("project");
+      const projectId = projectParam === null || projectParam === "" ? undefined : Number(projectParam);
+      if (projectId !== undefined && !Number.isInteger(projectId)) return problem(400, "project must be an id");
+      const limitParam = Number(url.searchParams.get("limit") ?? Number.NaN);
+      const limit = Number.isFinite(limitParam) ? limitParam : undefined;
+      let hdb: ReturnType<typeof openHistoryDb> = null;
+      try {
+        hdb = openHistoryDb(storeDir, { create: false, busyTimeoutMs: 2000 });
+        if (hdb === null) return json({ indexed: false });
+        const hits =
+          q === "" ? recentHistory(hdb, { projectId, limit }) : searchHistory(hdb, { query: q, projectId, limit });
+        return json({ indexed: true, hits });
+      } catch (error) {
+        logError("ui history search", error, options.dataDir);
+        return json({ indexed: true, hits: [], error: historyReadFailure(error) });
+      } finally {
+        hdb?.close();
+      }
+    }
+    if (path === "/api/history/progress" && request.method === "GET") {
+      return json(historyProgress(db, now()));
+    }
+    if ((path === "/api/history/import" || path === "/api/history/index") && request.method === "POST") {
+      if (historyRunning()) return json({ started: false });
+      spawn("history", path.slice("/api/history/".length));
+      return json({ started: true });
+    }
+    if (path === "/api/history/forget" && request.method === "POST") {
+      if (historyRunning()) return problem(409, "a history run is going; wait for it to finish");
+      forgetHistoryIndex(storeDir);
+      return json({ forgotten: true });
+    }
+    if (path === "/api/history/replace-imports" && request.method === "POST") {
+      const body = await jsonObject(request);
+      if (body instanceof Response) return body;
+      if (typeof body.expected !== "number") return problem(400, "expected is required");
+      if (historyRunning()) return problem(409, "a history run is going; wait for it to finish");
+      const outcome = replaceAllImports(db, { now: now(), expected: body.expected });
+      if ("stale" in outcome) return json({ count: outcome.count }, 409);
+      return json(outcome);
+    }
+    if (path === "/api/history/restore-imports" && request.method === "POST") {
+      if (historyRunning()) return problem(409, "a history run is going; wait for it to finish");
+      return json({ restored: restoreImports(db) });
+    }
+    if (path === "/api/history/offer" && request.method === "GET") {
+      return json(historyOffer(db, { claudeCode: claudeCodeRoot(env), codex: codexRoot(env) }, now()));
+    }
+    if (path === "/api/history/offer/dismiss" && request.method === "POST") {
+      setMeta(db, HISTORY_OFFER_DISMISSED, "1");
+      return json({ dismissed: true });
     }
     if (path === "/api/turns" && request.method === "GET") {
       const projectId = Number(url.searchParams.get("project"));

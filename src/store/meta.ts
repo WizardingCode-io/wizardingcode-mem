@@ -22,6 +22,7 @@ export function setMeta(db: Db, key: string, value: string): void {
 
 export const DRAIN_LEASE = "drain.lease";
 export const BACKUP_LEASE = "backup.lease";
+export const HISTORY_LEASE = "history.lease";
 
 interface Lease {
   owner: string;
@@ -94,5 +95,9 @@ export const releaseDrain = (db: Db, owner: string): void => releaseLease(db, DR
 
 /** True while any background work that must not meet a move or a restore is under way. */
 export function anyLeaseActive(db: Db, now: number): boolean {
-  return leaseActive(db, DRAIN_LEASE, now) || leaseActive(db, BACKUP_LEASE, now);
+  return (
+    leaseActive(db, DRAIN_LEASE, now) ||
+    leaseActive(db, BACKUP_LEASE, now) ||
+    leaseActive(db, HISTORY_LEASE, now)
+  );
 }

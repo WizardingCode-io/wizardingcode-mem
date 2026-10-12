@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveProject } from "../../src/core/project.ts";
 import type { Redacted } from "../../src/core/redact.ts";
 import type { MemoryKind } from "../../src/core/types.ts";
+import { openHistoryDb } from "../../src/history/db.ts";
 import { type Db, openDb } from "../../src/store/db.ts";
 import { insertMemory } from "../../src/store/memories.ts";
+import { setMeta } from "../../src/store/meta.ts";
 import { startUi, type UiServer } from "../../src/ui/server.ts";
 
 const NOW = Date.UTC(2026, 9, 5, 12);
@@ -82,7 +84,14 @@ function seed(
   return id;
 }
 
-async function start(options: { idleMs?: number; onIdle?: () => void } = {}): Promise<UiServer> {
+async function start(
+  options: {
+    idleMs?: number;
+    onIdle?: () => void;
+    env?: Record<string, string | undefined>;
+    spawn?: (...args: string[]) => void;
+  } = {},
+): Promise<UiServer> {
   server = await startUi({ dataDir, port: 0, open: false, now: () => NOW, ...options });
   return server;
 }
@@ -107,6 +116,35 @@ describe("wizardingcode-mem ui: the page", () => {
     expect(html).not.toMatch(/<script[^>]+src=/);
     expect(html).not.toMatch(/<link[^>]+rel="stylesheet"/);
     expect(html).toContain("--primary:");
+  });
+
+  test("the page carries a Content-Security-Policy that keeps every load on this origin", async () => {
+    const s = await start();
+    const page = await fetch(s.url);
+    const csp = page.headers.get("content-security-policy") ?? "";
+    const directives = new Map(
+      csp
+        .split(";")
+        .map((part) => part.trim().split(/\s+/))
+        .filter((words) => words[0] !== "")
+        .map((words) => [words[0] as string, words.slice(1)]),
+    );
+    expect(directives.get("default-src")).toEqual(["'self'"]);
+    expect(directives.get("img-src")).toEqual(["'self'", "data:"]);
+    expect(directives.get("connect-src")).toEqual(["'self'"]);
+    expect(directives.get("font-src")).toEqual(["'self'", "data:"]);
+    expect(directives.get("object-src")).toEqual(["'none'"]);
+    // The inline scripts run by their hash; nothing else may.
+    const scriptSrc = directives.get("script-src") ?? [];
+    expect(scriptSrc).not.toContain("'unsafe-inline'");
+    expect(scriptSrc).not.toContain("'unsafe-eval'");
+    const html = await page.text();
+    const inline = [...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1] ?? "");
+    expect(inline.length).toBeGreaterThan(0);
+    for (const body of inline) {
+      const hash = new Bun.CryptoHasher("sha256").update(body).digest("base64");
+      expect(scriptSrc).toContain(`'sha256-${hash}'`);
+    }
   });
 
   test("without the token, nothing is served", async () => {
@@ -451,6 +489,302 @@ describe("wizardingcode-mem ui: the API", () => {
       memories: { active: number; archived: number };
     };
     expect(status.memories).toMatchObject({ active: 2, archived: 1 });
+  });
+
+  test("the history status, behind the token", async () => {
+    const s = await start({
+      env: { CLAUDE_CONFIG_DIR: join(dataDir, "no-claude"), CODEX_HOME: join(dataDir, "no-codex") },
+    });
+    expect((await fetch(`${s.origin}/api/history`)).status).toBe(401);
+    const history = (await (await api(s, "/api/history")).json()) as {
+      run: { state: string };
+      index: { exists: boolean };
+      transcripts: { claudeCode: number };
+    };
+    expect(history.run.state).toBe("never");
+    expect(history.index.exists).toBe(false);
+    expect(history.transcripts.claudeCode).toBe(0);
+  });
+});
+
+describe("wizardingcode-mem ui: history runs", () => {
+  const post = (s: UiServer, path: string, body?: unknown) =>
+    api(s, path, { method: "POST", body: body === undefined ? undefined : JSON.stringify(body) });
+  const histEnv = () => ({
+    CLAUDE_CONFIG_DIR: join(dataDir, "no-claude"),
+    CODEX_HOME: join(dataDir, "no-codex"),
+  });
+  const holdLease = (until: number) => {
+    const db = openDb({ dataDir, busyTimeoutMs: 2000 });
+    setMeta(db, "history.lease", JSON.stringify({ owner: `${process.pid}-x`, until }));
+    setMeta(db, "history.run.state", "running");
+    db.close();
+  };
+  const startSpying = async () => {
+    const spawned: string[][] = [];
+    const s = await start({
+      env: histEnv(),
+      spawn: (...args: string[]) => void spawned.push(args),
+    });
+    return { s, spawned };
+  };
+
+  test("every route needs the token", async () => {
+    const s = await start({ env: histEnv() });
+    for (const path of [
+      "import",
+      "index",
+      "forget",
+      "replace-imports",
+      "restore-imports",
+      "offer/dismiss",
+    ]) {
+      expect((await fetch(`${s.origin}/api/history/${path}`, { method: "POST" })).status).toBe(401);
+    }
+    expect((await fetch(`${s.origin}/api/history/progress`)).status).toBe(401);
+  });
+
+  test("import and index start a detached run, unless one is going", async () => {
+    const { s, spawned } = await startSpying();
+    expect(await (await post(s, "/api/history/import")).json()).toEqual({ started: true });
+    expect(await (await post(s, "/api/history/index")).json()).toEqual({ started: true });
+    expect(spawned).toEqual([
+      ["history", "import"],
+      ["history", "index"],
+    ]);
+    holdLease(NOW + 60_000);
+    expect(await (await post(s, "/api/history/import")).json()).toEqual({ started: false });
+    expect(await (await post(s, "/api/history/index")).json()).toEqual({ started: false });
+    expect(spawned.length).toBe(2);
+  });
+
+  test("progress is light: only the run, the last import and the queue", async () => {
+    const { s } = await startSpying();
+    const progress = (await (await api(s, "/api/history/progress")).json()) as Record<
+      string,
+      unknown
+    >;
+    expect(Object.keys(progress).sort()).toEqual(["import", "queue", "run"]);
+    expect((progress.run as { state: string }).state).toBe("never");
+    holdLease(NOW + 60_000);
+    const running = (await (await api(s, "/api/history/progress")).json()) as {
+      run: { state: string };
+    };
+    expect(running.run.state).toBe("running");
+  });
+
+  test("forget deletes the index, and is refused while a run is going", async () => {
+    const { s } = await startSpying();
+    const index = join(dataDir, "history.db");
+    writeFileSync(index, "x");
+    holdLease(NOW + 60_000);
+    expect((await post(s, "/api/history/forget")).status).toBe(409);
+    expect(existsSync(index)).toBe(true);
+    holdLease(NOW - 1000);
+    expect(await (await post(s, "/api/history/forget")).json()).toEqual({ forgotten: true });
+    expect(existsSync(index)).toBe(false);
+  });
+
+  test("replace-imports needs the count the user saw; a stale one is a 409 with the new count", async () => {
+    const { s } = await startSpying();
+    expect((await post(s, "/api/history/replace-imports", {})).status).toBe(400);
+    const stale = await post(s, "/api/history/replace-imports", { expected: 7 });
+    expect(stale.status).toBe(409);
+    expect(await stale.json()).toEqual({ count: 0 });
+    const ok = await post(s, "/api/history/replace-imports", { expected: 0 });
+    expect(ok.status).toBe(200);
+    expect(await ok.json()).toMatchObject({ archived: 0, projects: 0 });
+  });
+
+  test("replace then restore, with a real count; both refused while a run is going", async () => {
+    const db = openDb({ dataDir, busyTimeoutMs: 2000 });
+    const session = db
+      .query<{ id: number }, [number, number, number]>(
+        `INSERT INTO sessions (agent, agent_session_id, project_id, cwd, started_at, last_seen_at)
+         VALUES ('claude-code', 'h1', ?, '/shop', ?, ?) RETURNING id`,
+      )
+      .get(projectId, NOW, NOW)?.id as number;
+    db.run(
+      `INSERT INTO turns (session_id, project_id, seq, state, origin, prompt, started_at, ended_at)
+       VALUES (?, ?, 1, 'done', 'history', 'q', ?, ?)`,
+      [session, projectId, NOW - 60 * DAY, NOW - 10 * DAY],
+    );
+    // seed() dates memories two days ago: move them inside the covered span, as imports.
+    db.run(
+      "UPDATE memories SET origin = 'imported', created_at = ? WHERE project_id = ? AND status = 'active'",
+      [NOW - 30 * DAY, projectId],
+    );
+    db.close();
+    const { s } = await startSpying();
+    const preview = (await (await api(s, "/api/history")).json()) as {
+      replace: { wouldArchive: number };
+    };
+    expect(preview.replace.wouldArchive).toBe(2);
+
+    holdLease(NOW + 60_000);
+    expect((await post(s, "/api/history/replace-imports", { expected: 2 })).status).toBe(409);
+    expect((await post(s, "/api/history/restore-imports")).status).toBe(409);
+    holdLease(NOW - 1000);
+
+    const replaced = await post(s, "/api/history/replace-imports", { expected: 2 });
+    expect(replaced.status).toBe(200);
+    expect(await replaced.json()).toEqual({ projects: 1, archived: 2, spared: 0 });
+    expect(await (await post(s, "/api/history/replace-imports", { expected: 2 })).json()).toEqual({
+      count: 0,
+    });
+    expect(await (await post(s, "/api/history/restore-imports")).json()).toEqual({ restored: 2 });
+    const after = (await (await api(s, "/api/history")).json()) as {
+      replace: { wouldArchive: number; replaced: number };
+    };
+    expect(after.replace).toMatchObject({ wouldArchive: 2, replaced: 0 });
+  });
+
+  test("the offer is its own light route: shown with the count, gone once dismissed", async () => {
+    const claude = join(dataDir, "claude-home");
+    mkdirSync(join(claude, "projects", "-shop"), { recursive: true });
+    writeFileSync(join(claude, "projects", "-shop", "s1.jsonl"), "{}\n");
+    const s = await start({
+      env: { CLAUDE_CONFIG_DIR: claude, CODEX_HOME: join(dataDir, "no-codex") },
+    });
+    expect((await fetch(`${s.origin}/api/history/offer`)).status).toBe(401);
+    expect(await (await api(s, "/api/history/offer")).json()).toEqual({
+      show: true,
+      sessions: 1,
+      transcripts: { claudeCode: 1, codex: 0 },
+    });
+    await post(s, "/api/history/offer/dismiss");
+    expect(await (await api(s, "/api/history/offer")).json()).toMatchObject({ show: false });
+  });
+
+  test("restore-imports and the offer dismissal", async () => {
+    const { s } = await startSpying();
+    expect(await (await post(s, "/api/history/restore-imports")).json()).toEqual({ restored: 0 });
+    expect(await (await post(s, "/api/history/offer/dismiss")).json()).toEqual({ dismissed: true });
+    const status = (await (await api(s, "/api/history")).json()) as {
+      offer: { dismissed: boolean };
+    };
+    expect(status.offer.dismissed).toBe(true);
+  });
+});
+
+describe("wizardingcode-mem ui: searching past conversations", () => {
+  type Hit = {
+    id: number;
+    project: string;
+    agent: string;
+    sessionId: string;
+    cwd: string;
+    startedAt: number;
+    endedAt: number;
+    prompt: string;
+    answer: string | null;
+  };
+  type Found = { indexed: boolean; hits?: Hit[]; error?: string };
+  const histEnv = () => ({
+    CLAUDE_CONFIG_DIR: join(dataDir, "no-claude"),
+    CODEX_HOME: join(dataDir, "no-codex"),
+  });
+  const seedHistory = () => {
+    const hdb = openHistoryDb(dataDir, { create: true });
+    if (hdb === null) throw new Error("no history db");
+    hdb.run(
+      "INSERT INTO files (path, agent, size, mtime, indexed_at) VALUES ('/t.jsonl', 'claude-code', 1, 1, 1)",
+    );
+    const turn = (
+      n: number,
+      pid: number,
+      name: string,
+      prompt: string,
+      answer: string | null,
+      at: number,
+    ) =>
+      hdb.run(
+        `INSERT INTO turns (path, agent, session_id, turn_id, project_id, project_name, cwd, started_at, ended_at, prompt, final_text)
+         VALUES ('/t.jsonl', ?, 's1', ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          n === 3 ? "codex" : "claude-code",
+          `t${n}`,
+          pid,
+          name,
+          `/w/${name}`,
+          at - 60_000,
+          at,
+          prompt,
+          answer,
+        ],
+      );
+    turn(
+      1,
+      projectId,
+      "shop",
+      "Why is the cart total drifting?",
+      "Per-line rounding; round once at the end.",
+      NOW - 3 * DAY,
+    );
+    turn(2, projectId, "shop", "Add a Friday deploy freeze", null, NOW - DAY);
+    turn(3, 999, "blog", "The cart widget on the blog", "Moved it to the sidebar.", NOW - 2 * DAY);
+    hdb.close();
+  };
+  const search = async (s: UiServer, query: string) =>
+    (await (await api(s, `/api/history/search${query}`)).json()) as Found;
+
+  test("needs the token", async () => {
+    const s = await start({ env: histEnv() });
+    expect((await fetch(`${s.origin}/api/history/search?q=cart`)).status).toBe(401);
+  });
+
+  test("without an index it says so, and creates nothing", async () => {
+    const s = await start({ env: histEnv() });
+    expect(await search(s, "?q=cart")).toEqual({ indexed: false });
+    expect(existsSync(join(dataDir, "history.db"))).toBe(false);
+  });
+
+  test("finds turns by their words, across projects or in one", async () => {
+    seedHistory();
+    const s = await start({ env: histEnv() });
+    const all = await search(s, "?q=cart");
+    expect(all.indexed).toBe(true);
+    expect(all.hits?.map((h) => h.project).sort()).toEqual(["blog", "shop"]);
+    const shop = await search(s, `?q=cart&project=${projectId}`);
+    expect(shop.hits).toHaveLength(1);
+    expect(shop.hits?.[0]).toMatchObject({
+      project: "shop",
+      agent: "claude-code",
+      sessionId: "s1",
+      cwd: "/w/shop",
+      startedAt: NOW - 3 * DAY - 60_000,
+      endedAt: NOW - 3 * DAY,
+      prompt: "Why is the cart total drifting?",
+      answer: "Per-line rounding; round once at the end.",
+    });
+    expect(typeof shop.hits?.[0]?.id).toBe("number");
+    expect((await search(s, "?q=cart&limit=1")).hits).toHaveLength(1);
+    expect((await search(s, "?q=nothing-like-this")).hits).toEqual([]);
+  });
+
+  test("without words, the latest turns, newest first", async () => {
+    seedHistory();
+    const s = await start({ env: histEnv() });
+    const latest = await search(s, "");
+    expect(latest.hits?.map((h) => h.prompt)).toEqual([
+      "Add a Friday deploy freeze",
+      "The cart widget on the blog",
+      "Why is the cart total drifting?",
+    ]);
+    expect((await search(s, `?project=${projectId}&limit=1`)).hits?.map((h) => h.prompt)).toEqual([
+      "Add a Friday deploy freeze",
+    ]);
+  });
+
+  test("an index that cannot be read is reported, not a failure", async () => {
+    writeFileSync(join(dataDir, "history.db"), "not a database at all, just text".repeat(40));
+    const s = await start({ env: histEnv() });
+    const res = await api(s, "/api/history/search?q=cart");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Found;
+    expect(body.indexed).toBe(true);
+    expect(body.hits).toEqual([]);
+    expect(body.error).toContain("could not be read");
   });
 });
 

@@ -14,8 +14,10 @@ import {
 import { join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { createGunzip, createGzip } from "node:zlib";
+import { historyDbPath } from "../history/path.ts";
 import { DB_FILE, type Db, LATEST_VERSION } from "../store/db.ts";
-import { BACKUP_LEASE, claimLease, drainActive, releaseLease, setMeta } from "../store/meta.ts";
+import { anyLeaseActive, BACKUP_LEASE, claimLease, releaseLease, setMeta } from "../store/meta.ts";
+import { logError } from "../util/log.ts";
 import { BACKUP_LAST, type LastBackup } from "./schedule.ts";
 import { type BackupTarget, backupName, parseBackupName } from "./target.ts";
 
@@ -95,7 +97,7 @@ export interface RestoreOptions {
 }
 
 export type RestoreOutcome =
-  | { ok: true; replaced: string }
+  | { ok: true; replaced: string; historyRemoved: boolean }
   | { ok: false; reason: "unknown" | "unsound" | "busy" | "failed"; detail: string };
 
 /**
@@ -129,7 +131,7 @@ export async function restoreBackup(options: RestoreOptions): Promise<RestoreOut
     let frozen = false;
     try {
       lock.run(`PRAGMA busy_timeout = ${FREEZE_WAIT_MS}`);
-      if (drainActive(lock, now)) {
+      if (anyLeaseActive(lock, now)) {
         return {
           ok: false,
           reason: "busy",
@@ -146,7 +148,7 @@ export async function restoreBackup(options: RestoreOptions): Promise<RestoreOut
         if (existsSync(current + suffix)) renameSync(current + suffix, replaced + suffix);
       }
       renameSync(unpacked, current);
-      return { ok: true, replaced };
+      return { ok: true, replaced, historyRemoved: removeHistoryIndex(storeDir) };
     } finally {
       if (frozen) {
         try {
@@ -166,6 +168,22 @@ export async function restoreBackup(options: RestoreOptions): Promise<RestoreOut
   } finally {
     rmSync(gz, { force: true });
     rmSync(unpacked, { force: true });
+  }
+}
+
+/**
+ * The history index names projects by the replaced database's ids, which the copy may give
+ * to other projects. It is rebuildable, so it goes; true when there was one to remove.
+ */
+function removeHistoryIndex(storeDir: string): boolean {
+  const path = historyDbPath(storeDir);
+  if (!existsSync(path)) return false;
+  try {
+    for (const suffix of ["", "-wal", "-shm"]) rmSync(path + suffix, { force: true });
+    return true;
+  } catch (error) {
+    logError("backup restore", error);
+    return false;
   }
 }
 

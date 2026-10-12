@@ -24,8 +24,8 @@ import type { AgentId, HookEvent } from "../core/types.ts";
 /** What differs between hosts that keep hooks in a JSON file of the same shape. */
 export interface HostSpec {
   agent: AgentId;
-  /** The host's event names and ours. */
-  events: readonly (readonly [string, HookEvent])[];
+  /** The host's event names and ours; the optional third item is the host's tool matcher. */
+  events: readonly (readonly [string, HookEvent, string?])[];
   /** The entry, inside a group's `hooks` array, that runs our binary for an event. */
   entry(binaryPath: string, event: HookEvent): Json;
   /** Recognises an entry of ours, whichever binary path it names. */
@@ -156,12 +156,16 @@ function withoutOurs(spec: HostSpec, settings: Json): { settings: Json; removed:
 
 function withOurs(spec: HostSpec, settings: Json, binaryPath: string): Json {
   const hooks: Json = { ...(isObject(settings.hooks) ? settings.hooks : {}) };
-  for (const [hostEvent, event] of spec.events) {
+  for (const [hostEvent, event, matcher] of spec.events) {
     const groups = hooks[hostEvent];
     const entry = spec.entry(binaryPath, event);
     hooks[hostEvent] = [
       ...(Array.isArray(groups) ? groups : []),
-      spec.layout === "flat" ? entry : { hooks: [entry] },
+      spec.layout === "flat"
+        ? entry
+        : matcher === undefined
+          ? { hooks: [entry] }
+          : { matcher, hooks: [entry] },
     ];
   }
   return { ...(spec.topLevel ?? {}), ...settings, hooks };
@@ -360,7 +364,7 @@ export function inspectHooksFile(
   const events: string[] = [];
   const binaries = new Set<string>();
   if (isObject(settings.hooks)) {
-    for (const [hostEvent] of spec.events) {
+    for (const hostEvent of new Set(spec.events.map(([name]) => name))) {
       const groups = settings.hooks[hostEvent];
       for (const group of Array.isArray(groups) ? groups : []) {
         const entries =

@@ -108,6 +108,14 @@ ${factoryExport}function createPlugin(deps) {
         },
         execute: (args, ctx) => call("memory_save", args, ctx),
       }),
+      history_search: toolApi({
+        description: "Search what was said in this project's past agent sessions, word for word, including before wizardingcode-mem was installed. Use it when memory_search finds nothing and the user refers to an earlier conversation.",
+        args: {
+          query: toolApi.schema.string(),
+          limit: toolApi.schema.number().int().optional(),
+        },
+        execute: (args, ctx) => call("history_search", args, ctx),
+      }),
     };
 
     return {

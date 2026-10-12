@@ -22,6 +22,8 @@ describe("codex payloads", () => {
       prompt: null,
       finalText: null,
       source: "startup",
+      toolFile: null,
+      toolError: null,
       subagent: false,
     });
   });

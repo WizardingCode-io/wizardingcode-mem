@@ -9,6 +9,7 @@ const views: { tab: Tab; label: string; icon: string; key: string }[] = [
   { tab: "memories", label: "Memories", icon: "i-lucide-sticky-note", key: "1" },
   { tab: "turns", label: "Turns", icon: "i-lucide-history", key: "2" },
   { tab: "overview", label: "Overview", icon: "i-lucide-chart-column", key: "3" },
+  { tab: "history", label: "History", icon: "i-lucide-messages-square", key: "4" },
 ];
 const btn = (on: boolean) => [
   "flex size-9 items-center justify-center rounded-lg",
@@ -34,7 +35,7 @@ const tip = { content: { side: "right" as const, sideOffset: 8 } };
     <UTooltip :text="theme === 'dark' ? 'Light theme' : 'Dark theme'" v-bind="tip">
       <button type="button" :class="btn(false)" aria-label="Switch theme" @click="theme = theme === 'dark' ? 'light' : 'dark'"><UIcon :name="theme === 'dark' ? 'i-lucide-sun' : 'i-lucide-moon'" class="size-[18px]" /></button>
     </UTooltip>
-    <UTooltip text="Settings" :kbds="['4']" v-bind="tip">
+    <UTooltip text="Settings" :kbds="['5']" v-bind="tip">
       <button type="button" :class="btn(tab === 'settings')" aria-label="Settings" :aria-current="tab === 'settings' ? 'page' : undefined" @click="emit('go', 'settings')"><UIcon name="i-lucide-settings" class="size-[18px]" /></button>
     </UTooltip>
   </nav>

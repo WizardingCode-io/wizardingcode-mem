@@ -1,7 +1,6 @@
-import { realpathSync } from "node:fs";
 import type { AgentAdapter, TurnDetail } from "../adapters/types.ts";
-import { readGitInfo } from "../core/git.ts";
 import { isFromTheHost } from "../core/host-prompt.ts";
+import { relativeTo, rootsOf } from "../core/paths.ts";
 import { type Redacted, redact } from "../core/redact.ts";
 import type { DistillCandidate, DistillVerdict, Judge } from "../judge/types.ts";
 import { withoutNotes } from "../retrieve/render.ts";
@@ -34,6 +33,10 @@ export interface QueuedTurn {
   branch: string | null;
   commit: string | null;
   attempts: number;
+  /** Where the turn came from: a hook, or an agent's transcript read afterwards. */
+  origin: "live" | "history";
+  /** When the turn ended; history memories are dated by it. */
+  endedAt: number | null;
 }
 
 const MAX_CHANGED_FILES = 10;
@@ -48,33 +51,41 @@ const EMPTY: TurnDetail = {
   savedMemory: false,
 };
 
-function realpath(path: string): string {
-  try {
-    return realpathSync(path);
-  } catch {
-    return path;
-  }
-}
-
-/** Project-relative paths with forward slashes. Files outside the project are not anchors. */
-function relativeTo(roots: string[], paths: string[]): string[] {
-  const relative = new Set<string>();
-  for (const path of paths) {
-    const normalised = path.replaceAll("\\", "/");
-    const root = roots.find((candidate) => normalised.startsWith(`${candidate}/`));
-    if (root !== undefined) relative.add(normalised.slice(root.length + 1));
-  }
-  return [...relative];
+/** What a history turn was queued with: its transcript's tail no longer holds an old turn. */
+function storedDetail(db: Db, turnId: number): TurnDetail {
+  const row = db
+    .query<{ filesRead: string; filesChanged: string; commands: string; errors: string }, [number]>(
+      `SELECT files_read AS filesRead, files_changed AS filesChanged, commands, errors
+         FROM turns WHERE id = ?`,
+    )
+    .get(turnId);
+  const parse = (json: string | undefined): string[] => {
+    try {
+      const value: unknown = JSON.parse(json ?? "[]");
+      return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
+    } catch {
+      return [];
+    }
+  };
+  return {
+    filesRead: parse(row?.filesRead),
+    filesChanged: parse(row?.filesChanged),
+    commands: parse(row?.commands),
+    errors: parse(row?.errors),
+    savedMemory: false,
+  };
 }
 
 function readDetail(deps: DistillDeps, turn: QueuedTurn): TurnDetail {
   const adapter = deps.adapters[turn.agent];
-  if (adapter === undefined || turn.transcriptPath === null) return EMPTY;
-  const raw = adapter.readTurnDetail(turn.transcriptPath, turn.agentTurnId);
-  const cwd = realpath(turn.cwd);
-  const roots = [...new Set([readGitInfo(cwd)?.root ?? cwd, cwd, turn.cwd])].map((root) =>
-    root.replaceAll("\\", "/"),
-  );
+  const raw =
+    turn.origin === "history"
+      ? storedDetail(deps.db, turn.id)
+      : adapter !== undefined && turn.transcriptPath !== null
+        ? adapter.readTurnDetail(turn.transcriptPath, turn.agentTurnId)
+        : null;
+  if (raw === null) return EMPTY;
+  const roots = rootsOf(turn.cwd);
   return {
     filesRead: relativeTo(roots, raw.filesRead),
     filesChanged: relativeTo(roots, raw.filesChanged),
@@ -196,7 +207,9 @@ export async function distillTurn(
   }
 
   const action = await consolidate(deps, turn.projectId, draft, turn.id);
-  const now = deps.now();
+  // A turn read back from history is remembered as of when it happened, so that
+  // recency and supersession treat it as if it had been captured then.
+  const now = turn.origin === "history" && turn.endedAt !== null ? turn.endedAt : deps.now();
   withWrite(db, () => {
     if (action.type === "duplicate") {
       reinforce(db, action.targetId, turn.id, now);
@@ -221,7 +234,22 @@ export async function distillTurn(
         files: draft.files,
         now,
       });
-      for (const oldId of action.supersedes) if (oldId !== id) supersede(db, oldId, id, now);
+      for (const oldId of action.supersedes) {
+        if (oldId !== id) {
+          // A history memory must not supersede a newer memory.
+          // If the old memory is newer than the new one, reverse the supersession.
+          const oldCreatedAt = db
+            .query<{ created_at: number }, [number]>("SELECT created_at FROM memories WHERE id = ?")
+            .get(oldId)?.created_at;
+          if (oldCreatedAt !== undefined && oldCreatedAt > now) {
+            // The old memory is newer; the new (history) memory should step aside.
+            supersede(db, id, oldId, now);
+          } else {
+            // The old memory is older or same age; it is superseded by the new one.
+            supersede(db, oldId, id, now);
+          }
+        }
+      }
     }
     finish("done");
   });

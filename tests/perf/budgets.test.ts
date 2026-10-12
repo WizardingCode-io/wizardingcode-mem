@@ -22,6 +22,8 @@ const BASE_BUDGET_MS = {
   prompt: WINDOWS ? 200 : 80,
   "session-start": WINDOWS ? 300 : 150,
   "turn-end": WINDOWS ? 150 : 60,
+  "file-read": WINDOWS ? 150 : 50,
+  "tool-failed": WINDOWS ? 150 : 50,
 };
 
 const BASE_WORDS =
@@ -39,6 +41,9 @@ let binary: string;
 let base: string;
 let dataDir: string;
 let project: string;
+
+/** The file the agent reads: three memories about it sit among the 65,000. */
+const READ_FILE = "src/pool/lease.ts";
 
 /** Deterministic pseudo-random numbers: the same corpus on every run. */
 function generator(seed: number) {
@@ -85,6 +90,29 @@ beforeAll(() => {
         sourceTurnId: null,
         files: [{ path: file, role: "changed" }],
         now: now - next(200) * 86_400_000,
+      });
+    }
+    const linked = [
+      ["gotcha", "A lease must be released before the pool reuses its socket."],
+      ["fix", "SQLITE_BUSY on the lease table came from a missing busy_timeout."],
+      ["decision", "Leases expire after thirty seconds, not on process exit."],
+    ] as const;
+    for (const [kind, title] of linked) {
+      insertMemory(db, {
+        projectId,
+        kind,
+        title,
+        body: "Context: the pool lease in src/pool/lease.ts." as Redacted,
+        terms: READ_FILE,
+        importance: 4,
+        branch: null,
+        commit: null,
+        origin: "manual",
+        judge: "heuristic",
+        judgeVersion: "1",
+        sourceTurnId: null,
+        files: [{ path: READ_FILE, role: "changed" }],
+        now: now - 86_400_000,
       });
     }
   });
@@ -140,6 +168,8 @@ const BUDGET_MS = {
   prompt: BASE_BUDGET_MS.prompt * SLACK,
   "session-start": BASE_BUDGET_MS["session-start"] * SLACK,
   "turn-end": BASE_BUDGET_MS["turn-end"] * SLACK,
+  "file-read": BASE_BUDGET_MS["file-read"] * SLACK,
+  "tool-failed": BASE_BUDGET_MS["tool-failed"] * SLACK,
 };
 
 describe(`hook latency with ${MEMORIES} memories`, () => {
@@ -171,5 +201,41 @@ describe(`hook latency with ${MEMORIES} memories`, () => {
     }));
     console.log(`turn-end: ${result.shown}`);
     expect(result.value).toBeLessThanOrEqual(BUDGET_MS["turn-end"]);
+  }, 120_000);
+
+  // Tool-call events: a new session per run, so that each run looks the notes up afresh
+  // instead of finding them already shown in this context.
+  test(`a file read is answered within ${BUDGET_MS["file-read"]} ms`, async () => {
+    const result = await measure("file-read", (run) => ({
+      session_id: `perf-file-read-${run}`,
+      hook_event_name: "PostToolUse",
+      tool_name: "Read",
+      tool_input: { file_path: join(project, READ_FILE) },
+      tool_response: { type: "text", file: { filePath: join(project, READ_FILE) } },
+      tool_use_id: `toolu_read_${run}`,
+    }));
+    console.log(`file-read: ${result.shown}`);
+    expect(result.outputs.every((out) => out.includes(READ_FILE))).toBe(true);
+    expect(result.value).toBeLessThanOrEqual(BUDGET_MS["file-read"]);
+  }, 120_000);
+
+  test(`a failed command is answered within ${BUDGET_MS["tool-failed"]} ms`, async () => {
+    const next = generator(11);
+    const word = () => WORDS[next(WORDS.length)] as string;
+    // About twenty searchable words, one of them an identifier a memory shares.
+    const result = await measure("tool-failed", (run) => ({
+      session_id: `perf-tool-failed-${run}`,
+      hook_event_name: "PostToolUseFailure",
+      tool_name: "Bash",
+      tool_input: { command: "bun test", description: "Run tests" },
+      tool_use_id: `toolu_bash_${run}`,
+      error: `Exit code 1\nerror: SQLITE_BUSY while the ${word()} ${word()} held the lease table; ${word()} ${word()} ${word()} failed in the ${word()} ${word()} after ${word()} ${word()} and ${word()} ${word()} ${word()} ${word()} retries`,
+      is_interrupt: false,
+    }));
+    console.log(`tool-failed: ${result.shown}`);
+    expect(result.outputs.filter((out) => out.includes("SQLITE_BUSY")).length).toBeGreaterThan(
+      RUNS / 2,
+    );
+    expect(result.value).toBeLessThanOrEqual(BUDGET_MS["tool-failed"]);
   }, 120_000);
 });

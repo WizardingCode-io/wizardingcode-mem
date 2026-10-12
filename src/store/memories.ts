@@ -103,17 +103,17 @@ export function reinforce(db: Db, memoryId: number, turnId: number, now: number)
     [memoryId, turnId],
   ).changes;
   if (added > 0) {
-    db.run("UPDATE memories SET evidence_count = evidence_count + 1, updated_at = ? WHERE id = ?", [
-      now,
-      memoryId,
-    ]);
+    db.run(
+      "UPDATE memories SET evidence_count = evidence_count + 1, updated_at = MAX(updated_at, ?) WHERE id = ?",
+      [now, memoryId],
+    );
   }
 }
 
 /** Keeps the old memory, for history, but takes it out of circulation. */
 export function supersede(db: Db, oldId: number, newId: number, now: number): void {
   db.run(
-    "UPDATE memories SET status = 'superseded', superseded_by = ?, updated_at = ? WHERE id = ? AND status = 'active'",
+    "UPDATE memories SET status = 'superseded', superseded_by = ?, updated_at = MAX(updated_at, ?) WHERE id = ? AND status = 'active'",
     [newId, now, oldId],
   );
 }

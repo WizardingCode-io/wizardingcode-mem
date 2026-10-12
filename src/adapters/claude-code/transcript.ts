@@ -15,7 +15,7 @@ const READ_TOOLS = new Set(["Read"]);
 const WRITE_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
 
 /** A user line that opens a turn: it carries the prompt as plain text. */
-function isPrompt(line: Json): boolean {
+export function isPrompt(line: Json): boolean {
   return (
     line.type === "user" &&
     text(line.promptId) !== null &&
@@ -37,11 +37,8 @@ function add(set: Set<string>, value: string | null): void {
   if (value !== null && set.size < MAX_ITEMS) set.add(clip(value, MAX_ITEM_CHARS));
 }
 
-export function readTurnDetail(
-  transcriptPath: string,
-  turnId: string | null,
-  options: { maxBytes?: number } = {},
-): TurnDetail {
+/** What one turn did, from transcript lines already parsed. */
+export function turnDetailFromLines(lines: Json[], turnId: string | null): TurnDetail {
   const filesRead = new Set<string>();
   const filesChanged = new Set<string>();
   const commands = new Set<string>();
@@ -55,13 +52,6 @@ export function readTurnDetail(
     errors: [...errors],
     savedMemory,
   });
-
-  let lines: Json[];
-  try {
-    lines = parseLines(readTail(transcriptPath, options.maxBytes ?? DEFAULT_MAX_BYTES));
-  } catch {
-    return detail();
-  }
 
   let start =
     turnId === null
@@ -99,4 +89,18 @@ export function readTurnDetail(
     }
   }
   return detail();
+}
+
+export function readTurnDetail(
+  transcriptPath: string,
+  turnId: string | null,
+  options: { maxBytes?: number } = {},
+): TurnDetail {
+  let lines: Json[];
+  try {
+    lines = parseLines(readTail(transcriptPath, options.maxBytes ?? DEFAULT_MAX_BYTES));
+  } catch {
+    return turnDetailFromLines([], null);
+  }
+  return turnDetailFromLines(lines, turnId);
 }

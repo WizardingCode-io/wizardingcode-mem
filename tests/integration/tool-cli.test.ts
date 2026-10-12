@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveProject } from "../../src/core/project.ts";
 import { redact } from "../../src/core/redact.ts";
+import { openHistoryDb } from "../../src/history/db.ts";
 import { openDb } from "../../src/store/db.ts";
 import { insertMemory } from "../../src/store/memories.ts";
 import { runCliWith } from "../helpers/cli.ts";
@@ -88,6 +89,58 @@ describe("wizardingcode-mem tool", () => {
   });
 });
 
+/** A history index in the data dir with one turn for `projectId` and one for another project. */
+function seedHistory(projectId: number) {
+  const hdb = openHistoryDb(dataDir, { create: true });
+  if (hdb === null) throw new Error("no history db");
+  hdb.run(
+    "INSERT INTO files(path, agent, size, mtime, indexed_at) VALUES ('/t', 'codex', 1, 1, 1)",
+  );
+  const turn = (id: number, pid: number | null, name: string, prompt: string) =>
+    hdb.run(
+      `INSERT INTO turns(id, path, agent, session_id, turn_id, project_id, project_name, cwd, started_at, ended_at, prompt, final_text)
+       VALUES (?, '/t', 'codex', 's' || ?, 't' || ?, ?, ?, '/x', 1700000000000, 1700000000000, ?, 'Done.')`,
+      [id, id, id, pid, name, prompt],
+    );
+  turn(1, projectId, "project", "Why is the zebra cache cold?");
+  turn(2, 999, "elsewhere", "The zebra migration plan.");
+  hdb.close();
+}
+
+const NO_INDEX =
+  "No past conversations are indexed yet. The user can run: wizardingcode-mem history import";
+
+const UNREADABLE =
+  "The history index could not be read. The user can rebuild it: wizardingcode-mem history forget, then wizardingcode-mem history index";
+
+describe("history_search", () => {
+  test("without an index it says how to build one, and creates nothing", async () => {
+    const result = await tool("history_search", { query: "zebra" });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.trim()).toBe(NO_INDEX);
+    expect(existsSync(join(dataDir, "history.db"))).toBe(false);
+  });
+
+  test("in a project it finds that project's turns only", async () => {
+    seedHistory(1);
+    const result = await tool("history_search", { query: "zebra" });
+    expect(result.stdout).toContain("zebra cache");
+    expect(result.stdout).not.toContain("migration plan");
+  });
+
+  test("an index that cannot be read says how to rebuild it, and the tool still succeeds", async () => {
+    writeFileSync(join(dataDir, "history.db"), "not a database, not at all, not even close");
+    const result = await tool("history_search", { query: "zebra" });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.trim()).toBe(UNREADABLE);
+  });
+
+  test("a query that matches nothing says so", async () => {
+    seedHistory(1);
+    expect((await tool("history_search", { query: "giraffe" })).stdout).toContain("No ");
+  });
+});
+
 describe("wizardingcode-mem tool --global (Claude Desktop's chat: every project)", () => {
   const global = (name: string, args: unknown) =>
     runCliWith(
@@ -118,5 +171,19 @@ describe("wizardingcode-mem tool --global (Claude Desktop's chat: every project)
         })
       ).stdout,
     ).toMatch(/Saved as #\d+ in project\./);
+  });
+
+  test("history_search spans projects, or one by name, and names each project", async () => {
+    seedHistory(1);
+    const all = await global("history_search", { query: "zebra" });
+    expect(all.stdout).toContain("project (");
+    expect(all.stdout).toContain("elsewhere (");
+    const one = await global("history_search", { query: "zebra", project: "elsewhere" });
+    expect(one.stdout).toContain("migration plan");
+    expect(one.stdout).not.toContain("zebra cache");
+  });
+
+  test("history_search without an index returns the plain sentence", async () => {
+    expect((await global("history_search", { query: "zebra" })).stdout.trim()).toBe(NO_INDEX);
   });
 });

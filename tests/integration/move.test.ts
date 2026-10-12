@@ -16,7 +16,7 @@ import type { Redacted } from "../../src/core/redact.ts";
 import { readEnvFile } from "../../src/settings/env-file.ts";
 import { DB_FILE, openDb } from "../../src/store/db.ts";
 import { insertMemory } from "../../src/store/memories.ts";
-import { claimDrain } from "../../src/store/meta.ts";
+import { claimDrain, claimLease } from "../../src/store/meta.ts";
 import { inspectTarget, moveStore } from "../../src/store/move.ts";
 import { runCliWith } from "../helpers/cli.ts";
 
@@ -110,6 +110,18 @@ describe("moveStore", () => {
     expect(db.query<{ n: number }, []>("SELECT count(*) AS n FROM hook_runs").get()?.n).toBe(1);
     db.close();
     expect(existsSync(join(dataDir, DB_FILE))).toBe(false);
+  });
+
+  test("refuses while a history run holds its lease", async () => {
+    const db = openDb({ dataDir, busyTimeoutMs: 2000 });
+    claimLease(db, "history.lease", `${process.pid}-h`, NOW, 60_000);
+    db.close();
+    expect(await moveStore({ dataDir, from: dataDir, to: target, now: NOW })).toMatchObject({
+      ok: false,
+      reason: "busy",
+    });
+    expect(existsSync(join(dataDir, DB_FILE))).toBe(true);
+    expect(existsSync(join(target, DB_FILE))).toBe(false);
   });
 
   test("refuses while background work holds the database", async () => {

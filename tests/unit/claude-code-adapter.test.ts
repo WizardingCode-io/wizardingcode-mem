@@ -25,7 +25,36 @@ describe("claude-code payloads", () => {
       finalText: null,
       source: "startup",
       subagent: false,
+      toolFile: null,
+      toolError: null,
     });
+  });
+
+  test("a file read carries the path the tool read", () => {
+    expect(claudeCode.parse("file-read", payload("post-tool-use.read"))).toMatchObject({
+      event: "file-read",
+      toolFile: "/work/shop/src/store/db.ts",
+      toolError: null,
+      prompt: null,
+    });
+  });
+
+  test("a failed tool carries the error, unless the user interrupted it", () => {
+    expect(claudeCode.parse("tool-failed", payload("post-tool-use-failure.bash"))).toMatchObject({
+      event: "tool-failed",
+      toolFile: null,
+      toolError: "Exit code 1\nSQLITE_BUSY: database is locked",
+    });
+    const interrupted = JSON.stringify({
+      ...JSON.parse(payload("post-tool-use-failure.bash")),
+      is_interrupt: true,
+    });
+    expect(claudeCode.parse("tool-failed", interrupted)?.toolError).toBeNull();
+  });
+
+  test("a read without tool_input has no file", () => {
+    const bare = JSON.stringify({ session_id: "s", cwd: "/p" });
+    expect(claudeCode.parse("file-read", bare)?.toolFile).toBeNull();
   });
 
   test("a resumed session says so", () => {
@@ -109,6 +138,16 @@ describe("claude-code render", () => {
   test("context for a prompt is wrapped the way the host expects", () => {
     expect(JSON.parse(claudeCode.render("prompt", "remember this"))).toEqual({
       hookSpecificOutput: { hookEventName: "UserPromptSubmit", additionalContext: "remember this" },
+    });
+  });
+
+  test("context after a file read names PostToolUse", () => {
+    expect(JSON.parse(claudeCode.render("file-read", "notes"))).toEqual({
+      hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: "notes" },
+    });
+    expect(JSON.parse(claudeCode.render("tool-failed", "notes")).hookSpecificOutput).toEqual({
+      hookEventName: "PostToolUseFailure",
+      additionalContext: "notes",
     });
   });
 

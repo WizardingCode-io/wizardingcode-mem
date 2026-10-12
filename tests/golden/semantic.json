@@ -1,0 +1,85 @@
+{
+  "paraphrases": [
+    {
+      "prompt": "the very first statement after connecting gets a locked database error",
+      "expect": ["busy-timeout"]
+    },
+    {
+      "prompt": "porque é que a primeira consulta falha logo com a base bloqueada?",
+      "expect": ["busy-timeout"]
+    },
+    {
+      "prompt": "switching the journal to write-ahead logging ignores the wait setting",
+      "expect": ["wal-retry"]
+    },
+    {
+      "prompt": "can I fake the storage layer in unit tests instead of a real file?",
+      "expect": ["no-mocks"]
+    },
+    { "prompt": "posso simular a base de dados nos testes?", "expect": ["no-mocks"] },
+    {
+      "prompt": "interrupted requests vanish from the log because we create them too late",
+      "expect": ["open-at-prompt"]
+    },
+    {
+      "prompt": "o agente bloqueia a ação do utilizador quando o nosso script termina mal",
+      "expect": ["exit-code"]
+    },
+    { "prompt": "the release crashes on an old processor without AVX2", "expect": ["baseline"] },
+    {
+      "prompt": "o binário está a ler as variáveis secretas da pasta do projeto",
+      "expect": ["dotenv"]
+    },
+    {
+      "prompt": "accented words are not found when typed without accents",
+      "expect": ["diacritics"]
+    },
+    { "prompt": "a pesquisa por palavras sem acentos não encontra nada", "expect": ["diacritics"] },
+    {
+      "prompt": "the query planner walks every row and the search is a hundred times slower",
+      "expect": ["cross-join"]
+    },
+    { "prompt": "devíamos usar vetores semânticos na pesquisa?", "expect": ["no-embeddings"] },
+    {
+      "prompt": "importing the protocol library at startup made every hook slower",
+      "expect": ["mcp-sdk"]
+    },
+    {
+      "prompt": "cutting the text before hiding secrets may leave half a key visible",
+      "expect": ["redact-first"]
+    },
+    {
+      "prompt": "dois processos a esvaziar a fila ao mesmo tempo criaram duplicados",
+      "expect": ["drain-lease"]
+    },
+    { "prompt": "which language should the replies to the user be in?", "expect": ["pt-lingua"] },
+    { "prompt": "can Cursor get notes injected on every message?", "expect": ["pt-cursor"] },
+    {
+      "prompt": "o processo de testes fica pendurado dez segundos depois de passar",
+      "expect": ["pending-timer"]
+    },
+    { "prompt": "where do we keep how long each hook took?", "expect": ["hook-runs"] }
+  ],
+  "unrelated": [
+    "plan a three-day trip to Porto",
+    "convert this recipe from cups to grams",
+    "write a cover letter for a marketing job",
+    "explain the difference between a virus and a bacterium",
+    "qual é a melhor altura para visitar os Açores?",
+    "faz um resumo deste livro em cinco frases",
+    "what rhymes with orange?",
+    "draw an ASCII cat",
+    "how many calories are in a banana?",
+    "escreve um poema sobre o mar",
+    "set up a GitHub Actions workflow for a Python package",
+    "add pagination to the products API",
+    "style the login button with a gradient",
+    "migrate the Express app to Fastify",
+    "create a Dockerfile for the Next.js frontend",
+    "adiciona validação de email ao formulário de registo",
+    "muda a cor do cabeçalho para azul",
+    "write unit tests for the date formatter",
+    "optimise the images on the homepage",
+    "o carrinho de compras não atualiza o total"
+  ]
+}

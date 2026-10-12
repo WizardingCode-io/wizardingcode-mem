@@ -111,8 +111,10 @@ export function completeTurn(db: Db, turn: TurnContext, finalText: Redacted | nu
   } else if (target.state === "open" || target.state === "pending") {
     // A turn can end more than once: another hook may send the agent back to work, and
     // a turn-end can arrive after the next prompt. The latest ending is the one to keep.
+    // A hook completing the turn proves it live, even if history queued it first.
     db.run(
-      `UPDATE turns SET state = 'pending', completeness = 'full', final_text = COALESCE(?, final_text),
+      `UPDATE turns SET state = 'pending', completeness = 'full', origin = 'live',
+                        final_text = COALESCE(?, final_text),
                         ended_at = ?, transcript_path = COALESCE(?, transcript_path)
         WHERE id = ?`,
       [finalText, turn.now, turn.transcriptPath, target.id],
@@ -124,8 +126,8 @@ export function completeTurn(db: Db, turn: TurnContext, finalText: Redacted | nu
   ) {
     // Already distilled from an earlier ending: distil it again from this one.
     db.run(
-      `UPDATE turns SET state = 'pending', completeness = 'full', final_text = ?, ended_at = ?,
-                        attempts = 0, last_error = NULL,
+      `UPDATE turns SET state = 'pending', completeness = 'full', origin = 'live', final_text = ?,
+                        ended_at = ?, attempts = 0, last_error = NULL,
                         transcript_path = COALESCE(?, transcript_path)
         WHERE id = ?`,
       [finalText, turn.now, turn.transcriptPath, target.id],
