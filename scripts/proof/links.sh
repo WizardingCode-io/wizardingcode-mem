@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The linked projects and your rules proof (ADR 0018), on a temporary copy of the real database.
 #
-#   scripts/proof/links.sh <work dir> [--runs n] [--prompts n] [--hand-links n] [--unbounded]
+#   scripts/proof/links.sh <work dir> [--runs n] [--prompts n] [--hand-links n] [--seed-rules n] [--unbounded]
 #
 # <work dir>  an empty or new directory outside ~/.wizardingcode; everything is written here
 #
@@ -11,8 +11,10 @@
 # 2. runs scripts/proof/links.ts there, which migrates the copy, times the suggestion and the
 #    proposal passes the drain runs, counts what they produce, and measures the brief and the
 #    prompt notes before and after confirming every suggestion, after a stress of links made by
-#    hand to the biggest projects, and after accepting every proposal. --unbounded adds a
-#    proposal pass with no time budget.
+#    hand to the biggest projects, and after accepting every proposal. The proposal pass runs
+#    drain after drain until it reaches the backlog, then quiet drains. --seed-rules n (default
+#    3) writes n synthetic rules "said always" into the copy first, to measure recall.
+#    --unbounded gives the first proposal drain no time budget.
 #    The suggestion pass reads manifests (package.json and the like) from the project roots the
 #    copy records: those files are only read.
 #
@@ -25,7 +27,7 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: scripts/proof/links.sh <work dir> [--runs n] [--prompts n] [--hand-links n] [--unbounded]" >&2
+  echo "usage: scripts/proof/links.sh <work dir> [--runs n] [--prompts n] [--hand-links n] [--seed-rules n] [--unbounded]" >&2
   exit 1
 }
 [ $# -ge 1 ] || usage
@@ -40,6 +42,7 @@ while [ $# -gt 0 ]; do
     --runs) RUNS=$2; shift 2 ;;
     --prompts) PROMPTS=$2; shift 2 ;;
     --hand-links) HAND_LINKS=$2; shift 2 ;;
+    --seed-rules) EXTRA+=(--seed-rules "$2"); shift 2 ;;
     --unbounded) EXTRA+=(--unbounded); shift ;;
     *) usage ;;
   esac
