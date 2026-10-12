@@ -38,24 +38,13 @@ export function semanticCandidates(
     if (q === null) return [];
     const floor = filter.floor ?? SEMANTIC_FLOOR;
     const index = vectorIndex(db, model);
-    const { dims, rows, ids, projects, kinds, inverseNorms } = index;
-    if (dims !== q.length) return [];
-    // The query is a unit vector, so the cosine is q·row / ‖row‖, computed on the int8 row
-    // itself: the row's scale cancels out, and nothing is copied.
-    let norm = 0;
-    for (let i = 0; i < dims; i++) norm += (q[i] as number) * (q[i] as number);
-    const inverseQuery = norm > 0 ? 1 / Math.sqrt(norm) : 0;
-    const found: { id: number; score: number }[] = [];
+    if (index.dims !== q.length) return [];
     const project = filter.projectId;
     const kind = filter.kind ?? null;
-    for (let r = 0, offset = 0; r < ids.length; r++, offset += dims) {
-      if (project !== null && projects[r] !== project) continue;
-      if (kind !== null && kinds[r] !== kind) continue;
-      const dot = dotInt8(q, rows, offset, dims);
-      const score = dot * (inverseNorms[r] as number) * inverseQuery;
-      if (score >= floor) found.push({ id: ids[r] as number, score });
-    }
-    return found.sort((a, b) => b.score - a.score || b.id - a.id).slice(0, filter.limit);
+    return rankPacked(q, index, floor, filter.limit, (r) => {
+      if (project !== null && index.projects[r] !== project) return false;
+      return kind === null || index.kinds[r] === kind;
+    });
   } catch (error) {
     if (!failureLogged) {
       failureLogged = true;
@@ -63,6 +52,40 @@ export function semanticCandidates(
     }
     return [];
   }
+}
+
+/** The rows of a packed index, as far as scoring is concerned (memories and past turns alike). */
+export interface PackedRows {
+  dims: number;
+  ids: Int32Array;
+  /** 1/‖row‖ of the int8 row: the scale cancels out of the cosine. */
+  inverseNorms: Float32Array;
+  rows: Int8Array;
+}
+
+/**
+ * The rows whose cosine with the unit vector `q` reaches `floor`, best first (newer id first
+ * on a tie), at most `limit`. The cosine is q·row / ‖row‖, computed on the int8 row itself:
+ * the row's scale cancels out, and nothing is copied. `keep` filters by row number.
+ */
+export function rankPacked(
+  q: Float32Array,
+  index: PackedRows,
+  floor: number,
+  limit: number,
+  keep: (row: number) => boolean,
+): { id: number; score: number }[] {
+  const { dims, rows, ids, inverseNorms } = index;
+  let norm = 0;
+  for (let i = 0; i < dims; i++) norm += (q[i] as number) * (q[i] as number);
+  const inverseQuery = norm > 0 ? 1 / Math.sqrt(norm) : 0;
+  const found: { id: number; score: number }[] = [];
+  for (let r = 0, offset = 0; r < ids.length; r++, offset += dims) {
+    if (!keep(r)) continue;
+    const score = dotInt8(q, rows, offset, dims) * (inverseNorms[r] as number) * inverseQuery;
+    if (score >= floor) found.push({ id: ids[r] as number, score });
+  }
+  return found.sort((a, b) => b.score - a.score || b.id - a.id).slice(0, limit);
 }
 
 /** q · rows[offset, offset + dims), four lanes at a time (the hot loop of every search). */

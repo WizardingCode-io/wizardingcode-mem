@@ -8,7 +8,7 @@ import { runEmbedBackfill } from "../../src/embed/backfill.ts";
 import { deleteModel } from "../../src/embed/download.ts";
 import { cosine } from "../../src/embed/embed.ts";
 import { loadModel, type Model, modelPath } from "../../src/embed/model.ts";
-import { memoryVectors, writeMemoryVector } from "../../src/embed/vectors.ts";
+import { memoryVectors, vectorIndex, writeMemoryVector } from "../../src/embed/vectors.ts";
 import { type Db, openDb } from "../../src/store/db.ts";
 import { insertMemory, supersede } from "../../src/store/memories.ts";
 import { anyLeaseActive, claimLease, EMBED_LEASE, releaseLease } from "../../src/store/meta.ts";
@@ -328,5 +328,51 @@ describe("embed backfill and delete commands", () => {
     expect(busy.exitCode).toBe(0);
     expect(busy.stdout).toContain("already running");
     expect(rows()).toEqual([]);
+  });
+});
+
+describe("vectorIndex stamp", () => {
+  test("a commit by another connection during the build is not stamped as current", () => {
+    memory(0, model);
+    expect(vectorIndex(db, model).ids.length).toBe(1);
+    // Force a rebuild, and let another connection commit while the build's queries run.
+    db.run("UPDATE memories SET title = title");
+    const other = openDb({ dataDir, busyTimeoutMs: 2000 });
+    const original = db.query.bind(db);
+    let committed = false;
+    (db as { query: unknown }).query = (sql: string) => {
+      if (!committed && sql.includes("FROM memories WHERE status")) {
+        committed = true;
+        const [title, body] = TEXTS[1] as [string, string];
+        const id = insertMemory(
+          other,
+          {
+            projectId,
+            kind: "decision",
+            title,
+            body: body as Redacted,
+            terms: "",
+            importance: 3,
+            branch: null,
+            commit: null,
+            origin: "manual",
+            judge: "heuristic",
+            judgeVersion: "1",
+            sourceTurnId: null,
+            files: [],
+            now: NOW,
+          },
+          model,
+        );
+        void id;
+      }
+      return original(sql);
+    };
+    vectorIndex(db, model);
+    (db as { query: unknown }).query = original;
+    other.close();
+    expect(committed).toBe(true);
+    // Whatever the first build saw, the next call must see the commit made during it.
+    expect(vectorIndex(db, model).ids.length).toBe(2);
   });
 });

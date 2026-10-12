@@ -118,7 +118,12 @@ export async function run(argv: string[]): Promise<number> {
           );
           return 0;
         }
-        const hits = searchHistory(hdb, { query, projectName, limit });
+        const hits = searchHistory(hdb, {
+          query,
+          projectName,
+          limit,
+          model: loadModel({ dataDir }),
+        });
         process.stdout.write(
           hits.length === 0 ? "history search: no matches\n" : `${renderHits(hits)}\n`,
         );
@@ -155,6 +160,7 @@ export async function run(argv: string[]): Promise<number> {
           maxMs: budgetMs,
           agents,
           onProgress,
+          model: loadModel({ dataDir }),
         });
       } finally {
         hdb.close();
@@ -181,6 +187,8 @@ export async function run(argv: string[]): Promise<number> {
           : indexTranscript(hdb, db, agent as "claude-code" | "codex", transcript, {
               now: Date.now(),
               projects: new Map(),
+              // Its own turns only: the rest is filled by `history index`.
+              model: loadModel({ dataDir }),
             });
         process.stdout.write(
           `history index: 1 files, ${unchanged ? 0 : 1} indexed, ${unchanged ? 1 : 0} unchanged, 0 removed, ${turns} turns, 0 failed\n`,

@@ -1,5 +1,5 @@
 import { resolveProject } from "../core/project.ts";
-import { loadModel } from "../embed/model.ts";
+import { loadModel, type Model } from "../embed/model.ts";
 import { openHistoryDb } from "../history/db.ts";
 import { historyReadFailure, renderHits, searchHistory } from "../history/search.ts";
 import { makeJudge } from "../judge/index.ts";
@@ -170,6 +170,7 @@ const NO_HISTORY =
 /** Searches the history index, if there is one; never creates it. */
 function searchPast(
   storeDir: string,
+  model: Model | null,
   args: { query: string; limit?: number; project?: string },
   projectId?: number,
 ): string {
@@ -182,6 +183,7 @@ function searchPast(
       limit: args.limit,
       projectId,
       projectName: args.project,
+      model,
     });
     return hits.length === 0 ? "No past conversations match." : renderHits(hits);
   } catch (error) {
@@ -217,7 +219,11 @@ export async function runGlobalTool(name: ToolName, args: unknown): Promise<stri
           loadModel({ dataDir }),
         );
       case "history_search":
-        return searchPast(storeDir, args as Parameters<typeof searchPast>[1]);
+        return searchPast(
+          storeDir,
+          loadModel({ dataDir }),
+          args as Parameters<typeof searchPast>[2],
+        );
       case "memory_projects":
         return listProjects(db, now, args as Parameters<typeof listProjects>[2]);
     }
@@ -261,7 +267,12 @@ export async function runTool(name: ToolName, args: unknown, projectDir: string)
           args as Parameters<typeof saveMemory>[1],
         );
       case "history_search":
-        return searchPast(storeDir, { ...(args as { query: string; limit?: number }) }, project.id);
+        return searchPast(
+          storeDir,
+          loadModel({ dataDir }),
+          { ...(args as { query: string; limit?: number }) },
+          project.id,
+        );
       case "memory_projects":
         return "memory_projects answers only without a project folder (wizardingcode-mem mcp --global).";
     }

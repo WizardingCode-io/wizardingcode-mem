@@ -504,7 +504,12 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
         hdb = openHistoryDb(storeDir, { create: false, busyTimeoutMs: 2000 });
         if (hdb === null) return json({ indexed: false });
         const hits =
-          q === "" ? recentHistory(hdb, { projectId, limit }) : searchHistory(hdb, { query: q, projectId, limit });
+          q === "" ? recentHistory(hdb, { projectId, limit }) : searchHistory(hdb, {
+                query: q,
+                projectId,
+                limit,
+                model: loadModel({ dataDir: options.dataDir, env }),
+              });
         return json({ indexed: true, hits });
       } catch (error) {
         logError("ui history search", error, options.dataDir);

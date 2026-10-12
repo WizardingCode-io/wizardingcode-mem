@@ -119,7 +119,8 @@ interface CachedIndex {
 
 const indexes = new WeakMap<Db, CachedIndex>();
 
-function stamp(db: Db): { version: number; changes: number } {
+/** What a packed index is valid for: this connection's view of the file, and its own writes. */
+export function stamp(db: Db): { version: number; changes: number } {
   const version =
     db.query<{ data_version: number }, []>("PRAGMA data_version").get()?.data_version ?? 0;
   const changes = db.query<{ n: number }, []>("SELECT total_changes() AS n").get()?.n ?? 0;
@@ -127,6 +128,8 @@ function stamp(db: Db): { version: number; changes: number } {
 }
 
 export function vectorIndex(db: Db, model: Model): VectorIndex {
+  // Read before the build's queries, not after: a commit by another connection while they run
+  // moves the stamp on, so the next call rebuilds instead of trusting a half-old index.
   const now = stamp(db);
   const cached = indexes.get(db);
   if (
@@ -190,7 +193,6 @@ export function vectorIndex(db: Db, model: Model): VectorIndex {
     inverseNorms: inverseNorms.subarray(0, n),
     rows: rows.subarray(0, n * width),
   };
-  // The stamp is read again: building it wrote nothing, but reading is cheap and exact.
-  indexes.set(db, { index, ...stamp(db) });
+  indexes.set(db, { index, ...now });
   return index;
 }
