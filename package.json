@@ -1,6 +1,6 @@
 {
   "name": "wizardingcode-mem",
-  "version": "0.4.4",
+  "version": "0.5.0",
   "private": true,
   "description": "wizardingcode-mem: persistent cross-session memory for coding agents. One binary, no daemon, no generative LLM, local by default.",
   "license": "Apache-2.0",

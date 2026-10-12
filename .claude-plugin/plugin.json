@@ -1,7 +1,7 @@
 {
   "name": "wizardingcode-mem",
   "displayName": "wizardingcode-mem",
-  "version": "0.4.4",
+  "version": "0.5.0",
   "description": "Persistent memory across sessions: what each session learns, the next one is told. One local binary, no daemon, no LLM in the loop; your plan is never spent on memory.",
   "author": {
     "name": "WizardingCode",
