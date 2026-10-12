@@ -98,10 +98,11 @@ Judged by eye on the queries and titles (in the task report, not committed): in 
 
 `scripts/embed/pack.ts` rebuilds the pack from the model's pinned revision (`73908c3438cf03b6a01bcb9611d62b23d0726f08` of `minishlab/potion-multilingual-128M`); rebuilt on 2026-10-12, it is byte-identical to part 1's: sha256 `7d8362253e568e7bb24ff8be3f006f412973aa445a96c4c17b6f13a957825c6a`, 146,383,528 bytes. The model is MIT-licensed (Minish Lab); its notice, `LICENSE-potion.txt`, is published as a second asset of the same release.
 
+The release `model-potion-multilingual-128M-v1` was published on 2026-10-12 (not marked as the latest release). `embed download` against the real `MODEL_URL`, into a temporary data directory, fetched 146,383,528 bytes whose sha256 matches the pin.
+
 ## What is not done
 
 - **The prompt channel stays off** (ADR 0014): nothing is injected by meaning.
-- **The release is not yet published.** Until the asset exists at `MODEL_URL`, `embed download` fails cleanly ("Nothing was installed"). After publishing, the pinned sha256 and size must be checked against the asset.
 - **`embed download --backfill` end to end needs the network**: the download is tested against a local server (checksum, interruption, retry), the hand-over of its lease to the backfill and the backfill on their own; the whole command against the real URL is not run in the test suite.
 - **History noise.** The floor was calibrated on memories; turns, often short, pass it more easily. A floor of its own for `history_search`, or a minimum length, is a later measurement.
 - **A persistent connection in the MCP server**, so its searches hit the vector cache.
