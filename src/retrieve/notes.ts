@@ -64,21 +64,24 @@ export function toNote(db: Db, row: MemoryRow, origin?: string): Note {
 let promotedFailed = false;
 
 /**
- * The project's memories made knowledge whose entry is still in the project's knowledge
- * index and active: the entry says them now, so memory leaves them out. One indexed lookup;
- * when the entry is gone (its file deleted, the index refreshed) or retired by the author
- * (draft or superseded, which knowledge never shows), the memory's notes come back. On any
- * error, none: memory then shows everything, as it did before knowledge.
+ * The project's memories made knowledge whose entry knowledge has put in front of the agent
+ * in this context (session and context epoch) and that still stands in the project's index
+ * as active: the agent has the entry, so memory leaves them out (ruling K9). Elsewhere (a
+ * context the entry was never shown in, a moment knowledge has no share of, a context
+ * cleared since) memory still shows them: promotion never makes a rule less visible. One
+ * indexed lookup; on any error, none: memory then shows everything, as it did before knowledge.
  */
-export function promotedIds(db: Db, projectId: number): number[] {
+export function promotedIds(db: Db, projectId: number, sessionId: number, epoch: number): number[] {
   try {
     return db
-      .query<{ id: number }, [number]>(
+      .query<{ id: number }, [number, number, number]>(
         `SELECT p.memory_id AS id FROM promoted_memories p
            JOIN knowledge_entries e ON e.project_id = p.project_id AND e.slug = p.slug
-          WHERE p.project_id = ? AND e.status = 'active'`,
+           JOIN knowledge_shown ks ON ks.session_id = ?2 AND ks.context_epoch = ?3
+                                  AND ks.project_id = p.project_id AND ks.slug = p.slug
+          WHERE p.project_id = ?1 AND e.status = 'active'`,
       )
-      .all(projectId)
+      .all(projectId, sessionId, epoch)
       .map((row) => row.id);
   } catch (error) {
     if (!promotedFailed) {

@@ -282,8 +282,8 @@ export function retrieveForPrompt(
     /** Default 2,400 characters. */
     budgetChars?: number;
     /**
-     * Memories made knowledge, left out while their entry says them; looked up
-     * (`promotedIds`) when not given. The memory module passes [] when knowledge is off.
+     * Memories made knowledge whose entry knowledge showed in this context, left out; looked
+     * up (`promotedIds`) when not given. The memory module passes [] when knowledge is off.
      */
     promoted?: readonly number[];
   },
@@ -303,7 +303,7 @@ export function retrieveForPrompt(
 
   // Not shown in this context yet, and not said by a knowledge entry now.
   const unseen = `${notYetShown(db, input.sessionId, input.epoch)}${exceptIds(
-    input.promoted ?? promotedIds(db, input.projectId),
+    input.promoted ?? promotedIds(db, input.projectId, input.sessionId, input.epoch),
   )}`;
   const candidates = new Map<number, Candidate>();
   const matched = db

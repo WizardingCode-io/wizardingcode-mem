@@ -40,8 +40,8 @@ export function notesForFailure(
     /** Default 1,200 characters. */
     budgetChars?: number;
     /**
-     * Memories made knowledge, left out while their entry says them; looked up
-     * (`promotedIds`) when not given. The memory module passes [] when knowledge is off.
+     * Memories made knowledge whose entry knowledge showed in this context, left out; looked
+     * up (`promotedIds`) when not given. The memory module passes [] when knowledge is off.
      */
     promoted?: readonly number[];
   },

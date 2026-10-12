@@ -30,14 +30,15 @@ function fitting(notes: Note[], intro: string | undefined, budgetChars: number):
 }
 
 /**
- * The memories made knowledge that the project's knowledge entries say now, so memory
- * leaves them out: none unless knowledge is asked at this moment too and its folder is there
- * and readable (not deleted, not a link, not the home folder); otherwise nobody else would
- * say them. One indexed lookup; the folder is looked at only when some were promoted.
+ * The memories made knowledge whose entry knowledge has put in this context, so memory leaves
+ * them out (ruling K9): none unless knowledge is asked at this moment too and its folder is
+ * there and readable (not deleted, not a link, not the home folder). Knowledge is asked
+ * first (F5′), so an entry it shows at this very moment counts. One indexed lookup; the
+ * folder is looked at only when some were promoted.
  */
 function leftToKnowledge(input: MomentInput): number[] {
   if (input.modules !== undefined && !input.modules.includes("knowledge")) return [];
-  const ids = promotedIds(input.db, input.projectId);
+  const ids = promotedIds(input.db, input.projectId, input.sessionId, input.epoch);
   if (ids.length === 0) return ids;
   try {
     const root = input.projectRoot;

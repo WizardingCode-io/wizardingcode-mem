@@ -27,11 +27,14 @@ export function sessionBrief(
     projectId: number;
     branch: string | null;
     now: number;
+    /** The context the brief is for; without it, no memory is left to knowledge. */
+    sessionId?: number;
+    epoch?: number;
     /** Default 4,200 characters. */
     budgetChars?: number;
     /**
-     * Memories made knowledge, left out while their entry says them; looked up
-     * (`promotedIds`) when not given. The memory module passes [] when knowledge is off.
+     * Memories made knowledge whose entry knowledge showed in this context, left out; looked
+     * up (`promotedIds`) when not given. The memory module passes [] when knowledge is off.
      */
     promoted?: readonly number[];
   },
@@ -49,7 +52,11 @@ export function sessionBrief(
   const rank = (rows: MemoryRow[]) =>
     rows.sort((a, b) => prior(b, input) - prior(a, input) || b.id - a.id);
   // The knowledge entry says these now (none unless some were promoted).
-  const hidden = input.promoted ?? promotedIds(db, input.projectId);
+  const hidden =
+    input.promoted ??
+    (input.sessionId === undefined || input.epoch === undefined
+      ? []
+      : promotedIds(db, input.projectId, input.sessionId, input.epoch));
   const kept = (row: MemoryRow) => !hidden.includes(row.id);
   const pools = extraPools(db, input.projectId);
   const extra =

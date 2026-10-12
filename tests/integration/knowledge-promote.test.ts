@@ -518,9 +518,10 @@ describe("accepting holds the write lock only briefly (fix round 1)", () => {
   });
 });
 
-describe("a promoted memory's notes (Review Focus 5)", () => {
+describe("a promoted memory's notes (Review Focus 5, ruling K9)", () => {
   const TITLE = "Orders are cancelled through the saga orchestrator";
   const PROMPT = "how are orders cancelled by the saga orchestrator here?";
+  const SLUG = "orders-are-cancelled-through-the-saga-orchestrator";
   let promoted: number;
   let other: number;
 
@@ -535,41 +536,65 @@ describe("a promoted memory's notes (Review Focus 5)", () => {
     accept(promoted);
   });
 
-  const briefIds = () =>
-    sessionBrief(db, { projectId, branch: null, now: NOW }).notes.map((note) => note.id);
   let ctxEpoch = 0;
-  const promptIds = () =>
+  /** A new context; with `entryShown`, knowledge has already put the entry in it. */
+  const context = (entryShown: boolean) => {
+    const at = ++ctxEpoch;
+    if (entryShown) {
+      db.run(
+        `INSERT INTO knowledge_shown (session_id, context_epoch, project_id, slug, event, at)
+         VALUES (?, ?, ?, ?, 'prompt', ?)`,
+        [sessionId, at, projectId, SLUG, NOW],
+      );
+    }
+    return at;
+  };
+  const briefIds = (entryShown = true) =>
+    sessionBrief(db, {
+      projectId,
+      sessionId,
+      epoch: context(entryShown),
+      branch: null,
+      now: NOW,
+    }).notes.map((note) => note.id);
+  const promptIds = (entryShown = true) =>
     retrieveForPrompt(db, {
       projectId,
       sessionId,
-      epoch: ++ctxEpoch,
+      epoch: context(entryShown),
       prompt: PROMPT,
       branch: null,
       now: NOW,
     }).map((note) => note.id);
-  const fileIds = () =>
+  const fileIds = (entryShown = true) =>
     notesForFile(db, {
       projectId,
       sessionId,
-      epoch: ++ctxEpoch,
+      epoch: context(entryShown),
       path: "src/orders/cancel.ts",
       branch: null,
       now: NOW,
     }).map((note) => note.id);
-  const failureIds = () =>
+  const failureIds = (entryShown = true) =>
     notesForFailure(db, {
       projectId,
       sessionId,
-      epoch: ++ctxEpoch,
+      epoch: context(entryShown),
       error: "Error: orders saga orchestrator cancelled twice",
       branch: null,
       now: NOW,
     }).map((note) => note.id);
 
-  test("hidden at every moment while its entry exists", () => {
+  test("hidden where knowledge showed its entry in this context", () => {
     expect(briefIds()).toEqual([other]);
     expect(promptIds()).toEqual([other]);
     expect(fileIds()).toEqual([other]);
+  });
+
+  test("shown where knowledge did not show its entry in this context: never less visible", () => {
+    expect(briefIds(false).sort()).toEqual([promoted, other].sort());
+    expect(promptIds(false).sort()).toEqual([promoted, other].sort());
+    expect(fileIds(false).sort()).toEqual([promoted, other].sort());
   });
 
   test("edited later, still hidden while the entry exists; turned into a gotcha too", () => {
@@ -591,7 +616,7 @@ describe("a promoted memory's notes (Review Focus 5)", () => {
   });
 
   test("its entry file deleted by hand: the notes come back once the index follows", () => {
-    rmSync(join(dir, "orders-are-cancelled-through-the-saga-orchestrator.md"));
+    rmSync(join(dir, `${SLUG}.md`));
     refreshIndex(db, projectId, dir);
     expect(briefIds().sort()).toEqual([promoted, other].sort());
     expect(promptIds().sort()).toEqual([promoted, other].sort());
@@ -599,7 +624,7 @@ describe("a promoted memory's notes (Review Focus 5)", () => {
   });
 
   test("its entry retired by the author (draft or superseded): the notes come back (task 4 minor 5)", () => {
-    const file = join(dir, "orders-are-cancelled-through-the-saga-orchestrator.md");
+    const file = join(dir, `${SLUG}.md`);
     const text = readFileSync(file, "utf8");
     for (const status of ["superseded", "draft"]) {
       writeFileSync(file, text.replace("status: active", `status: ${status}`));
@@ -614,78 +639,73 @@ describe("a promoted memory's notes (Review Focus 5)", () => {
     expect(briefIds()).toEqual([other]);
   });
 
-  test("through the hooks: the knowledge module notices the deletion on the next prompt", () => {
-    const moment = (n: number): Omit<MomentInput, "budgetChars"> => ({
-      db,
-      moment: "prompt",
-      projectId,
-      branch: null,
-      root: repo,
-      projectRoot: repo,
-      sessionId,
-      epoch: 500 + n,
-      prompt: PROMPT,
-      path: null,
-      error: null,
-      now: NOW,
-    });
+  const hookInput = (
+    moment: MomentInput["moment"],
+    at: number,
+  ): Omit<MomentInput, "budgetChars"> => ({
+    db,
+    moment,
+    projectId,
+    branch: null,
+    root: repo,
+    projectRoot: repo,
+    sessionId,
+    epoch: at,
+    prompt: moment === "prompt" ? PROMPT : null,
+    path: moment === "file-read" ? "src/orders/cancel.ts" : null,
+    error: moment === "tool-failed" ? "Error: orders saga orchestrator cancelled twice" : null,
+    now: NOW,
+  });
+
+  test("through the hooks: a file read or a failure where the entry was not shown still says it (K9)", () => {
     const modules = enabledModules("memory,knowledge", undefined, () => {});
-    const before = compose(modules, moment(1)) ?? "";
+    // A context where knowledge never put the entry: reading the file brings the rule.
+    expect(compose(modules, hookInput("file-read", 300)) ?? "").toContain(`#${promoted} `);
+    // Failures bring fixes and gotchas only.
+    db.run("UPDATE memories SET kind = 'gotcha' WHERE id = ?", [promoted]);
+    expect(compose(modules, hookInput("tool-failed", 301)) ?? "").toContain(`#${promoted} `);
+    // A prompt shows the entry; in that context memory then leaves the rule to it.
+    const prompt = compose(modules, hookInput("prompt", 302)) ?? "";
+    expect(prompt).toContain("<wizardingcode-knowledge>");
+    expect(prompt).not.toContain(`#${promoted} `);
+    expect(compose(modules, hookInput("file-read", 302)) ?? "").not.toContain(`#${promoted} `);
+    // The context cleared or compacted: the entry is no longer in front of the agent.
+    expect(compose(modules, hookInput("file-read", 303)) ?? "").toContain(`#${promoted} `);
+  });
+
+  test("through the hooks: the knowledge module notices the deletion on the next prompt", () => {
+    const modules = enabledModules("memory,knowledge", undefined, () => {});
+    const before = compose(modules, hookInput("prompt", 501)) ?? "";
     expect(before).toContain("<wizardingcode-knowledge>");
     expect(before).not.toContain(`#${promoted}`);
-    rmSync(join(dir, "orders-are-cancelled-through-the-saga-orchestrator.md"));
-    const after = compose(modules, moment(2)) ?? "";
+    rmSync(join(dir, `${SLUG}.md`));
+    const after = compose(modules, hookInput("prompt", 502)) ?? "";
     expect(after).not.toContain("<wizardingcode-knowledge>");
     expect(after).toContain(TITLE);
   });
 
   test("the whole folder deleted, or turned into a link: the note comes back at once", () => {
-    const moment = (n: number): Omit<MomentInput, "budgetChars"> => ({
-      db,
-      moment: "prompt",
-      projectId,
-      branch: null,
-      root: repo,
-      projectRoot: repo,
-      sessionId,
-      epoch: 700 + n,
-      prompt: PROMPT,
-      path: null,
-      error: null,
-      now: NOW,
-    });
     const modules = enabledModules("memory,knowledge", undefined, () => {});
+    // Knowledge showed the entry in this context; then the folder goes.
+    context(true);
     rmSync(join(repo, ".wizardingcode"), { recursive: true });
     // No folder: the hook does not touch the index (one stat), yet the note is memory's again.
-    expect(compose(modules, moment(1)) ?? "").toContain(TITLE);
+    expect(compose(modules, hookInput("file-read", ctxEpoch)) ?? "").toContain(TITLE);
     if (process.platform !== "win32") {
       const elsewhere = join(base, "elsewhere");
       mkdirSync(join(elsewhere, "knowledge"), { recursive: true });
       symlinkSync(elsewhere, join(repo, ".wizardingcode"));
-      expect(compose(modules, moment(2)) ?? "").toContain(TITLE);
+      expect(compose(modules, hookInput("prompt", context(true))) ?? "").toContain(TITLE);
     }
   });
 
   test("with the knowledge module off, memory says the note itself", () => {
-    const text =
-      compose(
-        enabledModules("memory", undefined, () => {}),
-        {
-          db,
-          moment: "prompt",
-          projectId,
-          branch: null,
-          root: repo,
-          projectRoot: repo,
-          sessionId,
-          epoch: 900,
-          prompt: PROMPT,
-          path: null,
-          error: null,
-          now: NOW,
-        },
-      ) ?? "";
-    expect(text).toContain(TITLE);
+    const at = context(true);
+    const text = compose(
+      enabledModules("memory", undefined, () => {}),
+      hookInput("prompt", at),
+    );
+    expect(text ?? "").toContain(TITLE);
   });
 
   test("fails open: with the promotion table unreadable, memory shows every note", () => {

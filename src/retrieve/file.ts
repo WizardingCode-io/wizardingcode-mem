@@ -27,8 +27,8 @@ export function notesForFile(
     /** The intro the notes will be shown with, which counts against the budget. */
     intro?: string;
     /**
-     * Memories made knowledge, left out while their entry says them; looked up
-     * (`promotedIds`) when not given. The memory module passes [] when knowledge is off.
+     * Memories made knowledge whose entry knowledge showed in this context, left out; looked
+     * up (`promotedIds`) when not given. The memory module passes [] when knowledge is off.
      */
     promoted?: readonly number[];
   },
@@ -40,7 +40,7 @@ export function notesForFile(
          FROM memories m JOIN memory_files f ON f.memory_id = m.id
         WHERE m.project_id = ? AND f.path = ? AND m.status = 'active' AND m.kind IN ${KINDS}
           AND ${notYetShown(db, input.sessionId, input.epoch)}${exceptIds(
-            input.promoted ?? promotedIds(db, input.projectId),
+            input.promoted ?? promotedIds(db, input.projectId, input.sessionId, input.epoch),
           )}
         GROUP BY m.id`,
     )
