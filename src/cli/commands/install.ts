@@ -2,6 +2,7 @@ import { existsSync, readSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { doctorContext } from "../../doctor/context.ts";
+import { antigravityContext, installAntigravity } from "../../install/antigravity.ts";
 import { stageBinary } from "../../install/binary.ts";
 import { installClaudeCode } from "../../install/claude-code.ts";
 import {
@@ -11,13 +12,22 @@ import {
 } from "../../install/claude-desktop.ts";
 import { codexContext, installCodex } from "../../install/codex.ts";
 import { claudeCodeContext } from "../../install/context.ts";
+import { copilotContext, installCopilot } from "../../install/copilot.ts";
 import { cursorContext, installCursor } from "../../install/cursor.ts";
 import { AGENT_ORDER, detectAgents } from "../../install/detect.ts";
-import { geminiContext, installGemini } from "../../install/gemini.ts";
+import { droidContext, installDroid } from "../../install/droid.ts";
+import {
+  findGeminiLeftover,
+  GEMINI_CLEANUP,
+  geminiLeftoverContext,
+  offerGeminiCleanup,
+  removeGeminiLeftover,
+} from "../../install/gemini-leftover.ts";
 import { offerHistoryImportHere } from "../../install/history-offer.ts";
 import type { InstallResult } from "../../install/hooks-file.ts";
 import { findLegacyPlugins } from "../../install/legacy-plugins.ts";
 import { installOpenCode, opencodePluginPath } from "../../install/opencode.ts";
+import { installQwen, qwenContext } from "../../install/qwen.ts";
 import {
   describeImport,
   describeStop,
@@ -35,23 +45,29 @@ export const SUPPORTED_AGENTS = [
   "claude-desktop",
   "codex",
   "cursor",
-  "gemini",
   "opencode",
+  "qwen",
+  "droid",
+  "copilot",
+  "antigravity",
 ];
 export const AGENT_NAMES: Record<string, string> = {
   "claude-code": "Claude Code",
   "claude-desktop": "Claude Desktop",
   codex: "Codex",
   cursor: "Cursor",
-  gemini: "Gemini CLI",
   opencode: "OpenCode",
+  qwen: "Qwen Code",
+  droid: "Factory Droid",
+  copilot: "GitHub Copilot",
+  antigravity: "Antigravity",
 };
 
 const USAGE = `Usage: wizardingcode-mem install [<agent>] [--binary <path>] [--yes] [--keep-claude-mem] [--no-import] [--import-history | --no-import-history]
 
-  <agent>             claude-code | claude-desktop | codex | cursor | gemini | opencode; none installs for every one found
+  <agent>             claude-code | claude-desktop | codex | cursor | opencode | qwen | droid | copilot | antigravity; none installs for every one found
   --binary <path>     The wizardingcode-mem binary the hooks will run (needed when running from source)
-  --yes               Retire claude-mem and shibaox-mem without asking (disable or uninstall their plugins)
+  --yes               Retire claude-mem, shibaox-mem and an old Gemini CLI install without asking
   --keep-claude-mem   Leave claude-mem installed and running
   --no-import         Do not import claude-mem's memories
   --import-history    Learn from past Claude Code and Codex sessions without asking
@@ -139,6 +155,12 @@ export function run(argv: string[]): number {
   const named = argv[0] !== undefined && !argv[0].startsWith("--");
   const agent = named ? argv[0] : undefined;
   const rest = named ? argv.slice(1) : argv;
+  if (agent === "gemini") {
+    process.stderr.write(
+      `wizardingcode-mem install: Gemini CLI support was removed; Google moved its users to Antigravity CLI. For it, run: wizardingcode-mem install antigravity\nTo remove an old Gemini CLI install of wizardingcode-mem, run: ${GEMINI_CLEANUP}\n`,
+    );
+    return 1;
+  }
   if (agent !== undefined && !SUPPORTED_AGENTS.includes(agent)) {
     process.stderr.write(
       `wizardingcode-mem install: unknown agent "${agent}". Supported: ${SUPPORTED_AGENTS.join(", ")}\n${USAGE}`,
@@ -152,7 +174,9 @@ export function run(argv: string[]): number {
     });
     // Claude Desktop is no agent with hooks, but its chat should share the same memory.
     if (hasClaudeDesktop(claudeDesktopConfigPath())) found.push("claude-desktop");
+    const gemini = cleanUpGemini(rest);
     if (found.length === 0) {
+      if (gemini.length > 0) process.stdout.write(`${gemini.join("\n")}\n`);
       process.stderr.write(
         "wizardingcode-mem install: No supported agent found on this machine. Name one: wizardingcode-mem install <agent>\n",
       );
@@ -160,6 +184,7 @@ export function run(argv: string[]): number {
     }
     let code = 0;
     for (const each of found) code = Math.max(code, installOne(each, rest, false));
+    if (gemini.length > 0) process.stdout.write(`${gemini.join("\n")}\n`);
     // Once per run, not once per agent, and only when an agent whose transcripts are read was installed.
     if (code === 0 && (found.includes("claude-code") || found.includes("codex")))
       offerHistory(rest);
@@ -171,6 +196,17 @@ export function run(argv: string[]): number {
     return code;
   }
   return installOne(agent, rest);
+}
+
+/** An old Gemini CLI install of ours: offered for removal, once per run. */
+function cleanUpGemini(rest: string[]): string[] {
+  const context = geminiLeftoverContext();
+  return offerGeminiCleanup(rest, {
+    find: () => findGeminiLeftover(context.settingsPath),
+    remove: () => removeGeminiLeftover(context),
+    tty: Boolean(process.stdin.isTTY && process.stdout.isTTY),
+    confirm,
+  });
 }
 
 function offerHistory(rest: string[]): void {
@@ -246,9 +282,32 @@ function installOne(agent: string, rest: string[], offer = true): number {
       );
       return 0;
     }
-    if (agent === "gemini") {
+    if (agent === "antigravity") {
       process.stdout.write(
-        describeInstall(agent, installGemini(geminiContext(binaryPath)), binaryPath, lines),
+        describeInstall(
+          agent,
+          installAntigravity(antigravityContext(binaryPath)),
+          binaryPath,
+          lines,
+        ),
+      );
+      return 0;
+    }
+    if (agent === "copilot") {
+      process.stdout.write(
+        describeInstall(agent, installCopilot(copilotContext(binaryPath)), binaryPath, lines),
+      );
+      return 0;
+    }
+    if (agent === "droid") {
+      process.stdout.write(
+        describeInstall(agent, installDroid(droidContext(binaryPath)), binaryPath, lines),
+      );
+      return 0;
+    }
+    if (agent === "qwen") {
+      process.stdout.write(
+        describeInstall(agent, installQwen(qwenContext(binaryPath)), binaryPath, lines),
       );
       return 0;
     }

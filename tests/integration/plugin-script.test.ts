@@ -102,7 +102,6 @@ describe("what the agents install", () => {
     for (const path of [
       ".claude-plugin/plugin.json",
       "plugins/codex/.codex-plugin/plugin.json",
-      "plugins/gemini/gemini-extension.json",
       "plugins/cursor/.cursor-plugin/plugin.json",
       "plugins/opencode/package.json",
       "npm/package.json",
@@ -128,12 +127,6 @@ describe("what the agents install", () => {
       "Stop",
       "SessionEnd",
     ]);
-    expect(events("plugins/gemini/hooks/hooks.json")).toEqual([
-      "SessionStart",
-      "BeforeAgent",
-      "AfterAgent",
-      "SessionEnd",
-    ]);
     expect(events("plugins/cursor/hooks/hooks.json")).toEqual([
       "sessionStart",
       "beforeSubmitPrompt",
@@ -146,11 +139,20 @@ describe("what the agents install", () => {
     expect(readFileSync(join(ROOT, "plugins/cursor/hooks/hooks.json"), "utf8")).toContain(
       "hook cursor prompt",
     );
-    expect(readFileSync(join(ROOT, "plugins/gemini/hooks/hooks.json"), "utf8")).toContain(
-      "hook gemini prompt --via-plugin",
-    );
     // A root .mcp.json would also make the server a project-scope one for whoever opens this repository.
     expect(existsSync(join(ROOT, ".mcp.json"))).toBe(false);
+  });
+});
+
+describe("Gemini CLI, no longer supported", () => {
+  test("no generated file and no release step mentions it", () => {
+    for (const [path, content] of Object.entries(generated())) {
+      expect({ path, gemini: /gemini/i.test(content) }).toEqual({ path, gemini: false });
+    }
+    expect(existsSync(join(ROOT, "plugins/gemini"))).toBe(false);
+    expect(readFileSync(join(ROOT, ".github/workflows/release.yml"), "utf8")).not.toMatch(
+      /gemini/i,
+    );
   });
 });
 

@@ -22,6 +22,11 @@ export interface HookInput {
   toolError: string | null;
   /** The event came from inside a subagent, not from the user's own conversation. */
   subagent: boolean;
+  /**
+   * For a host that runs one hooks file in more than one place, each sending its own payload
+   * (GitHub Copilot: its CLI and VS Code), which one this came from; render answers in kind.
+   */
+  dialect?: string;
 }
 
 /** What a turn did, recovered from the host's transcript. Best effort: any part may be empty. */
@@ -55,6 +60,9 @@ export interface AgentAdapter {
     turnId: string | null,
     options?: { maxBytes?: number },
   ): TurnDetail;
-  /** Exactly what to write to stdout. An empty string means: print nothing. */
-  render(event: HookEvent, context: string | null): string;
+  /**
+   * Exactly what to write to stdout. An empty string means: print nothing. `input` is the
+   * payload this answers, for hosts whose reply depends on which dialect it came in.
+   */
+  render(event: HookEvent, context: string | null, input?: HookInput): string;
 }

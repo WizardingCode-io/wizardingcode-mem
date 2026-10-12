@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { antigravity } from "../../src/adapters/antigravity/adapter.ts";
 import { claudeCode } from "../../src/adapters/claude-code/adapter.ts";
+import { copilot } from "../../src/adapters/copilot/adapter.ts";
 import type { AgentAdapter, HookInput } from "../../src/adapters/types.ts";
 import { resolveProject } from "../../src/core/project.ts";
 import type { Redacted } from "../../src/core/redact.ts";
@@ -188,6 +190,26 @@ describe("hook: turn end", () => {
         final_text: "I renamed the module.",
       },
     ]);
+  });
+
+  // Antigravity's Stop carries neither a prompt nor a final message, and its transcript is
+  // not read: such an ending, with no turn open, would only queue an empty turn to distil.
+  test("an ending with nothing in it, from a host without a transcript, queues nothing", () => {
+    backupIsDue = true;
+    hook("turn-end", { agent: "antigravity" }, antigravity);
+    hook("turn-end", { agent: "antigravity" }, antigravity);
+    expect(turns()).toEqual([]);
+    expect(spawned).toBe(0);
+    // The session is still seen, and the end of a turn is still when a backup may run.
+    expect(db.query("SELECT agent FROM sessions").all()).toEqual([{ agent: "antigravity" }]);
+    expect(backups).toBe(2);
+  });
+
+  test("such an ending still closes the turn a prompt opened, once", () => {
+    hook("prompt", { agent: "copilot", prompt: "go" }, copilot);
+    hook("turn-end", { agent: "copilot" }, copilot);
+    hook("turn-end", { agent: "copilot" }, copilot);
+    expect(turns().map((turn) => [turn.state, turn.prompt])).toEqual([["pending", "go"]]);
   });
 
   test("a turn end delivered twice does not queue the turn twice", () => {

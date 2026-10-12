@@ -10,9 +10,9 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
-import type { AgentId, HookEvent } from "../core/types.ts";
+import type { AgentId, HookEvent, RetiredAgentId } from "../core/types.ts";
 
 // Installs wizardingcode-mem into a host's hooks file and removes it again. Claude Code and
 // Codex share the file's shape (event → groups → hooks); a HostSpec says what differs.
@@ -23,7 +23,8 @@ import type { AgentId, HookEvent } from "../core/types.ts";
 
 /** What differs between hosts that keep hooks in a JSON file of the same shape. */
 export interface HostSpec {
-  agent: AgentId;
+  /** A retired id only for recognising and removing what an old install left. */
+  agent: AgentId | RetiredAgentId;
   /** The host's event names and ours; the optional third item is the host's tool matcher. */
   events: readonly (readonly [string, HookEvent, string?])[];
   /** The entry, inside a group's `hooks` array, that runs our binary for an event. */
@@ -37,8 +38,27 @@ export interface HostSpec {
   mcpRemove: string[];
   /** When set, the MCP server is written into this JSON file instead (`mcpServers`). */
   mcpFile?: (context: InstallContext) => string;
-  /** grouped: event → [{ hooks: [entry] }] (Claude Code, Codex, Gemini). flat: event → [entry] (Cursor). */
+  /** The server's entry in `mcpFile`, when the host wants more than `{ command, args }`. */
+  mcpEntry?: (binaryPath: string) => Json;
+  /**
+   * The MCP server goes into the hooks file's own `mcpServers` (Qwen Code), in the same
+   * write as the hooks, so that the receipt still describes the whole file.
+   */
+  mcpInSettings?: boolean;
+  /** grouped: event → [{ hooks: [entry] }] (Claude Code, Codex, Qwen Code). flat: event → [entry] (Cursor). */
   layout?: "grouped" | "flat";
+  /** The file is the event map itself, with no `hooks` key around it (Factory Droid's hooks.json). */
+  unwrapped?: boolean;
+  /**
+   * The file maps hook names to their event maps (Antigravity's hooks.json): ours is the one
+   * under this name, and every other name in the file is the user's.
+   */
+  definition?: string;
+  /**
+   * The hooks to start the file from when it does not exist yet (Factory Droid: a copy of
+   * settings.json's, which the new file would otherwise silence). Throws when they cannot be read.
+   */
+  seed?: (context: InstallContext) => Json | null;
   /** Keys the file must hold besides `hooks`, such as Cursor's `version`. */
   topLevel?: Json;
   /** Anything the user still has to do by hand after installing. */
@@ -76,7 +96,7 @@ export interface UninstallResult {
 }
 
 interface Receipt {
-  agent: AgentId;
+  agent: AgentId | RetiredAgentId;
   installedAt: number;
   binaryPath: string;
   settingsPath: string;
@@ -84,16 +104,20 @@ interface Receipt {
   backupPath: string | null;
   /** Hash of the settings file as we left it; equal means nobody changed it since. */
   installedSha256: string;
+  /** The hooks a file we created was seeded with: holding just those, it is still ours to remove. */
+  seeded?: Json;
 }
 
 type Json = Record<string, unknown>;
+/** Where a file of named definitions is kept, whole, while ours is worked on as `hooks`; nothing else is at that level. */
+const DEFINITIONS = "definitions";
 
 const isObject = (value: unknown): value is Json =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 const sha256 = (text: string) => new Bun.CryptoHasher("sha256").update(text).digest("hex");
 // One receipt per settings file: several Claude Code profiles may share a data directory.
 const profileKey = (settingsPath: string) => sha256(settingsPath).slice(0, 12);
-const receiptPath = (dataDir: string, agent: AgentId, settingsPath: string) =>
+const receiptPath = (dataDir: string, agent: HostSpec["agent"], settingsPath: string) =>
   join(dataDir, "install", `${agent}-${profileKey(settingsPath)}.json`);
 
 /** The file to read and write: the target, when the settings file is a symlink into dotfiles. */
@@ -105,19 +129,49 @@ function resolved(path: string): string {
   }
 }
 
-function parseSettings(path: string, text: string | null): Json {
+function parseSettings(path: string, text: string | null, spec?: HostSpec): Json {
   if (text === null || text.trim() === "") return {};
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch {
+    // Hosts that accept JSONC are common; saying so is more use than "not valid JSON".
+    if (hasComments(text)) {
+      throw new Error(`comments in ${path} are not supported yet; remove them and run this again`);
+    }
     throw new Error(`${path} is not valid JSON; fix it and run this again`);
   }
   if (!isObject(parsed)) throw new Error(`${path} does not hold a JSON object`);
+  // An unwrapped file is the event map: seen from here, it is what sits under `hooks`.
+  if (spec?.unwrapped) return { hooks: parsed };
+  // A file of named definitions: ours is seen as `hooks`, the whole file is kept beside it.
+  if (spec?.definition !== undefined) {
+    const ours = parsed[spec.definition];
+    if (ours !== undefined && !isObject(ours)) {
+      throw new Error(
+        `"${spec.definition}" in ${path} is not an object; fix it and run this again`,
+      );
+    }
+    return { hooks: ours ?? {}, [DEFINITIONS]: parsed };
+  }
   if (parsed.hooks !== undefined && !isObject(parsed.hooks)) {
     throw new Error(`"hooks" in ${path} is not an object; fix it and run this again`);
   }
   return parsed;
+}
+
+/** Whether the text holds a line or block comment outside a string. */
+export function hasComments(text: string): boolean {
+  let inString = false;
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (inString) {
+      if (char === "\\") i++;
+      else if (char === '"') inString = false;
+    } else if (char === '"') inString = true;
+    else if (char === "/" && (text[i + 1] === "/" || text[i + 1] === "*")) return true;
+  }
+  return false;
 }
 
 /** The settings without any hook of ours; hook groups and events left empty are dropped. */
@@ -151,6 +205,14 @@ function withoutOurs(spec: HostSpec, settings: Json): { settings: Json; removed:
   }
   const result: Json = { ...settings, hooks };
   if (removed > 0 && Object.keys(hooks).length === 0) delete result.hooks;
+  if (spec.mcpInSettings && isObject(settings.mcpServers)) {
+    const { [MCP_NAME]: ours, [LEGACY_MCP_NAME]: legacy, ...servers } = settings.mcpServers;
+    if (ours !== undefined || legacy !== undefined) {
+      removed += 1;
+      result.mcpServers = servers;
+      if (Object.keys(servers).length === 0) delete result.mcpServers;
+    }
+  }
   return { settings: result, removed };
 }
 
@@ -168,7 +230,26 @@ function withOurs(spec: HostSpec, settings: Json, binaryPath: string): Json {
           : { matcher, hooks: [entry] },
     ];
   }
-  return { ...(spec.topLevel ?? {}), ...settings, hooks };
+  const result: Json = { ...(spec.topLevel ?? {}), ...settings, hooks };
+  if (spec.mcpInSettings) {
+    const servers = isObject(settings.mcpServers) ? settings.mcpServers : {};
+    result.mcpServers = { ...servers, [MCP_NAME]: { command: binaryPath, args: ["mcp"] } };
+  }
+  return result;
+}
+
+/** The text of a hooks file: the settings as they are, or for an unwrapped file its event map. */
+function render(spec: HostSpec, settings: Json, previous: string | null): string {
+  const hooks = isObject(settings.hooks) ? settings.hooks : {};
+  if (spec.definition !== undefined) {
+    // Our definition keeps its place in the file; one with no hook left in it goes.
+    const file: Json = { ...(settings[DEFINITIONS] as Json), [spec.definition]: hooks };
+    if (!Object.values(hooks).some((handlers) => Array.isArray(handlers) && handlers.length > 0)) {
+      delete file[spec.definition];
+    }
+    return serialise(file, previous);
+  }
+  return serialise(spec.unwrapped ? hooks : settings, previous);
 }
 
 /** Serialises in the file's own style: its indentation, and its final newline or lack of one. */
@@ -185,7 +266,11 @@ function writeAtomically(path: string, text: string): void {
   renameSync(temporary, path);
 }
 
-function readReceipt(dataDir: string, agent: AgentId, settingsPath: string): Receipt | null {
+function readReceipt(
+  dataDir: string,
+  agent: HostSpec["agent"],
+  settingsPath: string,
+): Receipt | null {
   try {
     const receipt = JSON.parse(
       readFileSync(receiptPath(dataDir, agent, settingsPath), "utf8"),
@@ -201,12 +286,28 @@ export function installHooksFile(spec: HostSpec, context: InstallContext): Insta
   const file = resolved(settingsPath);
   const previous = existsSync(file) ? readFileSync(file, "utf8") : null;
   // Validated before anything is changed or run.
-  const settings = parseSettings(settingsPath, previous);
-  const next = serialise(
+  const earlier = readReceipt(dataDir, spec.agent, settingsPath);
+  const seeded = previous === null ? (spec.seed?.(context) ?? undefined) : earlier?.seeded;
+  const settings =
+    previous === null && seeded !== undefined
+      ? { hooks: seeded }
+      : parseSettings(settingsPath, previous, spec);
+  if (spec.mcpInSettings && settings.mcpServers !== undefined && !isObject(settings.mcpServers)) {
+    throw new Error(`"mcpServers" in ${settingsPath} is not an object; fix it and run this again`);
+  }
+  const next = render(
+    spec,
     withOurs(spec, withoutOurs(spec, settings).settings, binaryPath),
     previous,
   );
   const changed = next !== previous;
+  // The MCP file is read and validated now, so that a broken one stops the install before the
+  // hooks go live: nothing is written unless both files can be.
+  const mcpPath = spec.mcpFile?.(context);
+  const mcpWrite =
+    mcpPath === undefined
+      ? null
+      : planMcpServer(mcpPath, spec.mcpEntry?.(binaryPath) ?? mcpServerEntry(binaryPath));
 
   if (changed) {
     const installDir = join(dataDir, "install");
@@ -215,7 +316,6 @@ export function installHooksFile(spec: HostSpec, context: InstallContext): Insta
     // An earlier receipt still describes this file only if nobody has changed the file
     // since we wrote it. Otherwise its backup is of a file that no longer exists, and
     // restoring it later would throw away whatever was done in between.
-    const earlier = readReceipt(dataDir, spec.agent, settingsPath);
     const earlierHolds =
       earlier !== null && previous !== null && sha256(previous) === earlier.installedSha256;
     let existedBefore: boolean;
@@ -248,6 +348,7 @@ export function installHooksFile(spec: HostSpec, context: InstallContext): Insta
       existedBefore,
       backupPath,
       installedSha256: sha256(next),
+      ...(seeded === undefined ? {} : { seeded }),
     };
     writeFileSync(
       receiptPath(dataDir, spec.agent, settingsPath),
@@ -257,9 +358,21 @@ export function installHooksFile(spec: HostSpec, context: InstallContext): Insta
   }
 
   const mcpCommand = spec.mcpAdd(binaryPath);
-  if (spec.mcpFile !== undefined) {
-    const mcpPath = spec.mcpFile(context);
-    writeMcpServer(mcpPath, binaryPath);
+  if (spec.mcpInSettings) {
+    return {
+      settingsPath,
+      changed,
+      mcp: "registered",
+      mcpCommand,
+      mcpPath: settingsPath,
+      notes: spec.notes,
+    };
+  }
+  if (mcpPath !== undefined) {
+    if (mcpWrite !== null) {
+      mkdirSync(dirname(mcpWrite.file), { recursive: true });
+      writeAtomically(mcpWrite.file, mcpWrite.text);
+    }
     return { settingsPath, changed, mcp: "registered", mcpCommand, mcpPath, notes: spec.notes };
   }
   // Otherwise the MCP server is registered through the host's own command: its config
@@ -274,21 +387,24 @@ export function installHooksFile(spec: HostSpec, context: InstallContext): Insta
 const legacyMcpRemove = (spec: HostSpec): string[] =>
   spec.mcpRemove.map((word) => (word === MCP_NAME ? LEGACY_MCP_NAME : word));
 
-/** Adds our server to a host's `mcpServers` file, keeping every other entry. */
-function writeMcpServer(path: string, binaryPath: string): void {
+const mcpServerEntry = (binaryPath: string): Json => ({ command: binaryPath, args: ["mcp"] });
+
+/**
+ * What adding our server to a host's `mcpServers` file, keeping every other entry, would
+ * write; null when it is already there. Throws, writing nothing, when the file is not valid.
+ */
+function planMcpServer(path: string, entry: Json): { file: string; text: string } | null {
   const file = resolved(path);
   const previous = existsSync(file) ? readFileSync(file, "utf8") : null;
   const config = parseSettings(path, previous);
+  if (config.mcpServers !== undefined && !isObject(config.mcpServers)) {
+    throw new Error(`"mcpServers" in ${path} is not an object; fix it and run this again`);
+  }
   const { [LEGACY_MCP_NAME]: _legacy, ...servers } = isObject(config.mcpServers)
     ? config.mcpServers
     : {};
-  const next = serialise(
-    { ...config, mcpServers: { ...servers, [MCP_NAME]: { command: binaryPath, args: ["mcp"] } } },
-    previous,
-  );
-  if (next === previous) return;
-  mkdirSync(dirname(file), { recursive: true });
-  writeAtomically(file, next);
+  const next = serialise({ ...config, mcpServers: { ...servers, [MCP_NAME]: entry } }, previous);
+  return next === previous ? null : { file, text: next };
 }
 
 /** Takes our server out of a host's `mcpServers` file; a file left empty by that goes away. */
@@ -337,16 +453,26 @@ export function uninstallHooksFile(spec: HostSpec, context: InstallContext): Uni
       outcome = "restored";
     } else {
       // The file has moved on: take out what is ours and keep everything else.
-      const { settings, removed } = withoutOurs(spec, parseSettings(settingsPath, current));
-      if (removed > 0) {
-        writeAtomically(file, serialise(settings, current));
+      const { settings, removed } = withoutOurs(spec, parseSettings(settingsPath, current, spec));
+      if (
+        removed > 0 &&
+        receipt?.seeded !== undefined &&
+        Bun.deepEquals(isObject(settings.hooks) ? settings.hooks : {}, receipt.seeded)
+      ) {
+        // A file we created that holds only the copy we seeded it with: removing it puts the
+        // host back on the hooks it was copied from.
+        rmSync(settingsPath);
+        outcome = "removed";
+      } else if (removed > 0) {
+        writeAtomically(file, render(spec, settings, current));
         outcome = "edited";
       }
     }
   }
 
+  // With mcpInSettings, the server already left with the hooks above.
   if (spec.mcpFile !== undefined) removeMcpServer(spec.mcpFile(context));
-  else {
+  else if (!spec.mcpInSettings) {
     context.run(spec.mcpRemove);
     context.run(legacyMcpRemove(spec));
   }
@@ -359,8 +485,11 @@ export function uninstallHooksFile(spec: HostSpec, context: InstallContext): Uni
 export function inspectHooksFile(
   spec: HostSpec,
   text: string,
+  /** The file the text came from; errors name it. */
+  path: string,
 ): { events: string[]; binaries: string[] } {
-  const settings = parseSettings("settings.json", text);
+  // Errors name the file that was read, not always settings.json.
+  const settings = parseSettings(basename(path), text, spec);
   const events: string[] = [];
   const binaries = new Set<string>();
   if (isObject(settings.hooks)) {

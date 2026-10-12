@@ -15,6 +15,7 @@ import { advanceEpoch, endSession, touchSession } from "../store/sessions.ts";
 import {
   abandonStaleTurns,
   completeTurn,
+  hasOpenTurn,
   hasQueuedTurns,
   interruptOpenTurns,
   openTurn,
@@ -206,13 +207,18 @@ export function handleHook(deps: HookDeps, adapter: AgentAdapter, input: HookInp
       break;
     }
     case "turn-end":
-      withWrite(db, () =>
+      withWrite(db, () => {
+        // An ending that brings nothing (no final message, no turn named, no transcript to
+        // read) and finds no turn open would only queue an empty turn to distil.
+        const empty =
+          input.finalText === null && input.turnId === null && !adapter.capabilities.transcript;
+        if (empty && !hasOpenTurn(db, session.id)) return;
         completeTurn(
           db,
           turn,
           input.finalText === null ? null : stored(input.finalText, FINAL_TEXT_MAX_CHARS),
-        ),
-      );
+        );
+      });
       break;
     case "session-end":
       // When the user interrupts, no turn-end arrives; this event still does.
@@ -258,5 +264,5 @@ export function handleHook(deps: HookDeps, adapter: AgentAdapter, input: HookInp
       deps.onError?.(error);
     }
   }
-  return adapter.render(input.event, context);
+  return adapter.render(input.event, context, input);
 }

@@ -32,50 +32,6 @@ afterEach(async () => {
 const sh = (...command: string[]) =>
   Bun.spawnSync(command, { stdout: "pipe", stderr: "pipe", env: { ...process.env } });
 
-describe("the Gemini CLI extension, as released", () => {
-  test("one archive per platform, named as Gemini looks for them, with the manifest at the root and the binary inside", () => {
-    const dist = join(base, "dist");
-    mkdirSync(dist);
-    for (const target of TARGETS)
-      writeFileSync(join(dist, target.file), `binary for ${target.file}`);
-    const packed = sh("sh", join(ROOT, "scripts/package-gemini.sh"), dist);
-    expect(packed.stderr.toString()).toBe("");
-    expect(packed.exitCode).toBe(0);
-    for (const name of ["darwin.arm64", "darwin.x64", "linux.x64", "linux.arm64", "win32.x64"]) {
-      expect(existsSync(join(dist, `${name}.wizardingcode-mem.tar.gz`))).toBe(true);
-    }
-
-    const out = join(base, "unpacked");
-    mkdirSync(out);
-    expect(
-      sh("tar", "-xzf", join(dist, "darwin.arm64.wizardingcode-mem.tar.gz"), "-C", out).exitCode,
-    ).toBe(0);
-    const manifest = JSON.parse(readFileSync(join(out, "gemini-extension.json"), "utf8")) as {
-      name: string;
-      version: string;
-    };
-    expect(manifest).toMatchObject({ name: "wizardingcode-mem", version: pkg.version });
-    expect(existsSync(join(out, "hooks", "hooks.json"))).toBe(true);
-    expect(readFileSync(join(out, "bin", "wizardingcode-mem"), "utf8")).toBe(
-      "binary for wizardingcode-mem-darwin-arm64",
-    );
-    expect(statSync(join(out, "bin", "wizardingcode-mem")).mode & 0o111).not.toBe(0);
-
-    const win = join(base, "win");
-    mkdirSync(win);
-    sh("tar", "-xzf", join(dist, "win32.x64.wizardingcode-mem.tar.gz"), "-C", win);
-    expect(existsSync(join(win, "bin", "wizardingcode-mem.exe"))).toBe(true);
-  });
-
-  test("a missing binary stops the packaging", () => {
-    const dist = join(base, "empty");
-    mkdirSync(dist);
-    const packed = sh("sh", join(ROOT, "scripts/package-gemini.sh"), dist);
-    expect(packed.exitCode).toBe(1);
-    expect(packed.stderr.toString()).toContain("is missing");
-  });
-});
-
 describe("the OpenCode npm plugin", () => {
   const fake = (version: string) =>
     `#!/bin/sh\nif [ "$1" = "--version" ]; then echo ${version}; exit 0; fi\ncat > /dev/null\necho "notes for $3"\n`;

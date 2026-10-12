@@ -45,7 +45,8 @@ export const installCursor = (context: CursorContext): InstallResult =>
   installHooksFile(CURSOR, context);
 export const uninstallCursor = (context: CursorContext): UninstallResult =>
   uninstallHooksFile(CURSOR, context);
-export const inspectCursorHooks = (text: string) => inspectHooksFile(CURSOR, text);
+export const inspectCursorHooks = (text: string, path = "hooks.json") =>
+  inspectHooksFile(CURSOR, text, path);
 
 export function cursorContext(
   binaryPath: string,

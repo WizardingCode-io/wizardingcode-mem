@@ -5,15 +5,14 @@ import type { AgentId } from "../core/types.ts";
 // Until 0.3.0 this product was shibaox-mem, installed as each agent's own plugin. Left
 // enabled, it would keep running beside wizardingcode-mem: two memories injecting into
 // the same session, and an empty ~/.shibaox recreated. Each agent removes its plugins
-// itself; this finds them and says how (ADR 0011).
+// itself; this finds them and says how (ADR 0011). Gemini CLI's, under either name, is an
+// old Gemini install like any other: src/install/gemini-leftover.ts.
 
 export interface LegacyPaths {
   /** Claude Code's settings.json. */
   settingsPath: string;
   /** Codex's hooks.json: config.toml sits beside it. */
   codexHooksPath: string;
-  /** Gemini CLI's settings.json: extensions/ sits beside it. */
-  geminiSettingsPath: string;
   /** Our plugin file in OpenCode's plugins directory. */
   opencodePluginPath: string;
 }
@@ -62,18 +61,6 @@ function codex(paths: LegacyPaths): LegacyPlugin | null {
   return { agent: "codex", name, command, hint: command.join(" ") };
 }
 
-function gemini(paths: LegacyPaths): LegacyPlugin | null {
-  const manifest = join(
-    dirname(paths.geminiSettingsPath),
-    "extensions",
-    LEGACY,
-    "gemini-extension.json",
-  );
-  if (!existsSync(manifest)) return null;
-  const command = ["gemini", "extensions", "uninstall", LEGACY];
-  return { agent: "gemini", name: LEGACY, command, hint: command.join(" ") };
-}
-
 function opencode(paths: LegacyPaths): LegacyPlugin | null {
   const dir = dirname(dirname(paths.opencodePluginPath));
   for (const file of ["opencode.json", "opencode.jsonc"]) {
@@ -91,7 +78,7 @@ function opencode(paths: LegacyPaths): LegacyPlugin | null {
 
 /** The shibaox-mem plugins still enabled on this machine, agent by agent. */
 export function findLegacyPlugins(paths: LegacyPaths): LegacyPlugin[] {
-  return [claudeCode(paths), codex(paths), gemini(paths), opencode(paths)].filter(
+  return [claudeCode(paths), codex(paths), opencode(paths)].filter(
     (found): found is LegacyPlugin => found !== null,
   );
 }

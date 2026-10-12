@@ -1,15 +1,23 @@
 import { Database } from "bun:sqlite";
 import { accessSync, constants, existsSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { lastBackup } from "../backup/schedule.ts";
+import { ANTIGRAVITY } from "../install/antigravity.ts";
 import { CLAUDE_CODE } from "../install/claude-code.ts";
 import { claudeDesktopServer, hasClaudeDesktop } from "../install/claude-desktop.ts";
 import { CODEX } from "../install/codex.ts";
+import { COPILOT } from "../install/copilot.ts";
 import { CURSOR } from "../install/cursor.ts";
-import { GEMINI } from "../install/gemini.ts";
+import { DROID } from "../install/droid.ts";
+import {
+  describeGeminiLeftover,
+  findGeminiLeftover,
+  GEMINI_CLEANUP,
+} from "../install/gemini-leftover.ts";
 import { type HostSpec, inspectHooksFile } from "../install/hooks-file.ts";
 import { findLegacyPlugins } from "../install/legacy-plugins.ts";
 import { PLUGIN_MARKER } from "../install/opencode-plugin.ts";
+import { QWEN } from "../install/qwen.ts";
 import { Breaker } from "../judge/breaker.ts";
 import { keyFingerprint } from "../judge/key.ts";
 import { loadSettings } from "../settings/settings.ts";
@@ -32,8 +40,13 @@ export interface DoctorContext {
   /** Where each other host keeps what `install` wrote. */
   codexHooksPath: string;
   cursorHooksPath: string;
+  /** Gemini CLI's settings.json, no longer supported: only looked at for an old install of ours. */
   geminiSettingsPath: string;
   opencodePluginPath: string;
+  qwenSettingsPath: string;
+  droidSettingsPath: string;
+  copilotHooksPath: string;
+  antigravityHooksPath: string;
   /** Whether a host's command is on this machine; null when it is not. */
   which: (command: string) => string | null;
   now: number;
@@ -207,9 +220,12 @@ const NATIVE_INSTALL: Record<string, string> = {
     "run: claude plugin marketplace add WizardingCode-io/wizardingcode-plugins && claude plugin install wizardingcode-mem@wizardingcode-plugins",
   codex:
     "run: codex plugin marketplace add WizardingCode-io/wizardingcode-plugins && codex plugin add wizardingcode-mem@wizardingcode-plugins",
-  gemini: "run: gemini extensions install https://github.com/WizardingCode-io/wizardingcode-mem",
   cursor: "run: wizardingcode-mem install cursor",
   opencode: "run: opencode plugin wizardingcode-mem-opencode --global",
+  qwen: "run: wizardingcode-mem install qwen",
+  droid: "run: wizardingcode-mem install droid",
+  copilot: "run: wizardingcode-mem install copilot",
+  antigravity: "run: wizardingcode-mem install antigravity",
 };
 
 const readText = (path: string): string | null => {
@@ -242,19 +258,6 @@ function nativeInstall(agent: string, context: DoctorContext): string | null {
           /^\[plugins\."(wizardingcode-mem@[^"]+)"\]\s*\n((?:(?!\[)[^\n]*\n?)*)/m.exec(config);
         if (section === null || !/^enabled\s*=\s*true/m.test(section[2] ?? "")) return null;
         return `installed as a plugin (${section[1]})`;
-      }
-      case "gemini": {
-        const manifest = readText(
-          join(
-            dirname(context.geminiSettingsPath),
-            "extensions",
-            "wizardingcode-mem",
-            "gemini-extension.json",
-          ),
-        );
-        if (manifest === null) return null;
-        const version = (JSON.parse(manifest) as { version?: string }).version ?? "unknown version";
-        return `installed as an extension (${version})`;
       }
       case "opencode": {
         const dir = dirname(dirname(context.opencodePluginPath));
@@ -298,12 +301,12 @@ function hooksHost(
   if (!existsSync(path)) return absent();
   let found: ReturnType<typeof inspectHooksFile>;
   try {
-    found = inspectHooksFile(spec, readFileSync(path, "utf8"));
+    found = inspectHooksFile(spec, readFileSync(path, "utf8"), path);
   } catch (error) {
     return {
       name,
       status: "warn",
-      detail: error instanceof Error ? error.message.replace("settings.json", path) : String(error),
+      detail: error instanceof Error ? error.message.replace(basename(path), path) : String(error),
     };
   }
   if (found.events.length === 0) return absent();
@@ -438,6 +441,17 @@ function legacy(context: DoctorContext): Check | null {
     : { name: "shibaox-mem", status: "warn", detail: problems.join("; ") };
 }
 
+/** An old Gemini CLI install of ours, now that Gemini CLI is no longer supported; null when none. */
+function geminiLeftover(context: DoctorContext): Check | null {
+  const found = findGeminiLeftover(context.geminiSettingsPath);
+  if (found === null) return null;
+  return {
+    name: "old Gemini CLI install",
+    status: "warn",
+    detail: `Gemini CLI support was removed, but wizardingcode-mem is still there (${describeGeminiLeftover(found)}); run: ${GEMINI_CLEANUP}`,
+  };
+}
+
 /** Looks, and changes nothing: no directory, database or setting is created or altered. */
 export function runChecks(context: DoctorContext): Check[] {
   const { check: databaseCheck, db } = database(context);
@@ -456,10 +470,14 @@ export function runChecks(context: DoctorContext): Check[] {
       hooksHost("Claude Code", CLAUDE_CODE, context.settingsPath, null, context),
       hooksHost("Codex", CODEX, context.codexHooksPath, "codex", context),
       hooksHost("Cursor", CURSOR, context.cursorHooksPath, "cursor", context),
-      hooksHost("Gemini CLI", GEMINI, context.geminiSettingsPath, "gemini", context),
       openCode(context),
+      hooksHost("Qwen Code", QWEN, context.qwenSettingsPath, "qwen", context),
+      hooksHost("Factory Droid", DROID, context.droidSettingsPath, "droid", context),
+      hooksHost("GitHub Copilot", COPILOT, context.copilotHooksPath, "copilot", context),
+      hooksHost("Antigravity", ANTIGRAVITY, context.antigravityHooksPath, "agy", context),
       claudeDesktop(context),
       legacy(context),
+      geminiLeftover(context),
     ].filter((check): check is Check => check !== null);
   } finally {
     db?.close();

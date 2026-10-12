@@ -1,10 +1,19 @@
+import { antigravityContext, uninstallAntigravity } from "../../install/antigravity.ts";
 import { uninstallClaudeCode } from "../../install/claude-code.ts";
 import { claudeDesktopConfigPath, uninstallClaudeDesktop } from "../../install/claude-desktop.ts";
 import { codexContext, uninstallCodex } from "../../install/codex.ts";
 import { claudeCodeContext } from "../../install/context.ts";
+import { copilotContext, uninstallCopilot } from "../../install/copilot.ts";
 import { cursorContext, uninstallCursor } from "../../install/cursor.ts";
-import { geminiContext, uninstallGemini } from "../../install/gemini.ts";
+import { droidContext, uninstallDroid } from "../../install/droid.ts";
+import {
+  describeGeminiLeftover,
+  findGeminiLeftover,
+  geminiLeftoverContext,
+  removeGeminiLeftover,
+} from "../../install/gemini-leftover.ts";
 import { opencodePluginPath, uninstallOpenCode } from "../../install/opencode.ts";
+import { qwenContext, uninstallQwen } from "../../install/qwen.ts";
 import { defaultDataDir } from "../../util/paths.ts";
 import { EXIT_USAGE } from "../exit.ts";
 import { AGENT_NAMES, SUPPORTED_AGENTS } from "./install.ts";
@@ -19,6 +28,7 @@ const OUTCOME = {
 /** `wizardingcode-mem uninstall <agent>`: removes what install wrote. Memories are never deleted. */
 export function run(argv: string[]): number {
   const [agent] = argv;
+  if (agent === "gemini") return uninstallGemini();
   if (agent === undefined || !SUPPORTED_AGENTS.includes(agent)) {
     process.stderr.write(
       `wizardingcode-mem uninstall: unknown agent "${agent ?? ""}". Supported: ${SUPPORTED_AGENTS.join(", ")}\n`,
@@ -60,15 +70,56 @@ export function run(argv: string[]): number {
     const result =
       agent === "codex"
         ? uninstallCodex(codexContext(""))
-        : agent === "gemini"
-          ? uninstallGemini(geminiContext(""))
-          : agent === "cursor"
-            ? uninstallCursor(cursorContext(""))
-            : uninstallClaudeCode(claudeCodeContext(""));
+        : agent === "cursor"
+          ? uninstallCursor(cursorContext(""))
+          : agent === "qwen"
+            ? uninstallQwen(qwenContext(""))
+            : agent === "droid"
+              ? uninstallDroid(droidContext(""))
+              : agent === "copilot"
+                ? uninstallCopilot(copilotContext(""))
+                : agent === "antigravity"
+                  ? uninstallAntigravity(antigravityContext(""))
+                  : uninstallClaudeCode(claudeCodeContext(""));
     process.stdout.write(
       [
         `Removed wizardingcode-mem from ${AGENT_NAMES[agent]}.`,
         `  ${result.settingsPath}: ${OUTCOME[result.settings]}`,
+        `Your memories are still in ${defaultDataDir()}. Delete that folder to remove them.`,
+        "",
+      ].join("\n"),
+    );
+    return 0;
+  } catch (error) {
+    process.stderr.write(
+      `wizardingcode-mem uninstall: ${error instanceof Error ? error.message : String(error)}\n`,
+    );
+    return 1;
+  }
+}
+
+/**
+ * `wizardingcode-mem uninstall gemini`: Gemini CLI is no longer supported, so this removes what
+ * an old install left there. Antigravity's ~/.gemini/config is not touched.
+ */
+function uninstallGemini(): number {
+  try {
+    const context = geminiLeftoverContext();
+    const found = findGeminiLeftover(context.settingsPath);
+    if (found === null) {
+      process.stdout.write("Gemini CLI: nothing of wizardingcode-mem's is left there.\n");
+      return 0;
+    }
+    const where = describeGeminiLeftover(found);
+    const result = removeGeminiLeftover(context);
+    process.stdout.write(
+      [
+        `Removed wizardingcode-mem's old Gemini CLI install (${where}).`,
+        ...(result.settings === "untouched"
+          ? []
+          : [`  ${result.settingsPath}: ${OUTCOME[result.settings]}`]),
+        ...result.extensions.map((dir) => `  ${dir}: removed`),
+        "Gemini CLI support was removed. For Antigravity, run: wizardingcode-mem install antigravity",
         `Your memories are still in ${defaultDataDir()}. Delete that folder to remove them.`,
         "",
       ].join("\n"),

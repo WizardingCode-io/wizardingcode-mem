@@ -83,6 +83,17 @@ export function interruptOpenTurns(
   ).changes;
 }
 
+/** Whether the session has a turn still waiting for its end. */
+export function hasOpenTurn(db: Db, sessionId: number): boolean {
+  return (
+    db
+      .query<{ one: number }, [number]>(
+        "SELECT 1 AS one FROM turns WHERE session_id = ? AND state = 'open' LIMIT 1",
+      )
+      .get(sessionId) !== null
+  );
+}
+
 /**
  * Queues the turn that just ended, with the assistant's final message. A turn whose
  * prompt was never seen (wizardingcode-mem installed mid-session) is captured from this event alone.

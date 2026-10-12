@@ -9,7 +9,7 @@
 
 <p align="center">
   <strong>Memory for coding agents.</strong><br>
-  What one session learns, the next one is told — in Claude Code, Claude Desktop, Codex, Gemini CLI, OpenCode and Cursor, from the same memory.
+  What one session learns, the next one is told — in Claude Code, Claude Desktop, Codex, OpenCode, Cursor, Qwen Code, Factory Droid, GitHub Copilot and Antigravity, from the same memory.
 </p>
 
 <p align="center">
@@ -108,13 +108,9 @@ Codex reviews a plugin's hooks before running them: open `/hooks` once and accep
 
 </td></tr>
 
-<tr><td><strong>Gemini CLI</strong></td><td>
+<tr><td><strong>Gemini CLI</strong><br><sub>no longer supported</sub></td><td>
 
-```sh
-gemini extensions install https://github.com/WizardingCode-io/wizardingcode-mem
-```
-
-It is also listed in the [Gemini CLI extensions gallery](https://geminicli.com/extensions/browse/).
+Google moved Gemini CLI's users to Antigravity CLI, and wizardingcode-mem followed: `wizardingcode-mem install antigravity`. An old Gemini CLI install of wizardingcode-mem keeps running until removed: hooks written straight into Gemini's `settings.json` now do nothing, but the 0.4.4 Gemini extension runs its own bundled binary and MCP server, which keep working at 0.4.4 and fail open once the database has moved to a newer schema. `wizardingcode-mem uninstall gemini` removes either (`install` and `doctor` point it out). Memories from Gemini sessions stay.
 
 </td></tr>
 
@@ -133,6 +129,21 @@ With the binary on the machine ([step 2](#get-the-binary-for-claude-desktops-cha
 ```sh
 wizardingcode-mem install cursor
 ```
+
+</td></tr>
+
+<tr><td><strong>Qwen Code, Factory Droid, GitHub Copilot, Antigravity</strong></td><td>
+
+With the binary on the machine ([step 2](#get-the-binary-for-claude-desktops-chat-and-cursor)), one command each:
+
+```sh
+wizardingcode-mem install qwen
+wizardingcode-mem install droid
+wizardingcode-mem install copilot      # the Copilot CLI and VS Code agent mode
+wizardingcode-mem install antigravity  # the CLI, the 2.0 app and the IDE
+```
+
+Each writes the agent's own hooks file and MCP server beside whatever you already have there, and `uninstall <name>` puts it back. The Copilot CLI gets its MCP server; for VS Code, `install copilot` prints the `code --add-mcp` line to run. These four are from the documentation and not yet run in a live session ([ADR 0016](docs/adr/0016-more-agents.md)).
 
 </td></tr>
 </table>
@@ -171,7 +182,7 @@ needs Node.js 18 or later; or download `wizardingcode-mem-windows-x64.exe` from 
 </td></tr>
 </table>
 
-Each of these checks the binary's SHA-256 against the release before using it. The curl script and `npx … install` also set up every supported agent and app they find; `wizardingcode-mem install <name>` does one (`claude-code`, `claude-desktop`, `codex`, `cursor`, `gemini`, `opencode`). Configuration files are backed up first, and `wizardingcode-mem uninstall <name>` puts them back. Where an agent has both the plugin and this direct install, the plugin stands down, so nothing is said twice.
+Each of these checks the binary's SHA-256 against the release before using it. The curl script and `npx … install` also set up every supported agent and app they find; `wizardingcode-mem install <name>` does one (`claude-code`, `claude-desktop`, `codex`, `cursor`, `opencode`, `qwen`, `droid`, `copilot`, `antigravity`). Configuration files are backed up first, and `wizardingcode-mem uninstall <name>` puts them back. Where an agent has both the plugin and this direct install, the plugin stands down, so nothing is said twice.
 
 ### Check it
 
@@ -324,7 +335,7 @@ The binary is at `~/.wizardingcode/mem/bin/wizardingcode-mem`; put that director
 | `wizardingcode-mem import claude-mem` | Brings memories over from claude-mem |
 | `wizardingcode-mem history import` · `index` · `search` · `forget` · `replace-imports` · `restore-imports` | Learn from past sessions (see above) |
 | `wizardingcode-mem rejudge` | Asks TypeSafe to judge imported memories properly |
-| `wizardingcode-mem install [<name>]` · `uninstall <name>` | The direct install: every agent and app found, or one (`claude-code`, `claude-desktop`, `codex`, `cursor`, `gemini`, `opencode`) |
+| `wizardingcode-mem install [<name>]` · `uninstall <name>` | The direct install: every agent and app found, or one (`claude-code`, `claude-desktop`, `codex`, `cursor`, `opencode`, `qwen`, `droid`, `copilot`, `antigravity`) |
 
 ## TypeSafe, if you want it
 
@@ -364,9 +375,12 @@ The importer can only map claude-mem's types onto ours and give every memory of 
 | Claude Desktop, Cowork and Code tab | plugin, added in the app | hooks | session start, every prompt | Code tab in use; Cowork from the documentation |
 | Claude Desktop, chat | MCP server in its config, across every project | `memory_save` when Claude saves | `memory_search` when Claude asks | in use |
 | Codex | plugin, from the marketplace | hooks + rollout | session start, every prompt | verified up to the prompt; turn end as documented |
-| Gemini CLI | extension, from the release | hooks | session start, every prompt | verified at session start; turns as documented |
 | OpenCode | npm plugin | the plugin API | the system prompt | verified up to the prompt |
 | Cursor | plugin | hooks | session start | from the documentation; not yet run |
+| Qwen Code | direct install (`~/.qwen/settings.json`) | hooks | session start, every prompt | from the documentation; not yet run |
+| Factory Droid | direct install (`~/.factory/hooks.json`) | hooks | session start, every prompt | from the documentation; not yet run |
+| GitHub Copilot, CLI and VS Code | direct install (`~/.copilot/hooks/wizardingcode-mem.json`) | hooks (prompts and turn ends) | session start | from the documentation; not yet run |
+| Antigravity, CLI, 2.0 and IDE | direct install (`~/.gemini/config/hooks.json`) | nothing yet: no prompt event, no documented transcript | the first model call | from the documentation; not yet run |
 
 "As documented" means the adapter follows the agent's published hook contract and has not yet been exercised in a live session on that event; the [decision records](docs/adr/0006-m3-multi-agent.md) say exactly what was captured and what was not.
 

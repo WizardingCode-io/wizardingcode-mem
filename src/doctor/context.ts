@@ -1,10 +1,14 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { antigravityContext } from "../install/antigravity.ts";
 import { claudeDesktopConfigPath } from "../install/claude-desktop.ts";
 import { codexContext } from "../install/codex.ts";
+import { copilotContext } from "../install/copilot.ts";
 import { cursorContext } from "../install/cursor.ts";
-import { geminiContext } from "../install/gemini.ts";
+import { droidContext } from "../install/droid.ts";
+import { geminiLeftoverContext } from "../install/gemini-leftover.ts";
 import { opencodePluginPath } from "../install/opencode.ts";
+import { qwenContext } from "../install/qwen.ts";
 import { storeDirOf } from "../util/paths.ts";
 import type { DoctorContext } from "./checks.ts";
 
@@ -19,8 +23,12 @@ export function doctorContext(dataDir: string, now = Date.now()): DoctorContext 
     ),
     codexHooksPath: codexContext("").settingsPath,
     cursorHooksPath: cursorContext("").settingsPath,
-    geminiSettingsPath: geminiContext("").settingsPath,
+    geminiSettingsPath: geminiLeftoverContext().settingsPath,
     opencodePluginPath: opencodePluginPath(),
+    qwenSettingsPath: qwenContext("").settingsPath,
+    droidSettingsPath: droidContext("").settingsPath,
+    copilotHooksPath: copilotContext("").settingsPath,
+    antigravityHooksPath: antigravityContext("").settingsPath,
     claudeDesktopConfigPath: claudeDesktopConfigPath(),
     which: (command) => Bun.which(command),
     now,

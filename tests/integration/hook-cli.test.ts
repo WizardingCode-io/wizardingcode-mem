@@ -90,14 +90,189 @@ describe("wizardingcode-mem hook", () => {
     ]);
   });
 
-  test("a whole turn from Gemini CLI, which names no turn, closes the session's open one", async () => {
-    await hook(payload("before-agent", "gemini"), "gemini", "prompt");
-    expect(await hook(payload("after-agent", "gemini"), "gemini", "turn-end")).toEqual(
+  test("a whole turn from Qwen Code, through its own adapter, is stored under its prompt_id", async () => {
+    await hook(payload("session-start.startup", "qwen"), "qwen", "session-start");
+    await hook(payload("user-prompt-submit", "qwen"), "qwen", "prompt");
+    expect(await hook(payload("stop", "qwen"), "qwen", "turn-end")).toEqual(SILENT_SUCCESS);
+    expect(rows("SELECT agent FROM sessions")).toEqual([{ agent: "qwen" }]);
+    expect(rows("SELECT agent_turn_id, state, completeness, final_text FROM turns")).toEqual([
+      { agent_turn_id: "prompt-1", state: "pending", completeness: "full", final_text: "done" },
+    ]);
+  });
+
+  test("a Qwen Code payload missing what is needed is silent success", async () => {
+    for (const event of ["session-start", "prompt", "turn-end", "session-end"]) {
+      expect(await hook('{"prompt":"x","extra":1}', "qwen", event)).toEqual(SILENT_SUCCESS);
+    }
+  });
+
+  test("a whole turn from Factory Droid, which names no turn, closes the session's open one", async () => {
+    await hook(payload("session-start.startup", "droid"), "droid", "session-start");
+    await hook(payload("user-prompt-submit", "droid"), "droid", "prompt");
+    expect(await hook(payload("stop", "droid"), "droid", "turn-end")).toEqual(SILENT_SUCCESS);
+    expect(rows("SELECT agent FROM sessions")).toEqual([{ agent: "droid" }]);
+    expect(rows("SELECT state FROM turns")).toEqual([{ state: "pending" }]);
+    expect(rows("SELECT id FROM turns WHERE state = 'open'")).toEqual([]);
+  });
+
+  test("a whole turn from the Copilot CLI is captured; its prompt prints nothing", async () => {
+    await hook(payload("session-start", "copilot"), "copilot", "session-start");
+    expect(await hook(payload("user-prompt-submitted", "copilot"), "copilot", "prompt")).toEqual(
       SILENT_SUCCESS,
     );
-    expect(rows("SELECT agent_turn_id, state, completeness, final_text FROM turns")).toEqual([
-      { agent_turn_id: null, state: "pending", completeness: "full", final_text: "done" },
-    ]);
+    expect(rows("SELECT state FROM turns")).toEqual([{ state: "open" }]);
+    expect(await hook(payload("agent-stop", "copilot"), "copilot", "turn-end")).toEqual(
+      SILENT_SUCCESS,
+    );
+    expect(rows("SELECT agent FROM sessions")).toEqual([{ agent: "copilot" }]);
+    expect(rows("SELECT state FROM turns")).toHaveLength(1);
+    expect(await hook(payload("session-end", "copilot"), "copilot", "session-end")).toEqual(
+      SILENT_SUCCESS,
+    );
+  });
+
+  test("a whole turn from VS Code, through the same hooks, is captured under the same agent", async () => {
+    await hook(payload("vscode.session-start", "copilot"), "copilot", "session-start");
+    expect(
+      await hook(payload("vscode.user-prompt-submit", "copilot"), "copilot", "prompt"),
+    ).toEqual(SILENT_SUCCESS);
+    expect(await hook(payload("vscode.stop", "copilot"), "copilot", "turn-end")).toEqual(
+      SILENT_SUCCESS,
+    );
+    expect(rows("SELECT agent FROM sessions")).toEqual([{ agent: "copilot" }]);
+    expect(rows("SELECT state FROM turns")).toHaveLength(1);
+  });
+
+  test("a Copilot session start answers each host in its own shape", async () => {
+    const project = join(dir, "copilot-project");
+    mkdirSync(project);
+    const db = openDb({ dataDir: dir, busyTimeoutMs: 5000 });
+    insertMemory(db, {
+      projectId: resolveProject(db, project, Date.now()).id,
+      kind: "gotcha",
+      title: "Run the pinned bun",
+      body: "The global one hangs on gzip streams." as Redacted,
+      terms: "",
+      importance: 4,
+      branch: null,
+      commit: null,
+      origin: "manual",
+      judge: "heuristic",
+      judgeVersion: "1",
+      sourceTurnId: null,
+      files: [],
+      now: Date.now(),
+    });
+    db.close();
+    const at = (name: string, session: string) =>
+      JSON.stringify({
+        ...JSON.parse(payload(name, "copilot")),
+        cwd: project,
+        ...(name.startsWith("vscode.") ? { session_id: session } : { sessionId: session }),
+      });
+
+    const cli = await hook(at("session-start", "cli-1"), "copilot", "session-start");
+    expect(cli.exitCode).toBe(0);
+    expect(JSON.parse(cli.stdout).additionalContext).toContain("Run the pinned bun");
+
+    const vscode = await hook(at("vscode.session-start", "vs-1"), "copilot", "session-start");
+    expect(vscode.exitCode).toBe(0);
+    const out = JSON.parse(vscode.stdout);
+    expect(out.hookSpecificOutput.hookEventName).toBe("SessionStart");
+    expect(out.hookSpecificOutput.additionalContext).toContain("Run the pinned bun");
+    expect(out.additionalContext).toBeUndefined();
+
+    expect(
+      await hook(
+        at("vscode.user-prompt-submit", "vs-1").replace("hello.txt", "bun"),
+        "copilot",
+        "prompt",
+      ),
+    ).toEqual(SILENT_SUCCESS);
+  });
+
+  test("an Antigravity conversation gets the brief before its first model call only", async () => {
+    const project = join(dir, "antigravity-project");
+    mkdirSync(project);
+    const db = openDb({ dataDir: dir, busyTimeoutMs: 5000 });
+    insertMemory(db, {
+      projectId: resolveProject(db, project, Date.now()).id,
+      kind: "gotcha",
+      title: "Run the pinned bun",
+      body: "The global one hangs on gzip streams." as Redacted,
+      terms: "",
+      importance: 4,
+      branch: null,
+      commit: null,
+      origin: "manual",
+      judge: "heuristic",
+      judgeVersion: "1",
+      sourceTurnId: null,
+      files: [],
+      now: Date.now(),
+    });
+    db.close();
+    const at = (name: string, change: Record<string, unknown> = {}) =>
+      JSON.stringify({
+        ...JSON.parse(payload(name, "antigravity")),
+        workspacePaths: [project],
+        ...change,
+      });
+
+    const first = await hook(at("pre-invocation.first"), "antigravity", "session-start");
+    expect(first.exitCode).toBe(0);
+    expect(first.stderr).toBe("");
+    const out = JSON.parse(first.stdout);
+    expect(Object.keys(out)).toEqual(["injectSteps"]);
+    expect(out.injectSteps).toHaveLength(1);
+    expect(Object.keys(out.injectSteps[0])).toEqual(["ephemeralMessage"]);
+    expect(out.injectSteps[0].ephemeralMessage).toContain("Run the pinned bun");
+
+    // Every later model call of the conversation, in this turn or the next, is silent.
+    for (const invocationNum of [1, 2, 7]) {
+      expect(
+        await hook(at("pre-invocation.first", { invocationNum }), "antigravity", "session-start"),
+      ).toEqual(SILENT_SUCCESS);
+    }
+    // Stop's `decision` is documented as required: ours always allows the stop.
+    expect(await hook(at("stop"), "antigravity", "turn-end")).toEqual({
+      exitCode: 0,
+      stdout: '{"decision":"stop"}',
+      stderr: "",
+    });
+    expect(rows("SELECT agent FROM sessions")).toEqual([{ agent: "antigravity" }]);
+    // Nothing of the turn reaches us, so nothing is queued to distil.
+    expect(rows("SELECT id FROM turns")).toEqual([]);
+  });
+
+  test("an Antigravity payload missing what is needed is silent success", async () => {
+    for (const event of ["session-start", "prompt", "turn-end", "session-end"]) {
+      expect(await hook('{"invocationNum":0,"extra":1}', "antigravity", event)).toEqual(
+        SILENT_SUCCESS,
+      );
+      expect(
+        await hook(
+          '{"conversationId":"c","workspacePaths":[],"invocationNum":0}',
+          "antigravity",
+          event,
+        ),
+      ).toEqual(SILENT_SUCCESS);
+    }
+  });
+
+  test("a GitHub Copilot payload missing what is needed is silent success", async () => {
+    for (const event of ["session-start", "prompt", "turn-end", "session-end"]) {
+      expect(await hook('{"prompt":"x","extra":1}', "copilot", event)).toEqual(SILENT_SUCCESS);
+      expect(await hook('{"hook_event_name":"Stop","cwd":"/p"}', "copilot", event)).toEqual(
+        SILENT_SUCCESS,
+      );
+    }
+  });
+
+  test("a Factory Droid payload missing what is needed is silent success", async () => {
+    for (const event of ["session-start", "prompt", "turn-end", "session-end"]) {
+      expect(await hook('{"prompt":"x","extra":1}', "droid", event)).toEqual(SILENT_SUCCESS);
+    }
   });
 
   test("a whole turn from Cursor: the prompt is let through, the response closes the turn", async () => {
@@ -169,7 +344,6 @@ describe("wizardingcode-mem hook", () => {
 
   test.each([
     ["codex", { CODEX_HOME: "codex" }, "codex/hooks.json", "user-prompt-submit"],
-    ["gemini", { GEMINI_CLI_HOME: "gemini" }, "gemini/settings.json", "before-agent"],
   ] as const)(
     "%s: run through its plugin while the direct install is also there, it stands down",
     async (agent, homes, file, fixture) => {

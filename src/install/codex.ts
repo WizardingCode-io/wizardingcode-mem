@@ -44,7 +44,8 @@ export const installCodex = (context: InstallContext): InstallResult =>
   installHooksFile(CODEX, context);
 export const uninstallCodex = (context: InstallContext): UninstallResult =>
   uninstallHooksFile(CODEX, context);
-export const inspectCodexHooks = (text: string) => inspectHooksFile(CODEX, text);
+export const inspectCodexHooks = (text: string, path = "hooks.json") =>
+  inspectHooksFile(CODEX, text, path);
 
 export function codexContext(
   binaryPath: string,

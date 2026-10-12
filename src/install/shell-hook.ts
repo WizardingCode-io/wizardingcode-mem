@@ -1,5 +1,5 @@
 import { basename } from "node:path";
-import type { AgentId, HookEvent } from "../core/types.ts";
+import type { AgentId, HookEvent, RetiredAgentId } from "../core/types.ts";
 import { isOurBinaryName } from "./hooks-file.ts";
 
 // Hosts whose hook `command` is one shell string: the binary path is quoted so that it
@@ -19,7 +19,7 @@ export function shellHookCommand(binaryPath: string, agent: AgentId, event: Hook
 }
 
 /** The binary an entry of ours runs, or null when the command is not one of ours. */
-export function ourShellHookBinary(entry: unknown, agent: AgentId): string | null {
+export function ourShellHookBinary(entry: unknown, agent: AgentId | RetiredAgentId): string | null {
   if (entry === null || typeof entry !== "object" || Array.isArray(entry)) return null;
   const command = (entry as { command?: unknown }).command;
   if (typeof command !== "string") return null;

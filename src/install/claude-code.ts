@@ -66,7 +66,8 @@ export const installClaudeCode = (context: InstallContext): InstallResult =>
   installHooksFile(CLAUDE_CODE, context);
 export const uninstallClaudeCode = (context: InstallContext): UninstallResult =>
   uninstallHooksFile(CLAUDE_CODE, context);
-export const inspectSettings = (text: string) => inspectHooksFile(CLAUDE_CODE, text);
+export const inspectSettings = (text: string, path = "settings.json") =>
+  inspectHooksFile(CLAUDE_CODE, text, path);
 export const HOOKED_EVENTS: readonly string[] = [
   ...new Set(CLAUDE_CODE.events.map(([hostEvent]) => hostEvent)),
 ];

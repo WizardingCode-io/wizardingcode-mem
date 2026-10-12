@@ -1,5 +1,5 @@
 // Writes what each agent installs natively: the Claude Code plugin at the repository
-// root, the Codex and Cursor plugins and the Gemini extension under plugins/, and the
+// root, the Codex and Cursor plugins under plugins/, and the
 // OpenCode plugin as an npm package. One source for names, versions and events; the
 // files are committed because the agents read them from git, and a test keeps them in
 // step with this script.
@@ -12,7 +12,6 @@ import pkg from "../package.json" with { type: "json" };
 import { CLAUDE_CODE } from "../src/install/claude-code.ts";
 import { CODEX } from "../src/install/codex.ts";
 import { CURSOR } from "../src/install/cursor.ts";
-import { GEMINI } from "../src/install/gemini.ts";
 import type { HostSpec } from "../src/install/hooks-file.ts";
 import { PLUGIN_MARKER, pluginSource } from "../src/install/opencode-plugin.ts";
 
@@ -38,7 +37,7 @@ const ph = (name: string) => `$${"{"}${name}}`;
 const seconds = (event: string) =>
   event === "session-start" ? START_TIMEOUT_SECONDS : TIMEOUT_SECONDS;
 
-/** event → [{ hooks: [entry] }], the shape Claude Code, Codex and Gemini share. */
+/** event → [{ hooks: [entry] }], the shape Claude Code and Codex share. */
 function grouped(spec: HostSpec, entry: (event: string) => Record<string, unknown>) {
   return {
     hooks: Object.fromEntries(
@@ -193,27 +192,6 @@ export function generated(version: string = pkg.version): Record<string, string>
     }),
     "plugins/codex/wizardingcode-mem.sh": sh,
 
-    // Gemini CLI: the release archive carries the binary in bin/, so nothing is fetched.
-    "plugins/gemini/gemini-extension.json": json({
-      name: NAME,
-      version,
-      description: META.description,
-      mcpServers: {
-        [NAME]: {
-          command: `${ph("extensionPath")}${ph("/")}bin${ph("/")}wizardingcode-mem`,
-          args: ["mcp"],
-        },
-      },
-    }),
-    "plugins/gemini/hooks/hooks.json": json(
-      grouped(GEMINI, (event) => ({
-        name: NAME,
-        type: "command",
-        command: `"${ph("extensionPath")}/bin/wizardingcode-mem" hook gemini ${event} --via-plugin`,
-        timeout: TIMEOUT_SECONDS * 1000,
-      })),
-    ),
-
     // Cursor: a flat list of entries per event.
     "plugins/cursor/.cursor-plugin/plugin.json": json({ name: NAME, version, ...META }),
     "plugins/cursor/hooks/hooks.json": json({
@@ -263,7 +241,7 @@ export function generated(version: string = pkg.version): Record<string, string>
 opencode plugin wizardingcode-mem-opencode --global
 \`\`\`
 
-Persistent memory for OpenCode sessions, shared with Claude Code, Codex, Cursor and Gemini CLI. The plugin fetches the [wizardingcode-mem](https://github.com/${REPO}) binary of its own version on first use (checksum verified) and keeps it in \`~/.wizardingcode/mem/bin\`. Memories live in \`~/.wizardingcode/mem\`.
+Persistent memory for OpenCode sessions, shared with Claude Code, Codex, Cursor, Qwen Code, Factory Droid, GitHub Copilot and Antigravity. The plugin fetches the [wizardingcode-mem](https://github.com/${REPO}) binary of its own version on first use (checksum verified) and keeps it in \`~/.wizardingcode/mem/bin\`. Memories live in \`~/.wizardingcode/mem\`.
 `,
   };
 }

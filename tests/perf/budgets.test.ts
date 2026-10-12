@@ -142,13 +142,18 @@ function judged(samples: number[]): { shown: string; value: number } {
 async function measure(
   event: keyof typeof BUDGET_MS,
   payload: (run: number) => Record<string, unknown>,
+  agent = "claude-code",
+  common: Record<string, unknown> | null = null,
 ): Promise<{ shown: string; value: number; outputs: string[] }> {
   const samples: number[] = [];
   const outputs: string[] = [];
   // One run first, unmeasured: the first start of a new binary pays one-off costs.
   for (let run = -1; run < RUNS; run++) {
-    const result = await runBinary(binary, ["hook", "claude-code", event], {
-      input: JSON.stringify({ session_id: `perf-${event}`, cwd: project, ...payload(run) }),
+    const result = await runBinary(binary, ["hook", agent, event], {
+      input: JSON.stringify({
+        ...(common ?? { session_id: `perf-${event}`, cwd: project }),
+        ...payload(run),
+      }),
       env: {
         WIZARDINGCODE_MEM_DATA_DIR: dataDir,
         WIZARDINGCODE_MEM_DISTILL: "off",
@@ -237,5 +242,84 @@ describe(`hook latency with ${MEMORIES} memories`, () => {
       RUNS / 2,
     );
     expect(result.value).toBeLessThanOrEqual(BUDGET_MS["tool-failed"]);
+  }, 120_000);
+});
+
+// The agents added with ADR 0016. Each one's prompt and session-start hooks run through
+// the same binary and the same store, with the payload shape the agent's documentation
+// gives. Copilot's prompt is capture-only (the host drops a prompt hook's output) and
+// Antigravity has no prompt event: its brief comes with the first model invocation.
+describe(`hook latency of the newer agents with ${MEMORIES} memories`, () => {
+  const promptText = (word: () => string) =>
+    `why does the ${word()} ${word()} ${word()} when the ${word()} ${word()} is slow? I checked the ${word()} and the ${word()}, the ${word()} looks fine, but the ${word()} ${word()} keeps hitting the ${word()} ${word()} and then the ${word()} ${word()} fails on the ${word()} ${word()}. Could the ${word()} ${word()} be the problem?`;
+
+  for (const agent of ["qwen", "droid"] as const) {
+    const common = { session_id: `perf-${agent}`, cwd: project };
+    test(`${agent}: a prompt is answered within ${BUDGET_MS.prompt} ms`, async () => {
+      const next = generator(7);
+      const word = () => WORDS[next(WORDS.length)] as string;
+      const result = await measure(
+        "prompt",
+        (run) => {
+          const text = promptText(word);
+          return agent === "qwen"
+            ? { prompt_id: `p${run}`, prompt: text, submitted_prompt: text }
+            : { message_id: `m${run}`, prompt: text };
+        },
+        agent,
+        { ...common, session_id: `perf-${agent}-prompt`, cwd: project },
+      );
+      console.log(`${agent} prompt: ${result.shown}`);
+      expect(result.outputs.filter((out) => out !== "").length).toBeGreaterThan(RUNS / 2);
+      expect(result.value).toBeLessThanOrEqual(BUDGET_MS.prompt);
+    }, 120_000);
+
+    test(`${agent}: a session start is answered within ${BUDGET_MS["session-start"]} ms`, async () => {
+      const result = await measure("session-start", () => ({ source: "startup" }), agent, {
+        ...common,
+        cwd: project,
+      });
+      console.log(`${agent} session-start: ${result.shown}`);
+      expect(result.outputs.every((out) => out.includes("Known about this project"))).toBe(true);
+      expect(result.value).toBeLessThanOrEqual(BUDGET_MS["session-start"]);
+    }, 120_000);
+  }
+
+  test(`copilot: a session start is answered within ${BUDGET_MS["session-start"]} ms`, async () => {
+    const result = await measure("session-start", () => ({ source: "startup" }), "copilot", {
+      sessionId: "perf-copilot",
+      cwd: project,
+    });
+    console.log(`copilot session-start: ${result.shown}`);
+    expect(result.outputs.every((out) => out.includes("Known about this project"))).toBe(true);
+    expect(result.value).toBeLessThanOrEqual(BUDGET_MS["session-start"]);
+  }, 120_000);
+
+  test(`copilot: a captured prompt returns within ${BUDGET_MS.prompt} ms`, async () => {
+    const next = generator(7);
+    const word = () => WORDS[next(WORDS.length)] as string;
+    const result = await measure("prompt", () => ({ prompt: promptText(word) }), "copilot", {
+      sessionId: "perf-copilot-prompt",
+      cwd: project,
+    });
+    console.log(`copilot prompt (capture only): ${result.shown}`);
+    // The host drops this hook's output, so we print none.
+    expect(result.outputs.every((out) => out === "")).toBe(true);
+    expect(result.value).toBeLessThanOrEqual(BUDGET_MS.prompt);
+  }, 120_000);
+
+  test(`antigravity: the first model invocation is answered within ${BUDGET_MS["session-start"]} ms`, async () => {
+    // The hook name is the host's PreInvocation, which the registered command calls session-start.
+    const result = await measure(
+      "session-start",
+      () => ({ invocationNum: 0, initialNumSteps: 1 }),
+      "antigravity",
+      { conversationId: "perf-antigravity", workspacePaths: [project] },
+    );
+    console.log(`antigravity pre-invocation: ${result.shown}`);
+    expect(
+      result.outputs.every((out) => out.includes("injectSteps") && out.includes("Known about")),
+    ).toBe(true);
+    expect(result.value).toBeLessThanOrEqual(BUDGET_MS["session-start"]);
   }, 120_000);
 });
