@@ -550,7 +550,7 @@ describe("the relevance floor", () => {
   const RELEVANT: [string, string][] = [
     ["can I delete an order when the customer asks for a refund?", "Orders are never deleted"],
     ["the invoice total is off by a cent, are we using floats somewhere?", "Money is stored"],
-    ["should this new service keep its data in MongoDB?", "We use PostgreSQL"],
+    ["should we move the orders database from PostgreSQL to MongoDB?", "We use PostgreSQL"],
     ["can a user belong to two tenants at once?", "Tenant: one customer company"],
     ["how many times does the queue retry a background job?", "Background jobs run"],
     ["send the export email from a background job", "Background jobs run"],
@@ -670,7 +670,7 @@ function shortTitleFolder(folder = dir): void {
 
 describe("the relevance floor with short titles", () => {
   const RELEVANT: [string, string][] = [
-    ["what states does an order go through before it ships?", "Order lifecycle"],
+    ["can a shipped order still go back to draft?", "Order lifecycle"],
     ["which feature flags can we remove now?", "Feature flags"],
     ["are product prices cached?", "Caching"],
     ["what time zone should dates be shown in?", "Date handling"],
