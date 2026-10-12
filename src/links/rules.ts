@@ -90,6 +90,8 @@ export async function proposeRules(
     model?: Model | null;
     /** Time for the grouping pass; memories not reached wait for the next drain. */
     maxMs?: number;
+    /** How many projects are searched for copies, the most recently active first. */
+    maxProjects?: number;
   },
 ): Promise<{ proposed: number }> {
   const deadline = performance.now() + (deps.maxMs ?? MAX_MS);
@@ -115,12 +117,12 @@ export async function proposeRules(
     return row;
   };
   const projects = db
-    .query<{ id: number }, []>(
-      `SELECT DISTINCT m.project_id AS id FROM memories m JOIN projects p ON p.id = m.project_id
+    .query<{ id: number }, [number]>(
+      `SELECT m.project_id AS id FROM memories m JOIN projects p ON p.id = m.project_id
         WHERE p.disabled = 0 AND m.status = 'active' AND m.kind IN ${RULE_KINDS}
-        ORDER BY m.project_id LIMIT ${MAX_PROJECTS}`,
+        GROUP BY m.project_id ORDER BY MAX(m.updated_at) DESC, m.project_id DESC LIMIT ?`,
     )
-    .all()
+    .all(deps.maxProjects ?? MAX_PROJECTS)
     .map((row) => row.id);
   const linked = confirmedPairs(db);
   const unlinked = (a: number, b: number) => a !== b && !linked.has(pairKey(a, b));
@@ -212,6 +214,8 @@ export async function proposeRules(
   for (const { members, reason } of proposals) {
     const key = JSON.stringify(members.map((m) => m.id).sort((a, b) => a - b));
     if (exists.get(key) !== null || notPersonal.includes(key)) continue;
+    // Each question is a request: past the budget, the groups left wait for the next drain.
+    if (deps.judge.personal && performance.now() > deadline) break;
     // The proposal's text is one memory's own, the most important (consolidation never writes text).
     const lead = [...members].sort(
       (a, b) => b.importance - a.importance || b.updatedAt - a.updatedAt || a.id - b.id,
@@ -295,17 +299,30 @@ export function acceptProposal(
     if (proposal.status !== "proposed")
       return { refused: `Proposal #${id} is ${proposal.status}.` };
     const ids = sourceIds(proposal);
+    // Sources as they are now: one replaced, archived or turned into another kind no longer
+    // counts, and the text is re-read from the most important source that still qualifies.
     const active = db
-      .query<{ id: number; projectId: number; kind: MemoryKind; importance: number }, []>(
-        `SELECT id, project_id AS projectId, kind, importance FROM memories
-          WHERE status = 'active' AND id IN (${ids.map((n) => Math.trunc(n)).join(", ") || "NULL"})
+      .query<
+        {
+          id: number;
+          projectId: number;
+          kind: MemoryKind;
+          importance: number;
+          title: string;
+          body: string;
+        },
+        []
+      >(
+        `SELECT id, project_id AS projectId, kind, importance, title, body FROM memories
+          WHERE status = 'active' AND kind IN ${RULE_KINDS}
+            AND id IN (${ids.map((n) => Math.trunc(n)).join(", ") || "NULL"})
           ORDER BY importance DESC, updated_at DESC, id`,
       )
       .all();
     const needed = proposal.reason === "repeated" ? 2 : 1;
     if (active.length < needed) {
       return {
-        refused: `Only ${active.length} of the memories behind proposal #${id} are still active.`,
+        refused: `Only ${active.length} of the memories behind proposal #${id} still state a convention or decision.`,
       };
     }
     const lead = active[0] as (typeof active)[number];
@@ -314,9 +331,9 @@ export function acceptProposal(
       {
         projectId: lead.projectId,
         kind: lead.kind,
-        title: proposal.title,
-        body: proposal.body as Redacted,
-        terms: searchTerms(proposal.title, proposal.body, []),
+        title: lead.title,
+        body: lead.body as Redacted,
+        terms: searchTerms(lead.title, lead.body, []),
         importance: lead.importance,
         branch: null,
         commit: null,

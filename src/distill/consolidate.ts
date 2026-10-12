@@ -23,6 +23,24 @@ export type Action =
 
 const MAX_NEIGHBOURS = 8;
 
+/** Which of these memories are the author's rules. None on any error: consolidation goes on as before. */
+function userRuleIds(db: Db, ids: number[]): Set<number> {
+  if (ids.length === 0) return new Set();
+  try {
+    return new Set(
+      db
+        .query<{ id: number }, []>(
+          `SELECT memory_id AS id FROM user_memories
+            WHERE memory_id IN (${ids.map((id) => Math.trunc(id)).join(", ")})`,
+        )
+        .all()
+        .map((row) => row.id),
+    );
+  } catch {
+    return new Set();
+  }
+}
+
 export async function consolidate(
   deps: { db: Db; judge: Judge },
   projectId: number,
@@ -53,11 +71,15 @@ export async function consolidate(
 
   // Replacement is checked first: a memory that is no longer true must not survive
   // just because the draft resembles it.
+  // The author's own rules are never replaced by one project's turn: they would silently stop
+  // being the author's. A draft that repeats one is still a duplicate.
+  const rules = userRuleIds(deps.db, [...known]);
   const replaced = answers
     .filter(
       (answer) =>
         answer.contradicts >= SUPERSEDE.minContradiction &&
-        answer.relationScore >= SUPERSEDE.minRelationScore,
+        answer.relationScore >= SUPERSEDE.minRelationScore &&
+        !rules.has(answer.id),
     )
     .map((answer) => answer.id);
   if (replaced.length > 0) return { type: "insert", supersedes: replaced };

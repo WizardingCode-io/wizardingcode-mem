@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { resolveProject } from "../../src/core/project.ts";
 import type { Redacted } from "../../src/core/redact.ts";
 import type { MemoryKind } from "../../src/core/types.ts";
+import { consolidate } from "../../src/distill/consolidate.ts";
 import type { Model } from "../../src/embed/model.ts";
 import { heuristicJudge } from "../../src/judge/heuristic.ts";
 import type { Judge } from "../../src/judge/types.ts";
@@ -39,6 +40,8 @@ interface Input {
   kind?: MemoryKind;
   importance?: number;
   prompt?: string;
+  /** When the memory was written; NOW by default. */
+  at?: number;
 }
 
 function memory(projectId: number, input: Input, model: Model | null = null): number {
@@ -77,7 +80,7 @@ function memory(projectId: number, input: Input, model: Model | null = null): nu
       judgeVersion: "1",
       sourceTurnId: turnId,
       files: [],
-      now: NOW,
+      now: input.at ?? NOW,
     },
     model,
   );
@@ -327,5 +330,151 @@ describe("accepting and undoing", () => {
     );
     expect(found).toContain(`#${result.userMemoryId} `);
     expect(found).toContain(`${RULE} (you)`);
+  });
+});
+
+describe("fix round 1", () => {
+  const sources = (n: number) =>
+    [a, b, c]
+      .slice(0, n)
+      .map((p, i) => memory(p, { title: RULE, body: RULE_BODY, importance: 3 + i }));
+  const acceptOnly = () => acceptProposal(db, proposals()[0]?.id ?? 0, NOW + 1);
+  const textOf = (id: number) =>
+    db
+      .query<{ title: string; body: string; kind: string; importance: number }, [number]>(
+        "SELECT title, body, kind, importance FROM memories WHERE id = ?",
+      )
+      .get(id);
+
+  test("a superseded source is not counted, and the text comes from a source still active", async () => {
+    const [one, two, three] = sources(3) as [number, number, number];
+    await propose();
+    // The most important copy was replaced by something that contradicts it.
+    const newer = memory(c, { title: "Another rule entirely about naming things", importance: 2 });
+    db.run("UPDATE memories SET status = 'superseded', superseded_by = ? WHERE id = ?", [
+      newer,
+      three,
+    ]);
+    db.run("UPDATE memories SET title = 'Run the tests with the pinned bun, always' WHERE id = ?", [
+      two,
+    ]);
+    const result = acceptOnly();
+    if (!("userMemoryId" in result)) throw new Error(result.refused);
+    expect(textOf(result.userMemoryId)).toMatchObject({
+      title: "Run the tests with the pinned bun, always",
+      importance: 4,
+    });
+    expect(statusOf(three)).toEqual({ status: "superseded", superseded_by: newer });
+    expect(statusOf(one)?.superseded_by).toBe(result.userMemoryId);
+  });
+
+  test("a source rejudged into a fix no longer counts: refused when too few remain", async () => {
+    const [, two] = sources(2) as [number, number];
+    await propose();
+    db.run("UPDATE memories SET kind = 'fix' WHERE id = ?", [two]);
+    expect(acceptOnly()).toHaveProperty("refused");
+    expect(statusOf(two)?.status).toBe("active");
+  });
+
+  test("a fix never becomes your rule, even when it is the most important source", async () => {
+    const [, , three] = sources(3) as [number, number, number];
+    await propose();
+    db.run("UPDATE memories SET kind = 'fix' WHERE id = ?", [three]);
+    const result = acceptOnly();
+    if (!("userMemoryId" in result)) throw new Error(result.refused);
+    expect(textOf(result.userMemoryId)?.kind).toBe("convention");
+    expect(statusOf(three)?.status).toBe("active");
+  });
+
+  test("an edited lead source: accept uses its current text", async () => {
+    const [, two] = sources(2) as [number, number];
+    await propose();
+    db.run("UPDATE memories SET title = ?, body = ? WHERE id = ?", [
+      "Run every test with the pinned bun",
+      "Edited since.",
+      two,
+    ]);
+    const result = acceptOnly();
+    if (!("userMemoryId" in result)) throw new Error(result.refused);
+    expect(textOf(result.userMemoryId)).toMatchObject({
+      title: "Run every test with the pinned bun",
+      body: "Edited since.",
+    });
+  });
+
+  test("the newest projects are searched when there are more than the cap", async () => {
+    // Older projects with their own conventions come first by id.
+    memory(a, { title: "Alpha keeps its migrations numbered", at: NOW - 1000 });
+    memory(b, { title: "Bravo writes changelogs by hand", at: NOW - 1000 });
+    memory(c, { title: "Charlie pins its toolchain", at: NOW - 1000 });
+    const newer = ["delta", "echo"].map((name) => {
+      const dir = join(base, name);
+      mkdirSync(dir);
+      return resolveProject(db, dir, NOW).id;
+    });
+    for (const p of newer) memory(p, { title: RULE, body: RULE_BODY });
+    expect(await proposeRules(db, { judge: heuristicJudge, now: NOW, maxProjects: 2 })).toEqual({
+      proposed: 1,
+    });
+  });
+
+  test("a project's own consolidation never supersedes your rule", async () => {
+    sources(2);
+    await propose();
+    const result = acceptOnly();
+    if (!("userMemoryId" in result)) throw new Error(result.refused);
+    const rule = result.userMemoryId;
+    const project = db
+      .query<{ p: number }, [number]>("SELECT project_id AS p FROM memories WHERE id = ?")
+      .get(rule)?.p as number;
+    // A judge that says the draft replaces every neighbour.
+    const replacing: Judge = {
+      ...heuristicJudge,
+      consolidate: async (input) => ({
+        source: "heuristic",
+        perNeighbour: input.neighbours.map((n) => ({
+          id: n.id,
+          relation: "same",
+          relationScore: 2,
+          contradicts: 0.95,
+        })),
+      }),
+    };
+    const action = await consolidate({ db, judge: replacing }, project, {
+      kind: "convention",
+      title: "Run the tests with the pinned bun before each commit",
+      body: RULE_BODY as Redacted,
+      importance: 3,
+      files: [],
+    });
+    expect(action).toEqual({ type: "insert", supersedes: [] });
+    expect(statusOf(rule)).toEqual({ status: "active", superseded_by: null });
+    expect(db.query("SELECT 1 FROM user_memories WHERE memory_id = ?").get(rule)).not.toBeNull();
+  });
+
+  test("the time budget also bounds the judge's questions; the rest wait for the next run", async () => {
+    const rules = [
+      "Write the test first and see it fail",
+      "Imports carry an explicit ts extension",
+      "Repository documents are written in English",
+    ];
+    for (const title of rules) {
+      memory(a, { title });
+      memory(b, { title });
+    }
+    let asked = 0;
+    const slow: Judge = {
+      ...heuristicJudge,
+      personal: async () => {
+        asked++;
+        await Bun.sleep(60);
+        return { personal: true, confidence: 0.9 };
+      },
+    };
+    const first = await proposeRules(db, { judge: slow, now: NOW, maxMs: 50 });
+    expect(first.proposed).toBeLessThan(3);
+    expect(asked).toBeLessThan(3);
+    const second = await proposeRules(db, { judge: slow, now: NOW, maxMs: 5000 });
+    expect(first.proposed + second.proposed).toBe(3);
   });
 });
