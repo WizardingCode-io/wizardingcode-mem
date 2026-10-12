@@ -39,7 +39,12 @@ interface Hooks {
   "experimental.chat.system.transform": Hook;
   tool: Record<
     string,
-    { definition: { execute: (args: unknown, ctx: unknown) => Promise<string> } }
+    {
+      definition: {
+        args: Record<string, unknown>;
+        execute: (args: unknown, ctx: unknown) => Promise<string>;
+      };
+    }
   >;
 }
 
@@ -182,6 +187,7 @@ describe("the OpenCode plugin", () => {
       "memory_get",
       "memory_save",
       "memory_search",
+      "project_links",
     ]);
     answers.memory_search = "#1 The limit is five.";
     const search = hooks.tool.memory_search;
@@ -192,6 +198,20 @@ describe("the OpenCode plugin", () => {
       args: [BIN, "tool", "memory_search", "--project", "/Users/dev/project"],
       stdin: { query: "limit" },
     });
+    await search.definition.execute({ query: "limit", project: "web" }, { sessionID: SESSION });
+    expect(calls.at(-1)?.stdin).toEqual({ query: "limit", project: "web" });
+    expect(Object.keys(search.definition.args)).toContain("project");
+    const links = hooks.tool.project_links;
+    if (links === undefined) throw new Error("project_links missing");
+    expect(Object.keys(links.definition.args).sort()).toEqual(["action", "id", "kind", "project"]);
+    await links.definition.execute(
+      { action: "link", project: "web", kind: "product" },
+      { sessionID: SESSION },
+    );
+    expect(calls.at(-1)).toEqual({
+      args: [BIN, "tool", "project_links", "--project", "/Users/dev/project"],
+      stdin: { action: "link", project: "web", kind: "product" },
+    });
     const past = hooks.tool.history_search;
     if (past === undefined) throw new Error("history_search missing");
     await past.definition.execute({ query: "zebra", limit: 3 }, { sessionID: SESSION });
@@ -199,5 +219,15 @@ describe("the OpenCode plugin", () => {
       args: [BIN, "tool", "history_search", "--project", "/Users/dev/project"],
       stdin: { query: "zebra", limit: 3 },
     });
+  });
+});
+
+describe("the generated OpenCode package", () => {
+  test("is what pluginSource writes, project_links included (bun run plugins)", async () => {
+    const generated = await Bun.file(
+      new URL("../../plugins/opencode/index.js", import.meta.url).pathname,
+    ).text();
+    expect(generated).toBe(pluginSource("npm"));
+    expect(generated).toContain("project_links: toolApi({");
   });
 });

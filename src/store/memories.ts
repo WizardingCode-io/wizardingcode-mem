@@ -2,7 +2,7 @@ import type { Redacted } from "../core/redact.ts";
 import type { MemoryKind } from "../core/types.ts";
 import type { Model } from "../embed/model.ts";
 import { refreshMemoryVector, writeMemoryVector } from "../embed/vectors.ts";
-import { anyOf, inProject, tokens } from "../util/words.ts";
+import { anyOf, inProject, inProjects, tokens } from "../util/words.ts";
 import type { Db } from "./db.ts";
 
 export interface NewMemory {
@@ -132,27 +132,35 @@ export interface Neighbour {
 
 const NEIGHBOUR_QUERY_TERMS = 24;
 
-/** Active memories of the project that share words with `text`, nearest first. */
+/** Active memories of the project (or of any of the projects) that share words with `text`, nearest first. */
 export function findNeighbours(
   db: Db,
-  projectId: number,
+  projectId: number | readonly number[],
   text: string,
   limit: number,
   /** A turn being distilled again must not be compared with its own earlier memory. */
   exceptTurnId: number | null = null,
 ): Neighbour[] {
+  const ids = typeof projectId === "number" ? [projectId] : [...projectId];
   const terms = [...tokens(text)].slice(0, NEIGHBOUR_QUERY_TERMS);
-  if (terms.length === 0) return [];
+  if (terms.length === 0 || ids.length === 0) return [];
+  const inIds = ids.length === 1 ? "= ?" : `IN (${ids.map((id) => Math.trunc(id)).join(", ")})`;
   const rows = db
-    .query<{ id: number; title: string; body: string }, [string, number, number | null, number]>(
+    .query<{ id: number; title: string; body: string }, (string | number | null)[]>(
       `SELECT m.id, m.title, m.body
          FROM memories_fts CROSS JOIN memories m ON m.id = memories_fts.rowid
-        WHERE memories_fts MATCH ? AND m.project_id = ? AND m.status = 'active'
+        WHERE memories_fts MATCH ? AND m.project_id ${inIds} AND m.status = 'active'
           AND (m.source_turn_id IS NULL OR m.source_turn_id IS NOT ?)
         ORDER BY bm25(memories_fts, 4.0, 1.0, 2.0, 0.0)
         LIMIT ?`,
     )
-    .all(inProject(anyOf(terms), projectId), projectId, exceptTurnId, limit);
+    .all(
+      ...(ids.length === 1
+        ? [inProject(anyOf(terms), ids[0] as number), ids[0] as number]
+        : [inProjects(anyOf(terms), ids)]),
+      exceptTurnId,
+      limit,
+    );
   const files = db.query<{ path: string }, [number]>(
     "SELECT path FROM memory_files WHERE memory_id = ? ORDER BY path",
   );

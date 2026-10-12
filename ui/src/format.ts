@@ -114,3 +114,13 @@ export const compact = (n: number): string =>
 const HUES = ["#FF3DCB", "#9B5CFF", "#2E7BFF", "#FFC53D", "#2EE6C8"];
 export const hue = (name: string): string =>
   HUES[[...name].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % HUES.length] as string;
+
+// A project's pill in the tone of its tile hue: the soft fill and the readable text.
+const SOFT: Record<string, Tone> = {
+  "#FF3DCB": { bg: "var(--magenta-soft)", fg: "var(--magenta-text)" },
+  "#9B5CFF": { bg: "var(--violet-soft)", fg: "var(--violet-text)" },
+  "#2E7BFF": { bg: "var(--blue-soft)", fg: "var(--blue-text)" },
+  "#FFC53D": { bg: "var(--warn-soft)", fg: "var(--warn)" },
+  "#2EE6C8": { bg: "var(--ok-soft)", fg: "var(--ok)" },
+};
+export const projectTone = (name: string): Tone => SOFT[hue(name)] ?? { bg: "var(--paper-sunken)", fg: "var(--ink-muted)" };

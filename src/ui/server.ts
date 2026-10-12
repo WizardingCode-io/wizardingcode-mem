@@ -39,9 +39,17 @@ import { logError } from "../util/log.ts";
 import { storeDirOf } from "../util/paths.ts";
 import { spawnDetached } from "../util/self.ts";
 import { clearUiState, writeUiState } from "./state.ts";
+import { acceptProposal, rejectProposal, undoUserRule } from "../links/rules.ts";
 import {
+  addLink,
+  changeLink,
+  dismissLinksOffer,
+  linksOffer,
+  listRules,
+  proposalStatus,
   getMemory,
   getTurn,
+  listLinks,
   listMemories,
   listProjects,
   projectRef,
@@ -413,6 +421,7 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
           db,
           {
             projectId,
+            scope: url.searchParams.get("scope") ?? undefined,
             q: url.searchParams.get("q") ?? undefined,
             kind: url.searchParams.get("kind") ?? undefined,
             status: url.searchParams.get("status") ?? undefined,
@@ -475,14 +484,77 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
     }
     if (path === "/api/search" && request.method === "GET") {
       const limit = Number(url.searchParams.get("limit") ?? 20);
+      const project = url.searchParams.get("project");
+      const projectId = project === null ? null : Number(project);
+      if (projectId !== null && !Number.isInteger(projectId)) {
+        return problem(400, "project must be an id");
+      }
       return json(
         searchAll(
           db,
           url.searchParams.get("q") ?? "",
           Number.isFinite(limit) ? limit : 20,
           loadModel({ dataDir: options.dataDir, env }),
+          projectId,
         ),
       );
+    }
+    // The quiet banner for new link suggestions and rule proposals, like the history offer.
+    if (path === "/api/links/offer" && request.method === "GET") {
+      return json(linksOffer(db));
+    }
+    if (path === "/api/links/offer/dismiss" && request.method === "POST") {
+      dismissLinksOffer(db);
+      return json({ dismissed: true });
+    }
+    // The author's rules: proposals to make theirs or reject, and rules to take back.
+    if (path === "/api/rules" && request.method === "GET") {
+      return json(listRules(db));
+    }
+    const ruleChange = /^\/api\/rules\/(\d+)\/(accept|reject|undo)$/.exec(path);
+    if (ruleChange !== null && request.method === "POST") {
+      const id = Number(ruleChange[1]);
+      const change = ruleChange[2];
+      if (change === "undo") {
+        // The id is the rule's memory: only an active rule of the author's can be taken back.
+        return undoUserRule(db, id, now())
+          ? json({ undone: true })
+          : problem(404, "no such rule of yours");
+      }
+      const status = proposalStatus(db, id);
+      if (status === null) return problem(404, "no such proposal");
+      if (status !== "proposed") return problem(409, `this proposal is already ${status}`);
+      if (change === "reject") {
+        return rejectProposal(db, id, now())
+          ? json({ rejected: true })
+          : problem(409, "this proposal was decided meanwhile");
+      }
+      const outcome = acceptProposal(db, id, now(), loadModel({ dataDir: options.dataDir, env }));
+      return "refused" in outcome ? problem(409, outcome.refused) : json(outcome);
+    }
+    if (path === "/api/links" && request.method === "GET") {
+      return json(listLinks(db));
+    }
+    if (path === "/api/links" && request.method === "POST") {
+      const body = await jsonObject(request);
+      if (body instanceof Response) return body;
+      const made = addLink(db, body, now());
+      return typeof made === "string" ? problem(400, made) : json(made);
+    }
+    const linkChange = /^\/api\/links\/(\d+)\/(confirm|reject|unlink)$/.exec(path);
+    if (linkChange !== null && request.method === "POST") {
+      const change = linkChange[2] as "confirm" | "reject" | "unlink";
+      const outcome = changeLink(db, Number(linkChange[1]), change, now());
+      if (outcome === "not-found") return problem(404, "no such link");
+      if (outcome === "conflict") {
+        return problem(
+          409,
+          change === "unlink"
+            ? "only a confirmed link can be unlinked"
+            : "only a suggestion can be confirmed or rejected; link the projects to link them again",
+        );
+      }
+      return json(outcome);
     }
     if (path === "/api/status" && request.method === "GET") {
       const projectId = Number(url.searchParams.get("project"));

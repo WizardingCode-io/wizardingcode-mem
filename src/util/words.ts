@@ -39,6 +39,12 @@ export function inProject(match: string, projectId: number): string {
   return `{title body terms} : (${match}) AND project_id : "${projectId}"`;
 }
 
+/** `inProject` over several projects; one project gives exactly what `inProject` gives. */
+export function inProjects(match: string, projectIds: readonly number[]): string {
+  if (projectIds.length === 1) return inProject(match, projectIds[0] as number);
+  return `{title body terms} : (${match}) AND project_id : (${projectIds.map((id) => `"${id}"`).join(" OR ")})`;
+}
+
 /** An FTS5 query matching any of the terms. Each term is quoted, so none is read as syntax. */
 export function anyOf(terms: Iterable<string>): string {
   return [...terms].map((term) => `"${term.replaceAll('"', '""')}"`).join(" OR ");

@@ -77,6 +77,13 @@ describe("wizardingcode-mem tool", () => {
     expect(result.stderr).toContain("ids");
   });
 
+  test("project_links serves OpenCode's agent, for the project given", async () => {
+    const result = await tool("project_links", { action: "list" });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toBe("No linked projects and no suggestions for project.\n");
+    expect((await tool("project_links", { action: "nope" })).exitCode).toBe(64);
+  });
+
   test("an unknown tool, or no --project, is a usage error", async () => {
     expect((await tool("memory_forget", {})).exitCode).toBe(64);
     const noProject = await runCliWith(
@@ -155,6 +162,12 @@ describe("wizardingcode-mem tool --global (Claude Desktop's chat: every project)
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("[project]");
     expect(result.stdout).toContain("The request limit is five per minute.");
+  });
+
+  test("project_links needs a project: refused in the global mode", async () => {
+    const result = await global("project_links", { action: "list" });
+    expect(result.exitCode).toBe(64);
+    expect(result.stderr).toContain("unknown tool");
   });
 
   test("memory_projects lists the projects; memory_save needs one", async () => {

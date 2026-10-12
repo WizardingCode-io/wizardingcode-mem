@@ -17,6 +17,7 @@ import { loadModel, modelPath } from "../../src/embed/model.ts";
 import { writeMemoryVector } from "../../src/embed/vectors.ts";
 import { openHistoryDb } from "../../src/history/db.ts";
 import { type Db, openDb } from "../../src/store/db.ts";
+import { linkProjects, suggestLink, visibleProjects } from "../../src/store/links.ts";
 import { insertMemory } from "../../src/store/memories.ts";
 import { setMeta } from "../../src/store/meta.ts";
 import { startUi, type UiServer } from "../../src/ui/server.ts";
@@ -1049,5 +1050,359 @@ describe("wizardingcode-mem ui: semantic search", () => {
     const { s } = await startSpying();
     expect((await post(s, "/api/semantic/delete")).status).toBe(200);
     expect(existsSync(join(dataDir, "history.db"))).toBe(false);
+  });
+});
+
+describe("wizardingcode-mem ui: linked projects", () => {
+  const ids = () => {
+    const db = openDb({ dataDir, busyTimeoutMs: 2000 });
+    try {
+      const of = (name: string) =>
+        db.query<{ id: number }, [string]>("SELECT id FROM projects WHERE name = ?").get(name)
+          ?.id as number;
+      mkdirSync(join(base, "lib"));
+      const lib = resolveProject(db, join(base, "lib"), NOW).id;
+      seed(db, "The library rotates its cache weekly.", "", { projectId: lib, kind: "gotcha" });
+      return { other: of("other"), lib };
+    } finally {
+      db.close();
+    }
+  };
+  const withDb = <T>(fn: (db: Db) => T): T => {
+    const db = openDb({ dataDir, busyTimeoutMs: 2000 });
+    try {
+      return fn(db);
+    } finally {
+      db.close();
+    }
+  };
+  const post = (s: UiServer, path: string, body?: unknown) =>
+    api(s, path, {
+      method: "POST",
+      ...(body === undefined
+        ? {}
+        : { body: JSON.stringify(body), headers: { "content-type": "application/json" } }),
+    });
+  interface LinkView {
+    id: number;
+    from: number;
+    fromName: string;
+    to: number;
+    toName: string;
+    kind: string;
+    status: string;
+    signals: string[];
+  }
+
+  test("every links route needs the token", async () => {
+    const s = await start();
+    expect((await fetch(`${s.origin}/api/links`)).status).toBe(401);
+    for (const path of [
+      "/api/links",
+      "/api/links/1/confirm",
+      "/api/links/1/reject",
+      "/api/links/1/unlink",
+    ]) {
+      expect((await fetch(`${s.origin}${path}`, { method: "POST" })).status).toBe(401);
+    }
+  });
+
+  test("lists every link with its projects' names and signals, and the pending suggestions", async () => {
+    const { other, lib } = ids();
+    const suggested = withDb((db) => {
+      linkProjects(db, projectId, lib, "uses", NOW);
+      return suggestLink(db, projectId, other, "product", ["remote owner + “shop”"], NOW) as number;
+    });
+    const s = await start();
+    const body = (await (await api(s, "/api/links")).json()) as {
+      links: LinkView[];
+      pending: { total: number; byProject: Record<string, number> };
+    };
+    expect(body.links).toEqual([
+      expect.objectContaining({
+        from: projectId,
+        fromName: "shop",
+        to: lib,
+        toName: "lib",
+        kind: "uses",
+        status: "confirmed",
+      }),
+      expect.objectContaining({
+        id: suggested,
+        fromName: "shop",
+        toName: "other",
+        kind: "product",
+        status: "suggested",
+        signals: ["remote owner + “shop”"],
+      }),
+    ]);
+    expect(body.pending).toEqual({
+      total: 1,
+      byProject: { [String(projectId)]: 1, [String(other)]: 1 },
+    });
+  });
+
+  test("links by hand; refuses itself, an unknown project and an unknown kind", async () => {
+    const { lib } = ids();
+    const s = await start();
+    const made = await post(s, "/api/links", { from: projectId, to: lib, kind: "uses" });
+    expect(made.status).toBe(200);
+    expect(await made.json()).toEqual(
+      expect.objectContaining({ from: projectId, to: lib, kind: "uses", status: "confirmed" }),
+    );
+    expect(withDb((db) => visibleProjects(db, projectId).map((v) => v.name))).toEqual(["lib"]);
+    expect((await post(s, "/api/links", { from: lib, to: lib, kind: "product" })).status).toBe(400);
+    expect((await post(s, "/api/links", { from: lib, to: 999, kind: "product" })).status).toBe(400);
+    expect((await post(s, "/api/links", { from: lib, to: projectId, kind: "x" })).status).toBe(400);
+  });
+
+  test("confirms or rejects a suggestion only; unlinks a confirmed link only", async () => {
+    const { other, lib } = ids();
+    const [a, b] = withDb((db) => [
+      suggestLink(db, projectId, other, "product", [], NOW) as number,
+      suggestLink(db, projectId, lib, "uses", [], NOW) as number,
+    ]);
+    const s = await start();
+    const confirmed = await post(s, `/api/links/${a}/confirm`);
+    expect(confirmed.status).toBe(200);
+    expect(await confirmed.json()).toEqual(expect.objectContaining({ id: a, status: "confirmed" }));
+    expect((await post(s, `/api/links/${a}/reject`)).status).toBe(409);
+    expect((await post(s, `/api/links/${b}/reject`)).status).toBe(200);
+    expect((await post(s, `/api/links/${b}/confirm`)).status).toBe(409);
+    expect((await post(s, `/api/links/${b}/unlink`)).status).toBe(409);
+    expect((await post(s, "/api/links/999/confirm")).status).toBe(404);
+    const unlinked = await post(s, `/api/links/${a}/unlink`);
+    expect(await unlinked.json()).toEqual(expect.objectContaining({ id: a, status: "rejected" }));
+    expect(withDb((db) => visibleProjects(db, projectId))).toEqual([]);
+  });
+
+  test("confirming one kind of a pair rejects the other: it leaves the list and the count", async () => {
+    const { lib } = ids();
+    const [uses, product] = withDb((db) => [
+      suggestLink(db, projectId, lib, "uses", ["package.json depends on lib"], NOW) as number,
+      suggestLink(db, lib, projectId, "product", ["same owner"], NOW) as number,
+    ]);
+    const s = await start();
+    expect((await post(s, `/api/links/${uses}/confirm`)).status).toBe(200);
+    const body = (await (await api(s, "/api/links")).json()) as {
+      links: LinkView[];
+      pending: { total: number };
+    };
+    expect(body.links.find((l) => l.id === product)?.status).toBe("rejected");
+    expect(body.pending.total).toBe(0);
+    expect((await post(s, `/api/links/${product}/confirm`)).status).toBe(409);
+    expect(withDb((db) => visibleProjects(db, lib))).toEqual([]);
+  });
+
+  test("the memory list takes its linked projects on request; the palette searches a project's group", async () => {
+    const { lib } = ids();
+    withDb((db) => linkProjects(db, projectId, lib, "uses", NOW));
+    const s = await start();
+    type List = { total: number; items: { title: string; projectId: number }[] };
+    const own = (await (await api(s, `/api/memories?project=${projectId}`)).json()) as List;
+    expect(own.total).toBe(2);
+    const linked = (await (
+      await api(s, `/api/memories?project=${projectId}&scope=linked`)
+    ).json()) as List;
+    expect(linked.total).toBe(3);
+    expect(linked.items.find((m) => m.projectId === lib)?.title).toBe(
+      "The library rotates its cache weekly.",
+    );
+    const searched = (await (
+      await api(s, `/api/memories?project=${projectId}&scope=linked&q=rotates`)
+    ).json()) as List;
+    expect(searched.items.map((m) => m.title)).toEqual(["The library rotates its cache weekly."]);
+    // From the library, the consumer stays out.
+    const fromLib = (await (
+      await api(s, `/api/memories?project=${lib}&scope=linked`)
+    ).json()) as List;
+    expect(fromLib.total).toBe(1);
+
+    const hits = (await (await api(s, `/api/search?q=rotates&project=${projectId}`)).json()) as {
+      projectName: string;
+    }[];
+    expect(hits.map((h) => h.projectName)).toEqual(["lib"]);
+    const everywhere = (await (await api(s, "/api/search?q=rotates")).json()) as unknown[];
+    expect(everywhere).toHaveLength(2);
+  });
+});
+
+describe("wizardingcode-mem ui: your rules and the links offer", () => {
+  const withDb = <T>(fn: (db: Db) => T): T => {
+    const db = openDb({ dataDir, busyTimeoutMs: 2000 });
+    try {
+      return fn(db);
+    } finally {
+      db.close();
+    }
+  };
+  const post = (s: UiServer, path: string) => api(s, path, { method: "POST" });
+  const otherId = () =>
+    withDb(
+      (db) =>
+        db.query<{ id: number }, []>("SELECT id FROM projects WHERE name = 'other'").get()
+          ?.id as number,
+    );
+  /** The Friday rule in shop, a copy in other, and a proposal of the pair. */
+  const proposeFriday = () =>
+    withDb((db) => {
+      const other = otherId();
+      const shopCopy = db
+        .query<{ id: number }, []>(
+          "SELECT id FROM memories WHERE title = 'Never deploy on Fridays.'",
+        )
+        .get()?.id as number;
+      const otherCopy = seed(db, "Never deploy on Fridays.", "Nobody is around to fix it.", {
+        kind: "convention",
+        importance: 3,
+        projectId: other,
+      });
+      const ids = [shopCopy, otherCopy].sort((a, b) => a - b);
+      const proposal = db
+        .query<{ id: number }, [string, number]>(
+          `INSERT INTO rule_proposals (memory_ids, title, body, reason, status, created_at)
+           VALUES (?, 'Never deploy on Fridays.', 'Support is thin at the weekend.', 'repeated', 'proposed', ?)
+           RETURNING id`,
+        )
+        .get(JSON.stringify(ids), NOW)?.id as number;
+      return { proposal, copies: ids, other };
+    });
+  const statusOf = (id: number) =>
+    withDb(
+      (db) =>
+        db.query<{ status: string }, [number]>("SELECT status FROM memories WHERE id = ?").get(id)
+          ?.status,
+    );
+  interface Rules {
+    proposed: {
+      id: number;
+      title: string;
+      body: string;
+      reason: string;
+      kind: string;
+      projects: string[];
+    }[];
+    accepted: { memoryId: number; title: string; kind: string; projects: string[] }[];
+  }
+
+  test("every rules and offer route needs the token", async () => {
+    const s = await start();
+    expect((await fetch(`${s.origin}/api/rules`)).status).toBe(401);
+    expect((await fetch(`${s.origin}/api/links/offer`)).status).toBe(401);
+    for (const path of [
+      "/api/rules/1/accept",
+      "/api/rules/1/reject",
+      "/api/rules/1/undo",
+      "/api/links/offer/dismiss",
+    ]) {
+      expect((await fetch(`${s.origin}${path}`, { method: "POST" })).status).toBe(401);
+    }
+  });
+
+  test("lists proposals with the projects they came from; nothing accepted yet", async () => {
+    const { proposal } = proposeFriday();
+    const s = await start();
+    const rules = (await (await api(s, "/api/rules")).json()) as Rules;
+    expect(rules.proposed).toEqual([
+      expect.objectContaining({
+        id: proposal,
+        title: "Never deploy on Fridays.",
+        reason: "repeated",
+        kind: "convention",
+        projects: ["other", "shop"],
+      }),
+    ]);
+    expect(rules.accepted).toEqual([]);
+  });
+
+  test("make mine supersedes the copies; undo archives the rule and brings them back", async () => {
+    const { proposal, copies } = proposeFriday();
+    const s = await start();
+    const made = await post(s, `/api/rules/${proposal}/accept`);
+    expect(made.status).toBe(200);
+    const { userMemoryId } = (await made.json()) as { userMemoryId: number };
+    expect(copies.map(statusOf)).toEqual(["superseded", "superseded"]);
+    const rules = (await (await api(s, "/api/rules")).json()) as Rules;
+    expect(rules.proposed).toEqual([]);
+    expect(rules.accepted).toEqual([
+      expect.objectContaining({
+        memoryId: userMemoryId,
+        title: "Never deploy on Fridays.",
+        kind: "convention",
+        projects: ["other", "shop"],
+      }),
+    ]);
+    expect((await post(s, `/api/rules/${proposal}/accept`)).status).toBe(409);
+
+    const undone = await post(s, `/api/rules/${userMemoryId}/undo`);
+    expect(undone.status).toBe(200);
+    expect(await undone.json()).toEqual({ undone: true });
+    expect(statusOf(userMemoryId)).toBe("archived");
+    expect(copies.map(statusOf)).toEqual(["active", "active"]);
+    expect(((await (await api(s, "/api/rules")).json()) as Rules).accepted).toEqual([]);
+    expect((await post(s, `/api/rules/${userMemoryId}/undo`)).status).toBe(404);
+  });
+
+  test("reject is for open proposals only; unknown ones are not found", async () => {
+    const { proposal, copies } = proposeFriday();
+    const s = await start();
+    expect(await (await post(s, `/api/rules/${proposal}/reject`)).json()).toEqual({
+      rejected: true,
+    });
+    expect((await post(s, `/api/rules/${proposal}/reject`)).status).toBe(409);
+    expect((await post(s, `/api/rules/${proposal}/accept`)).status).toBe(409);
+    expect((await post(s, "/api/rules/999/accept")).status).toBe(404);
+    expect((await post(s, "/api/rules/999/reject")).status).toBe(404);
+    // A memory that is not one of the author's rules cannot be undone.
+    expect((await post(s, `/api/rules/${copies[0]}/undo`)).status).toBe(404);
+    expect(((await (await api(s, "/api/rules")).json()) as Rules).proposed).toEqual([]);
+  });
+
+  test("a proposal whose sources changed is refused with the reason", async () => {
+    const { proposal, copies } = proposeFriday();
+    withDb((db) =>
+      db.run("UPDATE memories SET status = 'archived' WHERE id = ?", [copies[1] as number]),
+    );
+    const s = await start();
+    const refused = await post(s, `/api/rules/${proposal}/accept`);
+    expect(refused.status).toBe(409);
+    expect(((await refused.json()) as { error: string }).error).toContain("still state");
+  });
+
+  test("the offer counts new suggestions and proposals, and stays quiet once dismissed until more come", async () => {
+    const s = await start();
+    expect(await (await api(s, "/api/links/offer")).json()).toEqual({
+      show: false,
+      suggestions: 0,
+      proposals: 0,
+    });
+    proposeFriday();
+    mkdirSync(join(base, "lib"));
+    const lib = withDb((db) => resolveProject(db, join(base, "lib"), NOW).id);
+    const decided = withDb((db) => suggestLink(db, projectId, lib, "uses", [], NOW) as number);
+    withDb((db) => suggestLink(db, projectId, otherId(), "product", [], NOW));
+    await post(s, `/api/links/${decided}/reject`);
+    expect(await (await api(s, "/api/links/offer")).json()).toEqual({
+      show: true,
+      suggestions: 1,
+      proposals: 1,
+    });
+    expect(await (await post(s, "/api/links/offer/dismiss")).json()).toEqual({ dismissed: true });
+    expect(await (await api(s, "/api/links/offer")).json()).toEqual({
+      show: false,
+      suggestions: 0,
+      proposals: 0,
+    });
+    // Something new after the dismissal brings it back, counting only what is new.
+    mkdirSync(join(base, "api"));
+    withDb((db) => {
+      const apiProject = resolveProject(db, join(base, "api"), NOW).id;
+      suggestLink(db, apiProject, lib, "uses", [], NOW);
+    });
+    expect(await (await api(s, "/api/links/offer")).json()).toEqual({
+      show: true,
+      suggestions: 1,
+      proposals: 0,
+    });
   });
 });

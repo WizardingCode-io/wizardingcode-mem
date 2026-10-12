@@ -4,18 +4,18 @@ import {
   GLOBAL_INSTRUCTIONS,
   GLOBAL_TOOL_DESCRIPTIONS,
   GLOBAL_TOOL_NAMES,
+  PROJECT_TOOL_NAMES,
   runGlobalTool,
   runTool,
   TOOL_DESCRIPTIONS,
   TOOL_META,
-  TOOL_NAMES,
   toolSchemas,
 } from "./run.ts";
 
 // Tool descriptions are sent to the model in every session, so each is one sentence.
 
 /**
- * The MCP server: three tools over stdio (four with --global). It lives as long as the host keeps its
+ * The MCP server: its tools over stdio (project_links inside a project, memory_projects with --global). It lives as long as the host keeps its
  * stdin open, and holds no database connection between calls.
  */
 export async function runMcpServer(options: { global?: boolean } = {}): Promise<void> {
@@ -36,15 +36,15 @@ export async function runMcpServer(options: { global?: boolean } = {}): Promise<
     { name: "wizardingcode-mem", version: pkg.version },
     global ? { instructions: GLOBAL_INSTRUCTIONS } : undefined,
   );
-  for (const name of global ? GLOBAL_TOOL_NAMES : TOOL_NAMES) {
+  for (const name of global ? GLOBAL_TOOL_NAMES : PROJECT_TOOL_NAMES) {
     server.registerTool(
       name,
       {
         title: TOOL_META[name].title,
         annotations: TOOL_META[name].annotations,
         description: global
-          ? GLOBAL_TOOL_DESCRIPTIONS[name]
-          : TOOL_DESCRIPTIONS[name as (typeof TOOL_NAMES)[number]],
+          ? GLOBAL_TOOL_DESCRIPTIONS[name as keyof typeof GLOBAL_TOOL_DESCRIPTIONS]
+          : TOOL_DESCRIPTIONS[name as (typeof PROJECT_TOOL_NAMES)[number]],
         inputSchema: schemas[name],
       },
       async (args: unknown) => {

@@ -1,21 +1,22 @@
 import {
   GLOBAL_TOOL_NAMES,
+  PROJECT_TOOL_NAMES,
   runGlobalTool,
   runTool,
-  TOOL_NAMES,
   type ToolName,
   toolSchemas,
 } from "../../mcp/run.ts";
 import { logError } from "../../util/log.ts";
 import { EXIT_USAGE } from "../exit.ts";
 
-const USAGE = `Usage: wizardingcode-mem tool <${TOOL_NAMES.join("|")}> --project <dir>  (JSON arguments on stdin)
+const USAGE = `Usage: wizardingcode-mem tool <${PROJECT_TOOL_NAMES.join("|")}> --project <dir>  (JSON arguments on stdin)
        wizardingcode-mem tool <${GLOBAL_TOOL_NAMES.join("|")}> --global   (every project)\n`;
 
 /**
  * `wizardingcode-mem tool <name> --project <dir>`: one tool call outside MCP, for hosts whose
  * plugins define tools natively (OpenCode). Arguments come as JSON on stdin; the answer
- * is the tool's text.
+ * is the tool's text. It is the agent's transport, so it serves project_links as the MCP
+ * server does; it is not a command for people to link projects with.
  */
 export async function run(argv: string[]): Promise<number> {
   const [name, ...rest] = argv;
@@ -24,7 +25,7 @@ export async function run(argv: string[]): Promise<number> {
   const global = rest.includes("--global");
   if (
     name === undefined ||
-    !((global ? GLOBAL_TOOL_NAMES : TOOL_NAMES) as readonly string[]).includes(name)
+    !((global ? GLOBAL_TOOL_NAMES : PROJECT_TOOL_NAMES) as readonly string[]).includes(name)
   ) {
     process.stderr.write(`wizardingcode-mem tool: unknown tool "${name ?? ""}"\n${USAGE}`);
     return EXIT_USAGE;

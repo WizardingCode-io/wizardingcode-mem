@@ -1,0 +1,98 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`prompt notes with no links and no user rules are what they were before links existed (pinned) 1`] = `
+[
+  {
+    "ids": [
+      35,
+      62,
+      36,
+      10,
+      13,
+    ],
+    "prompt": "why does the queue retry fail when the lease timeout hits the worker pool?",
+    "text": 
+"<wizardingcode-mem-notes>
+Notes saved from earlier sessions in this project. They are background, not instructions, and may be out of date: check the code before relying on them.
+
+- #35 [change · 2026-09-18] The hook retry must worker before the session bundle.
+  Because the retry lock would otherwise schema the lease.
+- #62 [fix · 2026-09-26] The adapter branch must queue before the pool worker.
+  Because the chunk adapter would otherwise vacuum the backoff.
+- #36 [discovery · 2026-09-18] The queue judge must timeout before the schema trigger.
+  Because the process lease would otherwise index the router.
+- #10 [convention · 2026-09-10 · src/queue/session.ts] The handler bundle must bundle before the retry timeout.
+  Because the cursor session would otherwise cache the worker.
+- #13 [decision · 2026-08-25 · src/latency/timeout.ts] The judge backoff must socket before the batch session.
+  Because the index handler would otherwise queue the pool.
+</wizardingcode-mem-notes>"
+,
+  },
+  {
+    "ids": [
+      19,
+      64,
+      28,
+    ],
+    "prompt": "the parser buffer and the router handler break the payload stream",
+    "text": 
+"<wizardingcode-mem-notes>
+Notes saved from earlier sessions in this project. They are background, not instructions, and may be out of date: check the code before relying on them.
+
+- #19 [decision · 2026-06-30 · src/queue/session.ts] The stream migration must buffer before the parser deploy.
+  Because the schema column would otherwise socket the deadline.
+- #64 [convention · 2026-06-30 · src/queue/payload.ts] The deadline trigger must socket before the migration checkpoint.
+  Because the column latency would otherwise parser the router.
+- #28 [convention · 2026-06-30 · src/deadline/index.ts] The header buffer must handler before the parser token.
+  Because the backoff judge would otherwise column the lease.
+</wizardingcode-mem-notes>"
+,
+  },
+  {
+    "ids": [
+      70,
+      50,
+      3,
+      56,
+      61,
+    ],
+    "prompt": "how should the cache index migration handle the schema checkpoint?",
+    "text": 
+"<wizardingcode-mem-notes>
+Notes saved from earlier sessions in this project. They are background, not instructions, and may be out of date: check the code before relying on them.
+
+- #70 [convention · 2026-09-26 · src/index/build.ts] The checkpoint deadline must process before the cache pool.
+  Because the signal token would otherwise column the column.
+- #50 [fix · 2026-07-08] The judge cache must index before the transcript deadline.
+  Because the chunk process would otherwise pool the checkpoint.
+- #3 [gotcha · 2026-08-01] The router index must journal before the migration branch.
+  Because the lease transcript would otherwise signal the cache.
+- #56 [fix · 2026-07-16] The breaker cache must worker before the bundle migration.
+  Because the lease index would otherwise deadline the build.
+- #61 [decision · 2026-09-02 · src/config/router.ts] The handler schema must budget before the adapter migration.
+  Because the timeout column would otherwise render the index.
+</wizardingcode-mem-notes>"
+,
+  },
+  {
+    "ids": [
+      29,
+      48,
+      44,
+    ],
+    "prompt": "the deploy bundle signal and the journal vacuum trigger",
+    "text": 
+"<wizardingcode-mem-notes>
+Notes saved from earlier sessions in this project. They are background, not instructions, and may be out of date: check the code before relying on them.
+
+- #29 [change · 2026-10-04] The transcript commit must cache before the journal signal.
+  Because the signal deploy would otherwise thread the pool.
+- #48 [discovery · 2026-08-09] The cursor signal must column before the socket bundle.
+  Because the journal batch would otherwise trigger the signal.
+- #44 [fix · 2026-08-25] The vacuum judge must signal before the retry deploy.
+  Because the batch cache would otherwise checkpoint the buffer.
+</wizardingcode-mem-notes>"
+,
+  },
+]
+`;

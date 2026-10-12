@@ -14,11 +14,13 @@ const term = ref("");
 const hits = ref<SearchHit[]>([]);
 const scope = ref<"all" | "memories" | "projects" | "actions">("all");
 const cursor = ref(0);
+// Memories of this project and the ones linked to it, or of every project.
+const everywhere = ref(false);
 const input = ref<HTMLInputElement | null>(null);
 const list = ref<HTMLElement | null>(null);
 let timer: ReturnType<typeof setTimeout> | undefined;
 
-watch(term, (q) => {
+watch([term, everywhere], ([q]) => {
   clearTimeout(timer);
   cursor.value = 0;
   if (q.trim().length < 2) {
@@ -26,13 +28,14 @@ watch(term, (q) => {
     return;
   }
   timer = setTimeout(async () => {
-    hits.value = await api.search(q.trim(), 12);
+    hits.value = await api.search(q.trim(), 12, everywhere.value ? null : state.projectId);
   }, 120);
 });
 watch(open, async (o) => {
   if (!o) {
     term.value = "";
     scope.value = "all";
+    everywhere.value = false;
     return;
   }
   await nextTick();
@@ -88,6 +91,8 @@ const sections = computed(() => {
     { key: "a2", title: "Show turns", sub: "Every prompt and what it became", meta: "", tile: { text: "", bg: "var(--violet-soft)", fg: "var(--violet-text)", icon: "i-lucide-history" }, run: go("turns") },
     { key: "a3", title: "Show overview", sub: "Numbers and charts for this project", meta: "", tile: { text: "", bg: "var(--violet-soft)", fg: "var(--violet-text)", icon: "i-lucide-chart-column" }, run: go("overview") },
     { key: "a6", title: "Search past conversations", sub: "Every Claude Code and Codex session on this machine", meta: "", tile: { text: "", bg: "var(--violet-soft)", fg: "var(--violet-text)", icon: "i-lucide-messages-square" }, run: go("history") },
+    { key: "a7", title: "Show projects and links", sub: "Which projects read each other, and suggestions to review", meta: "", tile: { text: "", bg: "var(--violet-soft)", fg: "var(--violet-text)", icon: "i-lucide-link-2" }, run: go("projects") },
+    { key: "a8", title: "Show your rules", sub: "Rules you repeat, proposed to be yours in every project", meta: "", tile: { text: "", bg: "var(--violet-soft)", fg: "var(--violet-text)", icon: "i-lucide-user-round-check" }, run: go("you") },
     { key: "a4", title: "Open settings", sub: "Judge, retention, storage, backups", meta: "", tile: { text: "", bg: "var(--violet-soft)", fg: "var(--violet-text)", icon: "i-lucide-settings" }, run: go("settings") },
     {
       key: "a5",
@@ -102,7 +107,7 @@ const sections = computed(() => {
     },
   ].filter((a) => !q.value || a.title.toLowerCase().includes(q.value));
   return [
-    { key: "memories" as const, label: "Memories", rows: memories, hint: q.value.length < 2 ? "Type two letters to search every project" : "" },
+    { key: "memories" as const, label: "Memories", rows: memories, hint: q.value.length < 2 ? (everywhere.value || state.projectId === null ? "Type two letters to search every project" : "Type two letters to search this project and the ones linked to it") : "" },
     { key: "projects" as const, label: "Projects", rows: projects, hint: "" },
     { key: "actions" as const, label: "Actions", rows: actions, hint: "" },
   ];
@@ -138,7 +143,7 @@ function onKey(e: KeyboardEvent) {
   <UModal
     v-model:open="open"
     title="Search"
-    description="Search memories across every project, jump to a project or run an action"
+    description="Search memories of this project and its linked ones, or of every project; jump to a project or run an action"
     :ui="{ content: 'top-[72px] translate-y-0 sm:max-w-[640px] rounded-xl bg-(--paper-raised) ring-0 shadow-[0_0_0_1px_var(--line),0_2px_6px_#100E0D0d,0_24px_60px_-12px_#100e0d33] overflow-hidden', overlay: 'bg-[rgba(16,14,13,.48)]' }"
   >
     <template #content>
@@ -200,7 +205,10 @@ function onKey(e: KeyboardEvent) {
           <span class="flex items-center gap-1"><span class="wz-kbd">↑</span><span class="wz-kbd">↓</span>navigate</span>
           <span class="flex items-center gap-1"><span class="wz-kbd">↵</span>open</span>
           <span class="flex-1" />
-          <span>Memories in every project</span>
+          <div class="wz-segmented" role="group" aria-label="Which memories">
+            <button type="button" :aria-pressed="!everywhere" :disabled="state.projectId === null" @click="everywhere = false">This and linked</button>
+            <button type="button" :aria-pressed="everywhere" @click="everywhere = true">Every project</button>
+          </div>
         </div>
       </div>
     </template>

@@ -72,7 +72,7 @@ export function globalSearch(
   if (args.project) {
     const project = findProject(db, args.project);
     if (!project) return unknown(db, args.project);
-    return searchMemories({ ...context(db, null, now, project.id), model }, args);
+    return searchMemories({ ...context(db, null, now, project.id), model, alone: true }, args);
   }
   return searchMemories({ ...context(db, null, now, null), model }, args);
 }

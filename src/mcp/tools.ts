@@ -11,9 +11,11 @@ import { explicitMatch } from "../retrieve/query.ts";
 import { renderHeading, renderNote } from "../retrieve/render.ts";
 import { RRF_K, SEMANTIC_FLOOR, semanticCandidates } from "../retrieve/semantic.ts";
 import { type Db, withWrite } from "../store/db.ts";
+import { visibleProjects } from "../store/links.ts";
 import { insertMemory, supersede } from "../store/memories.ts";
+import { logError } from "../util/log.ts";
 import { clip } from "../util/text.ts";
-import { inProject, searchTerms } from "../util/words.ts";
+import { inProjects, searchTerms } from "../util/words.ts";
 
 // What the three MCP tools do, as plain functions over a database. The server in
 // server.ts only adapts them to the protocol.
@@ -29,6 +31,95 @@ export interface ToolContext {
   now: number;
   /** The semantic model, when loaded: a saved memory gets its vector. */
   model?: Model | null;
+  /** This project alone, without its linked projects (a project named in --global). */
+  alone?: boolean;
+}
+
+/** The projects a search or a get reads: null for every project. */
+interface Scope {
+  ids: number[] | null;
+  /** The author's rules (active, from projects outside `ids`), found alongside them. */
+  rules?: { ids: number[]; projects: number[] };
+}
+
+let rulesFailed = false;
+
+/** The author's active rules kept in projects outside `ids`. None on any error (fail open). */
+function userRules(db: Db, ids: number[]): Scope["rules"] {
+  try {
+    const rows = db
+      .query<{ id: number; projectId: number }, []>(
+        `SELECT m.id AS id, m.project_id AS projectId FROM user_memories u
+           JOIN memories m ON m.id = u.memory_id JOIN projects p ON p.id = m.project_id
+          WHERE m.status = 'active' AND p.disabled = 0`,
+      )
+      .all()
+      .filter((row) => !ids.includes(row.projectId));
+    if (rows.length === 0) return undefined;
+    return {
+      ids: rows.map((row) => row.id),
+      projects: [...new Set(rows.map((row) => row.projectId))],
+    };
+  } catch (error) {
+    if (!rulesFailed) {
+      rulesFailed = true;
+      logError("search.rules", error);
+    }
+    return undefined;
+  }
+}
+
+/**
+ * What a search covers: the project and the projects it sees through confirmed links, or
+ * one of them when `project` names it; a name outside the group is refused with the group.
+ */
+export function searchScope(context: ToolContext, project?: string): Scope | string {
+  const { db, projectId } = context;
+  if (projectId === null) return { ids: null };
+  if (context.alone) return { ids: [projectId] };
+  const visible = visibleProjects(db, projectId);
+  const wanted = project?.trim() ?? "";
+  if (wanted === "") {
+    const ids = [projectId, ...visible.map((v) => v.id)];
+    const rules = userRules(db, ids);
+    return rules === undefined ? { ids } : { ids, rules };
+  }
+  const own =
+    db.query<{ name: string }, [number]>("SELECT name FROM projects WHERE id = ?").get(projectId)
+      ?.name ?? "";
+  const group = [{ id: projectId, name: own }, ...visible];
+  const found =
+    group.find((p) => p.name === wanted) ??
+    group.find((p) => p.name.toLowerCase() === wanted.toLowerCase());
+  if (found === undefined) {
+    return `No project called “${wanted}” here. This project and its linked ones: ${group.map((p) => p.name).join(", ")}.`;
+  }
+  return { ids: [found.id] };
+}
+
+/** Whether results are named with their project: across projects, or from another one. */
+const labelled = (context: ToolContext, scope: Scope) =>
+  scope.ids === null || scope.ids.some((id) => id !== context.projectId);
+
+/** The SQL condition for a scope; ids come from the database, so they are inlined. */
+function inScope(scope: Scope): string {
+  if (scope.ids === null) return "1";
+  const projects = `m.project_id IN (${scope.ids.map((id) => Math.trunc(id)).join(", ")})`;
+  if (scope.rules === undefined) return projects;
+  return `(${projects} OR m.id IN (${scope.rules.ids.map((id) => Math.trunc(id)).join(", ")}))`;
+}
+
+/** The projects a scope's rows come from, the author's rules' included. */
+const scopeProjects = (scope: Scope): number[] | null =>
+  scope.ids === null ? null : [...scope.ids, ...(scope.rules?.projects ?? [])];
+
+/** One heading, named for its origin: the author's, another project's, or none. */
+function heading(db: Db, row: Ranked, scope: Scope, names: Map<number, string> | null): string {
+  if (scope.rules?.ids.includes(row.id)) {
+    return renderHeading({ ...toNote(db, row), origin: "you" });
+  }
+  const note = renderHeading(toNote(db, row));
+  return names === null ? note : `[${names.get(row.projectId) ?? "?"}] ${note}`;
 }
 
 const DEFAULT_LIMIT = 10;
@@ -45,11 +136,13 @@ const MAX_FILES = 10;
  */
 export function searchMemories(
   context: ToolContext,
-  args: { query: string; kind?: MemoryKind; limit?: number },
+  args: { query: string; kind?: MemoryKind; limit?: number; project?: string },
 ): string {
   const { db, projectId } = context;
   const limit = Math.min(MAX_LIMIT, Math.max(1, Math.trunc(args.limit ?? DEFAULT_LIMIT)));
-  const rows = rankMemories(context, args);
+  const scope = searchScope(context, args.project);
+  if (typeof scope === "string") return scope;
+  const rows = rankMemories(context, args, SEMANTIC_FLOOR, scope);
   if (rows.length === 0) return "No memories match.";
   const shown = rows.slice(0, limit);
   if (projectId !== null) {
@@ -59,13 +152,10 @@ export function searchMemories(
       shown.map((row) => row.id),
       context.now,
     );
-    return shown.map((row) => renderHeading(toNote(db, row))).join("\n");
   }
-  // Across projects, each heading says whose it is.
-  const names = projectNames(db);
-  return shown
-    .map((row) => `[${names.get(row.projectId) ?? "?"}] ${renderHeading(toNote(db, row))}`)
-    .join("\n");
+  // Across projects, each heading says whose it is; the author's rules say they are theirs.
+  const names = labelled(context, scope) ? projectNames(db) : null;
+  return shown.map((row) => heading(db, row, scope, names)).join("\n");
 }
 
 type Ranked = MemoryRow & { projectId: number };
@@ -77,25 +167,31 @@ type Ranked = MemoryRow & { projectId: number };
  */
 export function rankMemories(
   context: ToolContext,
-  args: { query: string; kind?: MemoryKind },
+  args: { query: string; kind?: MemoryKind; project?: string },
   floor: number = SEMANTIC_FLOOR,
+  given?: Scope,
 ): Ranked[] {
-  const { db, projectId } = context;
+  const { db } = context;
+  const scope = given ?? searchScope(context, args.project);
+  if (typeof scope === "string") return [];
+  const where = inScope(scope);
   const kind = args.kind ?? null;
   const model = context.model ?? null;
 
   if (args.query.trim() === "") {
     return db
-      .query<Ranked, [number | null, number | null, string | null, string | null, number]>(
+      .query<Ranked, [string | null, string | null, number]>(
         `SELECT ${MEMORY_COLUMNS}, m.project_id AS projectId FROM memories m
-          WHERE (? IS NULL OR m.project_id = ?) AND m.status = 'active' AND (? IS NULL OR m.kind = ?)
+          WHERE ${where} AND m.status = 'active' AND (? IS NULL OR m.kind = ?)
           ORDER BY m.importance DESC, m.updated_at DESC LIMIT ?`,
       )
-      .all(projectId, projectId, kind, kind, SEARCH_POOL)
+      .all(kind, kind, SEARCH_POOL)
       .sort((a, b) => prior(b, context) - prior(a, context) || b.id - a.id);
   }
+  const projects = scopeProjects(scope);
   const meaning = semanticCandidates(db, model, args.query, {
-    projectId,
+    projectId: null,
+    ...(projects === null ? {} : { projectIds: projects }),
     kind,
     limit: SEARCH_POOL,
     floor,
@@ -105,20 +201,15 @@ export function rankMemories(
     match === null
       ? []
       : db
-          .query<
-            Ranked & { bm25: number },
-            [string, number | null, number | null, string | null, string | null, number]
-          >(
+          .query<Ranked & { bm25: number }, [string, string | null, string | null, number]>(
             `SELECT ${MEMORY_COLUMNS}, m.project_id AS projectId, bm25(memories_fts, 4.0, 1.0, 2.0, 0.0) AS bm25
                FROM memories_fts CROSS JOIN memories m ON m.id = memories_fts.rowid
-              WHERE memories_fts MATCH ? AND (? IS NULL OR m.project_id = ?) AND m.status = 'active'
+              WHERE memories_fts MATCH ? AND ${where} AND m.status = 'active'
                 AND (? IS NULL OR m.kind = ?)
               ORDER BY bm25 LIMIT ?`,
           )
           .all(
-            projectId === null ? `{title body terms} : (${match})` : inProject(match, projectId),
-            projectId,
-            projectId,
+            projects === null ? `{title body terms} : (${match})` : inProjects(match, projects),
             kind,
             kind,
             SEARCH_POOL,
@@ -137,7 +228,7 @@ export function rankMemories(
   const lexical = new Map(found.map((row) => [row.id, row]));
   const getRow = db.query<Ranked, [number]>(
     `SELECT ${MEMORY_COLUMNS}, m.project_id AS projectId FROM memories m
-      WHERE m.id = ? AND m.status = 'active'`,
+      WHERE m.id = ? AND m.status = 'active' AND ${where}`,
   );
   const pool: Ranked[] = [...found];
   for (const hit of meaning) {
@@ -183,19 +274,18 @@ function recordReads(db: Db, projectId: number, ids: number[], now: number): voi
 export function getMemories(context: ToolContext, args: { ids: number[] }): string {
   const { db, projectId, now } = context;
   const ids = [...new Set(args.ids)].slice(0, MAX_IDS);
-  const find = db.query<
-    MemoryRow & { supersededBy: number | null; projectId: number },
-    [number, number | null, number | null]
-  >(
+  // Ids from a search: this project's and its linked projects'.
+  const scope = searchScope(context) as Scope;
+  const find = db.query<MemoryRow & { supersededBy: number | null; projectId: number }, [number]>(
     `SELECT ${MEMORY_COLUMNS}, m.superseded_by AS supersededBy, m.project_id AS projectId
-       FROM memories m WHERE m.id = ? AND (? IS NULL OR m.project_id = ?)`,
+       FROM memories m WHERE m.id = ? AND ${inScope(scope)}`,
   );
-  const names = projectId === null ? projectNames(db) : null;
+  const names = labelled(context, scope) ? projectNames(db) : null;
 
   const parts: string[] = [];
   const missing: number[] = [];
   for (const id of ids) {
-    const row = find.get(id, projectId, projectId);
+    const row = find.get(id);
     if (row === null) {
       missing.push(id);
       continue;
@@ -204,8 +294,11 @@ export function getMemories(context: ToolContext, args: { ids: number[] }): stri
       now,
       id,
     ]);
+    const yours = scope.rules?.ids.includes(row.id) ?? false;
+    const named = !yours && names !== null && (projectId === null || row.projectId !== projectId);
     const note =
-      (names ? `[${names.get(row.projectId) ?? "?"}] ` : "") + renderNote(toNote(db, row));
+      (named ? `[${names.get(row.projectId) ?? "?"}] ` : "") +
+      renderNote(yours ? { ...toNote(db, row), origin: "you" } : toNote(db, row));
     parts.push(row.supersededBy === null ? note : `${note}\n  (replaced by #${row.supersededBy})`);
   }
   if (missing.length > 0) {

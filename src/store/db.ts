@@ -8,6 +8,7 @@ import { dropHostContext } from "./migrations/0003_host_context.ts";
 import history from "./migrations/0004_history.sql" with { type: "text" };
 import moments from "./migrations/0005_moments.sql" with { type: "text" };
 import vectors from "./migrations/0006_vectors.sql" with { type: "text" };
+import links from "./migrations/0007_links.sql" with { type: "text" };
 
 export type Db = Database;
 
@@ -27,6 +28,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 4, name: "history", sql: history },
   { version: 5, name: "moments", sql: moments },
   { version: 6, name: "vectors", sql: vectors },
+  { version: 7, name: "links", sql: links },
 ];
 export const LATEST_VERSION = MIGRATIONS.length;
 

@@ -4,8 +4,8 @@
 // on a grid with an 8px column gap. With the detail dock open, the narrow column set.
 import { computed, nextTick, reactive, ref, watch, watchEffect } from "vue";
 import { KINDS, type Kind, type MemoryItem } from "../api";
-import { day, IMPORTANCE_LABEL, KIND_TONE } from "../format";
-import { loadList, PAGE, project, select, state } from "../viewer";
+import { day, IMPORTANCE_LABEL, KIND_TONE, projectTone } from "../format";
+import { linked, loadList, PAGE, project, select, state } from "../viewer";
 import Empty from "./Empty.vue";
 import Importance from "./Importance.vue";
 
@@ -106,6 +106,20 @@ const groupMenu = computed(() => [
     },
   })),
 ]);
+// This project alone, or with the projects linked to it (the default once there are any).
+function setScope(scope: "linked" | "project") {
+  state.scope = scope;
+  void loadList();
+}
+const scopeMenu = computed(() => [
+  [
+    { label: project.value ? `This project · ${project.value.name}` : "This project", type: "checkbox" as const, checked: state.scope === "project", onUpdateChecked: () => setScope("project") },
+    { label: `With linked · ${linked.value.map((l) => l.name).join(", ")}`, type: "checkbox" as const, checked: state.scope === "linked", onUpdateChecked: () => setScope("linked") },
+  ],
+]);
+const withLinked = computed(() => state.scope === "linked" && linked.value.length > 0);
+/** A row from a linked project names it. */
+const origin = (m: MemoryItem) => (m.projectId === state.projectId ? null : (state.projects.find((p) => p.id === m.projectId)?.name ?? "linked"));
 const filtered = computed(() => Boolean(state.q || state.kind || state.minImportance > 1 || state.status !== "active"));
 </script>
 
@@ -114,6 +128,9 @@ const filtered = computed(() => Boolean(state.q || state.kind || state.minImport
   <div class="flex h-10 flex-none items-center gap-2 px-4">
     <UDropdownMenu :items="groupMenu" :content="{ align: 'start' }">
       <button type="button" class="wz-pill group"><UIcon name="i-lucide-rows-3" class="size-3.5" />Group: {{ state.q ? "None" : GROUP_LABEL[groupBy] }}</button>
+    </UDropdownMenu>
+    <UDropdownMenu v-if="linked.length" :items="scopeMenu" :content="{ align: 'start' }">
+      <button type="button" class="wz-pill" :aria-pressed="withLinked">Projects: <b class="font-semibold text-(--ink)">{{ withLinked ? `This + ${linked.length} linked` : "This one" }}</b><UIcon name="i-lucide-chevron-down" class="size-3" /></button>
     </UDropdownMenu>
     <button type="button" class="wz-pill" :aria-pressed="important" @click="important = !important">Important and up</button>
     <button type="button" class="wz-pill" :aria-pressed="archived" @click="archived = !archived">Archived<template v-if="project?.archived"> · {{ project.archived.toLocaleString() }}</template></button>
@@ -167,6 +184,7 @@ const filtered = computed(() => Boolean(state.q || state.kind || state.minImport
               <span role="cell" class="flex min-w-0 items-center gap-2">
                 <span class="wz-ring" :style="{ color: KIND_TONE[m.kind].fg }" role="img" :aria-label="m.kind" />
                 <span class="min-w-0 flex-initial truncate text-[13px] leading-[18px]" :class="m.status === 'superseded' ? 'text-(--ink-muted) line-through' : 'text-(--ink)'">{{ m.title }}</span>
+                <span v-if="origin(m)" class="inline-flex h-5 max-w-[140px] min-w-0 flex-none items-center rounded px-1.5 text-[11px] leading-[14px] font-semibold whitespace-nowrap" :style="{ background: projectTone(origin(m)!).bg, color: projectTone(origin(m)!).fg }" :title="`From ${origin(m)}, a linked project`"><span class="truncate">{{ origin(m) }}</span></span>
                 <span v-if="m.stale" class="wz-status square flex-none" :style="{ background: 'var(--warn-soft)', color: 'var(--warn)' }">Stale</span>
                 <span v-if="m.status === 'archived'" class="wz-status flex-none" :style="{ background: 'var(--paper-sunken)', color: 'var(--ink-muted)' }">Archived</span>
               </span>

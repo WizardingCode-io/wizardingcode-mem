@@ -6,6 +6,9 @@ import {
   distillQuestions,
   distillState,
   distillVerdict,
+  personalQuestions,
+  personalState,
+  personalVerdict,
 } from "./questions.ts";
 import type {
   ConsolidateInput,
@@ -13,6 +16,8 @@ import type {
   DistillInput,
   DistillVerdict,
   Judge,
+  PersonalInput,
+  PersonalVerdict,
 } from "./types.ts";
 
 export interface TypeSafeJudgeOptions {
@@ -62,6 +67,12 @@ export class TypeSafeJudge implements Judge {
       questions: consolidateQuestions(input),
     });
     return consolidateVerdict(input, answers);
+  }
+
+  /** One request per proposed rule, in the background, never on a hook path. */
+  async personal(input: PersonalInput): Promise<PersonalVerdict> {
+    const answers = await this.ask({ state: personalState(input), questions: personalQuestions() });
+    return personalVerdict(answers);
   }
 
   private async ask(request: SystemOneRequest): Promise<Record<string, Answer>> {

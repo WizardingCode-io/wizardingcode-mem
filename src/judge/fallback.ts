@@ -1,6 +1,9 @@
 import type { Breaker } from "./breaker.ts";
 import { TypeSafeError } from "./client.ts";
-import type { Judge } from "./types.ts";
+import type { Judge, PersonalVerdict } from "./types.ts";
+
+/** No judge could say whether a rule is personal: it stands, and the author decides. */
+const UNJUDGED: PersonalVerdict = { personal: true, confidence: 0 };
 
 export interface FallbackOptions {
   onError?: (error: unknown) => void;
@@ -36,7 +39,7 @@ export function withFallback(
     }
   };
 
-  return {
+  const judge: Judge = {
     name: "fallback",
     version: `${primary.version}+${fallback.version}`,
     versions: { ...fallback.versions, ...primary.versions },
@@ -51,4 +54,14 @@ export function withFallback(
         () => fallback.consolidate(input),
       ),
   };
+  const personal = primary.personal?.bind(primary);
+  if (personal) {
+    const other = fallback.personal?.bind(fallback);
+    judge.personal = (input) =>
+      attempt(
+        () => personal(input),
+        async () => (other ? other(input) : UNJUDGED),
+      );
+  }
+  return judge;
 }

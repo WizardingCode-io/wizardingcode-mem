@@ -11,6 +11,8 @@ export interface Note {
   /** Paths the memory is about, changed files first. */
   files: string[];
   stale: boolean;
+  /** Where a note from outside the current project comes from: "you" or "from <project>". */
+  origin?: string;
 }
 
 // Memories are shown as dated notes with their provenance, never as instructions:
@@ -37,7 +39,8 @@ export const inert = (text: string) => text.replace(OWN_TAG, "‹$1›");
 export function renderHeading(note: Note): string {
   const about = [note.kind, day(note.createdAt)];
   if (note.files.length > 0) about.push(note.files.slice(0, MAX_FILES_SHOWN).join(", "));
-  return inert(`#${note.id} [${about.join(" · ")}] ${note.title}`);
+  const origin = note.origin === undefined ? "" : ` (${note.origin})`;
+  return inert(`#${note.id} [${about.join(" · ")}] ${note.title}${origin}`);
 }
 
 const heading = (note: Note) => `- ${renderHeading(note)}`;

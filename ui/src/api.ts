@@ -1,8 +1,10 @@
 // The viewer's client for /api. The token comes from the URL the binary opened.
 import type { HistoryOffer, HistoryProgress, HistoryStatus, PastSearch } from "./history";
+import type { LinkKind, LinksList, LinksOffer, LinkView, RulesList } from "./links";
 import type { SemanticStatus } from "./semantic";
 
 export type { SemanticStatus } from "./semantic";
+export type { AcceptedRule, LinkKind, LinksList, LinksOffer, LinkView, ProposedRule, RulesList } from "./links";
 export type { HistoryOffer, HistoryProgress, HistoryQueue, HistoryRun, HistoryRunState, HistoryStatus, PastSearch, PastTurn } from "./history";
 
 export const TOKEN = new URLSearchParams(location.search).get("token") ?? "";
@@ -189,8 +191,11 @@ export const api = {
     call<TurnItem[]>(`/api/turns?project=${projectId}&limit=${limit}`),
   turn: (id: number) => call<TurnDetail>(`/api/turns/${id}`),
   stats: (projectId: number) => call<ProjectStats>(`/api/projects/${projectId}/stats`),
-  search: (q: string, limit = 20) =>
-    call<SearchHit[]>(`/api/search?q=${encodeURIComponent(q)}&limit=${limit}`),
+  /** With a project: that project and the ones linked to it; without, every project. */
+  search: (q: string, limit = 20, projectId: number | null = null) =>
+    call<SearchHit[]>(
+      `/api/search?q=${encodeURIComponent(q)}&limit=${limit}${projectId === null ? "" : `&project=${projectId}`}`,
+    ),
   /** This tab is here: the server keeps running and opens no second tab. */
   ping: () =>
     fetch("/api/ping", { method: "POST", headers: { Authorization: `Bearer ${TOKEN}` } }).catch(
@@ -255,6 +260,21 @@ export const api = {
   },
   restoreImports: () => call<{ restored: number }>("/api/history/restore-imports", { method: "POST", body: "{}" }),
   dismissHistoryOffer: () => call<{ dismissed: true }>("/api/history/offer/dismiss", { method: "POST", body: "{}" }),
+  links: () => call<LinksList>("/api/links"),
+  /** Links two projects by hand: confirmed at once. */
+  link: (from: number, to: number, kind: LinkKind) =>
+    call<LinkView>("/api/links", { method: "POST", body: JSON.stringify({ from, to, kind }) }),
+  /** Confirm or reject a suggestion; unlink a confirmed link. */
+  decideLink: (id: number, change: "confirm" | "reject" | "unlink") =>
+    call<LinkView>(`/api/links/${id}/${change}`, { method: "POST", body: "{}" }),
+  linksOffer: () => call<LinksOffer>("/api/links/offer"),
+  dismissLinksOffer: () => call<{ dismissed: true }>("/api/links/offer/dismiss", { method: "POST", body: "{}" }),
+  rules: () => call<RulesList>("/api/rules"),
+  /** Make a proposal yours, or reject it. */
+  decideRule: (proposalId: number, change: "accept" | "reject") =>
+    call<{ userMemoryId: number } | { rejected: true }>(`/api/rules/${proposalId}/${change}`, { method: "POST", body: "{}" }),
+  /** Take back one of your rules: it is archived and the project copies return. */
+  undoRule: (memoryId: number) => call<{ undone: true }>(`/api/rules/${memoryId}/undo`, { method: "POST", body: "{}" }),
   semantic: () => call<SemanticStatus>("/api/semantic"),
   /** Downloads the model, then gives the memories their vectors; `started: false` when one is going. */
   semanticDownload: () => call<{ started: boolean }>("/api/semantic/download", { method: "POST", body: "{}" }),
