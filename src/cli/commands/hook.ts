@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { ADAPTERS } from "../../adapters/index.ts";
 import { backupDue } from "../../backup/schedule.ts";
 import type { HookEvent } from "../../core/types.ts";
+import { enabledModules } from "../../engine/modules.ts";
 import { historyDbPath } from "../../history/path.ts";
 import { handleHook } from "../../hooks/handle.ts";
 import { loadSettings } from "../../settings/settings.ts";
@@ -156,7 +157,8 @@ export async function run(argv: string[]): Promise<number> {
           );
         },
         spawnBackup: () => spawnDetached("backup"),
-        onError: (error) => logError(`hook ${agent} ${event} (lookup)`, error),
+        modules: () => enabledModules(loadSettings(process.env, defaultDataDir()).modules),
+        onError: (error, scope) => logError(`hook ${agent} ${event} (${scope ?? "lookup"})`, error),
       },
       adapter,
       input,

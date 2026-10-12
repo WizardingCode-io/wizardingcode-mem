@@ -18,7 +18,12 @@ const input = (moment: Moment = "prompt"): Omit<MomentInput, "budgetChars"> => (
 });
 
 /** A module that says `text` and remembers the budget it was given. */
-function says(id: string, share: number, text: string | null, budgets: number[] = []) {
+function says(
+  id: string,
+  share: EngineModule["share"],
+  text: string | null,
+  budgets: number[] = [],
+) {
   return {
     id,
     name: id,
@@ -141,5 +146,48 @@ describe("compose", () => {
 
   test("no modules, nothing to say", () => {
     expect(compose([], input())).toBeNull();
+  });
+  test("a module without contribute takes no share", () => {
+    const tools: EngineModule = { id: "tools-only", name: "Tools only", share: 0.5 };
+    const budgets: number[] = [];
+    compose([tools, says("b", 1, "x", budgets)], input("prompt"));
+    expect(budgets).toEqual([2400]);
+  });
+});
+
+describe("compose: the remainder", () => {
+  test("a remainder module alone gets the whole budget, and its text unchanged", () => {
+    const budgets: number[] = [];
+    const out = compose([says("memory", "remainder", " text\n", budgets)], input("session-start"));
+    expect(out).toBe(" text\n");
+    expect(budgets).toEqual([4200]);
+  });
+
+  test("the others' shares come off the top, wherever the remainder module stands", () => {
+    const memory: number[] = [];
+    const other: number[] = [];
+    const out = compose(
+      [says("memory", "remainder", "first", memory), says("other", 0.25, "second", other)],
+      input("prompt"),
+    );
+    expect(out).toBe("first\n\nsecond");
+    expect(other).toEqual([600]);
+    expect(memory).toEqual([1800]);
+  });
+
+  test("shares that take the whole budget leave the remainder nothing", () => {
+    const memory: number[] = [];
+    compose(
+      [says("memory", "remainder", "x", memory), says("a", 0.7, "y"), says("b", 0.7, "z")],
+      input("prompt"),
+    );
+    expect(memory).toEqual([0]);
+  });
+
+  test("a module without contribute leaves the remainder whole", () => {
+    const memory: number[] = [];
+    const tools: EngineModule = { id: "tools-only", name: "Tools only", share: 0.5 };
+    compose([says("memory", "remainder", "x", memory), tools], input("file-read"));
+    expect(memory).toEqual([1200]);
   });
 });

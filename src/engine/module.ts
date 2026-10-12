@@ -49,9 +49,16 @@ export interface ModuleView {
 export interface EngineModule {
   id: string;
   name: string;
-  /** The part of each moment's budget the module asks for, 0..1; the composer caps it. */
-  share: number;
-  /** May throw; the composer contains it. A contribution longer than the budget is dropped. */
+  /**
+   * The part of each moment's budget the module asks for, 0..1, capped by the composer; or
+   * "remainder": whatever the other modules leave (memory's, so that alone it keeps the
+   * whole budget). A module without `contribute` takes nothing.
+   */
+  share: number | "remainder";
+  /**
+   * Must fit `budgetChars`, measuring before it records anything as shown; may throw, and
+   * the composer contains it. A contribution longer than the budget is dropped as a safety net.
+   */
   contribute?(input: MomentInput): Contribution;
   tools?(context: ToolContext, mode: "project" | "global"): ModuleTool[];
   views?: ModuleView[];

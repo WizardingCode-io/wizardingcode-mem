@@ -5,7 +5,7 @@ import { resolveProject } from "../core/project.ts";
 import { type Redacted, redact } from "../core/redact.ts";
 import { compose } from "../engine/compose.ts";
 import type { EngineModule } from "../engine/module.ts";
-import { memory } from "../modules/memory/index.ts";
+import { enabledModules } from "../engine/modules.ts";
 import { failureQuery } from "../retrieve/failure.ts";
 import { type Db, withWrite } from "../store/db.ts";
 import { drainActive } from "../store/meta.ts";
@@ -34,14 +34,17 @@ export interface HookDeps {
   spawnBackup?: () => void;
   /** Indexes one finished session's transcript in the background; absent when there is no history index. */
   spawnHistoryIndex?: (transcriptPath: string, agent: string) => void;
-  /** Told about failures that were contained here rather than thrown. */
-  onError?: (error: unknown) => void;
+  /**
+   * The modules on, in the engine's order; asked only when a moment injects. Default: the
+   * built-in default, memory alone.
+   */
+  modules?: () => readonly EngineModule[];
+  /** Told about failures that were contained here rather than thrown; `scope` names the module when one failed. */
+  onError?: (error: unknown, scope?: string) => void;
 }
 
 /** No turn runs this long: one still open after it belongs to a session that died. */
 const ABANDONED_AFTER_MS = 12 * 3_600_000;
-/** The modules asked at each moment, in this order. */
-const MODULES: readonly EngineModule[] = [memory];
 export const PROMPT_MAX_CHARS = 8 * 1024;
 export const FINAL_TEXT_MAX_CHARS = 16 * 1024;
 
@@ -104,7 +107,9 @@ export function handleHook(deps: HookDeps, adapter: AgentAdapter, input: HookInp
     error: null,
     now,
   };
-  const onModuleError = (_module: string, error: unknown) => deps.onError?.(error);
+  const onModuleError = (module: string, error: unknown) =>
+    deps.onError?.(error, `module ${module}`);
+  const modules = () => deps.modules?.() ?? enabledModules(undefined);
 
   switch (input.event) {
     case "session-start": {
@@ -114,7 +119,7 @@ export function handleHook(deps: HookDeps, adapter: AgentAdapter, input: HookInp
       context = lookUp(() => {
         const wiped = input.source === "clear" || input.source === "compact";
         const epoch = wiped ? advanceEpoch(db, session.id) : session.contextEpoch;
-        return compose(MODULES, { ...moment, moment: "session-start", epoch }, onModuleError);
+        return compose(modules(), { ...moment, moment: "session-start", epoch }, onModuleError);
       });
       break;
     }
@@ -127,7 +132,7 @@ export function handleHook(deps: HookDeps, adapter: AgentAdapter, input: HookInp
       });
       if (!adapter.capabilities.promptInjection) break;
       context = lookUp(() =>
-        compose(MODULES, { ...moment, moment: "prompt", prompt }, onModuleError),
+        compose(modules(), { ...moment, moment: "prompt", prompt }, onModuleError),
       );
       break;
     }
@@ -140,7 +145,7 @@ export function handleHook(deps: HookDeps, adapter: AgentAdapter, input: HookInp
         const normalised = posix.normalize(file.replaceAll("\\", "/"));
         const [path] = relativeTo(rootsOf(input.cwd), [normalised]);
         if (path === undefined) return null;
-        return compose(MODULES, { ...moment, moment: "file-read", path }, onModuleError);
+        return compose(modules(), { ...moment, moment: "file-read", path }, onModuleError);
       });
       break;
     }
@@ -150,7 +155,7 @@ export function handleHook(deps: HookDeps, adapter: AgentAdapter, input: HookInp
       if (error === null || !adapter.capabilities.promptInjection) break;
       if (failureQuery(error) === "") break;
       context = lookUp(() =>
-        compose(MODULES, { ...moment, moment: "tool-failed", error }, onModuleError),
+        compose(modules(), { ...moment, moment: "tool-failed", error }, onModuleError),
       );
       break;
     }

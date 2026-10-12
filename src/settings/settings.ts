@@ -15,6 +15,7 @@ export const SETTING_KEYS = [
   "WIZARDINGCODE_MEM_HISTORY_DAYS",
   "WIZARDINGCODE_MEM_UI_AUTO_OPEN",
   "WIZARDINGCODE_MEM_STORE_DIR",
+  "WIZARDINGCODE_MODULES",
   "WIZARDINGCODE_MEM_BACKUP_TO",
   "WIZARDINGCODE_MEM_BACKUP_EVERY_HOURS",
   "WIZARDINGCODE_MEM_BACKUP_KEEP",
@@ -43,6 +44,8 @@ export interface Settings {
   uiAutoOpen: boolean;
   /** Where the database lives when it was moved away from the data directory. */
   storeDir: string | null;
+  /** The modules on, as the comma list it was given; null means the default (memory). */
+  modules: string | null;
   backup: {
     /** A folder, or `s3://bucket/prefix`. */
     to: string | null;
@@ -65,6 +68,7 @@ export const DEFAULTS = {
   uiAutoOpen: true,
   backupEveryHours: 24,
   backupKeep: 10,
+  modules: "memory",
 } as const;
 
 const RETENTION = { min: 7, max: 3650 };
@@ -124,6 +128,7 @@ export function loadSettings(env: Env = process.env, dataDir: string): Settings 
     ),
     uiAutoOpen: onOff(value("WIZARDINGCODE_MEM_UI_AUTO_OPEN"), DEFAULTS.uiAutoOpen),
     storeDir: value("WIZARDINGCODE_MEM_STORE_DIR"),
+    modules: value("WIZARDINGCODE_MODULES"),
     backup: {
       to: value("WIZARDINGCODE_MEM_BACKUP_TO"),
       everyHours: integer(
@@ -151,6 +156,13 @@ export type Validated =
 
 /** The absolute path test for both families of paths, whatever this machine is. */
 const absolutePath = (value: string) => isAbsolute(value) || win32.isAbsolute(value);
+const MODULE_ID = /^[a-z][a-z0-9-]*$/;
+/** A comma list of module ids, spaces around them removed and lower-cased. */
+const moduleList = (value: string) =>
+  value
+    .split(",")
+    .map((id) => id.trim().toLowerCase())
+    .join(",");
 const S3_URL = /^s3:\/\/[a-z0-9][a-z0-9.-]{1,61}[a-z0-9](\/[^\s]*)?$/i;
 
 /** How each key is checked; the message never repeats the value. */
@@ -168,6 +180,12 @@ const RULES: Record<SettingKey, (value: string) => string | null> = {
       : `a whole number of days from ${HISTORY_DAYS.min} to ${HISTORY_DAYS.max}`,
   WIZARDINGCODE_MEM_UI_AUTO_OPEN: (v) => (v === "on" || v === "off" ? null : "on or off"),
   WIZARDINGCODE_MEM_STORE_DIR: () => "the store directory is changed by moving the store, not here",
+  WIZARDINGCODE_MODULES: (v) =>
+    moduleList(v)
+      .split(",")
+      .every((id) => MODULE_ID.test(id))
+      ? null
+      : "a comma list of module ids, such as memory",
   WIZARDINGCODE_MEM_BACKUP_TO: (v) =>
     absolutePath(v) || S3_URL.test(v) ? null : "an absolute folder path or s3://bucket/prefix",
   WIZARDINGCODE_MEM_BACKUP_EVERY_HOURS: (v) =>
@@ -217,7 +235,7 @@ export function validatePatch(patch: Patch): Validated {
     }
     const problem = RULES[settingKey](text);
     if (problem !== null) errors[key] = problem;
-    else changes[settingKey] = text;
+    else changes[settingKey] = settingKey === "WIZARDINGCODE_MODULES" ? moduleList(text) : text;
   }
   return Object.keys(errors).length > 0 ? { ok: false, errors } : { ok: true, changes };
 }
@@ -255,6 +273,7 @@ export function publicSettings(env: Env = process.env, dataDir: string): PublicS
     WIZARDINGCODE_MEM_UI_AUTO_OPEN: settings.uiAutoOpen ? "on" : "off",
     WIZARDINGCODE_MEM_BACKUP_EVERY_HOURS: String(settings.backup.everyHours),
     WIZARDINGCODE_MEM_BACKUP_KEEP: String(settings.backup.keep),
+    WIZARDINGCODE_MODULES: DEFAULTS.modules,
   };
   const out = {} as PublicSettings;
   for (const key of SETTING_KEYS) {

@@ -1,11 +1,10 @@
+import { MOMENT_BUDGET } from "../engine/compose.ts";
 import type { Db } from "../store/db.ts";
 import { visibleProjects } from "../store/links.ts";
 import { logError } from "../util/log.ts";
 import { MEMORY_COLUMNS, type MemoryRow, prior, toNote } from "./notes.ts";
 import { type LastTurn, type Note, renderBrief, renderHeading } from "./render.ts";
 
-/** About 1,200 tokens, and well under the size at which hosts stop showing hook output. */
-const BUDGET_CHARS = 4200;
 const POOL = 200;
 /** The share of the brief the author's own rules may take. */
 export const USER_SHARE = 0.15;
@@ -32,7 +31,7 @@ export function sessionBrief(
     budgetChars?: number;
   },
 ): { text: string; notes: Note[] } {
-  const budgetChars = input.budgetChars ?? BUDGET_CHARS;
+  const budgetChars = input.budgetChars ?? MOMENT_BUDGET["session-start"];
   const last = db
     .query<LastTurn, [number]>(
       `SELECT prompt, final_text AS finalText, COALESCE(ended_at, started_at) AS endedAt, branch

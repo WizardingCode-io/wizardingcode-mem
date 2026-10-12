@@ -1,12 +1,11 @@
 import { redact } from "../core/redact.ts";
+import { MOMENT_BUDGET } from "../engine/compose.ts";
 import type { Db } from "../store/db.ts";
 import { retrieveForPrompt } from "./prompt.ts";
 import type { Note } from "./render.ts";
 
 const MAX_QUERY_CHARS = 2000;
 const MAX_NOTES = 2;
-/** About 350 tokens: a failure can repeat, so each one gets little room. */
-const BUDGET_CHARS = 1200;
 
 /**
  * The part of a failure worth searching for: redacted (a secret in an error must never
@@ -53,6 +52,6 @@ export function notesForFailure(
     now: input.now,
     kinds: ["fix", "gotcha"],
     maxNotes: MAX_NOTES,
-    budgetChars: input.budgetChars ?? BUDGET_CHARS,
+    budgetChars: input.budgetChars ?? MOMENT_BUDGET["tool-failed"],
   });
 }
