@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import pkg from "../../package.json" with { type: "json" };
 import { resolveProject } from "../../src/core/project.ts";
 import type { Redacted } from "../../src/core/redact.ts";
+import { loadModel } from "../../src/embed/model.ts";
+import { writeMemoryVector } from "../../src/embed/vectors.ts";
 import { type Db, openDb } from "../../src/store/db.ts";
 import { insertMemory } from "../../src/store/memories.ts";
 import { setMeta } from "../../src/store/meta.ts";
@@ -554,5 +556,54 @@ describe("wizardingcode-mem doctor, after shibaox-mem", () => {
   test("nothing of it left: no line at all", async () => {
     const result = await cli("doctor");
     expect(result.stdout).not.toContain("shibaox");
+  });
+});
+
+describe("doctor: semantic search", () => {
+  const placeModel = (content?: string) => {
+    mkdirSync(join(dataDir, "models"), { recursive: true });
+    const target = join(dataDir, "models", "potion-multilingual-128M.wcpack");
+    if (content === undefined)
+      copyFileSync(join(import.meta.dir, "../fixtures/embed/subset.wcpack"), target);
+    else writeFileSync(target, content);
+  };
+
+  test("without the model: ok, words only, and how to get it", async () => {
+    seed((db, projectId) => void memory(db, projectId, "one"));
+    const result = await cli("doctor");
+    expect(result.stdout).toMatch(/ok {2}\s+semantic search: not downloaded/);
+    expect(line(result.stdout, "semantic search")).toContain("wizardingcode-mem embed download");
+  });
+
+  test("with the model: ready, the memories with vectors, and the backfill when some lack one", async () => {
+    placeModel();
+    let first = 0;
+    seed((db, projectId) => {
+      first = memory(db, projectId, "one");
+      memory(db, projectId, "two");
+    });
+    seed((db) => {
+      const model = loadModel({ dataDir, env: {} });
+      writeMemoryVector(db, model, first, "one", "");
+    });
+    const result = await cli("doctor");
+    const found = line(result.stdout, "semantic search");
+    expect(found).toMatch(/ok {2}\s+semantic search: ready/);
+    expect(found).toContain("1 of 2 active memories");
+    expect(found).toContain("wizardingcode-mem embed backfill");
+  });
+
+  test("turned off: says so, and keeps the model", async () => {
+    placeModel();
+    const result = await cliWith({ WIZARDINGCODE_MEM_SEMANTIC: "off" }, "doctor");
+    expect(result.stdout).toMatch(/ok {2}\s+semantic search: turned off/);
+  });
+
+  test("a model that cannot be read is a warning, with the way out", async () => {
+    placeModel("not a pack");
+    const result = await cli("doctor");
+    const found = line(result.stdout, "semantic search");
+    expect(found).toMatch(/warn\s+semantic search: the model cannot be used/);
+    expect(found).toContain("embed delete");
   });
 });

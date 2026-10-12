@@ -18,7 +18,9 @@ import {
   writeSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
+import { openHistoryDb } from "../history/db.ts";
 import type { Db } from "../store/db.ts";
+import { logError } from "../util/log.ts";
 import { MODEL_FILE, modelPath } from "./model.ts";
 import { dropMemoryVectors } from "./vectors.ts";
 
@@ -224,8 +226,12 @@ export async function downloadModel(options: DownloadOptions): Promise<DownloadR
   }
 }
 
-/** Removes the pack and, given the database, every vector made with it. */
-export function deleteModel(dataDir: string, db?: Db): boolean {
+/**
+ * Removes the pack and, given the database, every vector made with it; given the store
+ * directory, the past turns' vectors in history.db too, when that index exists (it is never
+ * created here). The turns themselves stay: they are searchable by words.
+ */
+export function deleteModel(dataDir: string, db?: Db, storeDir?: string): boolean {
   try {
     unlinkSync(modelPath(dataDir));
   } catch (error) {
@@ -234,5 +240,25 @@ export function deleteModel(dataDir: string, db?: Db): boolean {
   // The vectors go with the model: they mean nothing without it, and a different model
   // downloaded later would ignore them anyway.
   if (db !== undefined) dropMemoryVectors(db);
+  if (storeDir !== undefined) dropTurnVectors(storeDir);
   return true;
+}
+
+function dropTurnVectors(storeDir: string): void {
+  let hdb: ReturnType<typeof openHistoryDb> = null;
+  try {
+    hdb = openHistoryDb(storeDir, { create: false, write: true, busyTimeoutMs: 5000 });
+    if (hdb === null) return;
+    const there = hdb
+      .query<{ n: number }, []>(
+        "SELECT count(*) AS n FROM sqlite_master WHERE type = 'table' AND name = 'turn_vectors'",
+      )
+      .get();
+    if ((there?.n ?? 0) > 0) hdb.run("DELETE FROM turn_vectors");
+  } catch (error) {
+    // Left behind, they are ignored: search reads only vectors of a model that is present.
+    logError("model delete", error);
+  } finally {
+    hdb?.close();
+  }
 }

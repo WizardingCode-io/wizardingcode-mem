@@ -131,17 +131,20 @@ export function loadModel(options: {
 type ModelState = { present: boolean; bytes: number; enabled: boolean; reason: string | null };
 
 /** Never throws: a failure is reported as the reason. */
-export function modelState(dataDir: string): ModelState {
+export function modelState(
+  dataDir: string,
+  env: Record<string, string | undefined> = process.env,
+): ModelState {
   try {
-    return stateOf(dataDir);
+    return stateOf(dataDir, env);
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     return { present: false, bytes: 0, enabled: false, reason };
   }
 }
 
-function stateOf(dataDir: string): ModelState {
-  const enabled = loadSettings(process.env, dataDir).semantic === "on";
+function stateOf(dataDir: string, env: Record<string, string | undefined>): ModelState {
+  const enabled = loadSettings(env, dataDir).semantic === "on";
   const path = modelPath(dataDir);
   const signature = statOf(path);
   if (!signature) return { present: false, bytes: 0, enabled, reason: null };

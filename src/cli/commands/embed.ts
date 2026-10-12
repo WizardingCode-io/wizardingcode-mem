@@ -2,15 +2,18 @@ import { unlinkSync } from "node:fs";
 import { runEmbedBackfill } from "../../embed/backfill.ts";
 import { deleteModel, downloadModel } from "../../embed/download.ts";
 import { loadModel, modelState } from "../../embed/model.ts";
+import { DOWNLOAD_ERROR, PROGRESS_DONE, PROGRESS_TOTAL } from "../../embed/status.ts";
 import { openDb } from "../../store/db.ts";
-import { setMeta } from "../../store/meta.ts";
+import { claimLease, EMBED_DOWNLOAD_LEASE, releaseLease, setMeta } from "../../store/meta.ts";
 import { resolvePaths } from "../../util/paths.ts";
 import { EXIT_USAGE } from "../exit.ts";
 
 const USAGE =
-  "Usage: wizardingcode-mem embed <download | status | delete | backfill [--limit n]>\n";
-export const PROGRESS_DONE = "embed.download.done";
-export const PROGRESS_TOTAL = "embed.download.total";
+  "Usage: wizardingcode-mem embed <download [--backfill] | status | delete | backfill [--limit n]>\n";
+/** The download renews its lease at most this often, and holds it this long. */
+const LEASE_RENEW_MS = 10_000;
+// Longer than the download's own 60 s stall timeout, so a slow stretch does not lose it.
+const LEASE_MS = 120_000;
 
 const mb = (n: number) => `${(n / 1024 / 1024).toFixed(1)} MB`;
 
@@ -40,7 +43,7 @@ export async function run(argv: string[]): Promise<number> {
     }
     let removed: boolean;
     try {
-      removed = deleteModel(dataDir, db);
+      removed = deleteModel(dataDir, db, storeDir);
     } finally {
       db?.close();
     }
@@ -53,18 +56,47 @@ export async function run(argv: string[]): Promise<number> {
     process.stdout.write("embed: model removed\n");
     return 0;
   }
-  if (sub !== "download") {
+  const rest = argv.slice(1);
+  if (sub !== "download" || rest.some((arg) => arg !== "--backfill")) {
     process.stderr.write(USAGE);
     return EXIT_USAGE;
   }
+  const code = await download(dataDir, storeDir);
+  if (code === null) return 0;
+  if (code !== 0) return code;
+  // Asked by the viewer and the install: the memories already there get their vectors now.
+  if (rest.includes("--backfill")) return backfill([], dataDir, storeDir);
+  process.stdout.write(
+    "embed: memories saved before now get a vector with: wizardingcode-mem embed backfill\n",
+  );
+  return 0;
+}
+
+/** The exit code, or null when another download holds the lease. */
+async function download(dataDir: string, storeDir: string): Promise<number | null> {
   let db: ReturnType<typeof openDb> | undefined;
   try {
     db = openDb({ dataDir: storeDir, busyTimeoutMs: 250 });
   } catch {
     // Progress is a courtesy; the download does not need the database.
   }
+  const owner = `${process.pid}-${crypto.randomUUID()}`;
+  let renewedAt = Date.now();
   try {
-    db?.run("DELETE FROM meta WHERE key IN (?, ?)", [PROGRESS_DONE, PROGRESS_TOTAL]);
+    if (db && !claimLease(db, EMBED_DOWNLOAD_LEASE, owner, renewedAt, LEASE_MS)) {
+      process.stdout.write("embed: a download is already running\n");
+      db.close();
+      return null;
+    }
+  } catch {
+    // A busy database must not stop the download: it only loses the lease and the progress.
+  }
+  try {
+    db?.run("DELETE FROM meta WHERE key IN (?, ?, ?)", [
+      PROGRESS_DONE,
+      PROGRESS_TOTAL,
+      DOWNLOAD_ERROR,
+    ]);
   } catch {}
   let partPath: string | null = null;
   const dropPart = () => {
@@ -86,6 +118,11 @@ export async function run(argv: string[]): Promise<number> {
       if (db) {
         setMeta(db, PROGRESS_DONE, String(done));
         setMeta(db, PROGRESS_TOTAL, String(total));
+        const at = Date.now();
+        if (at - renewedAt >= LEASE_RENEW_MS) {
+          renewedAt = at;
+          claimLease(db, EMBED_DOWNLOAD_LEASE, owner, at, LEASE_MS);
+        }
       }
     } catch {}
   };
@@ -108,6 +145,9 @@ export async function run(argv: string[]): Promise<number> {
     });
     if (process.stdout.isTTY) process.stdout.write("\n");
     if (!out.ok) {
+      try {
+        if (db) setMeta(db, DOWNLOAD_ERROR, out.reason);
+      } catch {}
       process.stderr.write(
         `wizardingcode-mem embed: ${out.reason}. Nothing was installed; run it again to retry.\n`,
       );
@@ -121,6 +161,7 @@ export async function run(argv: string[]): Promise<number> {
     process.off("SIGTERM", sigterm);
     try {
       db?.run("DELETE FROM meta WHERE key IN (?, ?)", [PROGRESS_DONE, PROGRESS_TOTAL]);
+      if (db) releaseLease(db, EMBED_DOWNLOAD_LEASE, owner);
     } catch {}
     db?.close();
   }

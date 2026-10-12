@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveProject } from "../../src/core/project.ts";
@@ -9,9 +9,16 @@ import { deleteModel } from "../../src/embed/download.ts";
 import { cosine } from "../../src/embed/embed.ts";
 import { loadModel, type Model, modelPath } from "../../src/embed/model.ts";
 import { memoryVectors, vectorIndex, writeMemoryVector } from "../../src/embed/vectors.ts";
+import { historyDbPath, openHistoryDb } from "../../src/history/db.ts";
 import { type Db, openDb } from "../../src/store/db.ts";
 import { insertMemory, supersede } from "../../src/store/memories.ts";
-import { anyLeaseActive, claimLease, EMBED_LEASE, releaseLease } from "../../src/store/meta.ts";
+import {
+  anyLeaseActive,
+  claimLease,
+  EMBED_DOWNLOAD_LEASE,
+  EMBED_LEASE,
+  releaseLease,
+} from "../../src/store/meta.ts";
 import { setMemoryStatus, updateMemory } from "../../src/ui/api.ts";
 import { runCliWith } from "../helpers/cli.ts";
 
@@ -319,6 +326,50 @@ describe("embed backfill and delete commands", () => {
     const none = await embed("backfill");
     expect(none.exitCode).toBe(1);
     expect(none.stderr).toContain("embed download");
+  });
+
+  test("delete also drops the past turns' vectors, and never creates the history index", async () => {
+    const hdb = openHistoryDb(dataDir, { create: true }) as NonNullable<
+      ReturnType<typeof openHistoryDb>
+    >;
+    hdb.run(
+      "INSERT INTO files (path, agent, size, mtime, indexed_at) VALUES ('/t', 'codex', 1, 1, 1)",
+    );
+    hdb.run(
+      `INSERT INTO turns (id, path, agent, session_id, turn_id, project_id, project_name, cwd, started_at, ended_at, prompt, final_text)
+       VALUES (1, '/t', 'codex', 's', 't', NULL, 'p', '/', 1, 1, 'q', 'a')`,
+    );
+    hdb.run("INSERT INTO turn_vectors (turn_id, model, scale, vec) VALUES (1, 'm', 1, x'00')");
+    hdb.close();
+    expect((await embed("delete")).exitCode).toBe(0);
+    const after = openHistoryDb(dataDir, { create: false }) as NonNullable<
+      ReturnType<typeof openHistoryDb>
+    >;
+    expect(after.query("SELECT count(*) AS n FROM turn_vectors").get()).toEqual({ n: 0 });
+    expect(after.query("SELECT count(*) AS n FROM turns").get()).toEqual({ n: 1 });
+    after.close();
+    rmSync(historyDbPath(dataDir));
+    copyFileSync(fixture, modelPath(dataDir));
+    expect((await embed("delete")).exitCode).toBe(0);
+    expect(existsSync(historyDbPath(dataDir))).toBe(false);
+  });
+
+  test("an index made before turn vectors existed: delete still succeeds", () => {
+    const hdb = openHistoryDb(dataDir, { create: true }) as NonNullable<
+      ReturnType<typeof openHistoryDb>
+    >;
+    hdb.run("DROP TABLE turn_vectors");
+    hdb.close();
+    expect(deleteModel(dataDir, db, dataDir)).toBe(true);
+    expect(existsSync(modelPath(dataDir))).toBe(false);
+  });
+
+  test("a second download says so while one holds the download lease", async () => {
+    claimLease(db, EMBED_DOWNLOAD_LEASE, `${process.pid}-other`, Date.now(), 60_000);
+    const busy = await embed("download");
+    expect(busy.exitCode).toBe(0);
+    expect(busy.stdout).toContain("already running");
+    expect((await embed("download", "--bogus")).exitCode).toBe(64);
   });
 
   test("backfill says so when another run holds the lease", async () => {

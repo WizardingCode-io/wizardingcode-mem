@@ -24,6 +24,8 @@ export const DRAIN_LEASE = "drain.lease";
 export const BACKUP_LEASE = "backup.lease";
 export const HISTORY_LEASE = "history.lease";
 export const EMBED_LEASE = "embed.lease";
+/** Held by `embed download` while it fetches the model: one download at a time. */
+export const EMBED_DOWNLOAD_LEASE = "embed.download.lease";
 
 interface Lease {
   owner: string;
