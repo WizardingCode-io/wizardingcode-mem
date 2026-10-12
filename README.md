@@ -277,7 +277,7 @@ wizardingcode-mem embed delete                # remove the model and its vectors
 `install` asks once in a terminal (`--semantic` agrees in advance, `--no-semantic` skips the question), and the viewer's **Settings → Search** page downloads it with a progress bar, fills the vectors, turns it on or off and deletes it. `doctor` says how it stands.
 
 - **Where it is used:** `memory_search` and `history_search` (the agent's tools), the viewer's ⌘K search and its History view. **Never** to choose what is added to your agent's context: what the hooks inject is still chosen by words, files and importance alone.
-- **What it costs:** the 146 MB model in `~/.wizardingcode/mem/models`, and about 350 bytes per note in the database (vectors travel in backups, so a restore does not need a rebuild). A search across every project takes about 10 ms more.
+- **What it costs:** the 146 MB model in `~/.wizardingcode/mem/models`, and about 350 bytes per note in the database (vectors travel in backups, so a restore does not need a rebuild). A search across every project takes about 10 ms more in the viewer. The agent's `memory_search` pays more: the MCP server opens a connection per call and rebuilds the packed vectors each time, about 73 ms more per call on a store of 90,000 notes (ADR 0017).
 - **The only download, and nothing of yours goes out:** a fixed address, checked against a pinned checksum and size before it is used. The model is [potion-multilingual-128M](https://huggingface.co/minishlab/potion-multilingual-128M) by Minish Lab (MIT), repacked for this binary; no resident process, no generative model.
 - **Turn it off** from Settings or with `WIZARDINGCODE_MEM_SEMANTIC=off`; the model is kept until you delete it.
 

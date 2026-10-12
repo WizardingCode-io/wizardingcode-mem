@@ -119,8 +119,27 @@ describe("history by meaning", () => {
     pass(null);
     expect(turns()).toBe(3);
     expect(vectors()).toBe(0);
-    const words = searchHistory(hdb, { query: "mock database" });
-    expect(searchHistory(hdb, { query: "mock database", model: null })).toEqual(words);
+    // Pinned: without the model, history search ranks exactly as it did before vectors existed
+    // (bm25, then the newest), whether the model is left out or passed as null.
+    const SNAPSHOT: [string, string[]][] = [
+      ["never", [MOCK[0], HOOK[0]]],
+      ["never code", [HOOK[0], MOCK[0]]],
+      ["exit code tests", [HOOK[0], MOCK[0]]],
+      ["a real file", [MOCK[0]]],
+      ["cut", [REDACT[0]]],
+      ["mock database", [MOCK[0]]],
+    ];
+    for (const [query, prompts] of SNAPSHOT) {
+      for (const args of [{ query }, { query, model: null }]) {
+        expect(searchHistory(hdb, args).map((h) => h.prompt)).toEqual(prompts);
+      }
+    }
+    expect(searchHistory(hdb, { query: "never", limit: 1 }).map((h) => h.prompt)).toEqual([
+      MOCK[0],
+    ]);
+    expect(
+      searchHistory(hdb, { query: "never cut", projectName: "blog" }).map((h) => h.project),
+    ).toEqual(["blog"]);
     expect(searchHistory(hdb, { query: PARAPHRASE })).toEqual([]);
     expect(searchHistory(hdb, { query: PARAPHRASE, model: null })).toEqual([]);
     // The next pass with a model fills the turns already there, without touching the files.
