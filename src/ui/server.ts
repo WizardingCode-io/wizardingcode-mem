@@ -11,6 +11,8 @@ import { runChecks } from "../doctor/checks.ts";
 import { deleteModel } from "../embed/download.ts";
 import { loadModel } from "../embed/model.ts";
 import { semanticStatus } from "../embed/status.ts";
+import type { EngineModule } from "../engine/module.ts";
+import { BUILT_IN, enabledModules } from "../engine/modules.ts";
 import { doctorContext } from "../doctor/context.ts";
 import { replaceAllImports, restoreImports } from "../backfill/replace.ts";
 import { openHistoryDb } from "../history/db.ts";
@@ -87,6 +89,8 @@ export interface UiOptions {
   exclusive?: boolean;
   /** How a background run is started (`history import`, ...); tests record instead. */
   spawn?: (...args: string[]) => void;
+  /** The modules this binary has (`BUILT_IN`); tests add the fixture. */
+  modules?: readonly EngineModule[];
 }
 
 /** Thrown by an exclusive start that lost the race to another viewer. */
@@ -279,6 +283,14 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
       openedAt = at;
       open(pageUrl);
       return json({ opened: true });
+    }
+    // The modules on, read from the settings each time: the rail draws their views.
+    if (path === "/api/modules" && request.method === "GET") {
+      const on = enabledModules(
+        loadSettings(env, options.dataDir).modules,
+        options.modules ?? BUILT_IN,
+      );
+      return json(on.map(({ id, name, views }) => ({ id, name, views: views ?? [] })));
     }
     if (path === "/api/overview" && request.method === "GET") {
       return json({ version: pkg.version, dataDir: options.dataDir, storeDir, projects: listProjects(db) });

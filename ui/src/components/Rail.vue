@@ -1,19 +1,14 @@
 <script setup lang="ts">
 // The icon rail: 48px, 36×36 icon buttons (radius 8) with a tooltip to the right that names
-// them and their key. Top: fold the projects panel. Views. Bottom: theme, settings.
-import { sidebarOpen, type Tab, theme } from "../viewer";
+// them and their key. Top: fold the projects panel. The views of the modules that are on
+// (/api/modules; memory's are Memories, Turns, Overview, History, Across projects). Bottom:
+// theme, settings.
+import { rail, sidebarOpen, type Tab, theme } from "../viewer";
 
 defineProps<{ tab: Tab }>();
 const emit = defineEmits<{ go: [tab: Tab] }>();
-const views: { tab: Tab; label: string; icon: string; key: string }[] = [
-  { tab: "memories", label: "Memories", icon: "i-lucide-sticky-note", key: "1" },
-  { tab: "turns", label: "Turns", icon: "i-lucide-history", key: "2" },
-  { tab: "overview", label: "Overview", icon: "i-lucide-chart-column", key: "3" },
-  { tab: "history", label: "History", icon: "i-lucide-messages-square", key: "4" },
-  { tab: "projects", label: "Across projects", icon: "i-lucide-link-2", key: "6" },
-];
 /** Projects and You are one page: the rail lights its button on either. */
-const on = (view: Tab, tab: Tab) => view === tab || (view === "projects" && tab === "you");
+const on = (view: string, tab: Tab) => view === tab || (view === "projects" && tab === "you");
 const btn = (on: boolean) => [
   "flex size-9 items-center justify-center rounded-lg",
   on ? "bg-[#25211E] text-[#F4F1EC]" : "text-[#9A938B] hover:bg-[#1E1B18] hover:text-[#F4F1EC]",
@@ -29,8 +24,8 @@ const tip = { content: { side: "right" as const, sideOffset: 8 } };
       </button>
     </UTooltip>
     <span class="my-1 h-px w-6 bg-[#2B2724]" />
-    <UTooltip v-for="v in views" :key="v.tab" :text="v.label" :kbds="[v.key]" v-bind="tip">
-      <button type="button" :class="btn(on(v.tab, tab))" :aria-label="v.label" :aria-current="on(v.tab, tab) ? 'page' : undefined" @click="emit('go', v.tab)">
+    <UTooltip v-for="v in rail" :key="v.tab" :text="v.label" :kbds="v.key === '' ? [] : [v.key]" v-bind="tip">
+      <button type="button" :class="btn(on(v.tab, tab))" :aria-label="v.label" :aria-current="on(v.tab, tab) ? 'page' : undefined" @click="emit('go', v.tab as Tab)">
         <UIcon :name="v.icon" class="size-[18px]" />
       </button>
     </UTooltip>

@@ -3,6 +3,7 @@ import ui from "@nuxt/ui/vite";
 import vue from "@vitejs/plugin-vue";
 import { defineConfig } from "vite";
 import { viteSingleFile } from "vite-plugin-singlefile";
+import { MEMORY_VIEWS } from "../src/modules/memory/views.ts";
 
 // The viewer: Vue 3, Tailwind 4 and Nuxt UI, built into one HTML file that the binary
 // embeds and serves. In development, `bun run ui:dev` proxies /api and /assets to a
@@ -82,8 +83,10 @@ export default defineConfig({
       // The theme is written from the brand's tokens in app.css; nothing is generated here.
       dts: false,
       // Every icon the app and Nuxt UI use travels inside the page: the viewer must work
-      // with no network at all, so none is fetched from iconify's API at runtime.
-      icon: { clientBundle: { scan: true, sizeLimitKb: 512 } },
+      // with no network at all, so none is fetched from iconify's API at runtime. The rail's
+      // icons come from the modules (/api/modules), not from this source: each built-in
+      // module's views are listed here.
+      icon: { clientBundle: { scan: true, icons: MEMORY_VIEWS.map((view) => view.icon), sizeLimitKb: 512 } },
     }),
     viteSingleFile({ removeViteModuleLoader: true }),
   ],

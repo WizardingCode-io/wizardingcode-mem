@@ -1,5 +1,5 @@
 import { redact } from "../core/redact.ts";
-import { MOMENT_BUDGET } from "../engine/compose.ts";
+import { MOMENT_BUDGET } from "../engine/budget.ts";
 import type { Db } from "../store/db.ts";
 import { retrieveForPrompt } from "./prompt.ts";
 import type { Note } from "./render.ts";

@@ -1,4 +1,4 @@
-import { MOMENT_BUDGET } from "../engine/compose.ts";
+import { MOMENT_BUDGET } from "../engine/budget.ts";
 import type { Db } from "../store/db.ts";
 import { visibleProjects } from "../store/links.ts";
 import { logError } from "../util/log.ts";

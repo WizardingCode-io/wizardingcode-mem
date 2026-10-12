@@ -1,20 +1,5 @@
-import type { EngineModule, Moment, MomentInput } from "./module.ts";
-
-/**
- * Characters each moment may add to the agent's context, shared by every module. These
- * are the budgets memory had for each moment before there were modules, and its
- * retrieval's defaults.
- */
-export const MOMENT_BUDGET: Readonly<Record<Moment, number>> = {
-  /** About 1,200 tokens, and well under the size at which hosts stop showing hook output. */
-  "session-start": 4200,
-  /** About 700 tokens. */
-  prompt: 2400,
-  /** About 350 tokens: a file read is frequent, so each one gets little room. */
-  "file-read": 1200,
-  /** About 350 tokens: a failure can repeat, so each one gets little room. */
-  "tool-failed": 1200,
-};
+import { MOMENT_BUDGET } from "./budget.ts";
+import type { EngineModule, MomentInput } from "./module.ts";
 
 /**
  * One moment's context: each module in order, within its share of the budget, joined by a

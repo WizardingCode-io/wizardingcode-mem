@@ -1,4 +1,4 @@
-import { MOMENT_BUDGET } from "../engine/compose.ts";
+import { MOMENT_BUDGET } from "../engine/budget.ts";
 import type { Db } from "../store/db.ts";
 import { MEMORY_COLUMNS, type MemoryRow, prior, toNote } from "./notes.ts";
 import { notYetShown } from "./prompt.ts";

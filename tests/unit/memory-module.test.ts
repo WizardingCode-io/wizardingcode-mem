@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveProject } from "../../src/core/project.ts";
 import type { Redacted } from "../../src/core/redact.ts";
-import { MOMENT_BUDGET } from "../../src/engine/compose.ts";
+import { MOMENT_BUDGET } from "../../src/engine/budget.ts";
 import type { Moment, MomentInput } from "../../src/engine/module.ts";
 import { memory } from "../../src/modules/memory/index.ts";
 import { type Db, openDb } from "../../src/store/db.ts";

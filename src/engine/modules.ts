@@ -1,4 +1,5 @@
 import { memory } from "../modules/memory/index.ts";
+import { DEFAULTS } from "../settings/settings.ts";
 import { logError } from "../util/log.ts";
 import type { EngineModule } from "./module.ts";
 
@@ -8,8 +9,8 @@ import type { EngineModule } from "./module.ts";
 /** Every module shipped in this binary, in the engine's order. */
 export const BUILT_IN: readonly EngineModule[] = [memory];
 
-/** The modules on when the setting names none. */
-const DEFAULT_IDS = ["memory"];
+/** The modules on when the setting names none: the settings' own default. */
+const DEFAULT_IDS = DEFAULTS.modules.split(",");
 
 /** The seam for a later licence check: today every built-in module is allowed. */
 export function moduleAllowed(_id: string): boolean {

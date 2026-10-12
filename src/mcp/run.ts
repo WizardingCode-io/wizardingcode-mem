@@ -1,198 +1,40 @@
-import { resolveProject } from "../core/project.ts";
-import { loadModel, type Model } from "../embed/model.ts";
-import { openHistoryDb } from "../history/db.ts";
-import { historyReadFailure, renderHits, searchHistory } from "../history/search.ts";
-import { makeJudge } from "../judge/index.ts";
-import { openDb } from "../store/db.ts";
+import type { EngineModule, ModuleTool, ToolMode } from "../engine/module.ts";
 import { logError } from "../util/log.ts";
-import { resolvePaths } from "../util/paths.ts";
-import { globalGet, globalSave, globalSearch, listProjects } from "./global.ts";
-import { type LinksAction, projectLinksTool } from "./links-tool.ts";
-import { getMemories, saveMemory, searchMemories, type ToolContext } from "./tools.ts";
 
-// The tools, reachable from the MCP server and from `wizardingcode-mem tool` alike.
-
-export const TOOL_NAMES = ["memory_search", "memory_get", "memory_save", "history_search"] as const;
-/** Claude Desktop's chat has no project folder: there the tools span every project, plus a list of them. */
-export const GLOBAL_TOOL_NAMES = [...TOOL_NAMES, "memory_projects"] as const;
-/**
- * What the agent gets inside a project, through the MCP server or the `tool` bridge (OpenCode):
- * the tools, and linking projects by hand.
- */
-export const PROJECT_TOOL_NAMES = [...TOOL_NAMES, "project_links"] as const;
-export type ToolName = (typeof GLOBAL_TOOL_NAMES)[number] | "project_links";
-
-/** Tool argument schemas; zod is loaded here and nowhere a hook runs. */
-export async function toolSchemas(global = false) {
-  const { z } = await import("zod");
-  const { MEMORY_KINDS } = await import("../core/types.ts");
-  const kind = z.enum(MEMORY_KINDS);
-  const project = z.string().min(1).max(200);
-  return {
-    memory_search: z.object({
-      query: z
-        .string()
-        .describe("Words, symbols or file names. Empty lists the most important notes."),
-      kind: kind.optional(),
-      limit: z.number().int().min(1).max(25).optional(),
-      ...(global
-        ? {
-            project: project
-              .optional()
-              .describe("Only this project (its name); every project when left out."),
-          }
-        : {
-            project: project
-              .optional()
-              .describe("Only this project or one linked project (its name)."),
-          }),
-    }),
-    memory_get: z.object({ ids: z.array(z.number().int()).min(1).max(20) }),
-    memory_save: z.object({
-      text: z.string().min(1).describe("Self-contained; the first sentence becomes the title."),
-      kind,
-      importance: z.number().int().min(1).max(5).optional(),
-      ...(global
-        ? {
-            project: project
-              .optional()
-              .describe("The project this belongs to, by name; memory_projects lists them."),
-          }
-        : {
-            files: z
-              .array(z.string())
-              .max(10)
-              .optional()
-              .describe("Project-relative paths it is about."),
-          }),
-    }),
-    history_search: z.object({
-      query: z.string().min(1).max(500).describe("Words, symbols or file names."),
-      limit: z.number().int().min(1).max(25).optional(),
-      ...(global
-        ? {
-            project: project
-              .optional()
-              .describe("Only this project (its name); every project when left out."),
-          }
-        : {}),
-    }),
-    memory_projects: z.object({ limit: z.number().int().min(1).max(50).optional() }),
-    project_links: z.object({
-      action: z.enum(["list", "link", "unlink", "confirm", "reject"]),
-      project: project
-        .optional()
-        .describe("For link and unlink: the other project, by name or key."),
-      kind: z
-        .enum(["product", "uses"])
-        .optional()
-        .describe(
-          "For link: product (one product, both see each other) or uses (this project uses it, one way).",
-        ),
-      id: z
-        .number()
-        .int()
-        .optional()
-        .describe("For confirm and reject: a suggestion's id from list."),
-    }),
-  };
-}
-
-export const TOOL_DESCRIPTIONS: Record<(typeof PROJECT_TOOL_NAMES)[number], string> = {
-  memory_search:
-    "Search notes saved from earlier sessions in this project and its linked projects, by words and, when the optional model is installed, by meaning; returns one heading per note.",
-  memory_get: "Read saved notes in full, by the ids that memory_search returned.",
-  memory_save:
-    "Save something worth knowing in later sessions: a decision and its reason, a rule the user stated, a pitfall, a fix.",
-  history_search:
-    "Search what was said in this project's past agent sessions, word for word, including before wizardingcode-mem was installed. Use it when memory_search finds nothing and the user refers to an earlier conversation.",
-  project_links:
-    "List, link or unlink the projects whose notes this project reads (same product, or one it uses), and confirm or reject suggested links; only when the user asks.",
-};
-
-export const GLOBAL_TOOL_DESCRIPTIONS: Record<(typeof GLOBAL_TOOL_NAMES)[number], string> = {
-  memory_search:
-    "Search notes saved while working on any of the user's projects, by words and, when the optional model is installed, by meaning; each heading names its project.",
-  memory_get: "Read saved notes in full, by the ids that memory_search returned.",
-  memory_save:
-    "Save something worth knowing later, into the project it belongs to: a decision and its reason, a rule the user stated, a pitfall.",
-  history_search:
-    "Search what was said in any of the user's projects' past agent sessions, word for word, including before wizardingcode-mem was installed; each result names its project. Use it when memory_search finds nothing and the user refers to an earlier conversation.",
-  memory_projects:
-    "List the user's projects, most recently active first, to pick one to save into.",
-};
+// The tools an agent is offered, reachable from the MCP server and from `wizardingcode-mem
+// tool` alike: whatever the enabled modules offer, in module order.
 
 /**
- * How each tool is shown to people, and whether it only reads: hosts that ask before a
- * tool runs can tell a lookup from a write.
+ * Every enabled module's tools for this mode, in module order. A module whose tools fail to
+ * load offers none (told to `onError`); a name an earlier module already took is skipped.
  */
-export const TOOL_META: Record<
-  ToolName,
-  {
-    title: string;
-    annotations: {
-      readOnlyHint: boolean;
-      destructiveHint: boolean;
-      idempotentHint: boolean;
-      openWorldHint: boolean;
-    };
+export async function moduleTools(
+  modules: readonly EngineModule[],
+  mode: ToolMode,
+  onError: (moduleId: string, error: unknown) => void = (id, error) =>
+    logError(`tools (module ${id})`, error),
+): Promise<ModuleTool[]> {
+  const tools: ModuleTool[] = [];
+  const taken = new Set<string>();
+  for (const module of modules) {
+    let offered: ModuleTool[];
+    try {
+      offered = (await module.tools?.(mode)) ?? [];
+    } catch (error) {
+      onError(module.id, error);
+      continue;
+    }
+    for (const tool of offered) {
+      if (taken.has(tool.name)) {
+        onError(module.id, new Error(`tool ${tool.name} is already offered`));
+        continue;
+      }
+      taken.add(tool.name);
+      tools.push(tool);
+    }
   }
-> = {
-  memory_search: {
-    title: "Search memories",
-    annotations: {
-      readOnlyHint: true,
-      destructiveHint: false,
-      idempotentHint: true,
-      openWorldHint: false,
-    },
-  },
-  memory_get: {
-    title: "Read memories",
-    annotations: {
-      readOnlyHint: true,
-      destructiveHint: false,
-      idempotentHint: true,
-      openWorldHint: false,
-    },
-  },
-  history_search: {
-    title: "Search past conversations",
-    annotations: {
-      readOnlyHint: true,
-      destructiveHint: false,
-      idempotentHint: true,
-      openWorldHint: false,
-    },
-  },
-  memory_projects: {
-    title: "List projects",
-    annotations: {
-      readOnlyHint: true,
-      destructiveHint: false,
-      idempotentHint: true,
-      openWorldHint: false,
-    },
-  },
-  project_links: {
-    title: "Link projects",
-    annotations: {
-      readOnlyHint: false,
-      destructiveHint: false,
-      idempotentHint: false,
-      openWorldHint: false,
-    },
-  },
-  memory_save: {
-    title: "Save a memory",
-    annotations: {
-      readOnlyHint: false,
-      destructiveHint: false,
-      idempotentHint: false,
-      openWorldHint: false,
-    },
-  },
-};
+  return tools;
+}
 
 /** What the model is told about the memory when it has no project folder (Claude Desktop's chat). */
 export const GLOBAL_INSTRUCTIONS = [
@@ -201,124 +43,3 @@ export const GLOBAL_INSTRUCTIONS = [
   "When the user decides something, states a rule or learns a pitfall worth keeping for a project, save it with memory_save and name the project; memory_projects lists them. Do not save small talk or what is already obvious from the conversation.",
   "For something said in an earlier conversation that no note covers, history_search searches the past sessions themselves.",
 ].join(" ");
-
-const NO_HISTORY =
-  "No past conversations are indexed yet. The user can run: wizardingcode-mem history import";
-
-/** Searches the history index, if there is one; never creates it. */
-function searchPast(
-  storeDir: string,
-  model: Model | null,
-  args: { query: string; limit?: number; project?: string },
-  projectId?: number,
-): string {
-  let hdb: ReturnType<typeof openHistoryDb> = null;
-  try {
-    hdb = openHistoryDb(storeDir, { create: false, busyTimeoutMs: 2000 });
-    if (hdb === null) return NO_HISTORY;
-    const hits = searchHistory(hdb, {
-      query: args.query,
-      limit: args.limit,
-      projectId,
-      projectName: args.project,
-      model,
-    });
-    return hits.length === 0 ? "No past conversations match." : renderHits(hits);
-  } catch (error) {
-    logError("mcp history_search", error);
-    return historyReadFailure(error);
-  } finally {
-    hdb?.close();
-  }
-}
-
-/** One validated call in the global scope: every project, no folder. */
-export async function runGlobalTool(name: ToolName, args: unknown): Promise<string> {
-  const { dataDir, storeDir } = resolvePaths();
-  const db = openDb({ dataDir: storeDir, busyTimeoutMs: 2000 });
-  try {
-    const now = Date.now();
-    switch (name) {
-      case "memory_search":
-        return globalSearch(
-          db,
-          now,
-          args as Parameters<typeof globalSearch>[2],
-          loadModel({ dataDir }),
-        );
-      case "memory_get":
-        return globalGet(db, now, args as Parameters<typeof globalGet>[2]);
-      case "memory_save":
-        return await globalSave(
-          db,
-          makeJudge({ db, dataDir }),
-          now,
-          args as Parameters<typeof globalSave>[3],
-          loadModel({ dataDir }),
-        );
-      case "history_search":
-        return searchPast(
-          storeDir,
-          loadModel({ dataDir }),
-          args as Parameters<typeof searchPast>[2],
-        );
-      case "memory_projects":
-        return listProjects(db, now, args as Parameters<typeof listProjects>[2]);
-      case "project_links":
-        return "project_links answers only inside a project.";
-    }
-  } finally {
-    db.close();
-  }
-}
-
-/**
- * Runs one validated tool call against a freshly opened database, for the project at
- * `projectDir`. Throws on failure; callers decide how to report it.
- */
-export async function runTool(name: ToolName, args: unknown, projectDir: string): Promise<string> {
-  const { dataDir, storeDir } = resolvePaths();
-  const db = openDb({ dataDir: storeDir, busyTimeoutMs: 2000 });
-  try {
-    const now = Date.now();
-    const project = resolveProject(db, projectDir, now);
-    if (project.disabled) return "Memory is turned off for this project.";
-    const context: ToolContext = {
-      db,
-      judge: makeJudge({ db, dataDir }),
-      projectId: project.id,
-      root: project.root,
-      branch: project.branch,
-      now,
-    };
-    switch (name) {
-      case "memory_search":
-        // Loaded once per process (cached); without it, search is by words alone.
-        return searchMemories(
-          { ...context, model: loadModel({ dataDir }) },
-          args as Parameters<typeof searchMemories>[1],
-        );
-      case "memory_get":
-        return getMemories(context, args as Parameters<typeof getMemories>[1]);
-      case "memory_save":
-        // Cached per process: a get does not need it.
-        return await saveMemory(
-          { ...context, model: loadModel({ dataDir }) },
-          args as Parameters<typeof saveMemory>[1],
-        );
-      case "history_search":
-        return searchPast(
-          storeDir,
-          loadModel({ dataDir }),
-          { ...(args as { query: string; limit?: number }) },
-          project.id,
-        );
-      case "memory_projects":
-        return "memory_projects answers only without a project folder (wizardingcode-mem mcp --global).";
-      case "project_links":
-        return projectLinksTool(context, args as LinksAction);
-    }
-  } finally {
-    db.close();
-  }
-}

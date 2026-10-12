@@ -6,6 +6,7 @@ import { recordInjections } from "../../retrieve/notes.ts";
 import { retrieveForPrompt } from "../../retrieve/prompt.ts";
 import { inert, type Note, renderNotes } from "../../retrieve/render.ts";
 import { withWrite } from "../../store/db.ts";
+import { MEMORY_VIEWS } from "./views.ts";
 
 // Memory as a module: what earlier sessions learned, at each moment, recorded as shown so
 // that the same context is not told the same note twice.
@@ -113,4 +114,7 @@ export const memory: EngineModule = {
   // What the other modules leave: the whole budget while it is the only one.
   share: "remainder",
   contribute,
+  // Loaded only when a server or the bridge asks: the hooks never pay for zod or the tools.
+  tools: async (mode) => (await import("./tools.ts")).memoryTools(mode),
+  views: [...MEMORY_VIEWS],
 };

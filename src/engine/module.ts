@@ -1,9 +1,10 @@
-import type { ToolContext } from "../mcp/tools.ts";
+import type { ZodType } from "zod";
 import type { Db } from "../store/db.ts";
 
 // What a module is to the engine: something that may add context at each injection
-// moment, and later its own tools and views. The hooks ask every module through the
-// composer; none of them is called directly.
+// moment, the tools it offers the agent and the views it adds to the viewer. The hooks ask
+// every module through the composer, the MCP server and the `tool` bridge list the enabled
+// modules' tools, and the viewer draws their views; none of them is named directly.
 
 /** The hook events that may put context in front of the agent. */
 export type Moment = "session-start" | "prompt" | "file-read" | "tool-failed";
@@ -32,11 +33,34 @@ export interface MomentInput {
 /** Text already rendered in the module's own wrapper; null or "" contributes nothing. */
 export type Contribution = string | null;
 
+/**
+ * Inside a project, or with no project folder (`mcp --global`, Claude Desktop's chat):
+ * the tools offered in each are listed separately.
+ */
+export type ToolMode = "project" | "global";
+
+/** Where one call was made: the project's folder, or null in global mode. */
+export interface ToolCall {
+  projectDir: string | null;
+}
+
 export interface ModuleTool {
   name: string;
+  /** Sent to the model in every session: one sentence. */
   description: string;
-  inputSchema: unknown;
-  run(args: unknown): Promise<string> | string;
+  /** The arguments' schema; the caller validates against it before `run`. */
+  inputSchema: ZodType;
+  /** How the tool is shown to people. */
+  title?: string;
+  /** Whether it only reads: hosts that ask before a tool runs can tell a lookup from a write. */
+  annotations?: {
+    readOnlyHint: boolean;
+    destructiveHint: boolean;
+    idempotentHint: boolean;
+    openWorldHint: boolean;
+  };
+  /** Runs one validated call and answers in text; throws on failure. */
+  run(args: unknown, call: ToolCall): Promise<string> | string;
 }
 
 export interface ModuleView {
@@ -60,6 +84,11 @@ export interface EngineModule {
    * the composer contains it. A contribution longer than the budget is dropped as a safety net.
    */
   contribute?(input: MomentInput): Contribution;
-  tools?(context: ToolContext, mode: "project" | "global"): ModuleTool[];
+  /**
+   * The tools offered in this mode, in order; none when absent. Called once per server or
+   * bridge run, never on the hook path; a module loads what its tools need here.
+   */
+  tools?(mode: ToolMode): Promise<ModuleTool[]> | ModuleTool[];
+  /** The viewer's rail buttons for this module, in order. */
   views?: ModuleView[];
 }

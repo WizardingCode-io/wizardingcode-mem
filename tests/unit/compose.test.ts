@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { compose, MOMENT_BUDGET } from "../../src/engine/compose.ts";
+import { MOMENT_BUDGET } from "../../src/engine/budget.ts";
+import { compose } from "../../src/engine/compose.ts";
 import type { EngineModule, Moment, MomentInput } from "../../src/engine/module.ts";
 import type { Db } from "../../src/store/db.ts";
 

@@ -1,0 +1,412 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`MCP tool list with memory alone inside a project 1`] = `
+{
+  "tools": [
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true,
+      },
+      "description": "Search notes saved from earlier sessions in this project and its linked projects, by words and, when the optional model is installed, by meaning; returns one heading per note.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "kind": {
+            "enum": [
+              "decision",
+              "fix",
+              "gotcha",
+              "convention",
+              "change",
+              "discovery",
+            ],
+            "type": "string",
+          },
+          "limit": {
+            "maximum": 25,
+            "minimum": 1,
+            "type": "integer",
+          },
+          "project": {
+            "description": "Only this project or one linked project (its name).",
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string",
+          },
+          "query": {
+            "description": "Words, symbols or file names. Empty lists the most important notes.",
+            "type": "string",
+          },
+        },
+        "required": [
+          "query",
+        ],
+        "type": "object",
+      },
+      "name": "memory_search",
+      "title": "Search memories",
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true,
+      },
+      "description": "Read saved notes in full, by the ids that memory_search returned.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "ids": {
+            "items": {
+              "maximum": 9007199254740991,
+              "minimum": -9007199254740991,
+              "type": "integer",
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "type": "array",
+          },
+        },
+        "required": [
+          "ids",
+        ],
+        "type": "object",
+      },
+      "name": "memory_get",
+      "title": "Read memories",
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false,
+      },
+      "description": "Save something worth knowing in later sessions: a decision and its reason, a rule the user stated, a pitfall, a fix.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "files": {
+            "description": "Project-relative paths it is about.",
+            "items": {
+              "type": "string",
+            },
+            "maxItems": 10,
+            "type": "array",
+          },
+          "importance": {
+            "maximum": 5,
+            "minimum": 1,
+            "type": "integer",
+          },
+          "kind": {
+            "enum": [
+              "decision",
+              "fix",
+              "gotcha",
+              "convention",
+              "change",
+              "discovery",
+            ],
+            "type": "string",
+          },
+          "text": {
+            "description": "Self-contained; the first sentence becomes the title.",
+            "minLength": 1,
+            "type": "string",
+          },
+        },
+        "required": [
+          "text",
+          "kind",
+        ],
+        "type": "object",
+      },
+      "name": "memory_save",
+      "title": "Save a memory",
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true,
+      },
+      "description": "Search what was said in this project's past agent sessions, word for word, including before wizardingcode-mem was installed. Use it when memory_search finds nothing and the user refers to an earlier conversation.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "limit": {
+            "maximum": 25,
+            "minimum": 1,
+            "type": "integer",
+          },
+          "query": {
+            "description": "Words, symbols or file names.",
+            "maxLength": 500,
+            "minLength": 1,
+            "type": "string",
+          },
+        },
+        "required": [
+          "query",
+        ],
+        "type": "object",
+      },
+      "name": "history_search",
+      "title": "Search past conversations",
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false,
+      },
+      "description": "List, link or unlink the projects whose notes this project reads (same product, or one it uses), and confirm or reject suggested links; only when the user asks.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "action": {
+            "enum": [
+              "list",
+              "link",
+              "unlink",
+              "confirm",
+              "reject",
+            ],
+            "type": "string",
+          },
+          "id": {
+            "description": "For confirm and reject: a suggestion's id from list.",
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer",
+          },
+          "kind": {
+            "description": "For link: product (one product, both see each other) or uses (this project uses it, one way).",
+            "enum": [
+              "product",
+              "uses",
+            ],
+            "type": "string",
+          },
+          "project": {
+            "description": "For link and unlink: the other project, by name or key.",
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string",
+          },
+        },
+        "required": [
+          "action",
+        ],
+        "type": "object",
+      },
+      "name": "project_links",
+      "title": "Link projects",
+    },
+  ],
+}
+`;
+
+exports[`MCP tool list with memory alone with --global 1`] = `
+{
+  "tools": [
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true,
+      },
+      "description": "Search notes saved while working on any of the user's projects, by words and, when the optional model is installed, by meaning; each heading names its project.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "kind": {
+            "enum": [
+              "decision",
+              "fix",
+              "gotcha",
+              "convention",
+              "change",
+              "discovery",
+            ],
+            "type": "string",
+          },
+          "limit": {
+            "maximum": 25,
+            "minimum": 1,
+            "type": "integer",
+          },
+          "project": {
+            "description": "Only this project (its name); every project when left out.",
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string",
+          },
+          "query": {
+            "description": "Words, symbols or file names. Empty lists the most important notes.",
+            "type": "string",
+          },
+        },
+        "required": [
+          "query",
+        ],
+        "type": "object",
+      },
+      "name": "memory_search",
+      "title": "Search memories",
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true,
+      },
+      "description": "Read saved notes in full, by the ids that memory_search returned.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "ids": {
+            "items": {
+              "maximum": 9007199254740991,
+              "minimum": -9007199254740991,
+              "type": "integer",
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "type": "array",
+          },
+        },
+        "required": [
+          "ids",
+        ],
+        "type": "object",
+      },
+      "name": "memory_get",
+      "title": "Read memories",
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false,
+      },
+      "description": "Save something worth knowing later, into the project it belongs to: a decision and its reason, a rule the user stated, a pitfall.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "importance": {
+            "maximum": 5,
+            "minimum": 1,
+            "type": "integer",
+          },
+          "kind": {
+            "enum": [
+              "decision",
+              "fix",
+              "gotcha",
+              "convention",
+              "change",
+              "discovery",
+            ],
+            "type": "string",
+          },
+          "project": {
+            "description": "The project this belongs to, by name; memory_projects lists them.",
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string",
+          },
+          "text": {
+            "description": "Self-contained; the first sentence becomes the title.",
+            "minLength": 1,
+            "type": "string",
+          },
+        },
+        "required": [
+          "text",
+          "kind",
+        ],
+        "type": "object",
+      },
+      "name": "memory_save",
+      "title": "Save a memory",
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true,
+      },
+      "description": "Search what was said in any of the user's projects' past agent sessions, word for word, including before wizardingcode-mem was installed; each result names its project. Use it when memory_search finds nothing and the user refers to an earlier conversation.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "limit": {
+            "maximum": 25,
+            "minimum": 1,
+            "type": "integer",
+          },
+          "project": {
+            "description": "Only this project (its name); every project when left out.",
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string",
+          },
+          "query": {
+            "description": "Words, symbols or file names.",
+            "maxLength": 500,
+            "minLength": 1,
+            "type": "string",
+          },
+        },
+        "required": [
+          "query",
+        ],
+        "type": "object",
+      },
+      "name": "history_search",
+      "title": "Search past conversations",
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true,
+      },
+      "description": "List the user's projects, most recently active first, to pick one to save into.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "limit": {
+            "maximum": 50,
+            "minimum": 1,
+            "type": "integer",
+          },
+        },
+        "type": "object",
+      },
+      "name": "memory_projects",
+      "title": "List projects",
+    },
+  ],
+}
+`;
+
+exports[`the OpenCode bridge's names with memory alone an unknown name is refused with the names it accepts 1`] = `
+"wizardingcode-mem tool: unknown tool "nope"
+Usage: wizardingcode-mem tool <memory_search|memory_get|memory_save|history_search|project_links> --project <dir>  (JSON arguments on stdin)
+       wizardingcode-mem tool <memory_search|memory_get|memory_save|history_search|memory_projects> --global   (every project)
+"
+`;
