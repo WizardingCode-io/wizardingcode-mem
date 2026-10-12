@@ -93,3 +93,104 @@ export function memoryVectors(
     ),
   }));
 }
+
+/**
+ * Every active memory's vector of one model, packed for scoring: the int8 rows side by side,
+ * with each row's 1/‖q‖. Kept per connection and rebuilt when the database changed (another
+ * connection's commit moves `data_version`; this connection's writes move `total_changes()`),
+ * so a search reads no BLOB and copies nothing when nothing was written.
+ */
+export interface VectorIndex {
+  model: string;
+  dims: number;
+  ids: Int32Array;
+  projects: Int32Array;
+  kinds: string[];
+  /** 1/‖row‖ of the int8 row: the scale cancels out of the cosine. */
+  inverseNorms: Float32Array;
+  rows: Int8Array;
+}
+
+interface CachedIndex {
+  index: VectorIndex;
+  version: number;
+  changes: number;
+}
+
+const indexes = new WeakMap<Db, CachedIndex>();
+
+function stamp(db: Db): { version: number; changes: number } {
+  const version =
+    db.query<{ data_version: number }, []>("PRAGMA data_version").get()?.data_version ?? 0;
+  const changes = db.query<{ n: number }, []>("SELECT total_changes() AS n").get()?.n ?? 0;
+  return { version, changes };
+}
+
+export function vectorIndex(db: Db, model: Model): VectorIndex {
+  const now = stamp(db);
+  const cached = indexes.get(db);
+  if (
+    cached !== undefined &&
+    cached.index.model === model.id &&
+    cached.version === now.version &&
+    cached.changes === now.changes
+  ) {
+    return cached.index;
+  }
+  // Two plain scans merged by id: a join here costs twice as much as both together.
+  const vectors = db
+    .query<[number, Uint8Array], [string]>(
+      "SELECT memory_id, vec FROM memory_vectors WHERE model = ? AND length(vec) > 0 ORDER BY memory_id",
+    )
+    .values(model.id) as [number, Uint8Array][];
+  const active = db
+    .query<[number, number, string], []>(
+      "SELECT id, project_id, kind FROM memories WHERE status = 'active' ORDER BY id",
+    )
+    .values() as [number, number, string][];
+  const first = vectors[0];
+  const width = model.pack?.header?.dims ?? (first === undefined ? 0 : first[1].byteLength);
+  const capacity = Math.min(vectors.length, active.length);
+  const ids = new Int32Array(capacity);
+  const projects = new Int32Array(capacity);
+  const kinds = new Array<string>(capacity);
+  const inverseNorms = new Float32Array(capacity);
+  const rows = new Int8Array(capacity * width);
+  let n = 0;
+  for (let v = 0, m = 0; v < vectors.length && m < active.length; ) {
+    const [vectorId, vec] = vectors[v] as [number, Uint8Array];
+    const [memoryId, projectId, kind] = active[m] as [number, number, string];
+    if (vectorId < memoryId) v++;
+    else if (memoryId < vectorId) m++;
+    else {
+      v++;
+      m++;
+      if (vec.byteLength !== width) continue;
+      const q = new Int8Array(vec.buffer, vec.byteOffset, width);
+      const offset = n * width;
+      let sum = 0;
+      for (let i = 0; i < width; i++) {
+        const x = q[i] as number;
+        rows[offset + i] = x;
+        sum += x * x;
+      }
+      ids[n] = memoryId;
+      projects[n] = projectId;
+      kinds[n] = kind;
+      inverseNorms[n] = sum > 0 ? 1 / Math.sqrt(sum) : 0;
+      n++;
+    }
+  }
+  const index: VectorIndex = {
+    model: model.id,
+    dims: width,
+    ids: ids.subarray(0, n),
+    projects: projects.subarray(0, n),
+    kinds: kinds.slice(0, n),
+    inverseNorms: inverseNorms.subarray(0, n),
+    rows: rows.subarray(0, n * width),
+  };
+  // The stamp is read again: building it wrote nothing, but reading is cheap and exact.
+  indexes.set(db, { index, ...stamp(db) });
+  return index;
+}

@@ -5,9 +5,8 @@
  * (calibration in ADR 0017, scripts/embed/search-floor.ts).
  */
 
-import { cosine } from "../embed/embed.ts";
 import type { Model } from "../embed/model.ts";
-import { memoryVectors } from "../embed/vectors.ts";
+import { vectorIndex } from "../embed/vectors.ts";
 import type { Db } from "../store/db.ts";
 import { logError } from "../util/log.ts";
 
@@ -38,11 +37,23 @@ export function semanticCandidates(
     const q = model.embed(query);
     if (q === null) return [];
     const floor = filter.floor ?? SEMANTIC_FLOOR;
+    const index = vectorIndex(db, model);
+    const { dims, rows, ids, projects, kinds, inverseNorms } = index;
+    if (dims !== q.length) return [];
+    // The query is a unit vector, so the cosine is q·row / ‖row‖, computed on the int8 row
+    // itself: the row's scale cancels out, and nothing is copied.
+    let norm = 0;
+    for (let i = 0; i < dims; i++) norm += (q[i] as number) * (q[i] as number);
+    const inverseQuery = norm > 0 ? 1 / Math.sqrt(norm) : 0;
     const found: { id: number; score: number }[] = [];
-    const kinds = filter.kind ? [filter.kind] : undefined;
-    for (const row of memoryVectors(db, model, { projectId: filter.projectId, kinds })) {
-      const score = cosine(q, row.vec);
-      if (score >= floor) found.push({ id: row.id, score });
+    const project = filter.projectId;
+    const kind = filter.kind ?? null;
+    for (let r = 0, offset = 0; r < ids.length; r++, offset += dims) {
+      if (project !== null && projects[r] !== project) continue;
+      if (kind !== null && kinds[r] !== kind) continue;
+      const dot = dotInt8(q, rows, offset, dims);
+      const score = dot * (inverseNorms[r] as number) * inverseQuery;
+      if (score >= floor) found.push({ id: ids[r] as number, score });
     }
     return found.sort((a, b) => b.score - a.score || b.id - a.id).slice(0, filter.limit);
   } catch (error) {
@@ -52,6 +63,23 @@ export function semanticCandidates(
     }
     return [];
   }
+}
+
+/** q · rows[offset, offset + dims), four lanes at a time (the hot loop of every search). */
+function dotInt8(q: Float32Array, rows: Int8Array, offset: number, dims: number): number {
+  let a = 0;
+  let b = 0;
+  let c = 0;
+  let d = 0;
+  let i = 0;
+  for (; i + 3 < dims; i += 4) {
+    a += (q[i] as number) * (rows[offset + i] as number);
+    b += (q[i + 1] as number) * (rows[offset + i + 1] as number);
+    c += (q[i + 2] as number) * (rows[offset + i + 2] as number);
+    d += (q[i + 3] as number) * (rows[offset + i + 3] as number);
+  }
+  for (; i < dims; i++) a += (q[i] as number) * (rows[offset + i] as number);
+  return a + b + c + d;
 }
 
 /**

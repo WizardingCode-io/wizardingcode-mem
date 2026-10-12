@@ -136,7 +136,8 @@ export function rankMemories(
   // found a memory adds to its score; the prior ranks the whole pool.
   const lexical = new Map(found.map((row) => [row.id, row]));
   const getRow = db.query<Ranked, [number]>(
-    `SELECT ${MEMORY_COLUMNS}, m.project_id AS projectId FROM memories m WHERE m.id = ?`,
+    `SELECT ${MEMORY_COLUMNS}, m.project_id AS projectId FROM memories m
+      WHERE m.id = ? AND m.status = 'active'`,
   );
   const pool: Ranked[] = [...found];
   for (const hit of meaning) {

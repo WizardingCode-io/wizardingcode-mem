@@ -69,6 +69,8 @@ const ITEM_COLUMNS = `m.id, m.project_id AS projectId, m.kind, m.title, m.import
   m.use_count AS useCount, m.created_at AS createdAt, m.updated_at AS updatedAt`;
 const STATUSES = new Set(["active", "archived", "superseded", "all"]);
 const MAX_LIMIT = 200;
+/** How many memories found by words a list search fuses with those found by meaning. */
+const LIST_FUSION_WORDS = 500;
 
 type Row = Omit<MemoryItem, "files">;
 
@@ -124,6 +126,8 @@ export function listMemories(
           })
         : [];
     if (meaning.length > 0) {
+      // The best LIST_FUSION_WORDS by words are enough to fuse with: a page beyond them is
+      // never reached by a person scrolling a search.
       const lexical =
         words === null
           ? []
@@ -131,24 +135,28 @@ export function listMemories(
               .query<{ id: number }, (string | number | null)[]>(
                 `SELECT m.id FROM memories_fts CROSS JOIN memories m ON m.id = memories_fts.rowid
                   WHERE memories_fts MATCH ? AND ${where}
-                  ORDER BY bm25(memories_fts, 4.0, 1.0, 2.0, 0.0)`,
+                  ORDER BY bm25(memories_fts, 4.0, 1.0, 2.0, 0.0) LIMIT ?`,
               )
-              .all(inProject(words, options.projectId), ...params)
+              .all(inProject(words, options.projectId), ...params, LIST_FUSION_WORDS)
               .map((row) => row.id);
-      const getRow = db.query<Row, (string | number | null)[]>(
-        `SELECT ${ITEM_COLUMNS} FROM memories m WHERE m.id = ? AND ${where}`,
-      );
       // Found by meaning but outside the list's filters (importance) is dropped.
-      const rows = new Map<number, Row>();
-      for (const id of fuseRanks([lexical, meaning.map((hit) => hit.id)])) {
-        const row = getRow.get(id, ...params);
-        if (row !== null) rows.set(id, row);
-      }
-      const ordered = [...rows.values()];
-      return {
-        total: ordered.length,
-        items: attachFiles(db, ordered.slice(offset, offset + limit)),
-      };
+      const ids = meaning.map((hit) => hit.id);
+      const allowed = new Set(
+        db
+          .query<{ id: number }, (string | number | null)[]>(
+            `SELECT m.id FROM memories m
+              WHERE m.id IN (${ids.map(() => "?").join(", ")}) AND ${where}`,
+          )
+          .all(...ids, ...params)
+          .map((row) => row.id),
+      );
+      const fused = fuseRanks([lexical, ids.filter((id) => allowed.has(id))]);
+      const page = fused.slice(offset, offset + limit);
+      const getRow = db.query<Row, [number]>(
+        `SELECT ${ITEM_COLUMNS} FROM memories m WHERE m.id = ?`,
+      );
+      const rows = page.map((id) => getRow.get(id)).filter((row): row is Row => row !== null);
+      return { total: fused.length, items: attachFiles(db, rows) };
     }
     if (words === null) return { total: 0, items: [] };
     const match = inProject(words, options.projectId);

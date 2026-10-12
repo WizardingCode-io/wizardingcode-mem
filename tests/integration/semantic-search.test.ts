@@ -5,7 +5,9 @@ import { join } from "node:path";
 import { resolveProject } from "../../src/core/project.ts";
 import type { Redacted } from "../../src/core/redact.ts";
 import type { MemoryKind } from "../../src/core/types.ts";
+import { cosine } from "../../src/embed/embed.ts";
 import { loadModel, type Model, modelPath } from "../../src/embed/model.ts";
+import { memoryVectors } from "../../src/embed/vectors.ts";
 import { globalSearch } from "../../src/mcp/global.ts";
 import { searchMemories, type ToolContext } from "../../src/mcp/tools.ts";
 import { SEMANTIC_FLOOR, semanticCandidates } from "../../src/retrieve/semantic.ts";
@@ -14,6 +16,7 @@ import { insertMemory, supersede } from "../../src/store/memories.ts";
 import { listMemories, searchAll, setMemoryStatus } from "../../src/ui/api.ts";
 import { searchTerms } from "../../src/util/words.ts";
 import golden from "../golden/retrieval.json" with { type: "json" };
+import semantic from "../golden/semantic.json" with { type: "json" };
 
 // The subset pack holds every piece of the golden texts, so these vectors are the full
 // model's for them; a text outside the golden set is mostly unknown pieces to it.
@@ -147,6 +150,51 @@ describe("semanticCandidates", () => {
     const output = searchMemories(tool(projectId, model), { query: PARAPHRASE });
     expect(shownIds(output)).not.toContain(id("exit-code"));
     expect(shownIds(output)).not.toContain(replacement);
+  });
+
+  test("scoring on the stored int8 bytes ranks exactly as dequantising and cosine did", () => {
+    const queries = [
+      ...golden.relevant.map((item) => item.prompt),
+      ...golden.unrelated,
+      ...semantic.paraphrases.map((item) => item.prompt),
+      ...semantic.unrelated,
+    ];
+    for (const query of queries) {
+      const q = model.embed(query);
+      if (q === null) continue;
+      const before = memoryVectors(db, model, { projectId: null })
+        .map((row) => ({ id: row.id, score: cosine(q, row.vec) }))
+        .sort((a, b) => b.score - a.score || b.id - a.id);
+      const after = semanticCandidates(db, model, query, {
+        projectId: null,
+        limit: 1000,
+        floor: -1,
+      });
+      expect(after.map((hit) => hit.id)).toEqual(before.map((hit) => hit.id));
+      after.forEach((hit, i) => {
+        expect(Math.abs(hit.score - (before[i]?.score ?? 0))).toBeLessThan(1e-5);
+      });
+    }
+  });
+
+  test("the next search sees writes made since, on this connection or another", () => {
+    const first = semanticCandidates(db, model, PARAPHRASE, { projectId: otherId, limit: 50 });
+    expect(first).toEqual([]);
+    const added = add("exit-code", otherId);
+    expect(
+      semanticCandidates(db, model, PARAPHRASE, { projectId: otherId, limit: 50 }).map(
+        (hit) => hit.id,
+      ),
+    ).toEqual([added]);
+    const other = openDb({ dataDir: join(base, "data"), busyTimeoutMs: 2000 });
+    try {
+      other.run("UPDATE memories SET status = 'archived' WHERE id = ?", [added]);
+    } finally {
+      other.close();
+    }
+    expect(semanticCandidates(db, model, PARAPHRASE, { projectId: otherId, limit: 50 })).toEqual(
+      [],
+    );
   });
 
   test("an embed that throws finds nothing", () => {
