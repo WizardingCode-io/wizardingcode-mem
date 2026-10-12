@@ -70,6 +70,7 @@ describe("module migrations", () => {
       { module: "knowledge", version: 2 },
       { module: "knowledge", version: 3 },
       { module: "knowledge", version: 4 },
+      { module: "knowledge", version: 5 },
     ]);
     db.close();
   });
@@ -134,6 +135,7 @@ describe("module migrations", () => {
       { module: "knowledge", version: 2 },
       { module: "knowledge", version: 3 },
       { module: "knowledge", version: 4 },
+      { module: "knowledge", version: 5 },
     ]);
     expect(db.query("SELECT count(*) AS n FROM projects").get()).toEqual({ n: 1 });
     db.close();
@@ -188,6 +190,7 @@ describe("module migrations", () => {
       { module: "knowledge", version: 2 },
       { module: "knowledge", version: 3 },
       { module: "knowledge", version: 4 },
+      { module: "knowledge", version: 5 },
     ]);
     db.close();
   }, 60_000);

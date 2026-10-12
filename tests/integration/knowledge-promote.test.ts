@@ -28,7 +28,7 @@ import {
   PROMOTE_LEASE,
   proposePromotions,
   rejectPromotion,
-  SHOWN_CONTEXTS_SQL,
+  SHOWN_SQL,
 } from "../../src/modules/knowledge/promote.ts";
 import { sessionBrief } from "../../src/retrieve/brief.ts";
 import { notesForFailure } from "../../src/retrieve/failure.ts";
@@ -108,16 +108,45 @@ function memory(input: Input): number {
   });
 }
 
-/** Records the memory as shown this many more times, each in a context of its own. */
+const DAY = 86_400_000;
+let shownSessions = 0;
+
+/** A session of its own in the project, as the agents open them. */
+function newSession(): number {
+  shownSessions++;
+  return touchSession(db, {
+    agent: "claude-code",
+    agentSessionId: `shown-${shownSessions}`,
+    projectId,
+    cwd: repo,
+    branch: null,
+    now: NOW,
+  }).id;
+}
+
+/** Records one showing of the memory: by default on a prompt, in a session of its own, a day apart. */
+function showOnce(
+  memoryId: number,
+  options: { event?: string; session?: number; at?: number; context?: number } = {},
+): void {
+  epoch++;
+  const session = options.session ?? newSession();
+  db.run(
+    `INSERT INTO injections (session_id, context_epoch, memory_id, event, tokens, at)
+     VALUES (?, ?, ?, ?, 10, ?)`,
+    [
+      session,
+      options.context ?? 1000 + epoch,
+      memoryId,
+      options.event ?? "prompt",
+      options.at ?? NOW - DAY * shownSessions,
+    ],
+  );
+}
+
+/** Records the memory as shown this many more times, each on a prompt in a session of its own, a day apart. */
 function show(memoryId: number, times: number): void {
-  for (let i = 0; i < times; i++) {
-    epoch++;
-    db.run(
-      `INSERT INTO injections (session_id, context_epoch, memory_id, event, tokens, at)
-       VALUES (?, ?, ?, 'prompt', 10, ?)`,
-      [sessionId, 1000 + epoch, memoryId, NOW],
-    );
-  }
+  for (let i = 0; i < times; i++) showOnce(memoryId);
 }
 
 interface Row {
@@ -177,19 +206,15 @@ describe("which memories are proposed", () => {
     expect(filesIn()).toEqual([]);
   });
 
-  test("shown counts contexts: one context's heading, note and fetches count once", () => {
+  test("shown counts sessions: one session's heading, notes and fetches count once", () => {
     const once = memory({ title: "Webhooks are verified before parsing" });
-    epoch++;
-    for (const event of ["session-start", "prompt", "mcp", "mcp", "mcp"]) {
-      db.run(
-        `INSERT INTO injections (session_id, context_epoch, memory_id, event, tokens, at)
-         VALUES (?, ?, ?, ?, 10, ?)`,
-        [sessionId, 1000 + epoch, once, event, NOW],
-      );
+    const session = newSession();
+    for (const [i, event] of ["prompt", "mcp", "mcp", "file-read", "tool-failed"].entries()) {
+      showOnce(once, { event, session, context: 1 + i, at: NOW - 5 * DAY + i * DAY });
     }
-    show(once, 1);
+    showOnce(once);
     expect(propose().proposed).toBe(0);
-    show(once, 1);
+    showOnce(once);
     expect(propose().proposed).toBe(1);
   });
 
@@ -270,9 +295,9 @@ describe("which memories are proposed", () => {
     expect(listPromotions(db, projectId)).toEqual([]);
   });
 
-  test("the shown count reads an index, not every injection record (task 4 minor 3)", () => {
+  test("the shown count reads an index, not every injection record (task 4 minor 3, migration 5)", () => {
     const plan = db
-      .query<{ detail: string }, []>(`EXPLAIN QUERY PLAN ${SHOWN_CONTEXTS_SQL("1, 2, 3")}`)
+      .query<{ detail: string }, []>(`EXPLAIN QUERY PLAN ${SHOWN_SQL("1, 2, 3")}`)
       .all()
       .map((row) => row.detail)
       .join("\n");
@@ -315,6 +340,72 @@ describe("which memories are proposed", () => {
         createdAt: NOW,
       },
     ]);
+  });
+});
+
+describe("structural evidence: what counts as shown (final review I1, layer 1)", () => {
+  test("shown at session start in 5 sessions on 5 days: not proposed", () => {
+    const id = memory({ title: "Plan for this afternoon's refactor of the cart" });
+    for (let i = 0; i < 5; i++) showOnce(id, { event: "session-start", at: NOW - i * DAY });
+    expect(propose().proposed).toBe(0);
+  });
+
+  test("shown on prompts in 3 contexts of one session: not proposed", () => {
+    const id = memory({ title: "Use the outbox for the cart events" });
+    const session = newSession();
+    for (let i = 0; i < 3; i++) showOnce(id, { session, context: 1 + i, at: NOW - i * DAY });
+    expect(propose().proposed).toBe(0);
+  });
+
+  test("shown on prompts and fetches in 3 sessions over 2 days: proposed", () => {
+    const id = memory({ title: "Money is stored in integer cents" });
+    showOnce(id, { at: NOW - 2 * DAY });
+    showOnce(id, { event: "mcp", at: NOW - DAY });
+    showOnce(id, { event: "file-read", at: NOW });
+    expect(propose().proposed).toBe(1);
+  });
+
+  test("3 sessions within one day are not enough; a fourth a day later is (never lost)", () => {
+    const id = memory({ title: "Orders are never deleted, only cancelled" });
+    for (let i = 0; i < 3; i++) showOnce(id, { at: NOW + i * 3_600_000 });
+    expect(propose().proposed).toBe(0);
+    showOnce(id, { at: NOW + DAY });
+    expect(propose().proposed).toBe(1);
+  });
+
+  test("the author's own rule is proposed without any showing", () => {
+    const id = memory({ title: "Run the pinned bun before committing", kind: "convention" });
+    db.run("INSERT INTO user_memories (memory_id, proposal_id, created_at) VALUES (?, NULL, ?)", [
+      id,
+      NOW,
+    ]);
+    showOnce(id, { event: "session-start" });
+    expect(propose().proposed).toBe(1);
+  });
+
+  test("migration 5 replaces the contexts index with one that carries the event and the time", () => {
+    const names = db
+      .query<{ name: string }, []>(
+        "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'injections' ORDER BY name",
+      )
+      .all()
+      .map((row) => row.name);
+    expect(names).toContain("injections_memory_shown");
+    expect(names).not.toContain("injections_memory_contexts");
+  });
+
+  test("the index comes back at the next pass after a core rebuild dropped it (self-repair)", () => {
+    db.run("DROP INDEX injections_memory_shown");
+    const id = memory({ title: "Invoices are immutable once sent" });
+    show(id, 3);
+    expect(propose().proposed).toBe(1);
+    expect(
+      db
+        .query<{ n: number }, []>(
+          "SELECT count(*) AS n FROM sqlite_master WHERE type = 'index' AND name = 'injections_memory_shown'",
+        )
+        .get()?.n,
+    ).toBe(1);
   });
 });
 

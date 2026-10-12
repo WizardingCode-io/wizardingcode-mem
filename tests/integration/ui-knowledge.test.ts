@@ -239,7 +239,7 @@ describe("GET /api/knowledge/entries/:slug", () => {
 });
 
 describe("proposals", () => {
-  /** A decision shown in three contexts: proposed by the drain's pass. */
+  /** A decision asked for in three sessions over three days: proposed by the drain's pass. */
   function proposed(title: string): number {
     return withDb((db) => {
       const body = `${title}, because the review asked for it.`;
@@ -259,11 +259,20 @@ describe("proposals", () => {
         files: [],
         now: NOW,
       });
-      for (let epoch = 1; epoch <= 3; epoch++) {
+      // Asked for in three sessions, a day apart (what promotion counts as shown).
+      for (let day = 1; day <= 3; day++) {
+        const shownIn = touchSession(db, {
+          agent: "claude-code",
+          agentSessionId: `shown-${id}-${day}`,
+          projectId,
+          cwd: repo,
+          branch: null,
+          now: NOW,
+        }).id;
         db.run(
           `INSERT INTO injections (session_id, context_epoch, memory_id, event, tokens, at)
-           VALUES (?, ?, ?, 'prompt', 10, ?)`,
-          [sessionId, epoch, id, NOW],
+           VALUES (?, 1, ?, 'prompt', 10, ?)`,
+          [shownIn, id, NOW - day * 86_400_000],
         );
       }
       proposePromotions(db, { now: NOW, env });

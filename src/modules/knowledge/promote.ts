@@ -10,14 +10,14 @@ import { checkSlug, prepareFolder, renderEntry, today, writeNewEntry } from "./w
 
 // Memories worth keeping, proposed as knowledge (spec "Promotion from memory"). In the
 // background drain, bounded like the rule proposals (ADR 0018): a cursor, a lease and a
-// compare-and-set, so that a quiet drain costs two lookups. Exact rules, no judge: an
-// active decision or convention of importance 4 or more that agents were shown at least 3
-// times, or that is one of the author's own rules. Proposing writes nothing to a
-// repository; only accepting does, on the author's click, and only where knowledge is on.
+// compare-and-set, so that a quiet drain costs two lookups. Exact rules: an active decision
+// or convention of importance 4 or more that agents asked for or met in their work (never
+// the session-start brief) in at least 3 sessions spanning a day or more, or that is one of
+// the author's own rules. Proposing writes nothing to a repository; only accepting does, on
+// the author's click, and only where knowledge is on.
 
 const KINDS = "('decision', 'convention')";
 const MIN_IMPORTANCE = 4;
-const MIN_SHOWN = 3;
 /** Memories (new or changed) one pass looks at, at most. */
 const BATCH = 500;
 /** Injection records one pass reads, at most. */
@@ -93,13 +93,38 @@ export function projectRoot(db: Db, projectId: number): string | null {
 }
 
 /**
- * In how many contexts each memory (ids given as a list of integers) was shown. Contexts,
- * not rows: a heading at session start, the note on a prompt and any number of fetches in
- * one context are one showing.
+ * What counts as shown (final review I1): only what the agent asked for or what matched its
+ * work, never the session-start brief, which ranks by importance and so shows every important
+ * memory of a busy project in nearly every session.
  */
-export const SHOWN_CONTEXTS_SQL = (ids: string) =>
-  `SELECT memory_id AS id, count(DISTINCT session_id || ':' || context_epoch) AS n
-     FROM injections WHERE memory_id IN (${ids}) GROUP BY memory_id`;
+const ASKED_EVENTS = "('prompt', 'mcp', 'file-read', 'tool-failed')";
+/** Shown in at least this many distinct sessions... */
+const MIN_SESSIONS = 3;
+/** ...spanning at least this long, so that one long afternoon's plan does not qualify. */
+const MIN_SPAN_MS = 86_400_000;
+
+/**
+ * For each memory (ids given as a list of integers): in how many distinct sessions it was
+ * shown when asked for or matched, and the time between the first and the last such showing.
+ * A covering index search (`injections_memory_shown`, module migration 5).
+ */
+export const SHOWN_SQL = (ids: string) =>
+  `SELECT memory_id AS id, count(DISTINCT session_id) AS sessions, max(at) - min(at) AS span
+     FROM injections WHERE memory_id IN (${ids}) AND event IN ${ASKED_EVENTS}
+    GROUP BY memory_id`;
+
+/** Module migration 5's index, created again by a pass that finds it missing (a core rebuild). */
+const SHOWN_INDEX = "injections_memory_shown";
+const SHOWN_INDEX_SQL = `CREATE INDEX IF NOT EXISTS ${SHOWN_INDEX} ON injections(memory_id, event, session_id, at)`;
+
+function repairShownIndex(db: Db): void {
+  const present = db
+    .query<{ n: number }, [string]>(
+      "SELECT count(*) AS n FROM sqlite_master WHERE type = 'index' AND name = ?",
+    )
+    .get(SHOWN_INDEX)?.n;
+  if (present === 0) withWrite(db, () => db.run(SHOWN_INDEX_SQL));
+}
 
 /** The basic rule, on one memory row `m`: what a candidate must be whatever it was shown. */
 const ELIGIBLE = `m.status = 'active' AND m.kind IN ${KINDS} AND m.importance >= ${MIN_IMPORTANCE}`;
@@ -138,6 +163,7 @@ export function proposePromotions(
   const owner = deps.owner ?? `${process.pid}-${crypto.randomUUID()}`;
   if (!claimLease(db, PROMOTE_LEASE, owner, Date.now(), maxMs + 60_000)) return none;
   try {
+    repairShownIndex(db);
     return propose(db, deps, cursor, maxMs);
   } finally {
     releaseLease(db, PROMOTE_LEASE, owner);
@@ -201,12 +227,12 @@ function propose(
       .all();
     // How often each was shown, in one pass over the record (only for those that need it).
     const counted = candidates.filter((c) => c.rule === 0).map((c) => c.id);
-    const times = new Map<number, number>();
+    const shownEnough = new Set<number>();
     if (counted.length > 0) {
       for (const row of db
-        .query<{ id: number; n: number }, []>(SHOWN_CONTEXTS_SQL(counted.join(", ")))
+        .query<{ id: number; sessions: number; span: number }, []>(SHOWN_SQL(counted.join(", ")))
         .all()) {
-        times.set(row.id, row.n);
+        if (row.sessions >= MIN_SESSIONS && row.span >= MIN_SPAN_MS) shownEnough.add(row.id);
       }
     }
     const roots = new Map<number, string | null>();
@@ -228,7 +254,7 @@ function propose(
     for (const candidate of candidates) {
       // Out of time: the cursor stays where it was, and a later pass looks again.
       if (performance.now() > deadline) return { proposed, scanned: 0 };
-      if (candidate.rule === 0 && (times.get(candidate.id) ?? 0) < MIN_SHOWN) continue;
+      if (candidate.rule === 0 && !shownEnough.has(candidate.id)) continue;
       if (rootOf(candidate.projectId) === null) continue;
       proposed += insert.run(
         candidate.projectId,
