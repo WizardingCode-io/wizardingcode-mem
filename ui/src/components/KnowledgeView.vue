@@ -7,10 +7,10 @@
 // entry's Markdown and frontmatter (essential, path, problem), read only; a proposal's text
 // with Make knowledge (the screen's one primary) and Reject. Nothing is written to the
 // repository without that click.
-import { computed, onMounted, reactive, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, reactive, ref, watch, watchEffect } from "vue";
 import { api, type KnowledgeEntry, type KnowledgeView, type Promotion } from "../api";
 import { day } from "../format";
-import { becomes, entryCounts, entryGroups, type EntryFilter, KIND_LABEL, type KnowledgeKind, knowledgeEmpty, knowledgeHash, relativePath, sourceMemory } from "../knowledge";
+import { becomes, entryCounts, entryGroups, type EntryFilter, KIND_LABEL, type KnowledgeKind, knowledgeCrumb, knowledgeEmpty, knowledgeHash, relativePath, sourceMemory } from "../knowledge";
 import { state } from "../viewer";
 import Dock from "./Dock.vue";
 import DockProps from "./DockProps.vue";
@@ -53,6 +53,14 @@ watch(
     void load();
   },
 );
+
+// The header shows this page's numbers, not memory's.
+watchEffect(() => {
+  state.knowledgeCrumb = knowledgeCrumb(view.value, proposals.value);
+});
+onUnmounted(() => {
+  state.knowledgeCrumb = null;
+});
 
 // Proposals only where accepting could write: with a folder, or where one can be made.
 const offered = computed(() => (view.value?.state === "ok" || view.value?.state === "missing" ? proposals.value : []));

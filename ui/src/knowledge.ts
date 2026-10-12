@@ -144,3 +144,23 @@ export function openFromHash(hash: string): { open: string | null } | null {
     return { open: null };
   }
 }
+
+/** The numbers in the page header while the Knowledge view is open. */
+export interface KnowledgeCrumb {
+  entries: number;
+  essential: number;
+  attention: number;
+  proposals: number;
+}
+
+/**
+ * The Knowledge page's own numbers for the header, not memory's: its entries, the essential
+ * ones, those needing attention, and the proposals offered (only where accepting could write,
+ * as the page shows them). Null until the page has loaded.
+ */
+export function knowledgeCrumb(view: KnowledgeView | null, proposals: readonly Promotion[]): KnowledgeCrumb | null {
+  if (view === null) return null;
+  const counts = entryCounts(view.entries);
+  const offered = view.state === "ok" || view.state === "missing" ? proposals.length : 0;
+  return { entries: counts.all, essential: counts.essential, attention: counts.attention, proposals: offered };
+}

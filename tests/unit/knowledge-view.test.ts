@@ -5,6 +5,7 @@ import {
   entryGroups,
   type KnowledgeListEntry,
   type KnowledgeView,
+  knowledgeCrumb,
   knowledgeEmpty,
   knowledgeHash,
   matches,
@@ -159,5 +160,40 @@ describe("the address", () => {
     expect(openFromHash(knowledgeHash("e:Notes on SKUs"))).toEqual({ open: "e:Notes on SKUs" });
     expect(openFromHash("#projects/12")).toBeNull();
     expect(openFromHash("")).toBeNull();
+  });
+});
+
+describe("the header's numbers on the Knowledge page (task 5 minor)", () => {
+  const proposal = {
+    id: 1,
+    projectId: 1,
+    memoryId: 9,
+    slug: "x",
+    title: "X",
+    body: "",
+    kind: "decision" as const,
+    createdAt: 0,
+  };
+  test("entries, essential ones, ones needing attention and proposals, not memory's counts", () => {
+    const entries = [
+      entry({ slug: "a", essential: true }),
+      entry({ slug: "b", problem: "bad line" }),
+      entry({ slug: "c" }),
+    ];
+    expect(knowledgeCrumb(view({ entries }), [proposal])).toEqual({
+      entries: 3,
+      essential: 1,
+      attention: 1,
+      proposals: 1,
+    });
+  });
+  test("no proposals counted where knowledge is off; nothing before the page has loaded", () => {
+    expect(knowledgeCrumb(view({ state: "off", entries: [] }), [proposal])).toEqual({
+      entries: 0,
+      essential: 0,
+      attention: 0,
+      proposals: 0,
+    });
+    expect(knowledgeCrumb(null, [])).toBeNull();
   });
 });

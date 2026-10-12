@@ -569,7 +569,13 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
     if (knowledgeOne !== null && request.method === "GET") {
       const projectId = Number(url.searchParams.get("project") ?? Number.NaN);
       if (!Number.isInteger(projectId)) return problem(400, "project is required");
-      const found = knowledgeEntry(db, projectId, decodeURIComponent(knowledgeOne[1] ?? ""), env);
+      let slug: string;
+      try {
+        slug = decodeURIComponent(knowledgeOne[1] ?? "");
+      } catch {
+        return problem(400, "the entry's name is not a valid escape");
+      }
+      const found = knowledgeEntry(db, projectId, slug, env);
       return found === null ? problem(404, "no such entry") : json(found);
     }
     const promotion = /^\/api\/knowledge\/proposals\/(\d+)\/(accept|reject)$/.exec(path);

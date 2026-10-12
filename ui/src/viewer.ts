@@ -2,6 +2,7 @@
 import { useDark } from "@vueuse/core";
 import { computed, reactive, ref } from "vue";
 import { api, type Kind, type LinkView, type RulesList, type MemoryDetail, type MemoryItem, type Project, type TurnItem } from "./api";
+import type { KnowledgeCrumb } from "./knowledge";
 import { crossHash, visibleFrom } from "./links";
 import { type ModuleViewInfo, railOrMemory } from "./modules";
 
@@ -43,6 +44,8 @@ const state = reactive({
   rule: null as string | null,
   /** The Knowledge view's open item: an entry ("e:<slug>") or a proposal ("p<id>"). */
   knowledgeOpen: null as string | null,
+  /** The Knowledge page's own numbers for the header (null until it has loaded). */
+  knowledgeCrumb: null as KnowledgeCrumb | null,
   /** The ids in the order the list shows them (grouped by kind or not), for ↑ and ↓. */
   order: [] as number[],
   selected: null as number | null,

@@ -193,7 +193,15 @@ onMounted(async () => {
                 <span class="text-(--ink-muted)">Projects</span><span class="text-(--line-strong)">/</span>
                 <h1 class="m-0 max-w-[280px] truncate text-[13px] font-semibold" :title="project?.key">{{ project?.name ?? "…" }}</h1>
               </nav>
-              <span v-if="project" class="ml-2 flex min-w-0 items-center gap-2 overflow-hidden text-xs leading-4 whitespace-nowrap text-(--ink-muted)">
+              <!-- On the Knowledge page, its own numbers: entries, essential, needing attention, proposals. -->
+              <span v-if="state.tab === 'knowledge' && state.knowledgeCrumb" class="ml-2 flex min-w-0 items-center gap-2 overflow-hidden text-xs leading-4 whitespace-nowrap text-(--ink-muted)">
+                <span><span class="font-mono font-medium text-(--ink)">{{ state.knowledgeCrumb.entries.toLocaleString("en-GB") }}</span> {{ state.knowledgeCrumb.entries === 1 ? "entry" : "entries" }}</span>
+                <span class="text-(--line-strong)">·</span>
+                <span><span class="font-mono font-medium text-(--ink)">{{ state.knowledgeCrumb.essential.toLocaleString("en-GB") }}</span> essential</span>
+                <template v-if="state.knowledgeCrumb.attention"><span class="text-(--line-strong)">·</span><span class="inline-flex items-center gap-1"><span class="size-1.5 rounded-[1px] bg-(--warn)" /><span class="text-(--warn)">{{ state.knowledgeCrumb.attention.toLocaleString("en-GB") }} need attention</span></span></template>
+                <template v-if="state.knowledgeCrumb.proposals"><span class="text-(--line-strong)">·</span><span><span class="font-mono font-medium text-(--ink)">{{ state.knowledgeCrumb.proposals.toLocaleString("en-GB") }}</span> proposed</span></template>
+              </span>
+              <span v-else-if="project && state.tab !== 'knowledge'" class="ml-2 flex min-w-0 items-center gap-2 overflow-hidden text-xs leading-4 whitespace-nowrap text-(--ink-muted)">
                 <span><span class="font-mono font-medium text-(--ink)">{{ project.active.toLocaleString("en-GB") }}</span> active</span>
                 <span class="text-(--line-strong)">·</span>
                 <span><span class="font-mono font-medium text-(--ink)">{{ project.archived.toLocaleString("en-GB") }}</span> archived</span>

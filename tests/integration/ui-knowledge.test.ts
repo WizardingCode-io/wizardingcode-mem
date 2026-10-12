@@ -233,6 +233,8 @@ describe("GET /api/knowledge/entries/:slug", () => {
       problem: null,
     });
     expect((await get(s, `/api/knowledge/entries/nope?project=${projectId}`)).status).toBe(404);
+    // A bad percent-escape is the client's mistake, not the server's (task 5 minor).
+    expect((await get(s, `/api/knowledge/entries/%E0%A4%A?project=${projectId}`)).status).toBe(400);
     expect((await get(s, "/api/knowledge/entries/orders-saga")).status).toBe(400);
   });
 
