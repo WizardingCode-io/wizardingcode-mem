@@ -160,3 +160,9 @@ export function linksOfferLine(offer: LinksOffer): string {
   const rules = offer.proposals > 0 ? `${plural(offer.proposals, "rule", "rules")} you repeat that could be yours` : "";
   return `${[links, rules].filter(Boolean).join(", and ")}.`;
 }
+
+/** The address of the page across projects: the view, and the project or rule open in its dock. */
+export function crossHash(tab: "projects" | "you", linkProject: number | null, rule: string | null): string {
+  if (tab === "projects") return linkProject === null ? "#projects" : `#projects/${linkProject}`;
+  return rule === null ? "#you" : `#you/${rule}`;
+}

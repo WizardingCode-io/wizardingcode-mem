@@ -16,7 +16,7 @@ import TopBar from "./components/TopBar.vue";
 import HistoryView from "./components/HistoryView.vue";
 import TurnsView from "./components/TurnsView.vue";
 import { ago, hue } from "./format";
-import { closeDetail, loadLinks, loadList, loadOverview, loadRules, MACHINE_TABS, move, project, reload, select, selectProject, sidebarOpen, startHeartbeat, state, type Tab } from "./viewer";
+import { closeDetail, loadLinks, loadList, loadOverview, loadRules, MACHINE_TABS, move, openCross, project, reload, select, selectProject, sidebarOpen, startHeartbeat, state, type Tab } from "./viewer";
 
 // The view tabs (Sales OS page header, second row): a 10px square each, in the brand's hues.
 const tabs: { label: string; value: Tab; hue: string }[] = [
@@ -35,6 +35,9 @@ const tab = computed({
   get: () => state.tab,
   set: (t: Tab) => {
     state.tab = t;
+    // Leaving a view closes its dock, so coming back shows what the address says.
+    state.linkProject = null;
+    state.rule = null;
     history.replaceState(null, "", t === "memories" ? "#" : `#${t}`);
     if (t === "projects" || t === "you") void Promise.all([loadLinks(), loadRules()]);
     void reload();
@@ -96,8 +99,8 @@ function onKey(e: KeyboardEvent) {
     if (typing) (target as HTMLElement).blur();
     else if (state.tab === "turns" && state.turnId !== null) state.turnId = null;
     else if (state.tab === "history" && state.pastId !== null) state.pastId = null;
-    else if (state.tab === "projects" && state.linkProject !== null) state.linkProject = null;
-    else if (state.tab === "you" && state.rule !== null) state.rule = null;
+    else if (state.tab === "projects" && state.linkProject !== null) openCross("projects", null);
+    else if (state.tab === "you" && state.rule !== null) openCross("you", null);
     else if (state.selected !== null) closeDetail();
     return;
   }

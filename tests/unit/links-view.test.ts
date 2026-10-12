@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  crossHash,
   type LinkView,
   linksOfferLine,
   projectGroups,
@@ -144,5 +145,15 @@ describe("the rules and the banner", () => {
     expect(linksOfferLine({ show: true, suggestions: 0, proposals: 3 })).toBe(
       "3 rules you repeat that could be yours.",
     );
+  });
+});
+
+describe("the address of the page across projects", () => {
+  test("names the open project or rule, and only the view once nothing is open", () => {
+    expect(crossHash("projects", 12, null)).toBe("#projects/12");
+    expect(crossHash("projects", null, "p3")).toBe("#projects");
+    expect(crossHash("you", null, "p3")).toBe("#you/p3");
+    expect(crossHash("you", 12, "r45")).toBe("#you/r45");
+    expect(crossHash("you", null, null)).toBe("#you");
   });
 });

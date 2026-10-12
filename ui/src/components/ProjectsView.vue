@@ -8,7 +8,7 @@ import { computed, reactive, ref } from "vue";
 import { api, type LinkKind, type Project } from "../api";
 import { compact, day, hue } from "../format";
 import { projectGroups, projectLinks, projectPlace, signalParts, visibleFrom } from "../links";
-import { loadLinks, reload, state } from "../viewer";
+import { loadLinks, openCross, reload, state } from "../viewer";
 import Dock from "./Dock.vue";
 import DockProps from "./DockProps.vue";
 import Empty from "./Empty.vue";
@@ -55,8 +55,7 @@ const selected = computed(() => state.projects.find((p) => p.id === state.linkPr
 const mine = computed(() => (selected.value ? projectLinks(state.links, selected.value.id) : { confirmed: [], suggested: [] }));
 const reads = computed(() => (selected.value ? visibleFrom(state.links, selected.value.id) : []));
 function open(id: number) {
-  state.linkProject = state.linkProject === id ? null : id;
-  history.replaceState(null, "", state.linkProject === null ? "#projects" : `#projects/${id}`);
+  openCross("projects", state.linkProject === id ? null : id);
 }
 const dockRows = computed(() => {
   const p = selected.value;
@@ -194,7 +193,7 @@ const RELATION_TONE = {
         <Empty v-else icon="i-lucide-folder" title="No projects yet" text="Start a session in any of your agents. Its project shows up here." />
       </div>
 
-      <Dock v-if="selected" type="Project" icon="i-lucide-folder" :id="selected.id" label="Project links" @close="state.linkProject = null">
+      <Dock v-if="selected" type="Project" icon="i-lucide-folder" :id="selected.id" label="Project links" @close="openCross('projects', null)">
         <template #head>
           <div class="flex items-center gap-2.5">
             <span aria-hidden="true" class="flex size-8 flex-none items-center justify-center rounded-lg font-display text-[13px] font-bold text-[#100E0D] uppercase" :style="{ background: hue(selected.name) }">{{ selected.name.charAt(0) }}</span>
@@ -223,7 +222,7 @@ const RELATION_TONE = {
               </div>
             </dl>
             <div class="flex items-center gap-2">
-              <UButton size="xs" color="neutral" icon="i-lucide-link-2" label="Link" :loading="busy === s.link.id" @click="decide(s.link.id, 'confirm', s.otherName)" />
+              <UButton size="xs" color="neutral" variant="outline" icon="i-lucide-link-2" label="Link" :loading="busy === s.link.id" @click="decide(s.link.id, 'confirm', s.otherName)" />
               <UButton size="xs" color="neutral" variant="outline" label="Reject" :disabled="busy === s.link.id" @click="decide(s.link.id, 'reject', s.otherName)" />
             </div>
           </div>

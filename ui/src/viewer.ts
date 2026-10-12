@@ -2,7 +2,7 @@
 import { useDark } from "@vueuse/core";
 import { computed, reactive, ref } from "vue";
 import { api, type Kind, type LinkView, type RulesList, type MemoryDetail, type MemoryItem, type Project, type TurnItem } from "./api";
-import { visibleFrom } from "./links";
+import { crossHash, visibleFrom } from "./links";
 
 export type Tab = "memories" | "turns" | "overview" | "history" | "settings" | "projects" | "you";
 /** The tabs of the machine's pages: no project in the breadcrumb, the projects panel steps aside. */
@@ -50,6 +50,13 @@ const state = reactive({
 export const project = computed(() => state.projects.find((p) => p.id === state.projectId) ?? null);
 /** The projects the current one reads besides itself. */
 export const linked = computed(() => (state.projectId === null ? [] : visibleFrom(state.links, state.projectId)));
+
+/** Opens (or closes, with null) the dock of the page across projects, keeping the address in step. */
+export function openCross(tab: "projects" | "you", key: number | string | null): void {
+  if (tab === "projects") state.linkProject = key === null ? null : Number(key);
+  else state.rule = key === null ? null : String(key);
+  history.replaceState(null, "", crossHash(tab, state.linkProject, state.rule));
+}
 
 /** The rules again; null stays null on a failure. */
 export async function loadRules(): Promise<void> {

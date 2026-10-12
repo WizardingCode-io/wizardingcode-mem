@@ -7,7 +7,7 @@ import { computed, ref } from "vue";
 import { api, type AcceptedRule, type ProposedRule } from "../api";
 import { day, KIND_TONE, projectTone } from "../format";
 import { ruleWhy } from "../links";
-import { loadOverview, state } from "../viewer";
+import { loadOverview, openCross, state } from "../viewer";
 import Dock from "./Dock.vue";
 import DockProps from "./DockProps.vue";
 import Empty from "./Empty.vue";
@@ -36,8 +36,7 @@ const selected = computed<Selected | null>(() => {
   return rule ? { type: "accepted", rule } : null;
 });
 function open(key: string) {
-  state.rule = state.rule === key ? null : key;
-  history.replaceState(null, "", state.rule === null ? "#you" : `#you/${key}`);
+  openCross("you", state.rule === key ? null : key);
 }
 const dockRows = computed(() => {
   const s = selected.value;
@@ -55,6 +54,8 @@ async function act(key: string, run: () => Promise<unknown>, done: { title: stri
   busy.value = key;
   try {
     await run();
+    // The rule leaves its list (or moves to the other one): its dock closes with it.
+    if (state.rule === key) openCross("you", null);
     await loadOverview();
     toast.add({ ...done, color: "success" });
   } catch (error) {
@@ -179,7 +180,7 @@ const undo = (r: AcceptedRule) =>
       <Empty v-else icon="i-lucide-user-round-check" title="No rules of yours yet" text="When you repeat a convention or decision in projects that are not linked, or say it holds everywhere, it is proposed here to become yours." />
     </div>
 
-    <Dock v-if="selected" type="Rule" icon="i-lucide-user-round-check" :id="selected.type === 'proposed' ? selected.rule.id : selected.rule.memoryId" :label="selected.type === 'proposed' ? 'Proposed rule' : 'Your rule'" @close="state.rule = null">
+    <Dock v-if="selected" type="Rule" icon="i-lucide-user-round-check" :id="selected.type === 'proposed' ? selected.rule.id : selected.rule.memoryId" :label="selected.type === 'proposed' ? 'Proposed rule' : 'Your rule'" @close="openCross('you', null)">
       <template #head>
         <div class="flex flex-col gap-1">
           <span class="wz-label">{{ selected.type === "proposed" ? "Proposed" : "Yours" }} · {{ ruleWhy(selected.rule) }}</span>
