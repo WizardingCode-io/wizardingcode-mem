@@ -1,6 +1,6 @@
 # ADR 0017 — Search by meaning: the published model, the floor, and the proof
 
-Date: 2026-10-12 · Status: accepted; built and measured on a copy of real data; the model's GitHub release is to be published at `MODEL_URL` before the first download can succeed. Part 2 of roadmap item A3. Design: `docs/superpowers/specs/2026-10-11-semantic-recall-design.md`; the gate and the engine: ADR 0014.
+Date: 2026-10-12 · Status: accepted; built and measured on a copy of real data; the model's GitHub release is published at `MODEL_URL` and checked against the pin. Part 2 of roadmap item A3. Design: `docs/superpowers/specs/2026-10-11-semantic-recall-design.md`; the gate and the engine: ADR 0014.
 
 ## Context
 
@@ -46,7 +46,7 @@ The same floor serves `history_search` (see the proof: there it lets in more noi
 
 ## Backups carry the vectors (contradicting the spec)
 
-The spec said backups would not carry vectors, as they do not carry `history.db`, and a restore would be followed by a backfill. The vectors live in the main database instead, so `backup` copies them. The reason: a restore would otherwise leave every memory without a vector, and search by meaning silently weaker, until someone runs a backfill, which nothing prompts. The cost is about 256 bytes of vector per memory (on the author's copy: 22 MB of vectors, 31 MB of database growth with the index, for 89,916 memories, against a 222 MB database). `turn_vectors` stay in `history.db`, which is rebuildable and not backed up, as before.
+The spec said backups would not carry vectors, as they do not carry `history.db`, and a restore would be followed by a backfill. The vectors live in the main database instead, so `backup` copies them. The reason: a restore would otherwise leave every memory without a vector, and search by meaning silently weaker, until someone runs a backfill, which nothing prompts. The cost is about 256 bytes of vector per memory (on the author's copy: 23 MB of vectors, 32 MB of database growth with the index, for 89,916 memories, against a 222 MB database). `turn_vectors` stay in `history.db`, which is rebuildable and not backed up, as before.
 
 ## Deleting the model
 
@@ -69,7 +69,7 @@ Run on 2026-10-12, Apple M4 Max, macOS 26.6.2, the pinned Bun 1.4.2, the darwin-
 | | |
 |---|---|
 | `embed backfill` | 89,916 vectors in 13.0 s (0.14 ms each) |
-| Main database | 222.0 MB → 254.2 MB (+31.4 MB; 23.0 MB of it vector bytes) |
+| Main database | 222.0 MB → 254.2 MB (+32.2 MB; 23.0 MB of it vector bytes) |
 | History vectors | 3,626 in 1.1 s; `history.db` 15.5 MB → 17.1 MB |
 
 **Latency, ms, p50 / p95** (warm: one connection, 20 rounds of the ten queries after a first round; per call: a connection per search, as MCP does; process: the binary's `tool memory_search --global`, one process per call)
