@@ -49,7 +49,8 @@ function load(db: Db, maxProjects: number): Known[] {
 }
 
 function ownerStems(owner: string): Set<string> {
-  return new Set([owner, ...nameStems(owner)]);
+  const groups = owner.split("/");
+  return new Set([owner, ...groups, ...groups.flatMap(nameStems)]);
 }
 
 const MAX_LEVELS = 6;

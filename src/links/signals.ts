@@ -54,19 +54,28 @@ const GENERIC = new Set([
   ],
 ]);
 
-/** Splits a normalised `host/owner/name` remote (SSH and HTTPS alike) or null when it is not one. */
+/** A host name or an SSH alias: letters, digits and dashes, dots allowed but not required. */
+const HOST = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9-]+)*$/;
+
+/**
+ * Splits a normalised `host/owner/name` remote (SSH and HTTPS alike) or null when it is not one.
+ * The host may be an SSH alias with no dot (`gh-work`); a GitLab subgroup's owner is the whole
+ * group path (`group/sub`). Local paths (`/`, `.`, `~`) are never remotes.
+ */
 export function parseRemote(remote: string): { host: string; owner: string; name: string } | null {
   const text = remote.trim().replace(/^[a-z][a-z0-9+.-]*:\/\//i, "");
+  if (/^[/.~]/.test(text)) return null;
   const scp = text.match(/^(?:[^@/\s]+@)?([^:/\s]{2,}):(.+)$/);
-  const normal = scp && !text.startsWith("/") ? `${scp[1]}/${scp[2]}` : text;
+  const normal = scp ? `${scp[1]}/${scp[2]}` : text;
   const parts = normal
     .replace(/\/+$/, "")
     .replace(/\.git$/i, "")
     .toLowerCase()
     .split("/");
-  const [host, owner, name] = parts;
-  if (parts.length !== 3 || !host || !owner || !name || !host.includes(".")) return null;
-  return { host, owner, name };
+  if (parts.length < 3 || parts.some((part) => !part || part === "." || part === "..")) return null;
+  const host = parts[0] as string;
+  if (!HOST.test(host) || host === "localhost") return null;
+  return { host, owner: parts.slice(1, -1).join("/"), name: parts[parts.length - 1] as string };
 }
 
 export function nameStems(name: string): string[] {

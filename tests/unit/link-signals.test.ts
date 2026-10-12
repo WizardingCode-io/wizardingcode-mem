@@ -22,6 +22,41 @@ describe("parseRemote", () => {
     expect(parseRemote("/some/local/path")).toBeNull();
     expect(parseRemote("host/owner")).toBeNull();
   });
+  test("a dotless SSH alias is a host", () => {
+    expect(parseRemote("git@gh-work:acme/shop-api.git")).toEqual({
+      host: "gh-work",
+      owner: "acme",
+      name: "shop-api",
+    });
+    expect(parseRemote("gh-work/acme/shop-web")).toEqual({
+      host: "gh-work",
+      owner: "acme",
+      name: "shop-web",
+    });
+  });
+  test("dot paths, absolute paths, home paths and junk hosts are null", () => {
+    expect(parseRemote("../x/y")).toBeNull();
+    expect(parseRemote("./x/y")).toBeNull();
+    expect(parseRemote("./owner/name")).toBeNull();
+    expect(parseRemote("/srv/x/y")).toBeNull();
+    expect(parseRemote("~/x/y")).toBeNull();
+    expect(parseRemote("../owner/name")).toBeNull();
+    expect(parseRemote("localhost/owner/name")).toBeNull();
+    expect(parseRemote("-bad/owner/name")).toBeNull();
+    expect(parseRemote("ho_st/owner/name")).toBeNull();
+  });
+  test("GitLab subgroups: the owner is the whole group path", () => {
+    expect(parseRemote("gitlab.com/group/sub/shop-api")).toEqual({
+      host: "gitlab.com",
+      owner: "group/sub",
+      name: "shop-api",
+    });
+    expect(parseRemote("git@gitlab.com:group/sub/deeper/shop-web.git")).toEqual({
+      host: "gitlab.com",
+      owner: "group/sub/deeper",
+      name: "shop-web",
+    });
+  });
 });
 
 describe("stems", () => {

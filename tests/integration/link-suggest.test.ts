@@ -69,6 +69,24 @@ describe("suggestLinks", () => {
     });
     expect(links[0]?.signals).toEqual(["same owner github.com/acme", "shared name shop"]);
   });
+  test("an SSH host alias with no dot is a host: same owner and stem give product", () => {
+    project("shop-api", { remote: "gh-work/acme/shop-api" });
+    project("shop-web", { remote: "gh-work/acme/shop-web" });
+    expect(run().suggested).toBe(1);
+    expect(all()).toEqual([expect.objectContaining({ kind: "product", status: "suggested" })]);
+  });
+  test("GitLab subgroups: the group path is the owner", () => {
+    project("shop-api", { remote: "gitlab.com/group/sub/shop-api" });
+    project("shop-web", { remote: "gitlab.com/group/sub/shop-web" });
+    project("shop-cli", { remote: "gitlab.com/group/other/shop-cli" });
+    expect(run().suggested).toBe(1);
+    expect(all()).toEqual([
+      expect.objectContaining({
+        kind: "product",
+        signals: JSON.stringify(["same owner gitlab.com/group/sub", "shared name shop"]),
+      }),
+    ]);
+  });
   test("the owner's own name alone, or an unrelated pair, suggests nothing", () => {
     project("acme-shop", { remote: "github.com/acme/acme-shop" });
     project("acme-bank", { remote: "github.com/acme/acme-bank" });
