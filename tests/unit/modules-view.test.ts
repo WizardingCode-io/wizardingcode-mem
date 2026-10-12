@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { type ModuleInfo, railViews, viewKeys } from "../../ui/src/modules.ts";
+import { MEMORY_VIEWS } from "../../src/modules/memory/views.ts";
+import { type ModuleInfo, railOrMemory, railViews, viewKeys } from "../../ui/src/modules.ts";
 
 // The rail draws the enabled modules' views, in module order, and their keys switch to them.
 
@@ -58,5 +59,22 @@ describe("the rail's views", () => {
       "7": "echo",
       "5": "settings",
     });
+  });
+});
+
+describe("the rail when the modules cannot be loaded", () => {
+  test("falls back to memory's views instead of failing", async () => {
+    const rail = await railOrMemory(() => Promise.reject(new Error("503")));
+    expect(rail.map((v) => v.tab)).toEqual(MEMORY_VIEWS.map((v) => v.tab));
+    expect(rail.map((v) => v.key)).toEqual(MEMORY_VIEWS.map((v) => v.key));
+  });
+
+  test("uses what the server says when it answers", async () => {
+    const mod: ModuleInfo = {
+      id: "x",
+      name: "X",
+      views: [{ tab: "x", label: "X", icon: "i-x", key: "7" }],
+    };
+    expect((await railOrMemory(async () => [mod])).map((v) => v.tab)).toEqual(["x"]);
   });
 });

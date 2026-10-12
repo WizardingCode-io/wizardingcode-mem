@@ -2,6 +2,8 @@
 // order, and the keys that switch to them. Pure, so the tests drive it without a browser.
 // No import from api.ts: it reads the page's location.
 
+import { MEMORY_VIEWS } from "../../src/modules/memory/views.ts";
+
 export interface ModuleViewInfo {
   tab: string;
   label: string;
@@ -43,4 +45,16 @@ export function viewKeys(views: readonly ModuleViewInfo[]): Record<string, strin
   for (const view of views) if (view.key !== "") keys[view.key] = view.tab;
   keys[SETTINGS_KEY] = "settings";
   return keys;
+}
+
+/**
+ * The rail's views from a call to the server. The modules are an extra, like the links:
+ * when the call fails the rail is memory's own views and the page still loads.
+ */
+export async function railOrMemory(fetchModules: () => Promise<ModuleInfo[]>): Promise<ModuleViewInfo[]> {
+  try {
+    return railViews(await fetchModules());
+  } catch {
+    return railViews([{ id: "memory", name: "Memory", views: [...MEMORY_VIEWS] }]);
+  }
 }

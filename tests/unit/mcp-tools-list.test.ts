@@ -19,7 +19,12 @@ beforeAll(() => {
   env = {
     WIZARDINGCODE_MEM_DATA_DIR: join(base, "data"),
     WIZARDINGCODE_HOME: join(base, "home"),
+    WIZARDINGCODE_MEM_STORE_DIR: join(base, "store"),
     WIZARDINGCODE_MEM_MIGRATE: "off",
+    WIZARDINGCODE_MODULES: "",
+    // Whatever the shell has, nothing here can reach a real home or a real store.
+    HOME: join(base, "home"),
+    USERPROFILE: join(base, "home"),
   };
 });
 afterAll(() => {
