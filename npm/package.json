@@ -1,6 +1,6 @@
 {
   "name": "wizardingcode-mem",
-  "version": "0.4.4",
+  "version": "0.5.0",
   "description": "Persistent memory for coding agents: what one session learns, the next one is told. One local binary, no daemon, no LLM in the loop.",
   "bin": {
     "wizardingcode-mem": "bin/wizardingcode-mem.js"

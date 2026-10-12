@@ -4,7 +4,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSy
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-const VERSION = "0.4.4";
+const VERSION = "0.5.0";
 const REPO = "WizardingCode-io/wizardingcode-mem";
 const MARKER = "@wizardingcode-mem-plugin";
 const windows = process.platform === "win32";
