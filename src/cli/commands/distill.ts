@@ -3,6 +3,7 @@ import { drainQueue } from "../../distill/queue.ts";
 import { healLine, healVectors } from "../../embed/backfill.ts";
 import { loadModel } from "../../embed/model.ts";
 import { makeJudge } from "../../judge/index.ts";
+import { proposeRulesSafely } from "../../links/rules.ts";
 import { suggestLinksSafely } from "../../links/suggest.ts";
 import { type Db, openDb } from "../../store/db.ts";
 import { logError } from "../../util/log.ts";
@@ -20,10 +21,11 @@ export async function run(): Promise<number> {
   try {
     const { dataDir, storeDir } = resolvePaths();
     db = openDb({ dataDir: storeDir, busyTimeoutMs: 2000 });
+    const judge = makeJudge({ db, dataDir });
     const report = await drainQueue(
       {
         db,
-        judge: makeJudge({ db, dataDir }),
+        judge,
         adapters: ADAPTERS,
         now: Date.now,
         // Once per drain, in this background process; hooks never load it.
@@ -36,10 +38,13 @@ export async function run(): Promise<number> {
     );
     // Memories written without the model (imports, edits while it was off, a download that
     // came later) get their vector here, a bounded pass at a time: nobody has to run a backfill.
-    const healed = await healVectors(db, loadModel({ dataDir }), { now: Date.now });
+    const model = loadModel({ dataDir });
+    const healed = await healVectors(db, model, { now: Date.now });
     if (healed) process.stdout.write(healLine(healed));
     // Proposals for linked projects: exact rules over remotes and manifests, bounded, never fatal.
     suggestLinksSafely(db, Date.now());
+    // The author's own rules: proposed from the newest conventions and decisions, bounded, never fatal.
+    await proposeRulesSafely(db, { judge, now: Date.now(), model });
     return 0;
   } catch (error) {
     logError("distill", error);

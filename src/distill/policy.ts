@@ -15,3 +15,14 @@ export const DUPLICATE = { minRelationScore: 1.5, maxContradiction: 0.5 };
 
 /** The draft replaces an existing memory: store the draft and mark the old one superseded. */
 export const SUPERSEDE = { minContradiction: 0.7, minRelationScore: 0.8 };
+
+/**
+ * Two memories in different projects state the same rule by meaning when the cosine of their
+ * vectors reaches this. Deliberately high (above the search floor of 0.32): a proposal only
+ * asks the author, but a loose one would group rules that merely share a topic. Not yet
+ * calibrated against labelled pairs.
+ */
+export const SAME_MEANING = 0.8;
+
+/** A judge's "not personal" drops a proposed rule only when it is at least this sure. */
+export const NOT_PERSONAL = { minConfidence: 0.7 };

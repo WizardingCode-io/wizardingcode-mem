@@ -13,6 +13,7 @@ import { RRF_K, SEMANTIC_FLOOR, semanticCandidates } from "../retrieve/semantic.
 import { type Db, withWrite } from "../store/db.ts";
 import { visibleProjects } from "../store/links.ts";
 import { insertMemory, supersede } from "../store/memories.ts";
+import { logError } from "../util/log.ts";
 import { clip } from "../util/text.ts";
 import { inProjects, searchTerms } from "../util/words.ts";
 
@@ -37,6 +38,34 @@ export interface ToolContext {
 /** The projects a search or a get reads: null for every project. */
 interface Scope {
   ids: number[] | null;
+  /** The author's rules (active, from projects outside `ids`), found alongside them. */
+  rules?: { ids: number[]; projects: number[] };
+}
+
+let rulesFailed = false;
+
+/** The author's active rules kept in projects outside `ids`. None on any error (fail open). */
+function userRules(db: Db, ids: number[]): Scope["rules"] {
+  try {
+    const rows = db
+      .query<{ id: number; projectId: number }, []>(
+        `SELECT m.id AS id, m.project_id AS projectId FROM user_memories u
+           JOIN memories m ON m.id = u.memory_id WHERE m.status = 'active'`,
+      )
+      .all()
+      .filter((row) => !ids.includes(row.projectId));
+    if (rows.length === 0) return undefined;
+    return {
+      ids: rows.map((row) => row.id),
+      projects: [...new Set(rows.map((row) => row.projectId))],
+    };
+  } catch (error) {
+    if (!rulesFailed) {
+      rulesFailed = true;
+      logError("search.rules", error);
+    }
+    return undefined;
+  }
 }
 
 /**
@@ -49,7 +78,11 @@ export function searchScope(context: ToolContext, project?: string): Scope | str
   if (context.alone) return { ids: [projectId] };
   const visible = visibleProjects(db, projectId);
   const wanted = project?.trim() ?? "";
-  if (wanted === "") return { ids: [projectId, ...visible.map((v) => v.id)] };
+  if (wanted === "") {
+    const ids = [projectId, ...visible.map((v) => v.id)];
+    const rules = userRules(db, ids);
+    return rules === undefined ? { ids } : { ids, rules };
+  }
   const own =
     db.query<{ name: string }, [number]>("SELECT name FROM projects WHERE id = ?").get(projectId)
       ?.name ?? "";
@@ -70,7 +103,22 @@ const labelled = (context: ToolContext, scope: Scope) =>
 /** The SQL condition for a scope; ids come from the database, so they are inlined. */
 function inScope(scope: Scope): string {
   if (scope.ids === null) return "1";
-  return `m.project_id IN (${scope.ids.map((id) => Math.trunc(id)).join(", ")})`;
+  const projects = `m.project_id IN (${scope.ids.map((id) => Math.trunc(id)).join(", ")})`;
+  if (scope.rules === undefined) return projects;
+  return `(${projects} OR m.id IN (${scope.rules.ids.map((id) => Math.trunc(id)).join(", ")}))`;
+}
+
+/** The projects a scope's rows come from, the author's rules' included. */
+const scopeProjects = (scope: Scope): number[] | null =>
+  scope.ids === null ? null : [...scope.ids, ...(scope.rules?.projects ?? [])];
+
+/** One heading, named for its origin: the author's, another project's, or none. */
+function heading(db: Db, row: Ranked, scope: Scope, names: Map<number, string> | null): string {
+  if (scope.rules?.ids.includes(row.id)) {
+    return renderHeading({ ...toNote(db, row), origin: "you" });
+  }
+  const note = renderHeading(toNote(db, row));
+  return names === null ? note : `[${names.get(row.projectId) ?? "?"}] ${note}`;
 }
 
 const DEFAULT_LIMIT = 10;
@@ -104,14 +152,9 @@ export function searchMemories(
       context.now,
     );
   }
-  if (!labelled(context, scope)) {
-    return shown.map((row) => renderHeading(toNote(db, row))).join("\n");
-  }
-  // Across projects, each heading says whose it is.
-  const names = projectNames(db);
-  return shown
-    .map((row) => `[${names.get(row.projectId) ?? "?"}] ${renderHeading(toNote(db, row))}`)
-    .join("\n");
+  // Across projects, each heading says whose it is; the author's rules say they are theirs.
+  const names = labelled(context, scope) ? projectNames(db) : null;
+  return shown.map((row) => heading(db, row, scope, names)).join("\n");
 }
 
 type Ranked = MemoryRow & { projectId: number };
@@ -144,9 +187,10 @@ export function rankMemories(
       .all(kind, kind, SEARCH_POOL)
       .sort((a, b) => prior(b, context) - prior(a, context) || b.id - a.id);
   }
+  const projects = scopeProjects(scope);
   const meaning = semanticCandidates(db, model, args.query, {
     projectId: null,
-    ...(scope.ids === null ? {} : { projectIds: scope.ids }),
+    ...(projects === null ? {} : { projectIds: projects }),
     kind,
     limit: SEARCH_POOL,
     floor,
@@ -164,7 +208,7 @@ export function rankMemories(
               ORDER BY bm25 LIMIT ?`,
           )
           .all(
-            scope.ids === null ? `{title body terms} : (${match})` : inProjects(match, scope.ids),
+            projects === null ? `{title body terms} : (${match})` : inProjects(match, projects),
             kind,
             kind,
             SEARCH_POOL,
@@ -183,7 +227,7 @@ export function rankMemories(
   const lexical = new Map(found.map((row) => [row.id, row]));
   const getRow = db.query<Ranked, [number]>(
     `SELECT ${MEMORY_COLUMNS}, m.project_id AS projectId FROM memories m
-      WHERE m.id = ? AND m.status = 'active'`,
+      WHERE m.id = ? AND m.status = 'active' AND ${where}`,
   );
   const pool: Ranked[] = [...found];
   for (const hit of meaning) {
@@ -249,9 +293,11 @@ export function getMemories(context: ToolContext, args: { ids: number[] }): stri
       now,
       id,
     ]);
-    const named = names !== null && (projectId === null || row.projectId !== projectId);
+    const yours = scope.rules?.ids.includes(row.id) ?? false;
+    const named = !yours && names !== null && (projectId === null || row.projectId !== projectId);
     const note =
-      (named ? `[${names.get(row.projectId) ?? "?"}] ` : "") + renderNote(toNote(db, row));
+      (named ? `[${names.get(row.projectId) ?? "?"}] ` : "") +
+      renderNote(yours ? { ...toNote(db, row), origin: "you" } : toNote(db, row));
     parts.push(row.supersededBy === null ? note : `${note}\n  (replaced by #${row.supersededBy})`);
   }
   if (missing.length > 0) {

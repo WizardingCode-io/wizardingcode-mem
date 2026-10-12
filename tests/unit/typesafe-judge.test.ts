@@ -454,3 +454,93 @@ describe("withFallback", () => {
     expect(breaker.allow(1000)).toBe(true);
   });
 });
+
+// --- personal rules --------------------------------------------------------------------
+
+const ruleInput = {
+  title: "Run the tests with the pinned bun",
+  body: "The global one diverges.",
+  projects: ["alpha", "bravo"],
+};
+
+describe("TypeSafeJudge.personal", () => {
+  test("asks one yes/no question about the rule and its projects", async () => {
+    const { fetchFn, calls } = recorded({ personal: { type: "noul", noul: 0.2 } });
+    const verdict = await new TypeSafeJudge({ apiKey: KEY, fetch: fetchFn }).personal(ruleInput);
+    expect(calls).toHaveLength(1);
+    const request = calls[0] as { state: unknown; questions: Record<string, { type: string }> };
+    expect(Object.keys(request.questions)).toEqual(["personal"]);
+    expect(request.questions.personal?.type).toBe("noul");
+    expect(request.state).toEqual({
+      rule: { title: ruleInput.title, body: ruleInput.body },
+      projects: ["alpha", "bravo"],
+    });
+    expect(verdict.personal).toBe(false);
+    expect(verdict.confidence).toBeCloseTo(0.8);
+  });
+
+  test("a likely yes is personal", async () => {
+    const { fetchFn } = recorded({ personal: { type: "noul", noul: 0.9 } });
+    const verdict = await new TypeSafeJudge({ apiKey: KEY, fetch: fetchFn }).personal(ruleInput);
+    expect(verdict).toEqual({ personal: true, confidence: 0.9 });
+  });
+
+  test("a missing answer is an error", async () => {
+    const { fetchFn } = recorded({});
+    await expect(
+      new TypeSafeJudge({ apiKey: KEY, fetch: fetchFn }).personal(ruleInput),
+    ).rejects.toThrow(/answer/);
+  });
+});
+
+describe("withFallback and personal", () => {
+  let dir: string;
+  let db: Db;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "wizardingcode-mem-fallback-personal-"));
+    db = openDb({ dataDir: dir, busyTimeoutMs: 1000 });
+  });
+  afterEach(() => {
+    db.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("passes the primary's answer through", async () => {
+    const primary: Judge = {
+      ...heuristicJudge,
+      personal: async () => ({ personal: false, confidence: 0.9 }),
+    };
+    const judge = withFallback(
+      primary,
+      heuristicJudge,
+      new Breaker(db, { keyFingerprint: "k" }),
+      {},
+    );
+    expect(await judge.personal?.(ruleInput)).toEqual({ personal: false, confidence: 0.9 });
+  });
+
+  test("absent when the primary cannot answer it", () => {
+    const judge = withFallback(
+      heuristicJudge,
+      heuristicJudge,
+      new Breaker(db, { keyFingerprint: "k" }),
+      {},
+    );
+    expect(judge.personal).toBeUndefined();
+  });
+
+  test("a failed primary leaves the decision to the author: personal, with no confidence", async () => {
+    const errors: unknown[] = [];
+    const primary: Judge = {
+      ...heuristicJudge,
+      personal: async () => {
+        throw new TypeSafeError("network", "fetch failed");
+      },
+    };
+    const judge = withFallback(primary, heuristicJudge, new Breaker(db, { keyFingerprint: "k" }), {
+      onError: (error) => void errors.push(error),
+    });
+    expect(await judge.personal?.(ruleInput)).toEqual({ personal: true, confidence: 0 });
+    expect(errors).toHaveLength(1);
+  });
+});

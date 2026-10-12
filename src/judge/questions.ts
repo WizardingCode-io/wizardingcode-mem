@@ -6,6 +6,8 @@ import type {
   ConsolidateVerdict,
   DistillInput,
   DistillVerdict,
+  PersonalInput,
+  PersonalVerdict,
 } from "./types.ts";
 
 // The questions a System One model is asked, and how its answers become verdicts.
@@ -199,4 +201,28 @@ export function consolidateVerdict(
       };
     }),
   };
+}
+
+export function personalState(input: PersonalInput) {
+  return { rule: { title: input.title, body: input.body }, projects: input.projects };
+}
+
+export function personalQuestions(): Record<string, Question> {
+  return {
+    personal: {
+      type: "noul",
+      instructions:
+        "Is `rule` the developer's own way of working, one that would hold in any repository they work on, rather than something true only of the code in `projects`?",
+      criteria: {
+        true: "A personal habit or preference: how to test, commit, write documents, name things or work with tools, wherever the developer works.",
+        false:
+          "A fact, constraint or choice about these projects' own code, data, architecture or dependencies, which another repository would not share.",
+      },
+    },
+  };
+}
+
+export function personalVerdict(answers: Record<string, Answer>): PersonalVerdict {
+  const p = noul(answers, "personal");
+  return p >= 0.5 ? { personal: true, confidence: p } : { personal: false, confidence: 1 - p };
 }

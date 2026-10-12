@@ -56,6 +56,20 @@ export interface ConsolidateVerdict {
   source: JudgeSource;
 }
 
+export interface PersonalInput {
+  title: string;
+  body: string;
+  /** The names of the projects the rule was found in. */
+  projects: string[];
+}
+
+export interface PersonalVerdict {
+  /** Whether the rule is the author's way of working rather than a fact of its project. */
+  personal: boolean;
+  /** How sure the judge is of `personal`, 0.5 to 1; 0 when no judge could say. */
+  confidence: number;
+}
+
 export interface Judge {
   readonly name: JudgeSource | "fallback";
   /** Recorded on each memory, so that it can be judged again when a judge improves. */
@@ -64,4 +78,6 @@ export interface Judge {
   readonly versions: Partial<Record<JudgeSource, string>>;
   distill(input: DistillInput): Promise<DistillVerdict>;
   consolidate(input: ConsolidateInput): Promise<ConsolidateVerdict>;
+  /** Only judges that can tell have it; without it, a proposed rule stands and the author decides. */
+  personal?(input: PersonalInput): Promise<PersonalVerdict>;
 }
