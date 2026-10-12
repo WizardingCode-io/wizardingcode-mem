@@ -87,7 +87,7 @@ Candidates: active `decision`/`convention` memories, importance ≥ 4, shown to 
 
 ### Task 5: The Knowledge view
 
-**Files:** Create `ui/src/components/KnowledgeView.vue`; modify the module's `views` (rail button "Knowledge", next free key), `src/ui/server.ts` + `src/ui/api.ts` (`GET /api/knowledge?project=`, `GET /api/knowledge/:slug`, `GET /api/knowledge/proposals`, `POST /api/knowledge/proposals/:id/accept|reject`, token-protected), `ui/vite.config.ts` (the view's icons); tests for routes and view helpers.
+**Files:** Create `ui/src/components/KnowledgeView.vue`; modify the module's `views` (rail button "Knowledge", next free key), `src/ui/server.ts` + `src/ui/api.ts` (`GET /api/knowledge?project=`, `GET /api/knowledge/entries/:slug` (built as such: `/api/knowledge/:slug` collides with `proposals`), `GET /api/knowledge/proposals`, `POST /api/knowledge/proposals/:id/accept|reject`, token-protected), `ui/vite.config.ts` (the view's icons); tests for routes and view helpers.
 
 Entries grouped by kind (32px rows), a 320px dock rendering the Markdown and frontmatter (essential flag, path, problem), the proposals section (Make knowledge / Reject, one primary per screen), empty state for projects without a folder explaining where files go. Built from the rendered Sales OS mockups; screenshots of every state in light and dark compared side by side, viewer run against a temp data dir and a temp project.
 

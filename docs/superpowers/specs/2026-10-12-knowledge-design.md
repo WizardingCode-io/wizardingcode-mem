@@ -1,6 +1,6 @@
 # Knowledge: the project's curated truth, as the engine's second module — design
 
-Date: 2026-10-12. Status: written from the author's choices; awaiting the author's review. Roadmap item D2a (wave 3). D2b (personas) follows with its own spec. Built on ADR 0019 (one engine with modules).
+Date: 2026-10-12. Status: built and measured on branch `design/knowledge`; see ADR 0020 (`docs/adr/0020-knowledge.md`) for the rulings made in the build and the proof. Roadmap item D2a (wave 3). D2b (personas) follows with its own spec. Built on ADR 0019 (one engine with modules).
 
 ## Why
 
@@ -52,6 +52,8 @@ In the background, bounded like rule proposals (ADR 0018), with a cursor: active
 ## Viewer
 
 A "Knowledge" view in the rail (the module's view): entries grouped by kind, a detail dock rendering the Markdown with its frontmatter, the essential flag, the file path; the proposals section; problems (invalid frontmatter). Read-only for entries (editing happens in the repository or through the agent). Built from the Sales OS mockups, light and dark.
+
+Routes, behind the viewer's token: `GET /api/knowledge?project=` (refreshes the index first), `GET /api/knowledge/entries/:slug` (not `/api/knowledge/:slug`: an entry named `proposals.md` would collide with the next route), `GET /api/knowledge/proposals`, `POST /api/knowledge/proposals/:id/accept|reject`.
 
 ## Errors
 
