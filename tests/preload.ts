@@ -14,7 +14,25 @@ process.env.WIZARDINGCODE_MEM_MIGRATE ??= "off";
 // ~/.wizardingcode. Path overrides from the shell are dropped; tests set their own.
 const testHome = mkdtempSync(join(tmpdir(), "wizardingcode-test-home-"));
 process.env.WIZARDINGCODE_HOME = testHome;
-delete process.env.WIZARDINGCODE_MEM_DATA_DIR;
-delete process.env.WIZARDINGCODE_MEM_STORE_DIR;
-delete process.env.WIZARDINGCODE_MEM_CLAUDE_MEM_DIR;
+process.env.HOME = testHome;
+process.env.USERPROFILE = testHome;
+// Every variable the code reads to find a directory (an agent's home or config, the
+// store, a legacy install). Dropped from the shell's environment so no test can be
+// redirected to a real directory; tests that need one set it themselves. Add new ones here.
+const PATH_OVERRIDES = [
+  "WIZARDINGCODE_MEM_DATA_DIR",
+  "WIZARDINGCODE_MEM_STORE_DIR",
+  "WIZARDINGCODE_MEM_CLAUDE_MEM_DIR",
+  "WIZARDINGCODE_MEM_CLAUDE_DESKTOP_CONFIG",
+  "SHIBAOX_HOME",
+  "CODEX_HOME",
+  "CLAUDE_CONFIG_DIR",
+  "XDG_CONFIG_HOME",
+  "QWEN_HOME",
+  "COPILOT_HOME",
+  "GEMINI_CLI_HOME",
+  "APPDATA",
+  "LOCALAPPDATA",
+];
+for (const name of PATH_OVERRIDES) delete process.env[name];
 process.on("exit", () => rmSync(testHome, { recursive: true, force: true }));

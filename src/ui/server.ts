@@ -197,7 +197,7 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
   const token = randomBytes(16).toString("hex");
   const now = options.now ?? Date.now;
   const env = options.env ?? process.env;
-  const homeDir = options.homeDir ?? brandHome(env);
+  const homeDir = options.homeDir ?? brandHome();
   // The database may move while the server runs (Storage settings): `db` is reopened.
   let storeDir = storeDirOf(options.dataDir, env);
   let db: Db = openDb({ dataDir: storeDir, busyTimeoutMs: 2000 });
