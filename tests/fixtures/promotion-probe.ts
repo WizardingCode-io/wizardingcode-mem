@@ -4,8 +4,8 @@ import type { MemoryKind } from "../../src/core/types.ts";
 // history import files them, decisions and conventions of importance 4 or more. The episodic
 // ones record something that happened in a session, phrased as a convention or a decision,
 // one or more per pattern family; none of them may be proposed. The standing ones are rules
-// that stay true for the project, some naming a file or a version, which must survive: at
-// least 9 of the 10. All synthetic.
+// that stay true for the project, some naming a file or a version, which must survive: all
+// but one at most. All synthetic.
 
 export interface ProbeMemory {
   title: string;
@@ -127,6 +127,18 @@ export const EPISODIC: ProbeMemory[] = [
     body: "The admin screens are the third wave of the redesign.",
   },
   {
+    family: "process",
+    kind: "convention",
+    title: "Multi-session work coordination for the checkout and search windows",
+    body: "Each window keeps to its own folders until the wave closes.",
+  },
+  {
+    family: "process",
+    kind: "decision",
+    title: "End-to-end validation successful in two real sessions",
+    body: "Both agents saw the notes at the right moments.",
+  },
+  {
     family: "prompt-copy",
     kind: "convention",
     title: "Continue with the next step of the plan",
@@ -199,5 +211,15 @@ export const STANDING: ProbeMemory[] = [
     kind: "decision",
     title: "We use PostgreSQL 16, not MongoDB",
     body: "All services keep their data in PostgreSQL; see docs/adr/0003-database.md.",
+  },
+  {
+    kind: "convention",
+    title: "Tests must pass before a merge",
+    body: "The merge button stays off until the checks are green.",
+  },
+  {
+    kind: "decision",
+    title: "Every release is validated on staging first",
+    body: "Staging runs the release for a day before production gets it.",
   },
 ];

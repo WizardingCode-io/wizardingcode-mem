@@ -14,9 +14,9 @@ import { checkSlug, prepareFolder, renderEntry, today, writeNewEntry } from "./w
 // Memories worth keeping, proposed as knowledge (spec "Promotion from memory"). In the
 // background drain, bounded like the rule proposals (ADR 0018): a cursor, a lease and a
 // compare-and-set, so that a quiet drain costs two lookups. Exact rules: an active decision
-// or convention of importance 4 or more that agents asked for or met in their work (never
-// the session-start brief) in at least 3 sessions spanning a day or more, or that is one of
-// the author's own rules; and, unless it is one of those, it must not read as a record of a
+// or convention of importance 4 or more shown in at least 3 sessions spanning a day or more,
+// in one of which at least an agent asked for it or met it in its work (the session-start
+// brief alone is no evidence), or that is one of the author's own rules; and, unless it is one of those, it must not read as a record of a
 // session (`episodic.ts`) nor, when a judge can tell (a TypeSafe key), be judged surely not
 // standing knowledge. Proposing writes nothing to a repository; only accepting does, on
 // the author's click, and only where knowledge is on.
@@ -112,25 +112,37 @@ export function projectRoot(db: Db, projectId: number): string | null {
 }
 
 /**
- * What counts as shown (final review I1): only what the agent asked for or what matched its
- * work, never the session-start brief, which ranks by importance and so shows every important
- * memory of a busy project in nearly every session.
+ * What counts as asked for: a showing the agent asked for or that matched its work. The
+ * session-start brief ranks by importance, so it shows every important memory of a busy
+ * project in nearly every session; on its own it is no evidence (final review I1).
  */
 const ASKED_EVENTS = "('prompt', 'mcp', 'file-read', 'tool-failed')";
-/** Shown in at least this many distinct sessions... */
+/** Shown in at least this many distinct sessions (contexts of one session count once)... */
 const MIN_SESSIONS = 3;
-/** ...spanning at least this long, so that one long afternoon's plan does not qualify. */
+/** ...spanning at least this long, so that one long afternoon's plan does not qualify... */
 const MIN_SPAN_MS = 86_400_000;
+/**
+ * ...and asked for in at least this many of them. One, not three: re-measured on the
+ * author's store, the standing rules are shown at session start in every session and asked
+ * for in one or two, while records of a busy session are asked for as often or more; three
+ * asked-for sessions kept none of the rules and only noise (ADR 0020, the proof).
+ */
+const MIN_ASKED_SESSIONS = 1;
 
 /**
  * For each memory (ids given as a list of integers): in how many distinct sessions it was
- * shown when asked for or matched, and the time between the first and the last such showing.
- * A covering index search (`injections_memory_shown`, module migration 5).
+ * shown, in how many of them it was asked for, and the time between its first and last
+ * showing. A covering index search (`injections_memory_shown`, module migration 5).
  */
 export const SHOWN_SQL = (ids: string) =>
-  `SELECT memory_id AS id, count(DISTINCT session_id) AS sessions, max(at) - min(at) AS span
-     FROM injections WHERE memory_id IN (${ids}) AND event IN ${ASKED_EVENTS}
-    GROUP BY memory_id`;
+  `SELECT memory_id AS id, count(DISTINCT session_id) AS sessions,
+          count(DISTINCT CASE WHEN event IN ${ASKED_EVENTS} THEN session_id END) AS asked,
+          max(at) - min(at) AS span
+     FROM injections WHERE memory_id IN (${ids}) GROUP BY memory_id`;
+
+/** Whether a memory's showings are evidence that agents keep needing it. */
+export const shownEnough = (row: { sessions: number; asked: number; span: number }) =>
+  row.sessions >= MIN_SESSIONS && row.span >= MIN_SPAN_MS && row.asked >= MIN_ASKED_SESSIONS;
 
 /** Module migration 5's index, created again by a pass that finds it missing (a core rebuild). */
 const SHOWN_INDEX = "injections_memory_shown";
@@ -266,12 +278,14 @@ async function propose(
       .all();
     // How often each was shown, in one pass over the record (only for those that need it).
     const counted = candidates.filter((c) => c.rule === 0).map((c) => c.id);
-    const shownEnough = new Set<number>();
+    const evidence = new Set<number>();
     if (counted.length > 0) {
       for (const row of db
-        .query<{ id: number; sessions: number; span: number }, []>(SHOWN_SQL(counted.join(", ")))
+        .query<{ id: number; sessions: number; asked: number; span: number }, []>(
+          SHOWN_SQL(counted.join(", ")),
+        )
         .all()) {
-        if (row.sessions >= MIN_SESSIONS && row.span >= MIN_SPAN_MS) shownEnough.add(row.id);
+        if (shownEnough(row)) evidence.add(row.id);
       }
     }
     const roots = new Map<number, string | null>();
@@ -298,7 +312,7 @@ async function propose(
       // Out of time: the cursor stays where it was, and a later pass looks again.
       if (performance.now() > deadline) return { proposed, scanned: 0 };
       if (candidate.rule === 0) {
-        if (!shownEnough.has(candidate.id)) continue;
+        if (!evidence.has(candidate.id)) continue;
         // A record of a session, not a standing rule (layer 2).
         const episodic = looksEpisodic(candidate.title, candidate.body, candidate.prompt);
         if (episodic !== null) {

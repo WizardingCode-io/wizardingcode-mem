@@ -371,6 +371,17 @@ describe("structural evidence: what counts as shown (final review I1, layer 1)",
     expect((await propose()).proposed).toBe(0);
   });
 
+  test("at session start in 3 sessions over days, and asked for in one: proposed (re-proof)", async () => {
+    // A standing rule the brief shows in every session, that an agent also once looked up:
+    // the shape of the real rules on the author's store, which agents rarely ask for again.
+    const id = memory({ title: "The code is written from scratch, never copied" });
+    const asked = newSession();
+    showOnce(id, { event: "session-start", session: asked, at: NOW - 3 * DAY });
+    showOnce(id, { event: "mcp", session: asked, context: 2000, at: NOW - 3 * DAY });
+    for (let i = 0; i < 2; i++) showOnce(id, { event: "session-start", at: NOW - i * DAY });
+    expect((await propose()).proposed).toBe(1);
+  });
+
   test("shown on prompts in 3 contexts of one session: not proposed", async () => {
     const id = memory({ title: "Use the outbox for the cart events" });
     const session = newSession();
@@ -431,7 +442,7 @@ describe("structural evidence: what counts as shown (final review I1, layer 1)",
 });
 
 describe("session artifacts are not proposed (final review I1, layer 2)", () => {
-  test("the probe: no episodic memory proposed, at least 9 of 10 standing rules kept", async () => {
+  test("the probe: no episodic memory proposed, all standing rules but one at most kept", async () => {
     const ids = new Map<number, string>();
     for (const m of [...EPISODIC, ...STANDING]) {
       const id = memory({
@@ -448,7 +459,9 @@ describe("session artifacts are not proposed (final review I1, layer 2)", () => 
     const proposedIds = proposals().map((row) => row.memory_id);
     const kinds = proposedIds.map((id) => ids.get(id));
     expect(kinds.filter((kind) => kind !== "standing")).toEqual([]);
-    expect(kinds.filter((kind) => kind === "standing").length).toBeGreaterThanOrEqual(9);
+    expect(kinds.filter((kind) => kind === "standing").length).toBeGreaterThanOrEqual(
+      STANDING.length - 1,
+    );
     // Each drop is reported with its layer and the pattern that caught it.
     expect(dropped.length).toBe(EPISODIC.length);
     for (const drop of dropped) {

@@ -40,11 +40,11 @@ export const EPISODIC_PATTERNS: readonly EpisodicPattern[] = [
       /\b(?:PR|MR|pull request|issue)\s*#?\d+\b|(?:^|\s)#\d{2,}\b|\/(?:pull|issues|merge_requests)\/\d+/i,
   },
   {
-    // The language of a session's process: who was dispatched, what a review said, the plan
-    // for now.
+    // The language of a session's process: who was dispatched, what a review said, how
+    // sessions were coordinated, how a check came out, the plan for now.
     name: "process",
     pattern:
-      /\b(?:dispatch(?:ed|ing)?|re-?dispatch|subagents?|implementer|reviewer|review verdict|verdict|fix round|round \d+\/\d+|task \d+|wave \d+|(?:opened|merged|closed) (?:a |the )?(?:PR|pull request)|this session|next session|today|tonight|session plan|plan for (?:the|this) session)\b/i,
+      /\b(?:dispatch(?:ed|ing)?|re-?dispatch|subagents?|implementer|reviewer|review verdict|verdict|fix round|round \d+\/\d+|task \d+|wave \d+|(?:opened|merged|closed) (?:a |the )?(?:PR|pull request)|this session|next session|(?:multi|cross)-session|today|tonight|session plan|plan for (?:the|this) session|(?:validation|verification|tests?|build|checks?|review) (?:succeeded|successful|passed|failed))\b/i,
   },
 ];
 
