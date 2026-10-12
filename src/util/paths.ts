@@ -12,10 +12,12 @@ const set = (value: string | undefined): value is string => value !== undefined 
  */
 export function defaultDataDir(env: Record<string, string | undefined> = process.env): string {
   if (set(env.WIZARDINGCODE_MEM_DATA_DIR)) return env.WIZARDINGCODE_MEM_DATA_DIR;
-  const home = set(env.WIZARDINGCODE_HOME)
-    ? env.WIZARDINGCODE_HOME
-    : join(homedir(), ".wizardingcode");
-  return join(home, "mem");
+  return join(brandHome(env), "mem");
+}
+
+/** The brand's home, `~/.wizardingcode` (or `WIZARDINGCODE_HOME`): what every module shares, such as the app's state. */
+export function brandHome(env: Record<string, string | undefined> = process.env): string {
+  return set(env.WIZARDINGCODE_HOME) ? env.WIZARDINGCODE_HOME : join(homedir(), ".wizardingcode");
 }
 
 const absolute = (value: string) => isAbsolute(value) || win32.isAbsolute(value);

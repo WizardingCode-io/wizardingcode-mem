@@ -38,7 +38,7 @@ import {
 } from "../store/meta.ts";
 import { inspectTarget, moveStore } from "../store/move.ts";
 import { logError } from "../util/log.ts";
-import { storeDirOf } from "../util/paths.ts";
+import { brandHome, storeDirOf } from "../util/paths.ts";
 import { spawnDetached } from "../util/self.ts";
 import { clearUiState, writeUiState } from "./state.ts";
 import { acceptProposal, rejectProposal, undoUserRule } from "../links/rules.ts";
@@ -73,6 +73,8 @@ import page from "./dist/index.html" with { type: "text" };
 
 export interface UiOptions {
   dataDir: string;
+  /** The brand's home, where the app's state file lives; `~/.wizardingcode` unless moved. */
+  homeDir?: string;
   /** 0 picks a free port. */
   port?: number;
   /** Open the browser on start. */
@@ -195,6 +197,7 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
   const token = randomBytes(16).toString("hex");
   const now = options.now ?? Date.now;
   const env = options.env ?? process.env;
+  const homeDir = options.homeDir ?? brandHome(env);
   // The database may move while the server runs (Storage settings): `db` is reopened.
   let storeDir = storeDirOf(options.dataDir, env);
   let db: Db = openDb({ dataDir: storeDir, busyTimeoutMs: 2000 });
@@ -217,7 +220,7 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
     if (idleTimer !== undefined) clearTimeout(idleTimer);
     await server.stop(true);
     db.close();
-    clearUiState(options.dataDir, process.pid);
+    clearUiState(homeDir, process.pid, options.dataDir);
   };
   const touch = () => {
     if (idleTimer !== undefined) clearTimeout(idleTimer);
@@ -705,7 +708,7 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
   const url = `${origin}/?token=${token}`;
   pageUrl = url;
   const recorded = writeUiState(
-    options.dataDir,
+    homeDir,
     { pid: process.pid, origin, token, startedAt: now() },
     options.exclusive ?? false,
   );
