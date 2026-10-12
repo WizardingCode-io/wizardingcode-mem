@@ -3,6 +3,7 @@ import { drainQueue } from "../../distill/queue.ts";
 import { healLine, healVectors } from "../../embed/backfill.ts";
 import { loadModel } from "../../embed/model.ts";
 import { makeJudge } from "../../judge/index.ts";
+import { suggestLinksSafely } from "../../links/suggest.ts";
 import { type Db, openDb } from "../../store/db.ts";
 import { logError } from "../../util/log.ts";
 import { resolvePaths } from "../../util/paths.ts";
@@ -37,6 +38,8 @@ export async function run(): Promise<number> {
     // came later) get their vector here, a bounded pass at a time: nobody has to run a backfill.
     const healed = await healVectors(db, loadModel({ dataDir }), { now: Date.now });
     if (healed) process.stdout.write(healLine(healed));
+    // Proposals for linked projects: exact rules over remotes and manifests, bounded, never fatal.
+    suggestLinksSafely(db, Date.now());
     return 0;
   } catch (error) {
     logError("distill", error);
