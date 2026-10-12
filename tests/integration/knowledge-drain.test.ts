@@ -14,7 +14,8 @@ let dataDir: string;
 let project: string;
 beforeEach(() => {
   base = realpathSync(mkdtempSync(join(tmpdir(), "wizardingcode-mem-knowledge-drain-")));
-  process.env.WIZARDINGCODE_HOME = base;
+  // Beside the project, not around it: a folder holding the brand home has no knowledge.
+  process.env.WIZARDINGCODE_HOME = join(base, "home");
   dataDir = join(base, "data");
   project = join(base, "project");
   const dir = knowledgeDir(project);

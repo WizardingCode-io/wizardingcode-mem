@@ -2,12 +2,20 @@ import { resolveProject } from "../../core/project.ts";
 import type { ModuleTool, ToolMode } from "../../engine/module.ts";
 import { type Db, openDb } from "../../store/db.ts";
 import { resolvePaths } from "../../util/paths.ts";
-import { KINDS, type KnowledgeEntry, knowledgeDir, STATUSES, slugify } from "./files.ts";
+import {
+  folderProblem,
+  KINDS,
+  type KnowledgeEntry,
+  knowledgeDir,
+  STATUSES,
+  slugify,
+} from "./files.ts";
 import { entriesBySlug, listEntries, refreshIndex, searchKnowledge } from "./index-store.ts";
 import {
   checkSlug,
   editEntry,
   type FieldChanges,
+  prepareFolder,
   readForEdit,
   renderEntry,
   replaceEntry,
@@ -34,7 +42,12 @@ export interface KnowledgeContext {
   /** The project's working tree root: its knowledge is in `<root>/.wizardingcode/knowledge`. */
   root: string;
   now: number;
+  /** Where the home folder and the brand's home are; the process's environment by default. */
+  env?: Record<string, string | undefined>;
 }
+
+/** Why knowledge is not read or written for this project, or null. */
+const problemOf = (ctx: KnowledgeContext) => folderProblem(ctx.root, ctx.env ?? process.env);
 
 const DEFAULT_LIMIT = 10;
 
@@ -54,6 +67,8 @@ export function searchEntries(
   ctx: KnowledgeContext,
   args: { query: string; limit?: number },
 ): string {
+  const problem = problemOf(ctx);
+  if (problem !== null) return problem;
   fresh(ctx);
   const limit = args.limit ?? DEFAULT_LIMIT;
   const found =
@@ -85,6 +100,8 @@ function full(entry: KnowledgeEntry): string {
 }
 
 export function getEntries(ctx: KnowledgeContext, args: { slugs: string[] }): string {
+  const problem = problemOf(ctx);
+  if (problem !== null) return problem;
   fresh(ctx);
   const found = new Map(
     entriesBySlug(ctx.db, ctx.projectId, args.slugs).map((entry) => [entry.slug, entry]),
@@ -108,6 +125,8 @@ export interface SaveArgs {
 }
 
 export function saveEntry(ctx: KnowledgeContext, args: SaveArgs): string {
+  const problem = problemOf(ctx);
+  if (problem !== null) return `${problem} Nothing was written.`;
   let slug: string;
   if (args.slug === undefined) slug = slugify(args.title);
   else {
@@ -115,7 +134,9 @@ export function saveEntry(ctx: KnowledgeContext, args: SaveArgs): string {
     if ("refused" in checked) return checked.refused;
     slug = checked.slug;
   }
-  const dir = knowledgeDir(ctx.root);
+  const prepared = prepareFolder(ctx.root, ctx.env ?? process.env);
+  if ("refused" in prepared) return prepared.refused;
+  const { dir } = prepared;
   const text = renderEntry(
     {
       title: args.title,
@@ -148,6 +169,8 @@ export interface UpdateArgs {
 }
 
 export function updateEntry(ctx: KnowledgeContext, args: UpdateArgs): string {
+  const problem = problemOf(ctx);
+  if (problem !== null) return `${problem} Nothing was written.`;
   const checked = checkSlug(args.slug);
   if ("refused" in checked) return checked.refused;
   const dir = knowledgeDir(ctx.root);
@@ -165,7 +188,9 @@ export function updateEntry(ctx: KnowledgeContext, args: UpdateArgs): string {
     tags: args.tags,
     updated: today(ctx.now),
   };
-  const result = replaceEntry(dir, checked.slug, editEntry(read.text, changes, args.body));
+  const edited = editEntry(read.text, changes, args.body);
+  if ("refused" in edited) return edited.refused;
+  const result = replaceEntry(dir, checked.slug, edited.text);
   if ("refused" in result) return result.refused;
   refreshIndex(ctx.db, ctx.projectId, dir, { force: true });
   return `Updated ${checked.slug}: ${result.path}`;

@@ -1,5 +1,6 @@
 import {
   closeSync,
+  fchmodSync,
   fsyncSync,
   linkSync,
   lstatSync,
@@ -12,7 +13,7 @@ import {
   writeSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { KNOWLEDGE_FILE_MAX_BYTES } from "./files.ts";
+import { folderProblem, KNOWLEDGE_FILE_MAX_BYTES, knowledgeDir } from "./files.ts";
 
 // Writing knowledge files for the agent: names that cannot leave the folder, frontmatter
 // the parser in files.ts reads back as written, and atomic writes (a hidden temp file in
@@ -105,22 +106,32 @@ export function renderEntry(changes: FieldChanges, body: string): string {
 /**
  * The entry's text with the given fields changed in place (a key's block list goes with
  * it) and the others appended; every other line, comments and unknown keys included, kept
- * as written. The body is replaced when one is given. A file with no frontmatter gets one,
- * its text kept as the body.
+ * as written, in the file's own line endings. The body is replaced when one is given. A
+ * file with no frontmatter gets one, its text kept as the body. A frontmatter that never
+ * closes is refused: where it ends cannot be told, so nothing in it can be changed safely.
  */
-export function editEntry(text: string, changes: FieldChanges, body?: string): string {
-  const lines = text.replace(/^﻿/, "").split(/\r?\n/);
+export function editEntry(
+  text: string,
+  changes: FieldChanges,
+  body?: string,
+): { text: string } | { refused: string } {
+  const eol = /\r\n/.test(text) ? "\r\n" : "\n";
+  const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/);
   let front: string[] = [];
   let rest: string;
-  const end =
-    lines[0]?.trimEnd() === "---"
-      ? lines.findIndex((line, i) => i > 0 && /^(---|\.\.\.)\s*$/.test(line))
-      : -1;
+  const opens = lines[0]?.trimEnd() === "---";
+  const end = opens ? lines.findIndex((line, i) => i > 0 && /^(---|\.\.\.)\s*$/.test(line)) : -1;
+  if (opens && end === -1) {
+    return {
+      refused:
+        "Its frontmatter is never closed (no second ---); fix the file by hand. Nothing was written.",
+    };
+  }
   if (end !== -1) {
     front = lines.slice(1, end);
-    rest = lines.slice(end + 1).join("\n");
+    rest = lines.slice(end + 1).join(eol);
   } else {
-    rest = lines.join("\n");
+    rest = lines.join(eol);
   }
   const wanted = fieldLines(changes);
   const kept: string[] = [];
@@ -144,8 +155,8 @@ export function editEntry(text: string, changes: FieldChanges, body?: string): s
     kept.push(line);
   }
   kept.push(...wanted.values());
-  const newBody = body === undefined ? rest : `${body.trim()}\n`;
-  return `---\n${kept.join("\n")}\n---\n${newBody}`;
+  const newBody = body === undefined ? rest : `${body.trim().replace(/\r?\n/g, eol)}${eol}`;
+  return { text: `---${eol}${kept.join(eol)}${eol}---${eol}${newBody}` };
 }
 
 export type WriteResult = { path: string } | { refused: string };
@@ -163,16 +174,47 @@ function failure(error: unknown, dir: string): WriteResult {
 }
 
 /** Writes `text` to a hidden temp file in the folder, flushed; returns its path. */
-function tempFile(dir: string, slug: string, text: string): string {
+function tempFile(dir: string, slug: string, text: string, mode = 0o644): string {
   const temp = join(dir, `.${slug}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`);
-  const fd = openSync(temp, "wx", 0o644);
+  const fd = openSync(temp, "wx", mode);
   try {
     writeSync(fd, text);
     fsyncSync(fd);
-  } finally {
+    // The umask may have narrowed it: the entry keeps the mode it had.
+    fchmodSync(fd, mode);
+  } catch (error) {
     closeSync(fd);
+    rmSync(temp, { force: true });
+    throw error;
   }
+  closeSync(fd);
   return temp;
+}
+
+/**
+ * The project's knowledge folder, ready to write in: `.wizardingcode` and `knowledge`
+ * created one level at a time if missing, each checked to be a real folder (not a link)
+ * once it is there, and the result checked to resolve inside the project.
+ */
+export function prepareFolder(
+  projectRoot: string,
+  env: Record<string, string | undefined> = process.env,
+): { dir: string } | { refused: string } {
+  const dir = knowledgeDir(projectRoot);
+  for (const level of [join(projectRoot, ".wizardingcode"), dir]) {
+    try {
+      mkdirSync(level);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== "EEXIST") {
+        const failed = failure(error, level);
+        if ("refused" in failed) return failed;
+      }
+    }
+    const problem = folderProblem(projectRoot, env);
+    if (problem !== null) return { refused: `${problem} Nothing was written.` };
+  }
+  return { dir };
 }
 
 /** The entry file already there under this name, in any case (case-insensitive disks). */
@@ -194,7 +236,6 @@ export function writeNewEntry(dir: string, slug: string, text: string): NewResul
   const path = entryPath(dir, slug);
   let temp: string | null = null;
   try {
-    mkdirSync(dir, { recursive: true });
     const taken = existing(dir, slug);
     if (taken !== null) return { exists: taken };
     temp = tempFile(dir, slug, text);
@@ -246,7 +287,7 @@ export function replaceEntry(dir: string, slug: string, text: string): WriteResu
   const path = entryPath(dir, slug);
   let temp: string | null = null;
   try {
-    temp = tempFile(dir, slug, text);
+    temp = tempFile(dir, slug, text, lstatSync(path).mode & 0o777);
     renameSync(temp, path);
     temp = null;
     return { path };

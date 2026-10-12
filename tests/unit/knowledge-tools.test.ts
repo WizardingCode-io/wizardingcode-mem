@@ -17,6 +17,7 @@ import { resolveProject } from "../../src/core/project.ts";
 import { knowledgeDir, readEntries } from "../../src/modules/knowledge/files.ts";
 import { knowledge } from "../../src/modules/knowledge/index.ts";
 import { searchKnowledge } from "../../src/modules/knowledge/index-store.ts";
+import { freshenForHook } from "../../src/modules/knowledge/refresh.ts";
 import {
   getEntries,
   type KnowledgeContext,
@@ -40,6 +41,7 @@ let repo: string;
 let dir: string;
 let db: Db;
 let ctx: KnowledgeContext;
+let env: Record<string, string>;
 
 beforeEach(() => {
   base = realpathSync(mkdtempSync(join(tmpdir(), "wizardingcode-mem-knowledge-tools-")));
@@ -48,7 +50,8 @@ beforeEach(() => {
   dir = knowledgeDir(repo);
   db = openDb({ dataDir: join(base, "store"), busyTimeoutMs: 2000 });
   const project = resolveProject(db, repo, NOW);
-  ctx = { db, projectId: project.id, root: project.root, now: NOW };
+  env = { HOME: join(base, "home"), WIZARDINGCODE_HOME: join(base, "home", ".wizardingcode") };
+  ctx = { db, projectId: project.id, root: project.root, now: NOW, env };
 });
 afterEach(() => {
   db.close();
@@ -502,4 +505,119 @@ describe("the module's tools", () => {
     );
     expect(found.stdout).toContain("bridged-entry");
   }, 20_000);
+});
+
+describe("the folder must be the project's own (fix round 1)", () => {
+  const ENTRY = "---\ntitle: Elsewhere\nkind: rule\n---\nKeep.\n";
+  const symlinkable = process.platform !== "win32";
+
+  /** A folder outside the repository, holding one .md file a write must never touch. */
+  function outside(): string {
+    const target = join(base, "elsewhere");
+    mkdirSync(target, { recursive: true });
+    writeFileSync(join(target, "README.md"), ENTRY);
+    return target;
+  }
+  const untouched = (target: string) => {
+    expect(readdirSync(target).sort()).toEqual(["README.md"]);
+    expect(readFileSync(join(target, "README.md"), "utf8")).toBe(ENTRY);
+  };
+
+  test.skipIf(!symlinkable)("a symlinked knowledge folder: save, update and search refused", () => {
+    const target = outside();
+    mkdirSync(join(repo, ".wizardingcode"));
+    symlinkSync(target, dir);
+    expect(saveEntry(ctx, { title: "New", kind: "rule", body: "B." })).toMatch(/link/);
+    expect(updateEntry(ctx, { slug: "README", title: "Changed" })).toMatch(/link/);
+    expect(searchEntries(ctx, { query: "elsewhere" })).toMatch(/link/);
+    expect(getEntries(ctx, { slugs: ["README"] })).toMatch(/link/);
+    untouched(target);
+  });
+
+  test.skipIf(!symlinkable)("a symlinked .wizardingcode folder: save and update refused", () => {
+    const target = outside();
+    mkdirSync(join(target, "knowledge"));
+    writeFileSync(join(target, "knowledge", "README.md"), ENTRY);
+    symlinkSync(target, join(repo, ".wizardingcode"));
+    expect(saveEntry(ctx, { title: "New", kind: "rule", body: "B." })).toMatch(/link/);
+    expect(updateEntry(ctx, { slug: "README", title: "Changed" })).toMatch(/link/);
+    expect(readdirSync(join(target, "knowledge"))).toEqual(["README.md"]);
+    expect(readFileSync(join(target, "knowledge", "README.md"), "utf8")).toBe(ENTRY);
+  });
+
+  test.skipIf(!symlinkable)(
+    "a symlinked .wizardingcode with no knowledge folder yet: nothing created there",
+    () => {
+      const target = outside();
+      symlinkSync(target, join(repo, ".wizardingcode"));
+      expect(saveEntry(ctx, { title: "New", kind: "rule", body: "B." })).toMatch(/link/);
+      untouched(target);
+    },
+  );
+
+  test.skipIf(!symlinkable)("the hooks read nothing through a symlinked folder", () => {
+    const target = outside();
+    mkdirSync(join(repo, ".wizardingcode"));
+    symlinkSync(target, dir);
+    expect(freshenForHook(db, ctx.projectId, repo, env)).toBe(false);
+    expect(searchKnowledge(db, ctx.projectId, "elsewhere", 5)).toEqual([]);
+  });
+
+  test("the home folder is no project: knowledge is off there", () => {
+    const home = join(base, "home");
+    const homeCtx = { ...ctx, root: home };
+    const homeDir = knowledgeDir(home);
+    mkdirSync(homeDir, { recursive: true });
+    writeFileSync(join(homeDir, "data.md"), ENTRY);
+    for (const answer of [
+      saveEntry(homeCtx, { title: "New", kind: "rule", body: "B." }),
+      updateEntry(homeCtx, { slug: "data", title: "Changed" }),
+      searchEntries(homeCtx, { query: "elsewhere" }),
+      getEntries(homeCtx, { slugs: ["data"] }),
+    ]) {
+      expect(answer).toMatch(/knowledge is off/i);
+    }
+    expect(readdirSync(homeDir)).toEqual(["data.md"]);
+    expect(readFileSync(join(homeDir, "data.md"), "utf8")).toBe(ENTRY);
+    expect(freshenForHook(db, ctx.projectId, home, env)).toBe(false);
+    expect(searchKnowledge(db, ctx.projectId, "elsewhere", 5)).toEqual([]);
+  });
+
+  test("a project that is or holds the brand's home: knowledge is off", () => {
+    const brand = join(repo, "data");
+    const brandEnv = { ...env, WIZARDINGCODE_HOME: brand };
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "x.md"), ENTRY);
+    for (const root of [repo, brand]) {
+      mkdirSync(root, { recursive: true });
+      const there = { ...ctx, root, env: brandEnv };
+      expect(saveEntry(there, { title: "New", kind: "rule", body: "B." })).toMatch(
+        /knowledge is off/i,
+      );
+      expect(searchEntries(there, { query: "elsewhere" })).toMatch(/knowledge is off/i);
+      expect(freshenForHook(db, ctx.projectId, root, brandEnv)).toBe(false);
+    }
+    expect(readdirSync(dir)).toEqual(["x.md"]);
+  });
+});
+
+describe("writes keep what the author had (fix round 1)", () => {
+  test("update keeps CRLF line endings and the file's mode", () => {
+    handWritten("crlf", "---\r\ntitle: Old\r\nkind: rule\r\n---\r\nBody.\r\n");
+    chmodSync(join(dir, "crlf.md"), 0o600);
+    updateEntry(ctx, { slug: "crlf", title: "New" });
+    const text = readFileSync(join(dir, "crlf.md"), "utf8");
+    expect(text).toBe(`---\r\ntitle: "New"\r\nkind: rule\r\nupdated: ${TODAY}\r\n---\r\nBody.\r\n`);
+    if (process.platform !== "win32") {
+      const { statSync } = require("node:fs") as typeof import("node:fs");
+      expect(statSync(join(dir, "crlf.md")).mode & 0o777).toBe(0o600);
+    }
+  });
+
+  test("an entry whose frontmatter never closes is refused, not garbled", () => {
+    const text = "---\ntitle: Open\nkind: rule\nBody without a closing line.\n";
+    handWritten("open", text);
+    expect(updateEntry(ctx, { slug: "open", title: "X" })).toMatch(/never closed/);
+    expect(readFileSync(join(dir, "open.md"), "utf8")).toBe(text);
+  });
 });

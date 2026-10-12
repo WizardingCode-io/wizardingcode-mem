@@ -2,13 +2,16 @@ import {
   closeSync,
   constants,
   fstatSync,
+  lstatSync,
   openSync,
   readdirSync,
   readSync,
   realpathSync,
   statSync,
 } from "node:fs";
-import { join, sep } from "node:path";
+import { homedir } from "node:os";
+import { join, resolve, sep } from "node:path";
+import { brandHome } from "../../util/paths.ts";
 
 // Knowledge entries as files (K1, K2): one Markdown file per entry in the project's
 // `.wizardingcode/knowledge` folder, frontmatter first. The files are the truth and are
@@ -52,6 +55,60 @@ const RESERVED = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])$/;
 /** Where a project's knowledge lives: `<root>/.wizardingcode/knowledge`. */
 export function knowledgeDir(projectRoot: string): string {
   return join(projectRoot, ".wizardingcode", "knowledge");
+}
+
+type Env = Record<string, string | undefined>;
+
+function real(path: string): string {
+  try {
+    return realpathSync(path);
+  } catch {
+    return resolve(path);
+  }
+}
+
+const within = (path: string, folder: string) =>
+  path === folder || path.startsWith(folder.endsWith(sep) ? folder : folder + sep);
+
+/** Why knowledge is off in this folder at all, or null. */
+function offHere(projectRoot: string, env: Env): string | null {
+  const root = real(projectRoot);
+  const home = real(env.HOME || env.USERPROFILE || homedir());
+  const brand = real(brandHome(env));
+  // An agent started in the home folder outside git has the home folder as its project, and
+  // `~/.wizardingcode` is the brand's own data: never a project's knowledge.
+  if (root === home || within(root, brand) || within(brand, root)) {
+    return "Knowledge is off here: this folder is the home folder or holds wizardingcode's data, not a project. Open the project's own folder.";
+  }
+  return null;
+}
+
+/**
+ * Why the project's knowledge folder must not be read or written, or null when it may
+ * (a missing folder included). Knowledge is off in the home folder and in any folder that
+ * is or holds the brand's home; and `.wizardingcode` and `knowledge` must be real folders
+ * inside the project, not links: a repository can ship a link to anywhere.
+ */
+export function folderProblem(projectRoot: string, env: Env = process.env): string | null {
+  const off = offHere(projectRoot, env);
+  if (off !== null) return off;
+  const brandLevel = join(projectRoot, ".wizardingcode");
+  for (const level of [brandLevel, knowledgeDir(projectRoot)]) {
+    let stat: ReturnType<typeof lstatSync>;
+    try {
+      stat = lstatSync(level);
+    } catch {
+      return null; // not there yet: nothing to read, and a write creates it
+    }
+    if (stat.isSymbolicLink()) {
+      return `${level} is a link; knowledge is read and written only in a real folder inside the project.`;
+    }
+    if (!stat.isDirectory()) return `${level} is not a folder.`;
+  }
+  if (!within(real(knowledgeDir(projectRoot)), real(projectRoot))) {
+    return "The knowledge folder resolves outside the project; nothing is read or written there.";
+  }
+  return null;
 }
 
 /**
