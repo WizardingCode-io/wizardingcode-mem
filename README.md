@@ -242,7 +242,7 @@ A local page over your memories, in WizardingCode's app design:
 - **Turns** — every prompt and what it became, with filters (agent, status, source, period), sortable columns, a search over prompts and an export to CSV. Each turn opens with its prompt, files, commands, answer and the memories it left behind; Markdown is shown formatted.
 - **Overview** — the project's numbers and charts: memories and turns per week, by kind, by importance, and how fast the hooks have been.
 - **History** — past conversations with Claude Code and Codex, searchable, for one project or all of them (see [Learn from past sessions](#learn-from-past-sessions)).
-- **Settings** — agents, health, the judge, retention, history, storage, backups and the viewer, one page each.
+- **Settings** — agents, health, the judge, retention, history, search, storage, backups and the viewer, one page each.
 
 ⌘K (or the search in the top bar) searches every project at once. Light and dark; `[` folds the projects panel, `1`–`5` switch views. It listens on the loopback only, behind a token in the URL, loads nothing from the network, and stops itself after half an hour without you or a tab. It opens by itself when a session starts, in any agent — one viewer per machine, never a second tab — and stays closed under CI, over SSH, or when you turn that off.
 
@@ -264,6 +264,23 @@ wizardingcode-mem history search <words>      # find what was said; also the MCP
 - **Imports from claude-mem** inside the period history covers can be archived with `history replace-imports` (the viewer shows the count first). Nothing is deleted.
 - **To undo:** `history restore-imports` brings the archived imports back; `history forget` deletes the conversation index (it is rebuilt only if you ask).
 
+## Search by meaning (optional)
+
+Searches match words. With a small model downloaded once, they also find notes by what they mean, when the note uses other words than the question, or another language (Portuguese and English meet).
+
+```sh
+wizardingcode-mem embed download --backfill   # about 140 MB, once; then a vector for every note already there
+wizardingcode-mem embed status                # present, size, switched on
+wizardingcode-mem embed delete                # remove the model and its vectors; searches match words again
+```
+
+`install` asks once in a terminal (`--semantic` agrees in advance, `--no-semantic` skips the question), and the viewer's **Settings → Search** page downloads it with a progress bar, fills the vectors, turns it on or off and deletes it. `doctor` says how it stands.
+
+- **Where it is used:** `memory_search` and `history_search` (the agent's tools), the viewer's ⌘K search and its History view. **Never** to choose what is added to your agent's context: what the hooks inject is still chosen by words, files and importance alone.
+- **What it costs:** the 146 MB model in `~/.wizardingcode/mem/models`, and about 350 bytes per note in the database (vectors travel in backups, so a restore does not need a rebuild). A search across every project takes about 10 ms more.
+- **The only download, and nothing of yours goes out:** a fixed address, checked against a pinned checksum and size before it is used. The model is [potion-multilingual-128M](https://huggingface.co/minishlab/potion-multilingual-128M) by Minish Lab (MIT), repacked for this binary; no resident process, no generative model.
+- **Turn it off** from Settings or with `WIZARDINGCODE_MEM_SEMANTIC=off`; the model is kept until you delete it.
+
 ## Settings
 
 Every setting can be changed from the viewer, with no file to edit and no command to type. Open the viewer (it opens by itself when a session starts, or run `wizardingcode-mem ui`) and choose the gear at the bottom left.
@@ -284,6 +301,7 @@ One page at a time, in groups:
 | **Judge** | Paste a TypeSafe key (optional) and turn it on or off |
 | **Retention** | Choose how long old turns are kept, preview what a clean-up removes, run it |
 | **History** | Import past sessions and watch the progress, update or forget the conversation index, replace claude-mem's imports (and restore them) |
+| **Search** | Download the search model, fill its vectors, turn search by meaning on or off, delete it |
 | **Storage** | Move the database to another disk, an external drive or a NAS |
 | **Backups** | Pick a folder or a bucket, how often and how many to keep; back up now or restore one |
 | **Viewer** | Whether the viewer opens when a session starts |
@@ -307,6 +325,7 @@ Edit `~/.wizardingcode/mem/env` yourself, or set the variable in the environment
 | `TYPESAFE_API_KEY` | Turns on the TypeSafe judge | — |
 | `WIZARDINGCODE_MEM_TYPESAFE` | `off` keeps the key but lets the rules judge alone | `on` |
 | `WIZARDINGCODE_MEM_RETENTION_DAYS` | How long `compact` keeps finished turns no memory came from | `90` |
+| `WIZARDINGCODE_MEM_SEMANTIC` | `off` keeps the search model but searches by words only | `on` |
 | `WIZARDINGCODE_MEM_UI_AUTO_OPEN` | Open the viewer when a session starts | `on` |
 | `WIZARDINGCODE_MEM_STORE_DIR` | Where the database lives, when it was moved to another disk (set by **Storage**, not by hand) | the data directory |
 | `WIZARDINGCODE_MEM_BACKUP_TO` | Where backups go: a folder, or `s3://bucket/prefix` | — |
@@ -334,6 +353,7 @@ The binary is at `~/.wizardingcode/mem/bin/wizardingcode-mem`; put that director
 | `wizardingcode-mem backup` · `--list` · `--restore <name>` | A copy to the configured folder or bucket, now; what is there; one of them back in place |
 | `wizardingcode-mem import claude-mem` | Brings memories over from claude-mem |
 | `wizardingcode-mem history import` · `index` · `search` · `forget` · `replace-imports` · `restore-imports` | Learn from past sessions (see above) |
+| `wizardingcode-mem embed download` · `status` · `delete` · `backfill` | Search by meaning (see above) |
 | `wizardingcode-mem rejudge` | Asks TypeSafe to judge imported memories properly |
 | `wizardingcode-mem install [<name>]` · `uninstall <name>` | The direct install: every agent and app found, or one (`claude-code`, `claude-desktop`, `codex`, `cursor`, `opencode`, `qwen`, `droid`, `copilot`, `antigravity`) |
 
@@ -353,7 +373,7 @@ What is sent is the text of the turn being judged, and only that. If the service
 
 - **Redaction before storage.** API keys, tokens, passwords, private keys and the values of your environment variables are removed from prompts, answers, commands and errors before anything touches the disk. Text inside `<private>…</private>` is never stored.
 - **One file, yours.** `~/.wizardingcode/mem/wizardingcode-mem.db`, SQLite in WAL mode. Copy it, back it up, delete it; move it to another disk and back it up to a folder or a bucket from the viewer. `WIZARDINGCODE_HOME` moves the whole `~/.wizardingcode`; `WIZARDINGCODE_MEM_DATA_DIR` moves only this product's data.
-- **No telemetry, no account, no network** — except the TypeSafe requests you opt into, and the one download of the binary.
+- **No telemetry, no account, no network** — except the TypeSafe requests you opt into, the one download of the binary, and the one download of the search model if you ask for it.
 - **A project is a repository.** Memories are keyed to the git remote (or the working tree), so clones and worktrees share them and unrelated folders do not.
 - **Removable.** `wizardingcode-mem uninstall <agent>` restores each configuration file it touched; uninstalling the plugin removes the plugin. Delete `~/.wizardingcode/mem` to delete everything.
 
