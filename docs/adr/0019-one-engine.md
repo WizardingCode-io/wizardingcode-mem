@@ -14,19 +14,19 @@ The registry file and the cross-binary JSON contract of the 2026-10-10 target ar
 
 ## The contract
 
-`src/engine/module.ts`. An `EngineModule` has an `id`, a `name`, a `share`, and optionally:
+`src/engine/module.ts`. An `EngineModule` has an `id`, a `name`, a `share` (a number from 0 to 1, or `"remainder"`: memory's, what the other modules leave) and optionally:
 
 - `contribute(input)` returns the text for one moment (`session-start`, `prompt`, `file-read`, `tool-failed`), already rendered in the module's own wrapper, or null. The input carries the database, project id, branch, root, session, context epoch, the prompt, file or error as the moment needs, the time, and `budgetChars`, the module's share in characters.
 - `tools(mode)` returns the MCP tools for `"project"` or `"global"` mode. It is called once per server or bridge run, never on the hook path. Each tool's `run(args, call)` receives the per-call `ToolCall` (`projectDir`, null in global mode), because one server serves many calls. The first draft had `tools(context, mode)`; the project belongs to the call, not to the listing.
 - `views` are the rail buttons (`tab`, `label`, `icon`, `key`).
 
-`src/engine/modules.ts` lists `BUILT_IN` (memory) and `enabledModules(raw)`, which reads `WIZARDINGCODE_MODULES` (comma list, default `memory`, in `<data dir>/env`, the environment wins). Unknown ids are ignored and logged once per process; duplicates collapse; the order is always the engine's. `moduleAllowed(id)` is the seam for a later licence check and returns true today. The MCP server registers only the enabled modules' tools, and `/api/modules` tells the viewer which modules are on so the rail shows their views.
+`src/engine/modules.ts` lists `BUILT_IN` (memory) and `enabledModules(raw)`, which reads `WIZARDINGCODE_MODULES` (comma list, default `memory`, in `<data dir>/env`, the environment wins; it only adds modules, memory is always on, F9). Unknown ids are ignored and logged once per process; duplicates collapse; the order is always the engine's. `moduleAllowed(id)` is the seam for a later licence check and returns true today. The MCP server registers only the enabled modules' tools, and `/api/modules` tells the viewer which modules are on so the rail shows their views.
 
 ## The composer, budgets and fail-open
 
 `compose` (`src/engine/compose.ts`) asks each enabled module in order for its contribution and joins them with a blank line; null when nobody has anything to say. `src/engine/budget.ts` holds `MOMENT_BUDGET`, a leaf so retrieval can read the defaults without loading the composer: 4200 characters at session start, 2400 on a prompt, 1200 on a file read, 1200 on a tool failure. These are exactly the numbers memory had before, so alone it produces byte-for-byte today's text.
 
-Shares are taken in order from the moment's budget, each at most what is left, in characters so rounding cannot push the sum above the budget. A module with `share: "remainder"` gets what the others leave. A module without `contribute` takes nothing.
+Shares are taken in order from the moment's budget, each at most what is left, in characters so rounding cannot push the sum above the budget. A module with `share: "remainder"` gets what the others leave. A module without `contribute` takes nothing. The blank lines that join contributions count against the budget: 2 characters per join are set aside before shares are computed, so the combined text never exceeds it (alone, memory pays nothing).
 
 Fail-open, module by module: a module that throws contributes nothing and is reported (once per call, to the log); a contribution longer than its budget is dropped whole, never truncated mid-note, because half a note reads as a complete one. The others still inject and the hook still exits 0.
 
@@ -42,6 +42,7 @@ Fail-open, module by module: a module that throws contributes nothing and is rep
 | F6 | A module must fit the budget it is given (it is passed exactly); the composer's drop of an overrunning contribution is a safety net only. Memory measures before recording anything as shown. | A drop after recording would count a note as shown that the agent never saw. | A dropped module's notes counted as shown once. |
 | F7 | No Modules card in the viewer in D1. | With one shipped module there is nothing to switch; the key lives in the settings API like `HISTORY_DAYS`. | A small card later. |
 | F8 | The unknown-id log line is once per hook process, not once ever. | A database marker is not worth it for a misconfiguration line. | A repeated line in the log. |
+| F9 | Memory cannot be switched off in D1: `enabledModules` always includes it, and the settings API refuses a `WIZARDINGCODE_MODULES` list without it. | Capture, distilling and the viewer are memory's and are not gated by the setting, so "off" would leave it half on while the user believes it stopped. Stopping memory for a project stays the per-project "memory off". | A user cannot stop memory everywhere with one setting until a real off exists (D2). |
 
 ## A latent overrun, found while pinning snapshots
 

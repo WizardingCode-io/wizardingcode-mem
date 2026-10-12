@@ -24,22 +24,30 @@ Today everything is memory-specific: the hooks call `sessionBrief`, `retrieveFor
 - **F2: modules' own tables wait for D2.** Memory keeps its migrations as they are; a per-module migration namespace is designed with the first module that needs tables, against a real case. Cost if wrong: D2 adds the namespace.
 - **F3: the order of modules is fixed in code** (memory first), not configurable. Cost if wrong: a setting later.
 - **F4: budget shares are per module, declared by the module, capped by the composer** so their sum never exceeds the event's budget; memory declares the whole budget while it is alone.
+- F5-F9: see the rulings table in [ADR 0019](../../adr/0019-one-engine.md), which is authoritative (F5 memory takes the remainder; F6 a module fits the budget it is given; F7 no Modules card in D1; F8 unknown-id log once per process; F9 memory cannot be switched off in D1).
 
 ## The contract
 
 ```ts
 export type Moment = "session-start" | "prompt" | "file-read" | "tool-failed";
-export interface Contribution { text: string; notes: Note[] } // text already rendered; notes for recordInjections
-export interface MomentInput { db: Db; event: Moment; project: ProjectRef; session: SessionRow; prompt: string | null; file: string | null; error: string | null; now: number; budgetChars: number }
+export type Contribution = string | null; // text already rendered in the module's own wrapper
+export interface MomentInput {
+  db: Db; moment: Moment; projectId: number; branch: string | null; root: string;
+  sessionId: number; epoch: number;
+  prompt: string | null; path: string | null; error: string | null; // as the moment needs
+  now: number; budgetChars: number; // this module's share, in characters
+}
 export interface EngineModule {
-  id: string;            // "memory"
-  name: string;          // "Memory"
-  share: number;         // 0..1 of each moment's budget
-  contribute?(input: MomentInput): Contribution | null;
-  tools?(mode: ToolMode): ModuleTool[]; // the project arrives per call, in run(args, call)
+  id: string;                           // "memory"
+  name: string;                         // "Memory"
+  share: number | "remainder";          // 0..1 of each moment's budget, or what the others leave
+  contribute?(input: MomentInput): Contribution;
+  tools?(mode: ToolMode): Promise<ModuleTool[]> | ModuleTool[]; // run(args, call: ToolCall) gets the project
   views?: { tab: string; label: string; icon: string; key: string }[];
 }
 ```
+
+`src/engine/module.ts` is the source of truth, with [ADR 0019](../../adr/0019-one-engine.md). The sketch above changed during the build: the project belongs to the call (`ToolCall`), not to the listing; the module renders its own text, so notes never cross the contract; and `"remainder"` lets memory keep the whole budget while alone.
 
 The composer keeps the memory module's exact rendering (intro sentence, wrapper tags, labels), so a single module produces today's text. With several modules, each contribution stays inside its own wrapper block, in module order.
 
