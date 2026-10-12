@@ -124,7 +124,7 @@ describe("WIZARDINGCODE_MODULES", () => {
 
   test("the viewer sees it with its default, and may set or clear it", () => {
     expect(publicSettings({}, dir()).WIZARDINGCODE_MODULES).toEqual({
-      value: "memory",
+      value: "memory,knowledge",
       source: "default",
     });
     expect(validatePatch({ WIZARDINGCODE_MODULES: " memory, knowledge " })).toEqual({

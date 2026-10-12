@@ -21,7 +21,7 @@ beforeAll(() => {
     WIZARDINGCODE_HOME: join(base, "home"),
     WIZARDINGCODE_MEM_STORE_DIR: join(base, "store"),
     WIZARDINGCODE_MEM_MIGRATE: "off",
-    WIZARDINGCODE_MODULES: "", // blank means the default, memory
+    WIZARDINGCODE_MODULES: "", // blank means the default, memory and knowledge
     // Whatever the shell has, nothing here can reach a real home or a real store.
     HOME: join(base, "home"),
     USERPROFILE: join(base, "home"),
@@ -146,7 +146,7 @@ describe("the bridge follows the setting", () => {
     const result = await runCliWith(
       {
         input: JSON.stringify({ query: "x" }),
-        env: { ...env, WIZARDINGCODE_MODULES: "knowledge" },
+        env: { ...env, WIZARDINGCODE_MODULES: "personas" },
       },
       "tool",
       "memory_search",

@@ -16,6 +16,8 @@ export interface MomentInput {
   branch: string | null;
   /** The directory the agent works in (the hook's cwd). */
   root: string;
+  /** The project's working tree root (the git root, or the folder itself outside git). */
+  projectRoot: string;
   sessionId: number;
   /** The session's context epoch, already advanced when the context was cleared or compacted. */
   epoch: number;

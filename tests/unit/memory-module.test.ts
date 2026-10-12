@@ -92,6 +92,7 @@ function contribute(moment: Moment, budgetChars: number) {
     projectId,
     branch: null,
     root: base,
+    projectRoot: base,
     sessionId: session.id,
     epoch: session.contextEpoch,
     prompt: moment === "prompt" ? "why does the login token refresh fail after expiry" : null,

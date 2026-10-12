@@ -56,9 +56,17 @@ describe("module migrations", () => {
     expect(LATEST_VERSION).toBe(7);
     expect(version(db)).toBe(LATEST_VERSION);
     expect(tables(db)).toEqual(
-      expect.arrayContaining(["knowledge_entries", "knowledge_fts", "knowledge_state"]),
+      expect.arrayContaining([
+        "knowledge_entries",
+        "knowledge_fts",
+        "knowledge_state",
+        "knowledge_shown",
+      ]),
     );
-    expect(recorded(db)).toEqual([{ module: "knowledge", version: 1 }]);
+    expect(recorded(db)).toEqual([
+      { module: "knowledge", version: 1 },
+      { module: "knowledge", version: 2 },
+    ]);
     db.close();
   });
 
@@ -117,7 +125,10 @@ describe("module migrations", () => {
     before.close();
     const db = openDb({ dataDir: dir, busyTimeoutMs: 2000 });
     expect(version(db)).toBe(LATEST_VERSION);
-    expect(recorded(db)).toEqual([{ module: "knowledge", version: 1 }]);
+    expect(recorded(db)).toEqual([
+      { module: "knowledge", version: 1 },
+      { module: "knowledge", version: 2 },
+    ]);
     expect(db.query("SELECT count(*) AS n FROM projects").get()).toEqual({ n: 1 });
     db.close();
   });
@@ -168,6 +179,7 @@ describe("module migrations", () => {
     expect(recorded(db)).toEqual([
       { module: "fake", version: 1 },
       { module: "knowledge", version: 1 },
+      { module: "knowledge", version: 2 },
     ]);
     db.close();
   }, 60_000);
