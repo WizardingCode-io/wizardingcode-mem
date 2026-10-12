@@ -1,4 +1,4 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -9,6 +9,12 @@ import { join } from "node:path";
 process.env.WIZARDINGCODE_MEM_UI_AUTO_OPEN ??= "off";
 process.env.WIZARDINGCODE_MEM_UI_BROWSER ??= "none";
 process.env.WIZARDINGCODE_MEM_MIGRATE ??= "off";
-// The brand's home (the app's state file, the data directories) is a throwaway
-// directory unless a test points it elsewhere: nothing here may touch ~/.wizardingcode.
-process.env.WIZARDINGCODE_HOME ??= mkdtempSync(join(tmpdir(), "wizardingcode-test-home-"));
+// The brand's home (the app's state file, the data directories) is always a throwaway
+// directory, whatever the developer's shell exports: nothing here may touch a real
+// ~/.wizardingcode. Path overrides from the shell are dropped; tests set their own.
+const testHome = mkdtempSync(join(tmpdir(), "wizardingcode-test-home-"));
+process.env.WIZARDINGCODE_HOME = testHome;
+delete process.env.WIZARDINGCODE_MEM_DATA_DIR;
+delete process.env.WIZARDINGCODE_MEM_STORE_DIR;
+delete process.env.WIZARDINGCODE_MEM_CLAUDE_MEM_DIR;
+process.on("exit", () => rmSync(testHome, { recursive: true, force: true }));
