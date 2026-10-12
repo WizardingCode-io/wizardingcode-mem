@@ -18,26 +18,40 @@ const GENERIC_WEIGHT = 0.5;
 /** The floor: e.g. one title word and one body word, or three body words. */
 export const RELEVANCE_FLOOR = 3;
 /**
- * Or: the prompt names at least this part of the title's own words (a short title, such as
- * a glossary term or "PostgreSQL, not MongoDB", is about one or two words).
+ * Or: the prompt names at least this part of the title's own words, and at least two of
+ * them. A title of one or two words ("Order lifecycle", "Caching") shares its one word with
+ * many unrelated prompts, so one covered word is not enough, unless the title spells it as
+ * a name ("MongoDB", "PostgreSQL", "SQS", "OAuth2"): a product or a code name says what the
+ * entry is about where an ordinary word does not.
  */
 const TITLE_COVERAGE = 0.5;
+const MIN_COVERED = 2;
+
+/** A word written as a name: a capital inside it, a run of capitals, or digits with letters. */
+const isName = (word: string) =>
+  /\p{L}/u.test(word) && (/\p{Ll}\p{Lu}/u.test(word) || /\p{Lu}{2}/u.test(word) || /\d/.test(word));
 
 /** Title words that carry no subject of their own, besides the usual stop words. */
 const PLAIN = new Set(["never", "always", "only"]);
 
-/** The stems of a title's own words: not short, not generic, not stop words. */
-function titleWords(title: string): string[] {
-  const words = searchTokens(title).filter(
-    (token) => token.length >= 3 && !STOPWORDS.has(token) && !PLAIN.has(token) && !isGeneric(token),
-  );
-  return [...new Set(words.map((word) => stem(word)))];
+/** A title's own words (not short, not generic, not stop words), by stem, each marked when written as a name. */
+function titleWords(title: string): Map<string, boolean> {
+  const own = new Map<string, boolean>();
+  for (const word of title.match(/[\p{L}\p{N}]+/gu) ?? []) {
+    const token = searchTokens(word)[0];
+    if (token === undefined || token.length < 3) continue;
+    if (STOPWORDS.has(token) || PLAIN.has(token) || isGeneric(token)) continue;
+    const key = stem(token);
+    own.set(key, (own.get(key) ?? false) || isName(word));
+  }
+  return own;
 }
 
 /**
  * Whether the entry shares enough with the prompt: a name the prompt gives in code form
  * (`formatMoney`, `src/orders.ts`) found in it; or shared words weighing at least the floor,
- * at least one of them not generic; or the prompt covering half of the title's own words.
+ * at least one of them not generic; or the prompt covering half of the title's own words,
+ * two of them at least, or one written as a name.
  */
 export function isRelevant(entry: KnowledgeEntry, query: Query): boolean {
   const head = `${entry.title} ${entry.tags.join(" ")}`;
@@ -69,7 +83,7 @@ export function isRelevant(entry: KnowledgeEntry, query: Query): boolean {
   if (weight >= RELEVANCE_FLOOR) return true;
 
   const own = titleWords(entry.title);
-  if (own.length === 0) return false;
-  const covered = own.filter((word) => asked.has(word)).length;
-  return covered / own.length >= TITLE_COVERAGE;
+  const covered = [...own].filter(([key]) => asked.has(key));
+  if (covered.length === 0 || covered.length / own.size < TITLE_COVERAGE) return false;
+  return covered.length >= MIN_COVERED || covered.some(([, name]) => name);
 }

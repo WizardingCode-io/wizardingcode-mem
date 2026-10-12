@@ -1,5 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  renameSync,
+  rmSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ADAPTERS } from "../../src/adapters/index.ts";
@@ -423,6 +431,21 @@ describe("on a prompt", () => {
     expect(shown(prompt({ db }, ask))[0]).toContain("rotate weekly");
   });
 
+  test("an entry deleted or renamed between prompts is never shown under its old name", () => {
+    const db = store();
+    realisticFolder();
+    const ask = "how many times does the queue retry a background job?";
+    expect(block(prompt({ db }, ask))).toContain("background-jobs.md");
+    renameSync(join(dir, "background-jobs.md"), join(dir, "jobs-on-redis.md"));
+    start({ db }, "clear");
+    const renamed = block(prompt({ db }, ask));
+    expect(renamed).toContain("jobs-on-redis.md");
+    expect(renamed).not.toContain("background-jobs.md");
+    rmSync(join(dir, "jobs-on-redis.md"));
+    start({ db }, "clear");
+    expect(block(prompt({ db }, ask))).toBe("");
+  });
+
   test("a large folder uses the index it has; the background drain brings it up to date", () => {
     const db = store();
     for (let i = 0; i < 500; i++) {
@@ -554,6 +577,7 @@ describe("the relevance floor", () => {
   test("the realistic folder: the right entry for each prompt, nothing for the others", () => {
     const db = store();
     realisticFolder();
+    shortTitleFolder();
     for (const [i, [ask, title]] of RELEVANT.entries()) {
       const titles = shown(prompt({ db, session: `relevant-${i}` }, ask));
       expect({ ask, first: titles[0] ?? "" }).toEqual({
@@ -583,6 +607,129 @@ describe("the relevance floor", () => {
         ask,
         block: "",
       });
+    }
+  });
+});
+
+// Short titles, of one or two words of their own, as curated folders often have. A title
+// this short shares its one word with many unrelated prompts: it must not be a back door.
+const SHORT_TITLES: [string, string, string, string][] = [
+  [
+    "order-lifecycle",
+    "Order lifecycle",
+    "architecture",
+    "An order goes from draft to paid to shipped. A paid order can only be cancelled, never edited.",
+  ],
+  [
+    "user-roles",
+    "User roles",
+    "glossary",
+    "Admins manage the billing and the members; members see only their own projects.",
+  ],
+  [
+    "config-loading",
+    "Config loading",
+    "architecture",
+    "Settings come from config.toml, then the environment, then flags; the last one wins.",
+  ],
+  [
+    "logging",
+    "Logging",
+    "rule",
+    "Log through the shared logger with a request id; never console.log in production code.",
+  ],
+  [
+    "caching",
+    "Caching",
+    "architecture",
+    "Product pages are cached in Redis for five minutes; prices are never cached.",
+  ],
+  [
+    "date-handling",
+    "Date handling",
+    "rule",
+    "Dates are stored in UTC and shown in the customer's time zone; parse them with Temporal.",
+  ],
+  [
+    "feature-flags",
+    "Feature flags",
+    "howto",
+    "Flags live in flags.yaml; remove a flag within two releases of turning it on for everyone.",
+  ],
+  [
+    "error-codes",
+    "Error codes",
+    "rule",
+    "API errors carry a stable code like ORDER_NOT_FOUND; the message may change, the code never does.",
+  ],
+];
+
+function shortTitleFolder(folder = dir): void {
+  for (const [slug, title, kind, body] of SHORT_TITLES) entry(slug, { title, kind }, body, folder);
+}
+
+describe("the relevance floor with short titles", () => {
+  const RELEVANT: [string, string][] = [
+    ["what states does an order go through before it ships?", "Order lifecycle"],
+    ["which feature flags can we remove now?", "Feature flags"],
+    ["are product prices cached?", "Caching"],
+    ["what time zone should dates be shown in?", "Date handling"],
+    ["can I use `console.log` for debugging here?", "Logging"],
+    ["what can admins see that members cannot?", "User roles"],
+    ["what does ORDER_NOT_FOUND mean?", "Error codes"],
+  ];
+  // Each shares one common word with a short title, and nothing else.
+  const UNRELATED = [
+    "sort the list of results in reverse order",
+    "how many users signed up last week?",
+    "the user avatar is blurry on retina screens",
+    "update the eslint config to allow unused vars",
+    "add a log line when the export starts",
+    "clear the npm cache and reinstall",
+    "the date picker looks broken on mobile",
+    "rename the feature branch before merging",
+    "in what order should I run the migrations?",
+    "the build fails with a TypeScript error",
+    "why does this test hang?",
+    "show an error toast when the upload fails",
+    "move the user menu to the right",
+    "the config file is missing after install",
+    "add a loading spinner to the dashboard",
+    "which roles does the Helm chart define?",
+  ];
+
+  test("beside the realistic folder: the right entry for each prompt, nothing for the others", () => {
+    const db = store();
+    realisticFolder();
+    shortTitleFolder();
+    for (const [i, [ask, title]] of RELEVANT.entries()) {
+      // Among the two shown: a longer entry may share as much with the prompt.
+      const titles = shown(prompt({ db, session: `short-relevant-${i}` }, ask));
+      expect({ ask, found: titles.some((line) => line.startsWith(title)) }).toEqual({
+        ask,
+        found: true,
+      });
+    }
+    for (const [i, ask] of UNRELATED.entries()) {
+      expect({ ask, block: block(prompt({ db, session: `short-unrelated-${i}` }, ask)) }).toEqual({
+        ask,
+        block: "",
+      });
+    }
+  });
+
+  test("each short title alone in its folder: still nothing for the unrelated prompts", () => {
+    for (const [slug, title, kind, body] of SHORT_TITLES) {
+      rmSync(dir, { recursive: true, force: true });
+      entry(slug, { title, kind }, body);
+      const db = store(`alone-${slug}`);
+      for (const [i, ask] of UNRELATED.entries()) {
+        expect({ title, ask, block: block(prompt({ db, session: `alone-${i}` }, ask)) }).toEqual({
+          title,
+          ask,
+          block: "",
+        });
+      }
     }
   });
 });
