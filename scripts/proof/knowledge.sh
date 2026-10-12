@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The knowledge proof (ADR 0020): a synthetic project, then a temporary copy of the real database.
 #
-#   scripts/proof/knowledge.sh <work dir> [--runs n] [--no-copy]
+#   scripts/proof/knowledge.sh <work dir> [--runs n] [--no-copy] [--labels <file>]
 #
 # <work dir>  an empty or new directory outside ~/.wizardingcode; everything is written here
 #
@@ -18,6 +18,11 @@
 #       records (lstat and realpath only) and writes nothing outside the copy: proposing writes
 #       no file, and nothing is accepted.
 #
+# --labels <file>  the author's labels for the proposals, one `<memory id> keep|noise` per line;
+#                  the file must be outside the repository (it names memories). The report then
+#                  counts the noise among the proposals and any memory labelled keep that a
+#                  filter dropped.
+#
 # <work dir>/report.md is anonymous; <work dir>/full.md names projects and memory titles, for the
 # author's eyes only: never commit it.
 #
@@ -27,7 +32,7 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: scripts/proof/knowledge.sh <work dir> [--runs n] [--no-copy]" >&2
+  echo "usage: scripts/proof/knowledge.sh <work dir> [--runs n] [--no-copy] [--labels <file>]" >&2
   exit 1
 }
 [ $# -ge 1 ] || usage
@@ -35,15 +40,24 @@ WORK=$1
 shift
 RUNS=30
 COPY=1
+LABELS=""
 while [ $# -gt 0 ]; do
   case $1 in
     --runs) RUNS=$2; shift 2 ;;
     --no-copy) COPY=0; shift ;;
+    --labels) LABELS=$2; shift 2 ;;
     *) usage ;;
   esac
 done
 
-REPO=$(cd "$(dirname "$0")/../.." && pwd)
+REPO=$(cd "$(dirname "$0")/../.." && pwd -P)
+if [ -n "$LABELS" ]; then
+  [ -f "$LABELS" ] || { echo "no labels file at $LABELS" >&2; exit 1; }
+  LABELS=$(cd "$(dirname "$LABELS")" && pwd -P)/$(basename "$LABELS")
+  case "$LABELS" in
+    "$REPO"/*) echo "refusing: the labels file must be outside the repository" >&2; exit 1 ;;
+  esac
+fi
 BUN="$REPO/node_modules/.bin/bun"
 
 # The live store: the default data directory, or where its settings moved the database.
@@ -86,5 +100,6 @@ if [ "$COPY" = 1 ]; then
 else
   EXTRA+=(--no-copy)
 fi
+[ -n "$LABELS" ] && EXTRA+=(--labels "$LABELS")
 "$BUN" "$REPO/scripts/proof/knowledge.ts" "$WORK" --runs "$RUNS" ${EXTRA[@]+"${EXTRA[@]}"} \
   | tee -a "$WORK/run.log"

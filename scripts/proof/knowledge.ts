@@ -13,12 +13,17 @@
 // b. Without --no-copy: the copy of the real database in the data directory the environment
 //    names (WIZARDINGCODE_HOME), never the live one. Runs proposePromotions drain after drain
 //    until its cursor has reached the backlog, then quiet drains, and counts the proposals by
-//    project, kind and reason. Proposing writes no file; nothing is accepted.
+//    project, kind and reason. Proposing writes no file; nothing is accepted. Also reports what
+//    each of the three filters (final review I1) dropped: the structural evidence (memories the
+//    old rule, any 3 contexts, took and the new one does not), the session-artifact patterns
+//    and the judge (off here: TypeSafe is unset). With --labels <file> (lines `<memory id>
+//    keep|noise`, written by the author outside the repository), counts the noise among the
+//    proposals and any memory labelled keep that a filter dropped.
 //
 // Writes <out dir>/report.md (anonymous: counts and latencies) and <out dir>/full.md (project
 // names and memory titles: for the author's eyes only; never commit it).
 
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ADAPTERS } from "../../src/adapters/index.ts";
 import type { AgentAdapter, HookInput } from "../../src/adapters/types.ts";
@@ -29,7 +34,13 @@ import { handleHook } from "../../src/hooks/handle.ts";
 import { knowledgeDir, slugify } from "../../src/modules/knowledge/files.ts";
 import { knowledge } from "../../src/modules/knowledge/index.ts";
 import { refreshIndex } from "../../src/modules/knowledge/index-store.ts";
-import { projectRoot, proposePromotions } from "../../src/modules/knowledge/promote.ts";
+import {
+  type Drop,
+  shownEnough as meetsRule,
+  projectRoot,
+  proposePromotions,
+  SHOWN_SQL,
+} from "../../src/modules/knowledge/promote.ts";
 import { memory } from "../../src/modules/memory/index.ts";
 import { DB_FILE, type Db, openDb, withWrite } from "../../src/store/db.ts";
 import { insertMemory } from "../../src/store/memories.ts";
@@ -55,6 +66,8 @@ if (out === undefined) {
 }
 const RUNS = Number(option("runs", "30"));
 const COPY = !args.includes("--no-copy");
+/** Optional: the author's labels, one `<memory id> keep|noise` per line, kept outside the repository. */
+const LABELS = option("labels", "");
 
 interface Stats {
   n: number;
@@ -585,10 +598,18 @@ if (COPY) {
 
   // Drains until the cursor stops moving with nothing proposed, then quiet drains.
   const drains: { ms: number; scanned: number; proposed: number }[] = [];
+  const dropped: Drop[] = [];
   for (let i = 0; i < 200; i++) {
     const before = getMeta(db, "knowledge.promote.cursor");
     const t = performance.now();
-    const run = await proposePromotions(db, { now: Date.now(), env: process.env });
+    const run = await proposePromotions(db, {
+      now: Date.now(),
+      env: process.env,
+      // A memory looked at again by a later drain is dropped again: count it once.
+      onDrop: (drop) => {
+        if (!dropped.some((d) => d.id === drop.id)) dropped.push(drop);
+      },
+    });
     const ms = performance.now() - t;
     drains.push({ ms, ...run });
     if (run.proposed === 0 && getMeta(db, "knowledge.promote.cursor") === before) break;
@@ -625,10 +646,11 @@ if (COPY) {
     body: string;
     rule: number;
     slug: string;
+    memoryId: number;
   }
   const rows = db
     .query<Row, []>(
-      `SELECT k.id AS id, k.project_id AS projectId, m.kind AS kind, m.importance AS importance,
+      `SELECT k.id AS id, k.project_id AS projectId, m.id AS memoryId, m.kind AS kind, m.importance AS importance,
               m.title AS title, m.body AS body, k.slug AS slug,
               EXISTS (SELECT 1 FROM user_memories u WHERE u.memory_id = m.id) AS rule
          FROM knowledge_proposals k JOIN memories m ON m.id = k.memory_id
@@ -647,13 +669,35 @@ if (COPY) {
       .map(([k, n]) => `${k} ${n}`)
       .join(", ");
   };
-  // What the rule would take, before the project-root check: eligible and shown in 3 contexts.
-  const shownEnough = count(
-    `SELECT count(*) AS n FROM memories m JOIN projects p ON p.id = m.project_id AND p.disabled = 0
-      WHERE ${eligible} AND (
-        EXISTS (SELECT 1 FROM user_memories u WHERE u.memory_id = m.id) OR
-        (SELECT count(DISTINCT session_id || ':' || context_epoch) FROM injections i WHERE i.memory_id = m.id) >= 3)`,
-  );
+  // What each rule would take, before the project-root check: the old one (any 3 contexts,
+  // the session-start brief included) and the new structural evidence.
+  const candidatesOld = db
+    .query<{ id: number; projectId: number; title: string; rule: number }, []>(
+      `SELECT m.id AS id, m.project_id AS projectId, m.title AS title,
+              EXISTS (SELECT 1 FROM user_memories u WHERE u.memory_id = m.id) AS rule
+         FROM memories m JOIN projects p ON p.id = m.project_id AND p.disabled = 0
+        WHERE ${eligible} AND (
+          EXISTS (SELECT 1 FROM user_memories u WHERE u.memory_id = m.id) OR
+          (SELECT count(DISTINCT session_id || ':' || context_epoch) FROM injections i WHERE i.memory_id = m.id) >= 3)`,
+    )
+    .all();
+  const evidence = new Map<number, { sessions: number; asked: number; span: number }>();
+  const oldIds = candidatesOld.map((c) => c.id);
+  if (oldIds.length > 0) {
+    for (const row of db
+      .query<{ id: number; sessions: number; asked: number; span: number }, []>(
+        SHOWN_SQL(oldIds.join(", ")),
+      )
+      .all()) {
+      evidence.set(row.id, row);
+    }
+  }
+  const meetsEvidence = (id: number) => {
+    const e = evidence.get(id);
+    return e !== undefined && meetsRule(e);
+  };
+  const evidenceDrops = candidatesOld.filter((c) => c.rule === 0 && !meetsEvidence(c.id));
+  const shownEnough = candidatesOld.length - evidenceDrops.length;
   const projectsWithRoot = [...new Set(rows.map((r) => r.projectId))].length;
   let noRoot = 0;
   for (const id of names.keys()) if (projectRoot(db, id) === null) noRoot++;
@@ -661,15 +705,85 @@ if (COPY) {
   both(`### Proposals: ${rows.length}`);
   both("");
   both(
-    `Qualifying by the rule before the project check: ${shownEnough}. Proposed: ${rows.length}, in ${projectsWithRoot} projects ` +
+    `Qualifying before the project check: ${candidatesOld.length} by the old rule (any 3 contexts), ${shownEnough} by the structural evidence. Proposed: ${rows.length}, in ${projectsWithRoot} projects ` +
       `(per project ${sizes[0] ?? 0}–${sizes.at(-1) ?? 0}, median ${sizes[Math.floor(sizes.length / 2)] ?? 0}; ` +
       `per project, sorted: ${sizes.join(", ") || "none"}). Projects with a known root (a session seen): ${withSessions}; with none (never proposed): ${noRoot}.`,
   );
   both("");
   both(
-    `By kind: ${tally((r) => r.kind) || "none"}. By importance: ${tally((r) => String(r.importance)) || "none"}. By reason: ${tally((r) => (r.rule ? "author's rule" : "shown in 3+ contexts")) || "none"}.`,
+    `By kind: ${tally((r) => r.kind) || "none"}. By importance: ${tally((r) => String(r.importance)) || "none"}. By reason: ${tally((r) => (r.rule ? "author's rule" : "shown in 3+ sessions over a day or more, asked for in one")) || "none"}.`,
   );
   both("");
+  const byReason = (layer: Drop["layer"]) => {
+    const m = new Map<string, number>();
+    for (const d of dropped.filter((x) => x.layer === layer))
+      m.set(d.reason, (m.get(d.reason) ?? 0) + 1);
+    return [...m]
+      .sort()
+      .map(([k, n]) => `${k} ${n}`)
+      .join(", ");
+  };
+  const episodicDrops = dropped.filter((d) => d.layer === "episodic");
+  const judgeDrops = dropped.filter((d) => d.layer === "judge");
+  both("### What each filter dropped");
+  both("");
+  both(
+    `Structural evidence (layer 1): ${evidenceDrops.length} memories the old rule took. ` +
+      `Session artifacts (layer 2): ${episodicDrops.length}${episodicDrops.length ? ` (${byReason("episodic")})` : ""}. ` +
+      `Judge (layer 3): ${judgeDrops.length}${judgeDrops.length ? ` (${byReason("judge")})` : " (no key: not asked)"}.`,
+  );
+  both("");
+  const titles = new Map(
+    db
+      .query<{ id: number; title: string; projectId: number }, []>(
+        `SELECT id, title, project_id AS projectId FROM memories m WHERE ${eligible}`,
+      )
+      .all()
+      .map((r) => [r.id, r]),
+  );
+  full.push("### Dropped, by filter (never commit)");
+  full.push("");
+  full.push("#### Layer 1: structural evidence");
+  full.push("");
+  for (const c of evidenceDrops) {
+    const e = evidence.get(c.id);
+    full.push(
+      `- #${c.id} (${names.get(c.projectId) ?? c.projectId}) ${c.title} — shown in ${e?.sessions ?? 0} sessions (asked for in ${e?.asked ?? 0}) over ${((e?.span ?? 0) / 3_600_000).toFixed(1)} h`,
+    );
+  }
+  full.push("");
+  for (const layer of ["episodic", "judge"] as const) {
+    full.push(`#### ${layer === "episodic" ? "Layer 2: session artifacts" : "Layer 3: judge"}`);
+    full.push("");
+    for (const d of dropped.filter((x) => x.layer === layer)) {
+      const m = titles.get(d.id);
+      full.push(
+        `- #${d.id} (${m ? (names.get(m.projectId) ?? m.projectId) : "?"}) ${m?.title ?? "?"} — ${d.reason}`,
+      );
+    }
+    full.push("");
+  }
+  if (LABELS !== "") {
+    const labels = new Map<number, string>();
+    for (const line of readFileSync(LABELS, "utf8").split("\n")) {
+      const found = /^\s*#?(\d+)\s+(keep|noise)\b/i.exec(line);
+      if (found) labels.set(Number(found[1]), (found[2] as string).toLowerCase());
+    }
+    const proposedIds = db
+      .query<{ id: number }, []>(
+        "SELECT memory_id AS id FROM knowledge_proposals WHERE status = 'proposed'",
+      )
+      .all()
+      .map((r) => r.id);
+    const labelled = proposedIds.filter((id) => labels.has(id));
+    const noise = labelled.filter((id) => labels.get(id) === "noise").length;
+    const droppedIds = new Set([...evidenceDrops.map((c) => c.id), ...dropped.map((d) => d.id)]);
+    const lost = [...labels].filter(([id, label]) => label === "keep" && droppedIds.has(id)).length;
+    both(
+      `Labelled: ${labelled.length} of ${proposedIds.length} proposals; ${noise} noise (${labelled.length ? Math.round((100 * noise) / labelled.length) : 0} %). Memories labelled keep that a filter dropped: ${lost}.`,
+    );
+    both("");
+  }
   full.push("### Proposals (never commit)");
   full.push("");
   for (const [id, list] of perProject) {
@@ -677,7 +791,7 @@ if (COPY) {
     full.push("");
     for (const r of list) {
       full.push(
-        `- [${r.kind}, ${r.importance}${r.rule ? ", rule" : ""}] ${r.title} — ${r.body.slice(0, 200).replaceAll("\n", " ")}`,
+        `- #${r.memoryId} [${r.kind}, ${r.importance}${r.rule ? ", rule" : ""}] ${r.title} — ${r.body.slice(0, 200).replaceAll("\n", " ")}`,
       );
     }
     full.push("");
