@@ -4,6 +4,7 @@ import type { MemoryKind } from "../../core/types.ts";
 import { type Db, withWrite } from "../../store/db.ts";
 import { claimLease, getMeta, releaseLease, setMeta } from "../../store/meta.ts";
 import { logError } from "../../util/log.ts";
+import { looksEpisodic } from "./episodic.ts";
 import { folderProblem, type KnowledgeKind, knowledgeDir, slugify } from "./files.ts";
 import { refreshIndex } from "./index-store.ts";
 import { checkSlug, prepareFolder, renderEntry, today, writeNewEntry } from "./write.ts";
@@ -13,7 +14,8 @@ import { checkSlug, prepareFolder, renderEntry, today, writeNewEntry } from "./w
 // compare-and-set, so that a quiet drain costs two lookups. Exact rules: an active decision
 // or convention of importance 4 or more that agents asked for or met in their work (never
 // the session-start brief) in at least 3 sessions spanning a day or more, or that is one of
-// the author's own rules. Proposing writes nothing to a repository; only accepting does, on
+// the author's own rules; and, unless it is one of those, it must not read as a record of a
+// session (`episodic.ts`). Proposing writes nothing to a repository; only accepting does, on
 // the author's click, and only where knowledge is on.
 
 const KINDS = "('decision', 'convention')";
@@ -145,6 +147,8 @@ export function proposePromotions(
     injectionBatch?: number;
     maxMs?: number;
     owner?: string;
+    /** Told of each memory that met the evidence but was dropped, and why (the proof's report). */
+    onDrop?: (drop: Drop) => void;
   },
 ): { proposed: number; scanned: number } {
   const none = { proposed: 0, scanned: 0 };
@@ -174,6 +178,17 @@ interface Qualified {
   id: number;
   projectId: number;
   title: string;
+  body: string;
+  /** The prompt of the turn it was distilled from, when that turn is still kept. */
+  prompt: string | null;
+}
+
+/** A memory that met the evidence but was not proposed: by which layer, and why. */
+export interface Drop {
+  id: number;
+  layer: "episodic" | "judge";
+  /** The pattern that caught it (`EPISODIC_PATTERNS`, or "prompt-copy"), or the judge's verdict. */
+  reason: string;
 }
 
 function propose(
@@ -216,7 +231,8 @@ function propose(
     // The basic rule, in a project with memory on, never proposed before.
     const candidates = db
       .query<Qualified & { rule: number }, []>(
-        `SELECT m.id AS id, m.project_id AS projectId, m.title AS title,
+        `SELECT m.id AS id, m.project_id AS projectId, m.title AS title, m.body AS body,
+                (SELECT t.prompt FROM turns t WHERE t.id = m.source_turn_id) AS prompt,
                 EXISTS (SELECT 1 FROM user_memories u WHERE u.memory_id = m.id) AS rule
            FROM memories m JOIN projects p ON p.id = m.project_id AND p.disabled = 0
           WHERE m.id IN (${ids}) AND ${ELIGIBLE}
@@ -254,7 +270,15 @@ function propose(
     for (const candidate of candidates) {
       // Out of time: the cursor stays where it was, and a later pass looks again.
       if (performance.now() > deadline) return { proposed, scanned: 0 };
-      if (candidate.rule === 0 && !shownEnough.has(candidate.id)) continue;
+      if (candidate.rule === 0) {
+        if (!shownEnough.has(candidate.id)) continue;
+        // A record of a session, not a standing rule (layer 2).
+        const episodic = looksEpisodic(candidate.title, candidate.body, candidate.prompt);
+        if (episodic !== null) {
+          deps.onDrop?.({ id: candidate.id, layer: "episodic", reason: episodic });
+          continue;
+        }
+      }
       if (rootOf(candidate.projectId) === null) continue;
       proposed += insert.run(
         candidate.projectId,

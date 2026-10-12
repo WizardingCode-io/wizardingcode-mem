@@ -38,7 +38,9 @@ import { type Db, openDb } from "../../src/store/db.ts";
 import { insertMemory } from "../../src/store/memories.ts";
 import { claimLease } from "../../src/store/meta.ts";
 import { touchSession } from "../../src/store/sessions.ts";
+import { openTurn } from "../../src/store/turns.ts";
 import { searchTerms } from "../../src/util/words.ts";
+import { EPISODIC, STANDING } from "../fixtures/promotion-probe.ts";
 import { runCliWith } from "../helpers/cli.ts";
 
 // Memories worth keeping are proposed as knowledge (spec "Promotion from memory"): in the
@@ -86,6 +88,8 @@ interface Input {
   importance?: number;
   files?: string[];
   project?: number;
+  /** The prompt of the turn it was distilled from. */
+  prompt?: string;
 }
 
 function memory(input: Input): number {
@@ -102,7 +106,22 @@ function memory(input: Input): number {
     origin: "distilled",
     judge: "heuristic",
     judgeVersion: "1",
-    sourceTurnId: null,
+    sourceTurnId:
+      input.prompt === undefined
+        ? null
+        : openTurn(
+            db,
+            {
+              sessionId,
+              projectId: input.project ?? projectId,
+              agentTurnId: null,
+              transcriptPath: null,
+              branch: null,
+              commit: null,
+              now: NOW,
+            },
+            input.prompt as Redacted,
+          ),
     files: (input.files ?? []).map((path) => ({ path, role: "changed" as const })),
     now: NOW,
   });
@@ -406,6 +425,56 @@ describe("structural evidence: what counts as shown (final review I1, layer 1)",
         )
         .get()?.n,
     ).toBe(1);
+  });
+});
+
+describe("session artifacts are not proposed (final review I1, layer 2)", () => {
+  test("the probe: no episodic memory proposed, at least 9 of 10 standing rules kept", () => {
+    const ids = new Map<number, string>();
+    for (const m of [...EPISODIC, ...STANDING]) {
+      const id = memory({
+        title: m.title,
+        body: m.body,
+        kind: m.kind,
+        ...(m.prompt === undefined ? {} : { prompt: m.prompt }),
+      });
+      ids.set(id, m.family ?? "standing");
+      show(id, 3);
+    }
+    const dropped: { id: number; layer: string; reason: string }[] = [];
+    propose({ onDrop: (drop) => dropped.push(drop) });
+    const proposedIds = proposals().map((row) => row.memory_id);
+    const kinds = proposedIds.map((id) => ids.get(id));
+    expect(kinds.filter((kind) => kind !== "standing")).toEqual([]);
+    expect(kinds.filter((kind) => kind === "standing").length).toBeGreaterThanOrEqual(9);
+    // Each drop is reported with its layer and the pattern that caught it.
+    expect(dropped.length).toBe(EPISODIC.length);
+    for (const drop of dropped) {
+      expect(drop).toEqual({ id: drop.id, layer: "episodic", reason: ids.get(drop.id) as string });
+    }
+  });
+
+  test("the author's own rule is proposed even when it reads like a session record", () => {
+    const id = memory({ title: "Never merge a PR #12-style hotfix today without a review" });
+    db.run("INSERT INTO user_memories (memory_id, proposal_id, created_at) VALUES (?, NULL, ?)", [
+      id,
+      NOW,
+    ]);
+    expect(propose().proposed).toBe(1);
+  });
+
+  test("dropped for its text, it is looked at again once edited", () => {
+    const id = memory({
+      title: "Dispatched the cart work; money is stored in cents",
+      body: "Amounts are integers.",
+    });
+    show(id, 3);
+    expect(propose().proposed).toBe(0);
+    db.run("UPDATE memories SET title = 'Money is stored in cents', updated_at = ? WHERE id = ?", [
+      NOW + 1000,
+      id,
+    ]);
+    expect(propose().proposed).toBe(1);
   });
 });
 
