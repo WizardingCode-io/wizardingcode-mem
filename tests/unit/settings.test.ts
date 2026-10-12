@@ -33,6 +33,7 @@ describe("loadSettings", () => {
       historyDays: 180,
       uiAutoOpen: true,
       storeDir: null,
+      modules: null,
       backup: {
         to: null,
         everyHours: 24,
@@ -70,6 +71,7 @@ describe("loadSettings", () => {
       historyDays: 180,
       uiAutoOpen: false,
       storeDir: "/Volumes/Ext/mem",
+      modules: null,
       backup: {
         to: "s3://bucket/mem",
         everyHours: 6,
@@ -106,6 +108,48 @@ describe("loadSettings", () => {
     );
     expect(s.retentionDays).toBe(90);
     expect(s.typesafe).toBe("on");
+  });
+});
+
+describe("WIZARDINGCODE_MODULES", () => {
+  test("is read from the file, the environment winning", () => {
+    expect(loadSettings({}, dir("WIZARDINGCODE_MODULES=memory,echo\n")).modules).toBe(
+      "memory,echo",
+    );
+    expect(
+      loadSettings({ WIZARDINGCODE_MODULES: "echo" }, dir("WIZARDINGCODE_MODULES=memory\n"))
+        .modules,
+    ).toBe("echo");
+  });
+
+  test("the viewer sees it with its default, and may set or clear it", () => {
+    expect(publicSettings({}, dir()).WIZARDINGCODE_MODULES).toEqual({
+      value: "memory",
+      source: "default",
+    });
+    expect(validatePatch({ WIZARDINGCODE_MODULES: " memory, knowledge " })).toEqual({
+      ok: true,
+      changes: { WIZARDINGCODE_MODULES: "memory,knowledge" },
+    });
+    expect(validatePatch({ WIZARDINGCODE_MODULES: null })).toEqual({
+      ok: true,
+      changes: { WIZARDINGCODE_MODULES: null },
+    });
+  });
+
+  test("refuses a list without memory, which cannot be switched off", () => {
+    for (const value of ["knowledge", "echo,knowledge"]) {
+      const result = validatePatch({ WIZARDINGCODE_MODULES: value });
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.errors.WIZARDINGCODE_MODULES).toContain("memory");
+    }
+  });
+
+  test("rejects what is not a list of module ids", () => {
+    for (const value of ["", "memory;rm -rf", "memory,,", "mem ory", 3]) {
+      const result = validatePatch({ WIZARDINGCODE_MODULES: value });
+      expect(result.ok).toBe(false);
+    }
   });
 });
 

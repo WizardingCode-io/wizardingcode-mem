@@ -1,9 +1,11 @@
 // The viewer's client for /api. The token comes from the URL the binary opened.
 import type { HistoryOffer, HistoryProgress, HistoryStatus, PastSearch } from "./history";
 import type { LinkKind, LinksList, LinksOffer, LinkView, RulesList } from "./links";
+import type { ModuleInfo } from "./modules";
 import type { SemanticStatus } from "./semantic";
 
 export type { SemanticStatus } from "./semantic";
+export type { ModuleInfo, ModuleViewInfo } from "./modules";
 export type { AcceptedRule, LinkKind, LinksList, LinksOffer, LinkView, ProposedRule, RulesList } from "./links";
 export type { HistoryOffer, HistoryProgress, HistoryQueue, HistoryRun, HistoryRunState, HistoryStatus, PastSearch, PastTurn } from "./history";
 
@@ -176,6 +178,8 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
+  /** The modules on, in order, with their views. */
+  modules: () => call<ModuleInfo[]>("/api/modules"),
   overview: () =>
     call<{ version: string; dataDir: string; storeDir: string; projects: Project[] }>("/api/overview"),
   memories: (params: Record<string, string | number>) =>

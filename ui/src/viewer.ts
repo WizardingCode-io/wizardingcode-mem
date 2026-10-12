@@ -3,6 +3,7 @@ import { useDark } from "@vueuse/core";
 import { computed, reactive, ref } from "vue";
 import { api, type Kind, type LinkView, type RulesList, type MemoryDetail, type MemoryItem, type Project, type TurnItem } from "./api";
 import { crossHash, visibleFrom } from "./links";
+import { type ModuleViewInfo, railOrMemory } from "./modules";
 
 export type Tab = "memories" | "turns" | "overview" | "history" | "settings" | "projects" | "you";
 /** The tabs of the machine's pages: no project in the breadcrumb, the projects panel steps aside. */
@@ -74,6 +75,13 @@ export async function loadLinks(): Promise<void> {
   } catch {
     // Links are an extra: the page works without them.
   }
+}
+
+/** The rail's buttons: the views of the modules that are on, once the server has said which. */
+export const rail = ref<ModuleViewInfo[]>([]);
+
+export async function loadModules(): Promise<void> {
+  rail.value = await railOrMemory(() => api.modules());
 }
 
 export async function loadOverview(): Promise<void> {

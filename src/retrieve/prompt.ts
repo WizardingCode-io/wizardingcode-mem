@@ -1,5 +1,6 @@
 import { isFromTheHost } from "../core/host-prompt.ts";
 import type { MemoryKind } from "../core/types.ts";
+import { MOMENT_BUDGET } from "../engine/budget.ts";
 import type { Db } from "../store/db.ts";
 import { visibleProjects } from "../store/links.ts";
 import { logError } from "../util/log.ts";
@@ -13,8 +14,6 @@ export { recordInjections } from "./notes.ts";
 
 const CANDIDATES_PER_CHANNEL = 20;
 const MAX_NOTES = 5;
-/** About 700 tokens. */
-const BUDGET_CHARS = 2400;
 const RRF_K = 60;
 /** Three ordinary shared words, or two rare ones. */
 const EVIDENCE_WEIGHT = 3;
@@ -277,7 +276,7 @@ export function retrieveForPrompt(
   },
 ): Note[] {
   const maxNotes = input.maxNotes ?? MAX_NOTES;
-  const budgetChars = input.budgetChars ?? BUDGET_CHARS;
+  const budgetChars = input.budgetChars ?? MOMENT_BUDGET.prompt;
   const kindFilter =
     input.kinds === undefined
       ? "1"

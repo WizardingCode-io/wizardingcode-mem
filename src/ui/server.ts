@@ -11,6 +11,8 @@ import { runChecks } from "../doctor/checks.ts";
 import { deleteModel } from "../embed/download.ts";
 import { loadModel } from "../embed/model.ts";
 import { semanticStatus } from "../embed/status.ts";
+import type { EngineModule } from "../engine/module.ts";
+import { BUILT_IN, enabledModules } from "../engine/modules.ts";
 import { doctorContext } from "../doctor/context.ts";
 import { replaceAllImports, restoreImports } from "../backfill/replace.ts";
 import { openHistoryDb } from "../history/db.ts";
@@ -36,7 +38,7 @@ import {
 } from "../store/meta.ts";
 import { inspectTarget, moveStore } from "../store/move.ts";
 import { logError } from "../util/log.ts";
-import { storeDirOf } from "../util/paths.ts";
+import { brandHome, storeDirOf } from "../util/paths.ts";
 import { spawnDetached } from "../util/self.ts";
 import { clearUiState, writeUiState } from "./state.ts";
 import { acceptProposal, rejectProposal, undoUserRule } from "../links/rules.ts";
@@ -71,6 +73,8 @@ import page from "./dist/index.html" with { type: "text" };
 
 export interface UiOptions {
   dataDir: string;
+  /** The brand's home, where the app's state file lives; `~/.wizardingcode` unless moved. */
+  homeDir?: string;
   /** 0 picks a free port. */
   port?: number;
   /** Open the browser on start. */
@@ -87,6 +91,8 @@ export interface UiOptions {
   exclusive?: boolean;
   /** How a background run is started (`history import`, ...); tests record instead. */
   spawn?: (...args: string[]) => void;
+  /** The modules this binary has (`BUILT_IN`); tests add the fixture. */
+  modules?: readonly EngineModule[];
 }
 
 /** Thrown by an exclusive start that lost the race to another viewer. */
@@ -191,6 +197,7 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
   const token = randomBytes(16).toString("hex");
   const now = options.now ?? Date.now;
   const env = options.env ?? process.env;
+  const homeDir = options.homeDir ?? brandHome();
   // The database may move while the server runs (Storage settings): `db` is reopened.
   let storeDir = storeDirOf(options.dataDir, env);
   let db: Db = openDb({ dataDir: storeDir, busyTimeoutMs: 2000 });
@@ -213,7 +220,7 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
     if (idleTimer !== undefined) clearTimeout(idleTimer);
     await server.stop(true);
     db.close();
-    clearUiState(options.dataDir, process.pid);
+    clearUiState(homeDir, process.pid, options.dataDir);
   };
   const touch = () => {
     if (idleTimer !== undefined) clearTimeout(idleTimer);
@@ -279,6 +286,14 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
       openedAt = at;
       open(pageUrl);
       return json({ opened: true });
+    }
+    // The modules on, read from the settings each time: the rail draws their views.
+    if (path === "/api/modules" && request.method === "GET") {
+      const on = enabledModules(
+        loadSettings(env, options.dataDir).modules,
+        options.modules ?? BUILT_IN,
+      );
+      return json(on.map(({ id, name, views }) => ({ id, name, views: views ?? [] })));
     }
     if (path === "/api/overview" && request.method === "GET") {
       return json({ version: pkg.version, dataDir: options.dataDir, storeDir, projects: listProjects(db) });
@@ -693,7 +708,7 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
   const url = `${origin}/?token=${token}`;
   pageUrl = url;
   const recorded = writeUiState(
-    options.dataDir,
+    homeDir,
     { pid: process.pid, origin, token, startedAt: now() },
     options.exclusive ?? false,
   );

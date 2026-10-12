@@ -1,6 +1,6 @@
 import { startUi, UiClaimedError, type UiServer } from "../../ui/server.ts";
 import { askToOpen, clearUiState, probeUi, readUiState } from "../../ui/state.ts";
-import { defaultDataDir } from "../../util/paths.ts";
+import { brandHome, defaultDataDir } from "../../util/paths.ts";
 import { EXIT_USAGE } from "../exit.ts";
 
 const USAGE = "Usage: wizardingcode-mem ui [--port <n>] [--no-open] [--auto]\n";
@@ -19,21 +19,28 @@ async function serve(server: UiServer): Promise<void> {
  * is already running, or becomes it. Prints nothing; the session must not notice it.
  */
 async function auto(dataDir: string): Promise<number> {
-  const recorded = readUiState(dataDir);
+  const homeDir = brandHome();
+  const recorded = readUiState(homeDir, dataDir);
   if (recorded !== null) {
     if (await probeUi(recorded)) {
       await askToOpen(recorded);
       return 0;
     }
-    clearUiState(dataDir);
+    clearUiState(homeDir);
   }
   let server: UiServer;
   try {
-    server = await startUi({ dataDir, open: true, exclusive: true, onIdle: () => process.exit(0) });
+    server = await startUi({
+      dataDir,
+      homeDir,
+      open: true,
+      exclusive: true,
+      onIdle: () => process.exit(0),
+    });
   } catch (error) {
     if (!(error instanceof UiClaimedError)) throw error;
     // Another session's viewer got there first; let it show itself.
-    const winner = readUiState(dataDir);
+    const winner = readUiState(homeDir, dataDir);
     if (winner !== null && (await probeUi(winner))) await askToOpen(winner);
     return 0;
   }

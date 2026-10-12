@@ -7,13 +7,15 @@ import { probeUi, readUiState, UI_STATE_FILE } from "../../src/ui/state.ts";
 
 let base: string;
 let dataDir: string;
+let homeDir: string;
 let server: UiServer | undefined;
 let clock: number;
 let opened: string[];
 
 beforeEach(() => {
   base = realpathSync(mkdtempSync(join(tmpdir(), "wizardingcode-mem-ui-state-")));
-  dataDir = join(base, "data");
+  dataDir = join(base, "home", "mem");
+  homeDir = join(base, "home");
   clock = Date.UTC(2026, 9, 6, 9);
   opened = [];
 });
@@ -26,6 +28,7 @@ afterEach(async () => {
 async function start(options: { idleMs?: number; onIdle?: () => void } = {}): Promise<UiServer> {
   server = await startUi({
     dataDir,
+    homeDir,
     port: 0,
     open: false,
     now: () => clock,
@@ -44,7 +47,7 @@ const post = (s: UiServer, path: string) => api(s, path, { method: "POST" });
 describe("the viewer's state file", () => {
   test("says where the running viewer is, for the owner only, and goes with it", async () => {
     const s = await start();
-    const path = join(dataDir, UI_STATE_FILE);
+    const path = join(homeDir, UI_STATE_FILE);
     expect(JSON.parse(readFileSync(path, "utf8"))).toEqual({
       pid: process.pid,
       origin: s.origin,
@@ -52,10 +55,10 @@ describe("the viewer's state file", () => {
       startedAt: clock,
     });
     if (process.platform !== "win32") expect(statSync(path).mode & 0o777).toBe(0o600);
-    expect(readUiState(dataDir)).toMatchObject({ origin: s.origin, token: s.token });
+    expect(readUiState(homeDir, dataDir)).toMatchObject({ origin: s.origin, token: s.token });
     await s.stop();
     expect(existsSync(path)).toBe(false);
-    expect(readUiState(dataDir)).toBeNull();
+    expect(readUiState(homeDir, dataDir)).toBeNull();
   });
 
   test("a probe tells a live viewer from a stale file", async () => {

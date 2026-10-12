@@ -16,7 +16,8 @@ import TopBar from "./components/TopBar.vue";
 import HistoryView from "./components/HistoryView.vue";
 import TurnsView from "./components/TurnsView.vue";
 import { ago, hue } from "./format";
-import { closeDetail, loadLinks, loadList, loadOverview, loadRules, MACHINE_TABS, move, openCross, project, reload, select, selectProject, sidebarOpen, startHeartbeat, state, type Tab } from "./viewer";
+import { viewKeys } from "./modules";
+import { closeDetail, loadLinks, loadList, loadModules, loadOverview, loadRules, MACHINE_TABS, move, openCross, project, rail, reload, select, selectProject, sidebarOpen, startHeartbeat, state, type Tab } from "./viewer";
 
 // The view tabs (Sales OS page header, second row): a 10px square each, in the brand's hues.
 const tabs: { label: string; value: Tab; hue: string }[] = [
@@ -110,8 +111,7 @@ function onKey(e: KeyboardEvent) {
       sidebarOpen.value = !sidebarOpen.value;
       return;
     }
-    const views: Record<string, Tab> = { "1": "memories", "2": "turns", "3": "overview", "4": "history", "5": "settings", "6": "projects" };
-    const view = views[e.key];
+    const view = viewKeys(rail.value)[e.key] as Tab | undefined;
     if (view) {
       e.preventDefault();
       tab.value = view;
@@ -145,7 +145,7 @@ onMounted(async () => {
     state.rule = crossDeep[4] ?? null;
   }
   try {
-    await loadOverview();
+    await Promise.all([loadModules(), loadOverview()]);
     if (deep) await openMemory(Number(deep[1]));
   } catch (error) {
     failed.value = error instanceof Error ? error.message : String(error);

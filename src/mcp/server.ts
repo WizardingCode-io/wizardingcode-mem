@@ -1,29 +1,28 @@
 import pkg from "../../package.json" with { type: "json" };
+import type { EngineModule } from "../engine/module.ts";
+import { enabledModules } from "../engine/modules.ts";
+import { loadSettings } from "../settings/settings.ts";
 import { logError } from "../util/log.ts";
-import {
-  GLOBAL_INSTRUCTIONS,
-  GLOBAL_TOOL_DESCRIPTIONS,
-  GLOBAL_TOOL_NAMES,
-  PROJECT_TOOL_NAMES,
-  runGlobalTool,
-  runTool,
-  TOOL_DESCRIPTIONS,
-  TOOL_META,
-  toolSchemas,
-} from "./run.ts";
+import { defaultDataDir } from "../util/paths.ts";
+import { GLOBAL_INSTRUCTIONS, moduleTools } from "./run.ts";
 
 // Tool descriptions are sent to the model in every session, so each is one sentence.
 
 /**
- * The MCP server: its tools over stdio (project_links inside a project, memory_projects with --global). It lives as long as the host keeps its
- * stdin open, and holds no database connection between calls.
+ * The MCP server: the enabled modules' tools over stdio (memory's: project_links inside a
+ * project, memory_projects with --global). It lives as long as the host keeps its stdin
+ * open, and holds no database connection between calls.
  */
-export async function runMcpServer(options: { global?: boolean } = {}): Promise<void> {
+export async function runMcpServer(
+  options: { global?: boolean; modules?: readonly EngineModule[] } = {},
+): Promise<void> {
   const global = options.global === true;
   // The SDK is loaded here and nowhere else: hooks must never pay for it.
   const { McpServer } = await import("@modelcontextprotocol/server");
   const { StdioServerTransport } = await import("@modelcontextprotocol/server/stdio");
-  const schemas = await toolSchemas(global);
+  const modules =
+    options.modules ?? enabledModules(loadSettings(process.env, defaultDataDir()).modules);
+  const tools = await moduleTools(modules, global ? "global" : "project");
 
   const answer = (text: string, isError = false) => ({
     content: [{ type: "text" as const, text }],
@@ -36,26 +35,24 @@ export async function runMcpServer(options: { global?: boolean } = {}): Promise<
     { name: "wizardingcode-mem", version: pkg.version },
     global ? { instructions: GLOBAL_INSTRUCTIONS } : undefined,
   );
-  for (const name of global ? GLOBAL_TOOL_NAMES : PROJECT_TOOL_NAMES) {
+  for (const tool of tools) {
     server.registerTool(
-      name,
+      tool.name,
       {
-        title: TOOL_META[name].title,
-        annotations: TOOL_META[name].annotations,
-        description: global
-          ? GLOBAL_TOOL_DESCRIPTIONS[name as keyof typeof GLOBAL_TOOL_DESCRIPTIONS]
-          : TOOL_DESCRIPTIONS[name as (typeof PROJECT_TOOL_NAMES)[number]],
-        inputSchema: schemas[name],
+        ...(tool.title === undefined ? {} : { title: tool.title }),
+        ...(tool.annotations === undefined ? {} : { annotations: tool.annotations }),
+        description: tool.description,
+        inputSchema: tool.inputSchema,
       },
       async (args: unknown) => {
         try {
           return answer(
-            global
-              ? await runGlobalTool(name, args)
-              : await runTool(name, args, process.env.CLAUDE_PROJECT_DIR || process.cwd()),
+            await tool.run(args, {
+              projectDir: global ? null : process.env.CLAUDE_PROJECT_DIR || process.cwd(),
+            }),
           );
         } catch (error) {
-          logError(`mcp ${name}`, error);
+          logError(`mcp ${tool.name}`, error);
           return answer(
             `wizardingcode-mem: ${error instanceof Error ? error.message : String(error)}`,
             true,

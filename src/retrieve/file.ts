@@ -1,11 +1,10 @@
+import { MOMENT_BUDGET } from "../engine/budget.ts";
 import type { Db } from "../store/db.ts";
 import { MEMORY_COLUMNS, type MemoryRow, prior, toNote } from "./notes.ts";
 import { notYetShown } from "./prompt.ts";
 import { type Note, renderNotes } from "./render.ts";
 
 const MAX_NOTES = 2;
-/** About 350 tokens: a file read is frequent, so each one gets little room. */
-const BUDGET_CHARS = 1200;
 /** Kinds that warn or explain; a summary of a change is not worth interrupting a read. */
 const KINDS = "('gotcha', 'fix', 'convention', 'decision')";
 
@@ -23,8 +22,13 @@ export function notesForFile(
     path: string;
     branch: string | null;
     now: number;
+    /** Default 1,200 characters. */
+    budgetChars?: number;
+    /** The intro the notes will be shown with, which counts against the budget. */
+    intro?: string;
   },
 ): Note[] {
+  const budgetChars = input.budgetChars ?? MOMENT_BUDGET["file-read"];
   const rows = db
     .query<MemoryRow & { role: string }, [number, string]>(
       `SELECT ${MEMORY_COLUMNS}, MIN(f.role) AS role
@@ -45,7 +49,7 @@ export function notesForFile(
     if (chosen.length === MAX_NOTES) break;
     const next = [...chosen, toNote(db, row)];
     // `continue`, as on the prompt path: skip what does not fit and try the next.
-    if (renderNotes(next).length > BUDGET_CHARS) continue;
+    if (renderNotes(next, input.intro).length > budgetChars) continue;
     chosen.push(next[next.length - 1] as Note);
   }
   return chosen;

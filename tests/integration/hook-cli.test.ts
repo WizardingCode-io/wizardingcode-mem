@@ -536,6 +536,7 @@ describe("the viewer at session start, from the command line", () => {
         input: payload("session-start.startup", "codex"),
         env: {
           WIZARDINGCODE_MEM_DATA_DIR: dir,
+          WIZARDINGCODE_HOME: join(dir, "home"),
           WIZARDINGCODE_MEM_DISTILL: "off",
           WIZARDINGCODE_MEM_UI_AUTO_OPEN: "on",
           CI: "1",
@@ -548,6 +549,7 @@ describe("the viewer at session start, from the command line", () => {
     expect(result).toEqual(SILENT_SUCCESS);
     await Bun.sleep(500);
     expect(await Bun.file(join(dir, "ui.json")).exists()).toBe(false);
+    expect(await Bun.file(join(dir, "home", "ui.json")).exists()).toBe(false);
   });
 });
 
