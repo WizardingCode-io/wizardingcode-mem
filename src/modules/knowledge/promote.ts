@@ -1,6 +1,8 @@
 import { lstatSync, rmSync } from "node:fs";
 import { readGitInfo } from "../../core/git.ts";
 import type { MemoryKind } from "../../core/types.ts";
+import { NOT_STANDING } from "../../distill/policy.ts";
+import type { Judge } from "../../judge/types.ts";
 import { type Db, withWrite } from "../../store/db.ts";
 import { claimLease, getMeta, releaseLease, setMeta } from "../../store/meta.ts";
 import { logError } from "../../util/log.ts";
@@ -15,7 +17,8 @@ import { checkSlug, prepareFolder, renderEntry, today, writeNewEntry } from "./w
 // or convention of importance 4 or more that agents asked for or met in their work (never
 // the session-start brief) in at least 3 sessions spanning a day or more, or that is one of
 // the author's own rules; and, unless it is one of those, it must not read as a record of a
-// session (`episodic.ts`). Proposing writes nothing to a repository; only accepting does, on
+// session (`episodic.ts`) nor, when a judge can tell (a TypeSafe key), be judged surely not
+// standing knowledge. Proposing writes nothing to a repository; only accepting does, on
 // the author's click, and only where knowledge is on.
 
 const KINDS = "('decision', 'convention')";
@@ -26,6 +29,11 @@ const BATCH = 500;
 const INJECTION_BATCH = 5000;
 const MAX_MS = 2000;
 const CURSOR_KEY = "knowledge.promote.cursor";
+/** Questions to the judge in one pass, at most; the rest wait for a later pass. */
+const MAX_QUESTIONS = 20;
+/** Memories the judge said are not standing knowledge, so that it is not asked again. */
+const NOT_STANDING_KEY = "knowledge.not-standing";
+const MAX_REMEMBERED = 5000;
 /** One proposing process at a time. */
 export const PROMOTE_LEASE = "knowledge.promote.lease";
 
@@ -56,6 +64,15 @@ function readCursor(db: Db): Cursor {
       : START;
   } catch {
     return START;
+  }
+}
+
+function rememberedNotStanding(db: Db): number[] {
+  try {
+    const value: unknown = JSON.parse(getMeta(db, NOT_STANDING_KEY) ?? "[]");
+    return Array.isArray(value) ? value.filter((v): v is number => typeof v === "number") : [];
+  } catch {
+    return [];
   }
 }
 
@@ -137,10 +154,15 @@ const ELIGIBLE = `m.status = 'active' AND m.kind IN ${KINDS} AND m.importance >=
  * and out; past `maxMs` the pass stops and the cursor stays, so a later pass does the rest
  * (a memory already proposed is not proposed twice).
  */
-export function proposePromotions(
+export async function proposePromotions(
   db: Db,
   deps: {
     now: number;
+    /**
+     * Asked, when it can tell (a TypeSafe key), whether a memory states standing knowledge;
+     * without `standing`, the exact rules alone decide.
+     */
+    judge?: Judge;
     /** Where the home folder and the brand's home are; the process's environment by default. */
     env?: Record<string, string | undefined>;
     batch?: number;
@@ -150,7 +172,7 @@ export function proposePromotions(
     /** Told of each memory that met the evidence but was dropped, and why (the proof's report). */
     onDrop?: (drop: Drop) => void;
   },
-): { proposed: number; scanned: number } {
+): Promise<{ proposed: number; scanned: number }> {
   const none = { proposed: 0, scanned: 0 };
   const cursor = readCursor(db);
   const maxInjection =
@@ -168,7 +190,7 @@ export function proposePromotions(
   if (!claimLease(db, PROMOTE_LEASE, owner, Date.now(), maxMs + 60_000)) return none;
   try {
     repairShownIndex(db);
-    return propose(db, deps, cursor, maxMs);
+    return await propose(db, deps, cursor, maxMs);
   } finally {
     releaseLease(db, PROMOTE_LEASE, owner);
   }
@@ -179,6 +201,7 @@ interface Qualified {
   projectId: number;
   title: string;
   body: string;
+  kind: MemoryKind;
   /** The prompt of the turn it was distilled from, when that turn is still kept. */
   prompt: string | null;
 }
@@ -191,12 +214,12 @@ export interface Drop {
   reason: string;
 }
 
-function propose(
+async function propose(
   db: Db,
   deps: Parameters<typeof proposePromotions>[1],
   from: Cursor,
   maxMs: number,
-): { proposed: number; scanned: number } {
+): Promise<{ proposed: number; scanned: number }> {
   const deadline = performance.now() + maxMs;
   const batch = deps.batch ?? BATCH;
   const injectionBatch = deps.injectionBatch ?? INJECTION_BATCH;
@@ -231,7 +254,7 @@ function propose(
     // The basic rule, in a project with memory on, never proposed before.
     const candidates = db
       .query<Qualified & { rule: number }, []>(
-        `SELECT m.id AS id, m.project_id AS projectId, m.title AS title, m.body AS body,
+        `SELECT m.id AS id, m.project_id AS projectId, m.title AS title, m.body AS body, m.kind AS kind,
                 (SELECT t.prompt FROM turns t WHERE t.id = m.source_turn_id) AS prompt,
                 EXISTS (SELECT 1 FROM user_memories u WHERE u.memory_id = m.id) AS rule
            FROM memories m JOIN projects p ON p.id = m.project_id AND p.disabled = 0
@@ -267,6 +290,10 @@ function propose(
       `INSERT OR IGNORE INTO knowledge_proposals (project_id, memory_id, slug, status, created_at)
        VALUES (?, ?, ?, 'proposed', ?)`,
     );
+    const standing = deps.judge?.standing?.bind(deps.judge);
+    const notStanding = standing === undefined ? [] : rememberedNotStanding(db);
+    const names = new Map<number, string>();
+    let asked = 0;
     for (const candidate of candidates) {
       // Out of time: the cursor stays where it was, and a later pass looks again.
       if (performance.now() > deadline) return { proposed, scanned: 0 };
@@ -280,6 +307,42 @@ function propose(
         }
       }
       if (rootOf(candidate.projectId) === null) continue;
+      if (candidate.rule === 0 && standing !== undefined) {
+        if (notStanding.includes(candidate.id)) continue;
+        // Each question is a request: past the cap, the rest wait for a later pass, with the
+        // cursor where it was (proposed and judged-out memories are not looked at again).
+        if (asked >= MAX_QUESTIONS) return { proposed, scanned: 0 };
+        asked++;
+        try {
+          if (!names.has(candidate.projectId)) {
+            names.set(
+              candidate.projectId,
+              db
+                .query<{ name: string }, [number]>("SELECT name FROM projects WHERE id = ?")
+                .get(candidate.projectId)?.name ?? "",
+            );
+          }
+          const verdict = await standing({
+            title: candidate.title,
+            body: candidate.body,
+            kind: candidate.kind,
+            project: names.get(candidate.projectId) ?? "",
+          });
+          if (!verdict.standing && verdict.confidence >= NOT_STANDING.minConfidence) {
+            notStanding.push(candidate.id);
+            setMeta(db, NOT_STANDING_KEY, JSON.stringify(notStanding.slice(-MAX_REMEMBERED)));
+            deps.onDrop?.({
+              id: candidate.id,
+              layer: "judge",
+              reason: `not standing (${verdict.confidence.toFixed(2)})`,
+            });
+            continue;
+          }
+        } catch (error) {
+          // No verdict: it stays proposed, and the author decides.
+          logError("knowledge.standing", error);
+        }
+      }
       proposed += insert.run(
         candidate.projectId,
         candidate.id,
@@ -307,9 +370,12 @@ function propose(
 }
 
 /** Never throws: a failure here must not change the drain's outcome. */
-export function proposePromotionsSafely(db: Db, now: number): number {
+export async function proposePromotionsSafely(
+  db: Db,
+  deps: { now: number; judge?: Judge },
+): Promise<number> {
   try {
-    return proposePromotions(db, { now }).proposed;
+    return (await proposePromotions(db, deps)).proposed;
   } catch (error) {
     logError("knowledge.promote", error);
     return 0;

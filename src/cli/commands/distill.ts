@@ -56,7 +56,7 @@ export async function run(): Promise<number> {
       refreshActiveProjects(db, Date.now());
       // Memories worth keeping, proposed as knowledge after the rules: bounded, a cursor,
       // never a file written (only the author's click writes one). Never fatal.
-      proposePromotionsSafely(db, Date.now());
+      await proposePromotionsSafely(db, { now: Date.now(), judge });
     }
     return 0;
   } catch (error) {

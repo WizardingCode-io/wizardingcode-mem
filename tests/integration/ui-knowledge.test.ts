@@ -44,6 +44,14 @@ const withDb = <T>(run: (db: Db) => T): T => {
     db.close();
   }
 };
+const withDbAsync = async <T>(run: (db: Db) => Promise<T>): Promise<T> => {
+  const db = openDb({ dataDir, busyTimeoutMs: 2000 });
+  try {
+    return await run(db);
+  } finally {
+    db.close();
+  }
+};
 
 beforeEach(() => {
   base = realpathSync(mkdtempSync(join(tmpdir(), "wizardingcode-mem-ui-knowledge-")));
@@ -240,8 +248,8 @@ describe("GET /api/knowledge/entries/:slug", () => {
 
 describe("proposals", () => {
   /** A decision asked for in three sessions over three days: proposed by the drain's pass. */
-  function proposed(title: string): number {
-    return withDb((db) => {
+  function proposed(title: string): Promise<number> {
+    return withDbAsync(async (db) => {
       const body = `${title}, because the review asked for it.`;
       const id = insertMemory(db, {
         projectId,
@@ -275,7 +283,7 @@ describe("proposals", () => {
           [shownIn, id, NOW - day * 86_400_000],
         );
       }
-      proposePromotions(db, { now: NOW, env });
+      await proposePromotions(db, { now: NOW, env });
       const row = db
         .query<{ id: number }, [number]>("SELECT id FROM knowledge_proposals WHERE memory_id = ?")
         .get(id);
@@ -300,7 +308,7 @@ describe("proposals", () => {
 
   test("listed with the memory's text; of one project or of all", async () => {
     session();
-    const first = proposed("Orders are cancelled through the saga");
+    const first = await proposed("Orders are cancelled through the saga");
     const s = await start();
     const listed = await proposals(s);
     expect(listed.map((p) => [p.id, p.slug, p.title, p.kind])).toEqual([
@@ -317,7 +325,7 @@ describe("proposals", () => {
 
   test("Make knowledge writes the entry; it is listed at once; a second click is refused", async () => {
     session();
-    const id = proposed("Orders are cancelled through the saga");
+    const id = await proposed("Orders are cancelled through the saga");
     const s = await start();
     const made = await post(s, `/api/knowledge/proposals/${id}/accept`);
     expect(made.status).toBe(200);
@@ -337,7 +345,7 @@ describe("proposals", () => {
 
   test("Reject writes nothing and is final; an unknown proposal is 404", async () => {
     session();
-    const id = proposed("Orders are cancelled through the saga");
+    const id = await proposed("Orders are cancelled through the saga");
     const s = await start();
     const rejected = await post(s, `/api/knowledge/proposals/${id}/reject`);
     expect(rejected.status).toBe(200);
@@ -352,7 +360,7 @@ describe("proposals", () => {
 
   test("refused, with nothing written, where knowledge is off", async () => {
     session();
-    const id = proposed("Orders are cancelled through the saga");
+    const id = await proposed("Orders are cancelled through the saga");
     env.HOME = repo;
     const s = await start();
     const refused = await post(s, `/api/knowledge/proposals/${id}/accept`);

@@ -1,9 +1,11 @@
 import type { Breaker } from "./breaker.ts";
 import { TypeSafeError } from "./client.ts";
-import type { Judge, PersonalVerdict } from "./types.ts";
+import type { Judge, PersonalVerdict, StandingVerdict } from "./types.ts";
 
 /** No judge could say whether a rule is personal: it stands, and the author decides. */
 const UNJUDGED: PersonalVerdict = { personal: true, confidence: 0 };
+/** No judge could say whether a memory is standing knowledge: it stays proposed, and the author decides. */
+const UNJUDGED_STANDING: StandingVerdict = { standing: true, confidence: 0 };
 
 export interface FallbackOptions {
   onError?: (error: unknown) => void;
@@ -61,6 +63,15 @@ export function withFallback(
       attempt(
         () => personal(input),
         async () => (other ? other(input) : UNJUDGED),
+      );
+  }
+  const standing = primary.standing?.bind(primary);
+  if (standing) {
+    const other = fallback.standing?.bind(fallback);
+    judge.standing = (input) =>
+      attempt(
+        () => standing(input),
+        async () => (other ? other(input) : UNJUDGED_STANDING),
       );
   }
   return judge;

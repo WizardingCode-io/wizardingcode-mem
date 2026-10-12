@@ -588,7 +588,7 @@ if (COPY) {
   for (let i = 0; i < 200; i++) {
     const before = getMeta(db, "knowledge.promote.cursor");
     const t = performance.now();
-    const run = proposePromotions(db, { now: Date.now(), env: process.env });
+    const run = await proposePromotions(db, { now: Date.now(), env: process.env });
     const ms = performance.now() - t;
     drains.push({ ms, ...run });
     if (run.proposed === 0 && getMeta(db, "knowledge.promote.cursor") === before) break;
@@ -596,7 +596,7 @@ if (COPY) {
   const quiet: number[] = [];
   for (let i = 0; i < 20; i++) {
     const t = performance.now();
-    proposePromotions(db, { now: Date.now(), env: process.env });
+    await proposePromotions(db, { now: Date.now(), env: process.env });
     quiet.push(performance.now() - t);
   }
   const working = drains.filter((d) => d.scanned > 0 || d.proposed > 0);
