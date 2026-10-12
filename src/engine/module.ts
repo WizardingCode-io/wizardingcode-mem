@@ -1,5 +1,5 @@
 import type { ZodType } from "zod";
-import type { Db } from "../store/db.ts";
+import type { Db, ModuleMigration } from "../store/db.ts";
 
 // What a module is to the engine: something that may add context at each injection
 // moment, the tools it offers the agent and the views it adds to the viewer. The hooks ask
@@ -91,4 +91,10 @@ export interface EngineModule {
   tools?(mode: ToolMode): Promise<ModuleTool[]> | ModuleTool[];
   /** The viewer's rail buttons for this module, in order. */
   views?: ModuleView[];
+  /**
+   * The module's own tables, numbered from 1 in its namespace (ruling K8): applied by
+   * `openDb` after the core migrations, recorded in `module_migrations`. The same array is
+   * listed in `src/engine/module-schemas.ts`, which the store reads without loading modules.
+   */
+  migrations?: readonly ModuleMigration[];
 }

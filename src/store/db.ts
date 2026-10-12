@@ -1,6 +1,7 @@
 import { Database } from "bun:sqlite";
 import { chmodSync, existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { MODULE_SCHEMAS } from "../engine/module-schemas.ts";
 import { resolvePaths } from "../util/paths.ts";
 import init from "./migrations/0001_init.sql" with { type: "text" };
 import ftsProject from "./migrations/0002_fts_project.sql" with { type: "text" };
@@ -32,6 +33,19 @@ export const MIGRATIONS: readonly Migration[] = [
 ];
 export const LATEST_VERSION = MIGRATIONS.length;
 
+/** One step of a module's own schema (ruling K8). Forward-only, like the core's. */
+export interface ModuleMigration {
+  version: number;
+  name: string;
+  sql: string;
+}
+
+/** A module's migrations, numbered from 1 in its own namespace. */
+export interface ModuleSchema {
+  module: string;
+  migrations: readonly ModuleMigration[];
+}
+
 export const DB_FILE = "wizardingcode-mem.db";
 const BACKUPS_DIR = "backups";
 const BACKUPS_KEPT = 2;
@@ -53,6 +67,8 @@ export interface OpenOptions {
   busyTimeoutMs: number;
   /** For tests. */
   migrations?: readonly Migration[];
+  /** For tests. Defaults to every built-in module's (`MODULE_SCHEMAS`). */
+  moduleMigrations?: readonly ModuleSchema[];
 }
 
 function userVersion(db: Db): number {
@@ -159,6 +175,87 @@ function migrate(
   }
 }
 
+const MODULE_MIGRATIONS_TABLE = `CREATE TABLE IF NOT EXISTS module_migrations (
+  module TEXT NOT NULL,
+  version INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  applied_at INTEGER NOT NULL,
+  PRIMARY KEY (module, version)
+)`;
+
+/** The newest version recorded for each module; empty before any module migration ran. */
+function moduleVersions(db: Db): Map<string, number> {
+  const exists = db
+    .query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'module_migrations'")
+    .get();
+  if (exists === null) return new Map();
+  const rows = db
+    .query<{ module: string; version: number }, []>(
+      "SELECT module, max(version) AS version FROM module_migrations GROUP BY module",
+    )
+    .all();
+  return new Map(rows.map((row) => [row.module, row.version]));
+}
+
+const pendingOf = (schemas: readonly ModuleSchema[], done: Map<string, number>) =>
+  schemas.flatMap((schema) =>
+    [...schema.migrations]
+      .sort((a, b) => a.version - b.version)
+      .filter((migration) => migration.version > (done.get(schema.module) ?? 0))
+      .map((migration) => ({ module: schema.module, migration })),
+  );
+
+/**
+ * Brings each module's own tables up to date (ruling K8), after the core migrations and
+ * tracked in `module_migrations(module, version)`; the core `user_version` does not move
+ * for them, so an older binary still opens the database and ignores tables it does not
+ * know. Like the core runner: a quick read finds nothing to do on almost every open; when
+ * there is work, a second connection takes the write lock, reads again and applies what is
+ * still pending, so concurrent openers apply each migration once. A module migration that
+ * upgrades tables already there takes a backup first; a module's first tables do not. A
+ * version newer than this binary knows is left alone: that module's tables are not its.
+ */
+function migrateModules(db: Db, path: string, dir: string, schemas: readonly ModuleSchema[]): void {
+  if (pendingOf(schemas, moduleVersions(db)).length === 0) return;
+
+  const lock = new Database(path);
+  try {
+    lock.run(`PRAGMA busy_timeout = ${UPGRADE_WAIT_MS}`);
+    lock.run("PRAGMA foreign_keys = ON");
+    lock.run("BEGIN IMMEDIATE");
+    try {
+      // Read again under the lock: another process may have applied them while we waited.
+      const done = moduleVersions(lock);
+      const pending = pendingOf(schemas, done);
+      if (pending.length === 0) {
+        lock.run("ROLLBACK");
+        return;
+      }
+      if (pending.some(({ module }) => (done.get(module) ?? 0) > 0)) {
+        backup(db, dir, userVersion(lock));
+      }
+      lock.run(MODULE_MIGRATIONS_TABLE);
+      const record = lock.query(
+        "INSERT INTO module_migrations (module, version, name, applied_at) VALUES (?, ?, ?, ?)",
+      );
+      for (const { module, migration } of pending) {
+        lock.run(migration.sql);
+        record.run(module, migration.version, migration.name, Date.now());
+      }
+      lock.run("COMMIT");
+    } catch (error) {
+      try {
+        lock.run("ROLLBACK");
+      } catch {
+        // Nothing was open to roll back.
+      }
+      throw error;
+    }
+  } finally {
+    lock.close();
+  }
+}
+
 export function openDb(options: OpenOptions): Db {
   const dir = options.dataDir ?? resolvePaths().storeDir;
   mkdirSync(dir, { recursive: true, mode: 0o700 });
@@ -170,6 +267,7 @@ export function openDb(options: OpenOptions): Db {
     db.run("PRAGMA foreign_keys = ON");
     db.run("PRAGMA synchronous = NORMAL");
     migrate(db, path, dir, options.migrations ?? MIGRATIONS, options.busyTimeoutMs);
+    migrateModules(db, path, dir, options.moduleMigrations ?? MODULE_SCHEMAS);
   } catch (error) {
     db.close();
     throw error;
