@@ -230,6 +230,10 @@ The agent also gets three tools — `memory_search`, `memory_get` and `memory_sa
 
 Memories are kept as what they are: a title, a body of sentences that were actually said, the files they are about, the kind (`decision`, `fix`, `gotcha`, `convention`, `change`, `discovery`), an importance from 1 to 5, and where they came from.
 
+## Modules
+
+wizardingcode-mem is one engine with modules: each module can add context at the hook moments, offer tools to the agent and add views to the viewer, all inside one budget. Memory is the one module shipped today; `WIZARDINGCODE_MODULES` (default `memory`) chooses which are on. See [ADR 0019](docs/adr/0019-one-engine.md).
+
 ## The viewer
 
 ```sh

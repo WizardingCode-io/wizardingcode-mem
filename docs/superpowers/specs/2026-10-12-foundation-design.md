@@ -1,6 +1,6 @@
 # One engine with modules: the shared foundation — design
 
-Date: 2026-10-12. Status: approved direction (the author chose one engine with modules over separate products and asked to continue without further questions; the rulings below are the controller's, reported at the end). Roadmap item D1, wave 3, before D2 (knowledge and personas).
+Date: 2026-10-12. Status: built (ADR 0019); approved direction (the author chose one engine with modules over separate products and asked to continue without further questions; the rulings below are the controller's, reported at the end). Roadmap item D1, wave 3, before D2 (knowledge and personas).
 
 ## Why
 
@@ -36,7 +36,7 @@ export interface EngineModule {
   name: string;          // "Memory"
   share: number;         // 0..1 of each moment's budget
   contribute?(input: MomentInput): Contribution | null;
-  tools?(context: ToolContext): ModuleTool[];
+  tools?(mode: ToolMode): ModuleTool[]; // the project arrives per call, in run(args, call)
   views?: { tab: string; label: string; icon: string; key: string }[];
 }
 ```
