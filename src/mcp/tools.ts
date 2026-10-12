@@ -50,7 +50,8 @@ function userRules(db: Db, ids: number[]): Scope["rules"] {
     const rows = db
       .query<{ id: number; projectId: number }, []>(
         `SELECT m.id AS id, m.project_id AS projectId FROM user_memories u
-           JOIN memories m ON m.id = u.memory_id WHERE m.status = 'active'`,
+           JOIN memories m ON m.id = u.memory_id JOIN projects p ON p.id = m.project_id
+          WHERE m.status = 'active' AND p.disabled = 0`,
       )
       .all()
       .filter((row) => !ids.includes(row.projectId));

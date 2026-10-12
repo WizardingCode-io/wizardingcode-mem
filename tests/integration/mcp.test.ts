@@ -208,6 +208,14 @@ describe("memory_search over linked projects", () => {
     expect(out).toContain("matters here");
   });
 
+  test("a linked project with memory off is not searched", () => {
+    const web = other("web");
+    linkProjects(db, projectId, web, "product", NOW);
+    memory("The pragma order matters on the web.", "", { projectId: web });
+    db.run("UPDATE projects SET disabled = 1 WHERE id = ?", [web]);
+    expect(search("pragma")).toBe("No memories match.");
+  });
+
   test("memory_get reads a linked project's memory and names it", () => {
     const web = other("web");
     linkProjects(db, projectId, web, "product", NOW);

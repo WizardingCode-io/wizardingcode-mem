@@ -109,6 +109,16 @@ describe("session brief with linked projects", () => {
     expect(brief(f.lib).text).not.toContain("(from ");
   });
 
+  test("a linked project with memory off adds nothing", () => {
+    const before = pinned();
+    important(f.lib, 3);
+    important(f.site, 3);
+    f.link(f.app, f.lib, "uses");
+    f.link(f.app, f.site, "product");
+    f.db.run("UPDATE projects SET disabled = 1 WHERE id IN (?, ?)", [f.lib, f.site]);
+    expect(pinned()).toEqual(before);
+  });
+
   test("a broken links table gives today's brief", () => {
     const before = pinned();
     important(f.lib, 3);
@@ -159,6 +169,13 @@ describe("session brief with the author's rules", () => {
     const firstOutside = notes.findIndex((note) => note.origin !== undefined && note.id !== own);
     expect(notes.indexOf(shown[0] as (typeof notes)[number])).toBeLessThan(firstOutside);
     expect(shown[0]?.origin).toBe("you");
+  });
+
+  test("a rule kept in a project with memory off is not shown", () => {
+    const before = pinned();
+    for (const id of important(f.other, 3)) f.userRule(id);
+    f.db.run("UPDATE projects SET disabled = 1 WHERE id = ?", [f.other]);
+    expect(pinned()).toEqual(before);
   });
 
   test("an archived rule is not shown", () => {

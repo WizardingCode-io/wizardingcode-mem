@@ -137,6 +137,24 @@ describe("prompt notes with the author's rules", () => {
     expect(notes.filter((note) => note.id === rule).map((note) => note.origin)).toEqual(["you"]);
   });
 
+  test("a rule kept in a project with memory off is not shown", () => {
+    const before = pinned();
+    const [rule] = strong(f.other) as [number];
+    f.userRule(rule);
+    f.db.run("UPDATE projects SET disabled = 1 WHERE id = ?", [f.other]);
+    expect(retrieve(QUEUE).map((note) => note.id)).not.toContain(rule);
+    expect(pinned()).toEqual(before);
+  });
+
+  test("a linked project with memory off adds nothing", () => {
+    const before = pinned();
+    const [theirs] = strong(f.lib) as [number];
+    f.link(f.app, f.lib, "uses");
+    f.db.run("UPDATE projects SET disabled = 1 WHERE id = ?", [f.lib]);
+    expect(retrieve(QUEUE).map((note) => note.id)).not.toContain(theirs);
+    expect(pinned()).toEqual(before);
+  });
+
   test("a rule that does not match the prompt is not shown", () => {
     const before = pinned();
     const id = f.memory(f.other, { title: "Zebra giraffe elephant rule", importance: 5 });

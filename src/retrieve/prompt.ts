@@ -89,7 +89,8 @@ function extraCandidates(
     const rules = db
       .query<MemoryRow, [number]>(
         `SELECT ${MEMORY_COLUMNS} FROM user_memories u CROSS JOIN memories m ON m.id = u.memory_id
-          WHERE m.status = 'active' AND ${input.unseen} AND ${input.kindFilter}
+           JOIN projects p ON p.id = m.project_id
+          WHERE m.status = 'active' AND p.disabled = 0 AND ${input.unseen} AND ${input.kindFilter}
           ORDER BY m.importance DESC, m.updated_at DESC LIMIT ?`,
       )
       .all(LINKED_POOL);

@@ -121,7 +121,8 @@ function extraPools(db: Db, projectId: number): ExtraPools {
     const user = db
       .query<MemoryRow, [number]>(
         `SELECT ${MEMORY_COLUMNS} FROM user_memories u CROSS JOIN memories m ON m.id = u.memory_id
-          WHERE m.status = 'active' AND m.stale = 0
+           JOIN projects p ON p.id = m.project_id
+          WHERE m.status = 'active' AND m.stale = 0 AND p.disabled = 0
           ORDER BY m.importance DESC, m.updated_at DESC LIMIT ?`,
       )
       .all(POOL);

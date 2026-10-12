@@ -179,6 +179,16 @@ describe("store/links", () => {
     expect(isUserMemory(db, m)).toBe(true);
   });
 
+  test("a project with memory off is never visible, whatever its links", () => {
+    const a = project("a");
+    const b = project("b");
+    const c = project("c");
+    linkProjects(db, a, b, "product", 1);
+    linkProjects(db, a, c, "uses", 1);
+    db.run("UPDATE projects SET disabled = 1 WHERE id IN (?, ?)", [b, c]);
+    expect(visibleProjects(db, a)).toEqual([]);
+  });
+
   test("visibleProjects without the table returns []", () => {
     const a = project("a");
     db.run("DROP TABLE project_links");

@@ -91,7 +91,7 @@ export function visibleProjects(db: Db, projectId: number): Visible[] {
                 CASE WHEN MAX(l.kind = 'product') = 1 THEN 'product' ELSE 'uses' END AS relation
            FROM project_links l
            JOIN projects p ON p.id = CASE WHEN l.from_project = ?1 THEN l.to_project ELSE l.from_project END
-          WHERE l.status = 'confirmed'
+          WHERE l.status = 'confirmed' AND p.disabled = 0
             AND ((l.kind = 'product' AND (l.from_project = ?1 OR l.to_project = ?1))
               OR (l.kind = 'uses' AND l.from_project = ?1))
           GROUP BY p.id
