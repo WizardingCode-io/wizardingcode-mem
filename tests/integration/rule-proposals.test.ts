@@ -13,13 +13,15 @@ import {
   acceptProposal,
   proposeRules,
   rejectProposal,
-  SAID_ALWAYS,
+  saidAlways,
+  typedText,
   undoUserRule,
 } from "../../src/links/rules.ts";
 import { searchMemories } from "../../src/mcp/tools.ts";
 import { sessionBrief } from "../../src/retrieve/brief.ts";
 import { type Db, openDb } from "../../src/store/db.ts";
 import { insertMemory } from "../../src/store/memories.ts";
+import { claimLease } from "../../src/store/meta.ts";
 import { touchSession } from "../../src/store/sessions.ts";
 import { searchTerms } from "../../src/util/words.ts";
 
@@ -42,11 +44,13 @@ interface Input {
   prompt?: string;
   /** When the memory was written; NOW by default. */
   at?: number;
+  /** The turn it came from, shared with other memories of that turn. */
+  turn?: number;
 }
 
 function memory(projectId: number, input: Input, model: Model | null = null): number {
-  let turnId: number | null = null;
-  if (input.prompt !== undefined) {
+  let turnId: number | null = input.turn ?? null;
+  if (turnId === null && input.prompt !== undefined) {
     seq++;
     const session = touchSession(db, {
       agent: "claude-code",
@@ -131,20 +135,70 @@ afterEach(() => {
 const propose = (judge: Judge = heuristicJudge, model: Model | null = null) =>
   proposeRules(db, { judge, now: NOW, model });
 
-describe("SAID_ALWAYS", () => {
-  test("matches a rule said to hold everywhere, in Portuguese or English", () => {
-    for (const text of [
-      "usa sempre o bun fixado",
-      "em todos os projetos quero testes primeiro",
-      "Always write the test first",
-      "in every project, explicit .ts imports",
-      "do this in every repo",
-      "in all projects keep English docs",
-    ]) {
-      expect(SAID_ALWAYS.test(text)).toBe(true);
-    }
-    expect(SAID_ALWAYS.test("the hallways are long")).toBe(false);
-    expect(SAID_ALWAYS.test("fix the retry")).toBe(false);
+/** A pasted report: many ordinary lines, one of them with an incidental "always". */
+const REPORT = [
+  "## Audit of the queue handlers",
+  ...Array.from(
+    { length: 30 },
+    (_, i) => `- handler ${i}: retries on a closed socket, p95 ${40 + i} ms`,
+  ),
+  "We always run the tests with the pinned bun in this report, as noted.",
+  ...Array.from({ length: 20 }, (_, i) => `| worker ${i} | lease ${i * 3} s | ok |`),
+].join("\n");
+
+describe("saidAlways", () => {
+  test("a short typed sentence with a rule phrase and the rule's own words", () => {
+    expect(saidAlways("corre sempre os testes com o bun fixado", RULE)).toBeGreaterThanOrEqual(2);
+    expect(
+      saidAlways("always write ADRs in English, in every project", "ADRs are written in English"),
+    ).toBeGreaterThanOrEqual(2);
+    expect(
+      saidAlways(
+        "ok. a partir de agora os changelogs são escritos à mão",
+        "Os changelogs são escritos à mão",
+      ),
+    ).toBeGreaterThanOrEqual(2);
+    expect(
+      saidAlways(
+        "Em todos os projetos: imports com extensão .ts explícita",
+        "Imports levam extensão .ts explícita",
+      ),
+    ).toBeGreaterThanOrEqual(2);
+  });
+
+  test("a pasted report with an incidental 'always' is a task, not a rule", () => {
+    expect(REPORT.length).toBeGreaterThan(2000);
+    expect(saidAlways(REPORT, RULE)).toBe(0);
+    expect(saidAlways(`${REPORT}\nok, faz isso`, RULE)).toBe(0);
+  });
+
+  test("'sempre' about something else shares too little with the rule", () => {
+    expect(
+      saidAlways("o build falha sempre no CI", "Retry flaky jobs before failing the pipeline"),
+    ).toBe(0);
+    expect(saidAlways("isto falhou sempre ontem", RULE)).toBe(0);
+    expect(saidAlways("the hallways are long", RULE)).toBe(0);
+  });
+
+  test("the phrase and the rule's words must share a sentence", () => {
+    expect(saidAlways("Always be careful. Run the tests with the pinned bun.", RULE)).toBe(0);
+    expect(saidAlways("Always be careful.\nThe pinned bun runs the tests.", RULE)).toBe(0);
+  });
+
+  test("what the host sends, code, quotes and long pasted lines are not typed text", () => {
+    expect(
+      saidAlways(
+        "<task-notification>always run the tests with the pinned bun</task-notification>",
+        RULE,
+      ),
+    ).toBe(0);
+    expect(saidAlways("ok\n```\n# always run the tests with the pinned bun\n```", RULE)).toBe(0);
+    expect(saidAlways("> always run the tests with the pinned bun\nobrigado", RULE)).toBe(0);
+    expect(saidAlways("<log>always run the tests with the pinned bun</log> vê isto", RULE)).toBe(0);
+    expect(saidAlways(`ok ${"x".repeat(300)} always run the tests with the pinned bun`, RULE)).toBe(
+      0,
+    );
+    expect(typedText("ok\n```\ncode\n```\n> quoted\nfim")).toBe("ok\n\nfim");
   });
 });
 
@@ -152,12 +206,12 @@ describe("proposeRules", () => {
   test("the same convention in two unlinked projects becomes one proposal with both", async () => {
     const one = memory(a, { title: RULE, body: RULE_BODY, importance: 3 });
     const two = memory(b, { title: RULE, body: RULE_BODY, importance: 4 });
-    expect(await propose()).toEqual({ proposed: 1 });
+    expect(await propose()).toMatchObject({ proposed: 1 });
     const [row] = proposals();
     expect(JSON.parse(row?.memory_ids ?? "[]")).toEqual([one, two].sort((x, y) => x - y));
     expect(row).toMatchObject({ reason: "repeated", status: "proposed", title: RULE });
     // Running again proposes nothing new.
-    expect(await propose()).toEqual({ proposed: 0 });
+    expect(await propose()).toMatchObject({ proposed: 0 });
     expect(proposals()).toHaveLength(1);
   });
 
@@ -165,27 +219,84 @@ describe("proposeRules", () => {
     memory(a, { title: RULE, body: RULE_BODY });
     memory(b, { title: RULE, body: RULE_BODY });
     link(a, b);
-    expect(await propose()).toEqual({ proposed: 0 });
+    expect(await propose()).toMatchObject({ proposed: 0 });
     expect(proposals()).toHaveLength(0);
   });
 
   test("a decision whose prompt said 'sempre' is proposed alone", async () => {
     const id = memory(a, {
       kind: "decision",
-      title: "Documents in the repository are written in English",
+      title: "Os documentos do repositório são escritos em inglês",
       prompt: "escreve sempre os documentos em inglês",
     });
-    expect(await propose()).toEqual({ proposed: 1 });
+    expect(await propose()).toMatchObject({ proposed: 1 });
     const [row] = proposals();
     expect(JSON.parse(row?.memory_ids ?? "[]")).toEqual([id]);
     expect(row?.reason).toBe("said-always");
+  });
+
+  test("one turn that gave several memories: at most one said-always proposal, the closest", async () => {
+    const first = memory(a, {
+      title: "Bun is pinned in devDependencies",
+      prompt: "corre sempre os testes com o bun fixado e o lint",
+    });
+    const source = db
+      .query<{ t: number }, [number]>("SELECT source_turn_id AS t FROM memories WHERE id = ?")
+      .get(first)?.t as number;
+    const closest = memory(a, { title: RULE, turn: source });
+    memory(a, { title: "The lint runs with the tests", turn: source });
+    expect(await propose()).toMatchObject({ proposed: 1 });
+    expect(proposals().map((p) => JSON.parse(p.memory_ids))).toEqual([[closest]]);
+  });
+
+  test("a memory with no source turn is never said always", async () => {
+    memory(a, { kind: "decision", title: "Always run the tests with the pinned bun" });
+    expect(await propose()).toMatchObject({ proposed: 0 });
+  });
+
+  test("with a judge, said always needs a sure 'personal'; repeated keeps today's rule", async () => {
+    memory(a, { title: RULE, prompt: "corre sempre os testes com o bun fixado" });
+    memory(b, { title: "Changelogs are written by hand" });
+    memory(c, { title: "Changelogs are written by hand" });
+    const unsure: Judge = {
+      ...heuristicJudge,
+      personal: async () => ({ personal: true, confidence: 0.6 }),
+    };
+    expect(await propose(unsure)).toMatchObject({ proposed: 1 });
+    expect(proposals().map((p) => p.reason)).toEqual(["repeated"]);
+  });
+
+  test("with a judge sure it is personal, said always is proposed", async () => {
+    memory(a, { title: RULE, prompt: "corre sempre os testes com o bun fixado" });
+    const sure: Judge = {
+      ...heuristicJudge,
+      personal: async () => ({ personal: true, confidence: 0.9 }),
+    };
+    expect(await propose(sure)).toMatchObject({ proposed: 1 });
+    expect(proposals().map((p) => p.reason)).toEqual(["said-always"]);
+  });
+
+  test("a linked pair inside a chain of copies: no proposal", async () => {
+    memory(a, { title: RULE, body: RULE_BODY });
+    memory(b, { title: RULE, body: RULE_BODY });
+    memory(c, { title: RULE, body: RULE_BODY });
+    link(a, c);
+    expect(await propose()).toMatchObject({ proposed: 0 });
+  });
+
+  test("a disabled project neither proposes nor counts as a copy", async () => {
+    memory(a, { title: RULE, body: RULE_BODY });
+    memory(b, { title: RULE, body: RULE_BODY });
+    memory(b, { kind: "decision", title: RULE, prompt: "corre sempre os testes com o bun fixado" });
+    db.run("UPDATE projects SET disabled = 1 WHERE id = ?", [b]);
+    expect(await propose()).toMatchObject({ proposed: 0 });
   });
 
   test("a fix is never proposed, repeated or said always", async () => {
     memory(a, { kind: "fix", title: RULE, body: RULE_BODY });
     memory(b, { kind: "fix", title: RULE, body: RULE_BODY });
     memory(c, { kind: "fix", title: "Fixed the retry loop", prompt: "always fix it this way" });
-    expect(await propose()).toEqual({ proposed: 0 });
+    expect(await propose()).toMatchObject({ proposed: 0 });
   });
 
   test("a rejected set is never proposed again", async () => {
@@ -194,7 +305,7 @@ describe("proposeRules", () => {
     await propose();
     const [row] = proposals();
     expect(rejectProposal(db, row?.id ?? 0, NOW)).toBe(true);
-    expect(await propose()).toEqual({ proposed: 0 });
+    expect(await propose()).toMatchObject({ proposed: 0 });
     expect(proposals().map((p) => p.status)).toEqual(["rejected"]);
     expect(rejectProposal(db, row?.id ?? 0, NOW)).toBe(false);
   });
@@ -210,10 +321,10 @@ describe("proposeRules", () => {
         return { personal: false, confidence: 0.9 };
       },
     };
-    expect(await propose(judge)).toEqual({ proposed: 0 });
+    expect(await propose(judge)).toMatchObject({ proposed: 0 });
     expect(asked).toEqual([{ title: RULE, projects: ["alpha", "bravo"] }]);
     // The verdict is remembered: the same group is not asked about on every drain.
-    expect(await propose(judge)).toEqual({ proposed: 0 });
+    expect(await propose(judge)).toMatchObject({ proposed: 0 });
     expect(asked).toHaveLength(1);
   });
 
@@ -224,14 +335,14 @@ describe("proposeRules", () => {
       ...heuristicJudge,
       personal: async () => ({ personal: true, confidence: 0.8 }),
     };
-    expect(await propose(yes)).toEqual({ proposed: 1 });
+    expect(await propose(yes)).toMatchObject({ proposed: 1 });
   });
 
   test("the fallback judge, which has no `personal`, keeps the proposal", async () => {
     memory(a, { title: RULE, body: RULE_BODY });
     memory(b, { title: RULE, body: RULE_BODY });
     expect(heuristicJudge.personal).toBeUndefined();
-    expect(await propose(heuristicJudge)).toEqual({ proposed: 1 });
+    expect(await propose(heuristicJudge)).toMatchObject({ proposed: 1 });
   });
 
   test("with the model, the same rule in other words is grouped by meaning", async () => {
@@ -247,9 +358,69 @@ describe("proposeRules", () => {
     const one = memory(a, { title: RULE }, model);
     const two = memory(b, { title: "Usar o binário fixado antes de cada entrega" }, model);
     memory(c, { title: "Unrelated convention about naming" }, model);
-    expect(await propose(heuristicJudge, null)).toEqual({ proposed: 0 });
-    expect(await propose(heuristicJudge, model)).toEqual({ proposed: 1 });
+    expect(await propose(heuristicJudge, null)).toMatchObject({ proposed: 0 });
+    expect(await propose(heuristicJudge, model)).toMatchObject({ proposed: 1 });
     expect(JSON.parse(proposals()[0]?.memory_ids ?? "[]")).toEqual([one, two]);
+  });
+});
+
+describe("the cursor", () => {
+  const fresh = (n: number, projectId = a) =>
+    Array.from({ length: n }, (_, i) =>
+      memory(projectId, {
+        title: `Convention ${i} about the ${["queue", "cache", "lease", "socket", "parser"][i % 5]} worker`,
+        at: NOW - 1000 + i,
+      }),
+    );
+
+  test("a run with nothing new returns at once and searches nothing", async () => {
+    memory(a, { title: RULE, body: RULE_BODY });
+    memory(b, { title: RULE, body: RULE_BODY });
+    expect(await propose()).toMatchObject({ proposed: 1, scanned: 2 });
+    const started = performance.now();
+    expect(await propose()).toEqual({ proposed: 0, scanned: 0 });
+    expect(performance.now() - started).toBeLessThan(20);
+  });
+
+  test("each run reaches the next ones, until all are reached", async () => {
+    fresh(5);
+    const run = () => proposeRules(db, { judge: heuristicJudge, now: NOW, batch: 2 });
+    expect((await run()).scanned).toBe(2);
+    expect((await run()).scanned).toBe(2);
+    expect((await run()).scanned).toBe(1);
+    expect((await run()).scanned).toBe(0);
+  });
+
+  test("the first run starts at the newest few, not the whole history", async () => {
+    fresh(5);
+    const run = () => proposeRules(db, { judge: heuristicJudge, now: NOW, maxMemories: 2 });
+    expect((await run()).scanned).toBe(2);
+    expect((await run()).scanned).toBe(0);
+  });
+
+  test("a memory written after the cursor is grouped with an old one in another project", async () => {
+    const old = memory(a, { title: RULE, body: RULE_BODY, at: NOW - 5000 });
+    memory(c, { title: "Something else about naming", at: NOW - 4000 });
+    expect(await propose()).toMatchObject({ proposed: 0 });
+    const later = memory(b, { title: RULE, body: RULE_BODY, at: NOW + 1000 });
+    expect(await propose()).toMatchObject({ proposed: 1, scanned: 1 });
+    expect(JSON.parse(proposals()[0]?.memory_ids ?? "[]")).toEqual([old, later]);
+  });
+
+  test("a reinforced memory is looked at again", async () => {
+    const one = memory(a, { title: RULE, body: RULE_BODY, at: NOW - 5000 });
+    await propose();
+    db.run("UPDATE memories SET updated_at = ? WHERE id = ?", [NOW + 10, one]);
+    expect(await propose()).toMatchObject({ scanned: 1 });
+  });
+
+  test("another process proposing holds the lease: this one leaves at once", async () => {
+    memory(a, { title: RULE, body: RULE_BODY });
+    memory(b, { title: RULE, body: RULE_BODY });
+    expect(claimLease(db, "rules.lease", `${process.pid}-other`, Date.now(), 60_000)).toBe(true);
+    expect(await propose()).toEqual({ proposed: 0, scanned: 0 });
+    db.run("DELETE FROM meta WHERE key = 'rules.lease'");
+    expect(await propose()).toMatchObject({ proposed: 1 });
   });
 });
 
@@ -299,6 +470,28 @@ describe("accepting and undoing", () => {
     expect(proposals()[0]?.status).toBe("proposed");
   });
 
+  test("accept is refused when a source's project has memory off", async () => {
+    const { id, sources } = await proposed();
+    db.run(
+      "UPDATE projects SET disabled = 1 WHERE id = (SELECT project_id FROM memories WHERE id = ?)",
+      [sources[1] ?? 0],
+    );
+    expect(acceptProposal(db, id, NOW + 1)).toHaveProperty("refused");
+    expect(db.query("SELECT COUNT(*) AS n FROM user_memories").get()).toEqual({ n: 0 });
+  });
+
+  test("a rule kept in a disabled project is not in other projects' briefs", async () => {
+    const { id } = await proposed();
+    const result = acceptProposal(db, id, NOW + 1);
+    if (!("userMemoryId" in result)) throw new Error(result.refused);
+    db.run(
+      "UPDATE projects SET disabled = 1 WHERE id = (SELECT project_id FROM memories WHERE id = ?)",
+      [result.userMemoryId],
+    );
+    const { text } = sessionBrief(db, { projectId: c, branch: null, now: NOW + 2 });
+    expect(text).not.toContain(`#${result.userMemoryId} `);
+  });
+
   test("undo archives your memory and puts the copies back", async () => {
     const { id, sources } = await proposed();
     const result = acceptProposal(db, id, NOW + 1);
@@ -309,7 +502,7 @@ describe("accepting and undoing", () => {
       expect(statusOf(source)).toEqual({ status: "active", superseded_by: null });
     }
     // Undone is a decision: the set does not come back as a proposal.
-    expect(await propose()).toEqual({ proposed: 0 });
+    expect(await propose()).toMatchObject({ proposed: 0 });
     expect(undoUserRule(db, sources[0] ?? 0, NOW + 3)).toBe(false);
   });
 
@@ -413,9 +606,9 @@ describe("fix round 1", () => {
       return resolveProject(db, dir, NOW).id;
     });
     for (const p of newer) memory(p, { title: RULE, body: RULE_BODY });
-    expect(await proposeRules(db, { judge: heuristicJudge, now: NOW, maxProjects: 2 })).toEqual({
-      proposed: 1,
-    });
+    expect(
+      await proposeRules(db, { judge: heuristicJudge, now: NOW, maxProjects: 2 }),
+    ).toMatchObject({ proposed: 1 });
   });
 
   test("a project's own consolidation never supersedes your rule", async () => {
@@ -450,6 +643,25 @@ describe("fix round 1", () => {
     expect(action).toEqual({ type: "insert", supersedes: [] });
     expect(statusOf(rule)).toEqual({ status: "active", superseded_by: null });
     expect(db.query("SELECT 1 FROM user_memories WHERE memory_id = ?").get(rule)).not.toBeNull();
+  });
+
+  test("a project's repeated draft of your rule is a duplicate of it", async () => {
+    sources(2);
+    await propose();
+    const result = acceptOnly();
+    if (!("userMemoryId" in result)) throw new Error(result.refused);
+    const project = db
+      .query<{ p: number }, [number]>("SELECT project_id AS p FROM memories WHERE id = ?")
+      .get(result.userMemoryId)?.p as number;
+    const action = await consolidate({ db, judge: heuristicJudge }, project, {
+      kind: "convention",
+      title: RULE,
+      body: RULE_BODY as Redacted,
+      importance: 3,
+      files: [],
+    });
+    expect(action).toEqual({ type: "duplicate", targetId: result.userMemoryId });
+    expect(statusOf(result.userMemoryId)).toEqual({ status: "active", superseded_by: null });
   });
 
   test("the time budget also bounds the judge's questions; the rest wait for the next run", async () => {

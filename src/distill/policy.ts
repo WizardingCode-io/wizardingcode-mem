@@ -26,3 +26,6 @@ export const SAME_MEANING = 0.8;
 
 /** A judge's "not personal" drops a proposed rule only when it is at least this sure. */
 export const NOT_PERSONAL = { minConfidence: 0.7 };
+
+/** A rule the author only said once is proposed, with a judge, only when it is at least this sure it is personal. */
+export const PERSONAL = { minConfidence: 0.7 };

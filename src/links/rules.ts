@@ -6,9 +6,10 @@
  * `user_memories` row.
  */
 
+import { isFromTheHost } from "../core/host-prompt.ts";
 import type { Redacted } from "../core/redact.ts";
 import type { MemoryKind } from "../core/types.ts";
-import { DUPLICATE, NOT_PERSONAL, SAME_MEANING } from "../distill/policy.ts";
+import { DUPLICATE, NOT_PERSONAL, PERSONAL, SAME_MEANING } from "../distill/policy.ts";
 import type { Model } from "../embed/model.ts";
 import { vectorText } from "../embed/vectors.ts";
 import { heuristicJudge } from "../judge/heuristic.ts";
@@ -16,21 +17,102 @@ import type { Judge } from "../judge/types.ts";
 import { semanticCandidates } from "../retrieve/semantic.ts";
 import { type Db, withWrite } from "../store/db.ts";
 import { findNeighbours, insertMemory, supersede } from "../store/memories.ts";
-import { getMeta, setMeta } from "../store/meta.ts";
+import { claimLease, getMeta, releaseLease, setMeta } from "../store/meta.ts";
 import { logError } from "../util/log.ts";
-import { searchTerms } from "../util/words.ts";
+import { isGeneric, STOPWORDS, searchTerms, searchTokens, stem } from "../util/words.ts";
 
-/** A prompt that says the rule holds everywhere. */
-export const SAID_ALWAYS =
-  /\b(sempre|em todos os projetos|always|every project|in every repo|in all projects)\b/i;
+// --- Said always --------------------------------------------------------------------
+// A rule the author said holds everywhere. Exact rules, tested on the shapes the proof found:
+// only what the author typed counts (no host messages, code, quotes or pasted lines), a long
+// prompt is a task and not a rule, and the rule phrase must share a short sentence with at
+// least two of the memory title's own words. In Portuguese the bare "sempre" is ordinary
+// speech: only its rule forms count.
+
+/** The rule phrases, English and Portuguese. */
+const RULE_PHRASE = new RegExp(
+  [
+    String.raw`\balways\b`,
+    String.raw`\bfrom now on\b`,
+    String.raw`\b(?:in|for|across) (?:every|all|any) (?:project|repo|repositor)`,
+    String.raw`\bevery (?:project|repo)`,
+    String.raw`\bsempre (?:que|em)\b`,
+    // An imperative or infinitive next to "sempre": "usa sempre", "corre sempre", "sempre usar".
+    String.raw`\b\p{L}+(?:a|e|ar|er|ir)\s+sempre\b`,
+    String.raw`\bsempre\s+\p{L}+(?:ar|er|ir)\b`,
+    String.raw`\bem (?:todos os|qualquer) (?:projeto|repo)`,
+    String.raw`\bde agora em diante\b`,
+    String.raw`\ba partir de agora\b`,
+    String.raw`\bdaqui (?:para|pra) a frente\b`,
+  ].join("|"),
+  "iu",
+);
+
+/** The trigger's own words, which say nothing about which rule. */
+const TRIGGER_WORDS = new Set(
+  "always every all any from now project projects repo repos repository repositories sempre todos qualquer projeto projetos agora partir diante daqui frente"
+    .split(" ")
+    .map(stem),
+);
+
+const MAX_TYPED = 600;
+const MAX_LINE = 300;
+const MAX_SENTENCE = 240;
+const MIN_SHARED = 2;
+
+/** What the author typed: no fenced code, no `<tag>…</tag>` blocks, no quoted or pasted lines. */
+export function typedText(prompt: string): string {
+  return prompt
+    .replace(/```[\s\S]*?(?:```|$)/g, "")
+    .replace(/<([a-z][\w-]*)[^>]*>[\s\S]*?<\/\1>/gi, "")
+    .split("\n")
+    .filter((line) => !line.trimStart().startsWith(">") && line.length <= MAX_LINE)
+    .join("\n")
+    .trim();
+}
+
+function ruleWords(text: string): Set<string> {
+  return new Set(
+    searchTokens(text)
+      .filter((token) => token.length >= 3 && !STOPWORDS.has(token))
+      .map(stem)
+      .filter((word) => !TRIGGER_WORDS.has(word)),
+  );
+}
+
+/**
+ * How many of the title's own words share a sentence with a rule phrase in what the author
+ * typed; 0 when the prompt does not say the rule holds everywhere. Generic words (test, run)
+ * count only beside at least one telling word.
+ */
+export function saidAlways(prompt: string, title: string): number {
+  if (isFromTheHost(prompt)) return 0;
+  const typed = typedText(prompt);
+  if (typed.length > MAX_TYPED) return 0;
+  const wanted = ruleWords(title);
+  let best = 0;
+  for (const sentence of typed.split(/[.!?;](?=\s|$)|\n/)) {
+    if (sentence.length > MAX_SENTENCE || !RULE_PHRASE.test(sentence)) continue;
+    const shared = [...ruleWords(sentence)].filter((word) => wanted.has(word));
+    if (shared.length >= MIN_SHARED && shared.some((word) => !isGeneric(word))) {
+      best = Math.max(best, shared.length);
+    }
+  }
+  return best;
+}
 
 const RULE_KINDS = "('convention', 'decision')";
 const NEIGHBOURS = 8;
 const MAX_MS = 5000;
 const MAX_PROJECTS = 50;
+/** On the first run, how far back the backlog reaches: the newest this many. */
+const WINDOW = 300;
 /** Groups a judge said belong to their project, so that it is not asked again every drain. */
 const NOT_PERSONAL_KEY = "rules.not-personal";
 const MAX_REMEMBERED = 1000;
+/** Where the last run stopped: memories at or before it were already looked at. */
+const CURSOR_KEY = "rules.cursor";
+/** One proposing process at a time: two distills must not do the same work twice. */
+export const RULES_LEASE = "rules.lease";
 
 interface Candidate {
   id: number;
@@ -41,10 +123,19 @@ interface Candidate {
   importance: number;
   updatedAt: number;
   prompt: string | null;
+  turnId: number | null;
 }
 
-/** Active conventions and decisions, not one of the author's rules, in no proposal yet. */
+interface Cursor {
+  updatedAt: number;
+  id: number;
+  /** The semantic model the run had: a new model looks at the window again, by meaning. */
+  model: string | null;
+}
+
+/** Active conventions and decisions, in a project with memory on, not one of the author's rules, in no proposal yet. */
 const ELIGIBLE = `m.status = 'active' AND m.kind IN ${RULE_KINDS}
+  AND m.project_id IN (SELECT id FROM projects WHERE disabled = 0)
   AND NOT EXISTS (SELECT 1 FROM user_memories u WHERE u.memory_id = m.id)
   AND m.id NOT IN (SELECT j.value FROM rule_proposals r, json_each(r.memory_ids) j)`;
 
@@ -76,37 +167,116 @@ function rememberedNotPersonal(db: Db): string[] {
   }
 }
 
+function readCursor(db: Db): Cursor | null {
+  try {
+    const value = JSON.parse(getMeta(db, CURSOR_KEY) ?? "null") as Partial<Cursor> | null;
+    return value && typeof value.updatedAt === "number" && typeof value.id === "number"
+      ? { updatedAt: value.updatedAt, id: value.id, model: value.model ?? null }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+const after = (a: Cursor, b: Cursor) =>
+  a.updatedAt > b.updatedAt || (a.updatedAt === b.updatedAt && a.id > b.id);
+
+/** Compare-and-set: the cursor only moves forward, unless the model changed. */
+function advanceCursor(db: Db, next: Cursor): void {
+  withWrite(db, () => {
+    const stored = readCursor(db);
+    if (stored === null || stored.model !== next.model || after(next, stored)) {
+      setMeta(db, CURSOR_KEY, JSON.stringify(next));
+    }
+  });
+}
+
 /**
- * Proposes the author's rules from the newest `maxMemories` eligible memories. Only proposes:
- * nothing is accepted, superseded or deleted here. A set proposed once (whatever became of it)
- * is never proposed again.
+ * Proposes the author's rules from the conventions and decisions written or reinforced since the
+ * last run (the first run starts at the newest `maxMemories`). Only proposes: nothing is
+ * accepted, superseded or deleted here. A set proposed once (whatever became of it) is never
+ * proposed again. With nothing new, one query and out.
  */
 export async function proposeRules(
   db: Db,
   deps: {
     judge: Judge;
     now: number;
+    /** How far back the first run reaches. */
     maxMemories?: number;
+    /** How many new memories one run takes at most. */
+    batch?: number;
     model?: Model | null;
     /** Time for the grouping pass; memories not reached wait for the next drain. */
     maxMs?: number;
     /** How many projects are searched for copies, the most recently active first. */
     maxProjects?: number;
+    /** Who holds the lease while this runs. */
+    owner?: string;
   },
-): Promise<{ proposed: number }> {
-  const deadline = performance.now() + (deps.maxMs ?? MAX_MS);
-  const candidates = db
-    .query<Candidate, [number]>(
-      `SELECT ${COLUMNS}, t.prompt AS prompt
-         FROM memories m LEFT JOIN turns t ON t.id = m.source_turn_id
-        WHERE ${ELIGIBLE}
-        ORDER BY m.updated_at DESC, m.id DESC LIMIT ?`,
+): Promise<{ proposed: number; scanned: number }> {
+  const none = { proposed: 0, scanned: 0 };
+  const model = deps.model?.id ?? null;
+  const stored = readCursor(db);
+  const cursor = stored !== null && stored.model === model ? stored : null;
+  // The quiet drain: nothing written or reinforced since the cursor.
+  if (
+    cursor !== null &&
+    db
+      .query(
+        `SELECT 1 FROM memories m WHERE m.status = 'active' AND m.kind IN ${RULE_KINDS}
+          AND (m.updated_at, m.id) > (?, ?) LIMIT 1`,
+      )
+      .get(cursor.updatedAt, cursor.id) === null
+  ) {
+    return none;
+  }
+  const maxMs = deps.maxMs ?? MAX_MS;
+  const owner = deps.owner ?? `${process.pid}-${crypto.randomUUID()}`;
+  if (!claimLease(db, RULES_LEASE, owner, Date.now(), maxMs + 60_000)) return none;
+  try {
+    return await propose(db, deps, cursor ?? start(db, deps.maxMemories ?? WINDOW, model), maxMs);
+  } finally {
+    releaseLease(db, RULES_LEASE, owner);
+  }
+}
+
+/** The first run's cursor: just before the newest `window` eligible memories. */
+function start(db: Db, window: number, model: string | null): Cursor {
+  const edge = db
+    .query<{ updatedAt: number; id: number }, [number]>(
+      `SELECT m.updated_at AS updatedAt, m.id AS id FROM memories m WHERE ${ELIGIBLE}
+        ORDER BY m.updated_at DESC, m.id DESC LIMIT 1 OFFSET ?`,
     )
-    .all(deps.maxMemories ?? 300);
-  if (candidates.length === 0) return { proposed: 0 };
+    .get(Math.max(0, window - 1));
+  return edge === null
+    ? { updatedAt: Number.MIN_SAFE_INTEGER, id: 0, model }
+    : { updatedAt: edge.updatedAt, id: edge.id - 1, model };
+}
+
+async function propose(
+  db: Db,
+  deps: Parameters<typeof proposeRules>[1],
+  from: Cursor,
+  maxMs: number,
+): Promise<{ proposed: number; scanned: number }> {
+  const deadline = performance.now() + maxMs;
+  const model = from.model;
+  const candidates = db
+    .query<Candidate, [number, number, number]>(
+      `SELECT ${COLUMNS}, t.prompt AS prompt, m.source_turn_id AS turnId
+         FROM memories m LEFT JOIN turns t ON t.id = m.source_turn_id
+        WHERE ${ELIGIBLE} AND (m.updated_at, m.id) > (?, ?)
+        ORDER BY m.updated_at ASC, m.id ASC LIMIT ?`,
+    )
+    .all(from.updatedAt, from.id, deps.batch ?? WINDOW);
+  if (candidates.length === 0) {
+    advanceCursor(db, from);
+    return { proposed: 0, scanned: 0 };
+  }
 
   const eligible = db.query<Candidate, [number]>(
-    `SELECT ${COLUMNS}, NULL AS prompt FROM memories m WHERE m.id = ? AND ${ELIGIBLE}`,
+    `SELECT ${COLUMNS}, NULL AS prompt, NULL AS turnId FROM memories m WHERE m.id = ? AND ${ELIGIBLE}`,
   );
   const known = new Map<number, Candidate>(candidates.map((c) => [c.id, c]));
   const lookup = (id: number): Candidate | null => {
@@ -141,40 +311,51 @@ export async function proposeRules(
     if (ra !== rb) parent.set(ra, rb);
   };
 
+  // Grouping is symmetric: a new memory's search reaches every older one in the other
+  // projects, so what is behind the cursor never needs looking at again.
+  let reached = 0;
   for (const memory of candidates) {
     if (performance.now() > deadline) break;
     const others = projects.filter((p) => unlinked(memory.projectId, p));
-    if (others.length === 0) continue;
-    const text = `${memory.title} ${memory.body}`;
-    // The text rule consolidation uses, with no file anchors: paths of different projects are
-    // relative to different roots and say nothing about whether two rules are the same.
-    const neighbours = findNeighbours(db, others, text, NEIGHBOURS)
-      .filter((n) => lookup(n.id) !== null)
-      .map((n) => ({ ...n, files: [] }));
-    if (neighbours.length > 0) {
-      const verdict = await heuristicJudge.consolidate({
-        draft: { title: memory.title, body: memory.body as Redacted, kind: memory.kind, files: [] },
-        neighbours,
-      });
-      for (const answer of verdict.perNeighbour) {
-        if (
-          answer.relationScore >= DUPLICATE.minRelationScore &&
-          answer.contradicts < DUPLICATE.maxContradiction
-        ) {
-          join(memory.id, answer.id);
+    if (others.length > 0) {
+      const text = `${memory.title} ${memory.body}`;
+      // The text rule consolidation uses, with no file anchors: paths of different projects are
+      // relative to different roots and say nothing about whether two rules are the same.
+      const neighbours = findNeighbours(db, others, text, NEIGHBOURS)
+        .filter((n) => lookup(n.id) !== null)
+        .map((n) => ({ ...n, files: [] }));
+      if (neighbours.length > 0) {
+        const verdict = await heuristicJudge.consolidate({
+          draft: {
+            title: memory.title,
+            body: memory.body as Redacted,
+            kind: memory.kind,
+            files: [],
+          },
+          neighbours,
+        });
+        for (const answer of verdict.perNeighbour) {
+          if (
+            answer.relationScore >= DUPLICATE.minRelationScore &&
+            answer.contradicts < DUPLICATE.maxContradiction
+          ) {
+            join(memory.id, answer.id);
+          }
         }
       }
+      if (deps.model) {
+        const hits = semanticCandidates(db, deps.model, vectorText(memory.title, memory.body), {
+          projectId: null,
+          projectIds: others,
+          limit: NEIGHBOURS,
+          floor: SAME_MEANING,
+        });
+        for (const hit of hits) if (lookup(hit.id) !== null) join(memory.id, hit.id);
+      }
     }
-    if (deps.model) {
-      const hits = semanticCandidates(db, deps.model, vectorText(memory.title, memory.body), {
-        projectId: null,
-        projectIds: others,
-        limit: NEIGHBOURS,
-        floor: SAME_MEANING,
-      });
-      for (const hit of hits) if (lookup(hit.id) !== null) join(memory.id, hit.id);
-    }
+    reached++;
   }
+  const scanned = candidates.slice(0, reached);
 
   const groups = new Map<number, Candidate[]>();
   for (const id of parent.keys()) {
@@ -196,10 +377,27 @@ export async function proposeRules(
     for (const m of members) grouped.add(m.id);
     proposals.push({ members, reason: "repeated" });
   }
-  for (const memory of candidates) {
-    if (grouped.has(memory.id) || memory.prompt === null) continue;
-    if (SAID_ALWAYS.test(memory.prompt))
-      proposals.push({ members: [memory], reason: "said-always" });
+  // Said always: at most one per turn, the memory whose title the sentence names best.
+  const byTurn = new Map<number, { memory: Candidate; shared: number }>();
+  for (const memory of scanned) {
+    if (grouped.has(memory.id) || memory.prompt === null || memory.turnId === null) continue;
+    const shared = saidAlways(memory.prompt, memory.title);
+    if (shared === 0) continue;
+    const best = byTurn.get(memory.turnId);
+    if (
+      best === undefined ||
+      shared > best.shared ||
+      (shared === best.shared &&
+        (memory.importance > best.memory.importance ||
+          (memory.importance === best.memory.importance &&
+            (memory.updatedAt > best.memory.updatedAt ||
+              (memory.updatedAt === best.memory.updatedAt && memory.id > best.memory.id)))))
+    ) {
+      byTurn.set(memory.turnId, { memory, shared });
+    }
+  }
+  for (const { memory } of byTurn.values()) {
+    proposals.push({ members: [memory], reason: "said-always" });
   }
 
   const notPersonal = rememberedNotPersonal(db);
@@ -210,12 +408,24 @@ export async function proposeRules(
       .map((row) => [row.id, row.name]),
   );
   const exists = db.query("SELECT 1 FROM rule_proposals WHERE memory_ids = ?");
+  const position = new Map(candidates.map((c, i) => [c.id, i]));
+  // Where the cursor may move to: the last memory reached, held back before any group the
+  // judge had no time for, so the next run finds it again.
+  let until = reached - 1;
   let proposed = 0;
-  for (const { members, reason } of proposals) {
+  for (const [index, { members, reason }] of proposals.entries()) {
     const key = JSON.stringify(members.map((m) => m.id).sort((a, b) => a - b));
     if (exists.get(key) !== null || notPersonal.includes(key)) continue;
     // Each question is a request: past the budget, the groups left wait for the next drain.
-    if (deps.judge.personal && performance.now() > deadline) break;
+    if (deps.judge.personal && performance.now() > deadline) {
+      for (const rest of proposals.slice(index)) {
+        for (const m of rest.members) {
+          const at = position.get(m.id);
+          if (at !== undefined) until = Math.min(until, at - 1);
+        }
+      }
+      break;
+    }
     // The proposal's text is one memory's own, the most important (consolidation never writes text).
     const lead = [...members].sort(
       (a, b) => b.importance - a.importance || b.updatedAt - a.updatedAt || a.id - b.id,
@@ -227,14 +437,21 @@ export async function proposeRules(
           body: lead.body,
           projects: [...new Set(members.map((m) => names.get(m.projectId) ?? "?"))].sort(),
         });
-        if (!verdict.personal && verdict.confidence >= NOT_PERSONAL.minConfidence) {
+        // A repeated rule stands unless the judge is sure it is not personal; a rule only
+        // said once needs the judge to be sure it is.
+        const drop =
+          reason === "said-always"
+            ? !(verdict.personal && verdict.confidence >= PERSONAL.minConfidence)
+            : !verdict.personal && verdict.confidence >= NOT_PERSONAL.minConfidence;
+        if (drop) {
           notPersonal.push(key);
           setMeta(db, NOT_PERSONAL_KEY, JSON.stringify(notPersonal.slice(-MAX_REMEMBERED)));
           continue;
         }
       } catch (error) {
-        // No verdict: the proposal stands and the author decides.
         logError("rules.personal", error);
+        // No verdict: a repeated rule stands and the author decides; a rule said once does not.
+        if (reason === "said-always") continue;
       }
     }
     const changes = db.run(
@@ -244,7 +461,9 @@ export async function proposeRules(
     ).changes;
     proposed += changes;
   }
-  return { proposed };
+  const last = until >= 0 ? (candidates[until] as Candidate) : null;
+  advanceCursor(db, last ? { updatedAt: last.updatedAt, id: last.id, model } : from);
+  return { proposed, scanned: reached };
 }
 
 /** Never throws: a failure here must not change the drain's outcome. */
@@ -299,6 +518,18 @@ export function acceptProposal(
     if (proposal.status !== "proposed")
       return { refused: `Proposal #${id} is ${proposal.status}.` };
     const ids = sourceIds(proposal);
+    // Memory off for a project means its content goes nowhere: not into every project's brief.
+    const off = db
+      .query<{ name: string }, []>(
+        `SELECT DISTINCT p.name AS name FROM memories m JOIN projects p ON p.id = m.project_id
+          WHERE p.disabled = 1 AND m.id IN (${ids.map((n) => Math.trunc(n)).join(", ") || "NULL"})`,
+      )
+      .all();
+    if (off.length > 0) {
+      return {
+        refused: `Memory is off for ${off.map((row) => row.name).join(", ")}: proposal #${id} cannot become your rule.`,
+      };
+    }
     // Sources as they are now: one replaced, archived or turned into another kind no longer
     // counts, and the text is re-read from the most important source that still qualifies.
     const active = db
