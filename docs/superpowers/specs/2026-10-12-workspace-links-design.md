@@ -1,6 +1,6 @@
 # Linked projects and your own rules — design
 
-Date: 2026-10-12. Status: approved in conversation; written spec awaiting the author's review. Roadmap items B1 (links between workspaces) and B2 (memory of the user), the first of wave 3.
+Date: 2026-10-12. Status: approved by the author; built (plan `docs/superpowers/plans/2026-10-12-workspace-links.md`, with Ruling P1: a `user_memories` marker instead of `scope = 'user'`) and measured on a copy of real data: ADR 0018. Roadmap items B1 (links between workspaces) and B2 (memory of the user), the first of wave 3.
 
 ## Why
 

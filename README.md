@@ -242,9 +242,10 @@ A local page over your memories, in WizardingCode's app design:
 - **Turns** — every prompt and what it became, with filters (agent, status, source, period), sortable columns, a search over prompts and an export to CSV. Each turn opens with its prompt, files, commands, answer and the memories it left behind; Markdown is shown formatted.
 - **Overview** — the project's numbers and charts: memories and turns per week, by kind, by importance, and how fast the hooks have been.
 - **History** — past conversations with Claude Code and Codex, searchable, for one project or all of them (see [Learn from past sessions](#learn-from-past-sessions)).
+- **Across projects** — which projects read each other, the suggested links with the signal behind each (Link / Reject), and your rules: proposals to make yours and the ones you accepted (Undo). See [Linked projects and your rules](#linked-projects-and-your-rules).
 - **Settings** — agents, health, the judge, retention, history, search, storage, backups and the viewer, one page each.
 
-⌘K (or the search in the top bar) searches every project at once. Light and dark; `[` folds the projects panel, `1`–`5` switch views. It listens on the loopback only, behind a token in the URL, loads nothing from the network, and stops itself after half an hour without you or a tab. It opens by itself when a session starts, in any agent — one viewer per machine, never a second tab — and stays closed under CI, over SSH, or when you turn that off.
+⌘K (or the search in the top bar) searches the project and the ones linked to it, or every project at once with one switch. Light and dark; `[` folds the projects panel, `1`–`6` switch views. It listens on the loopback only, behind a token in the URL, loads nothing from the network, and stops itself after half an hour without you or a tab. It opens by itself when a session starts, in any agent — one viewer per machine, never a second tab — and stays closed under CI, over SSH, or when you turn that off.
 
 ## Learn from past sessions
 
@@ -280,6 +281,20 @@ wizardingcode-mem embed delete                # remove the model and its vectors
 - **What it costs:** the 146 MB model in `~/.wizardingcode/mem/models`, and about 350 bytes per note in the database (vectors travel in backups, so a restore does not need a rebuild). A search across every project takes about 10 ms more in the viewer. The agent's `memory_search` pays more: the MCP server opens a connection per call and rebuilds the packed vectors each time, about 73 ms more per call on a store of 90,000 notes (ADR 0017).
 - **The only download, and nothing of yours goes out:** a fixed address, checked against a pinned checksum and size before it is used. The model is [potion-multilingual-128M](https://huggingface.co/minishlab/potion-multilingual-128M) by Minish Lab (MIT), repacked for this binary; no resident process, no generative model.
 - **Turn it off** from Settings or with `WIZARDINGCODE_MEM_SEMANTIC=off`; the model is kept until you delete it.
+
+## Linked projects and your rules
+
+Each session reads its own project. Two things widen that, and both wait for your yes.
+
+**Linked projects.** When an API, a web app and a mobile app are one product, or a project uses a library of yours, what was learned in one is worth knowing in the other. wizardingcode-mem suggests links from exact signals, never from a model: two remotes with the same owner *and* a shared name (`shop-api`, `shop-web`; the owner alone never suggests, so forty client repositories under one account are not one group), a `package.json`, `composer.json`, `go.mod` or `Cargo.toml` that names the other project, or one workspace. You confirm or reject each one in the viewer's **Projects** view, or ask your agent, which has a `project_links` tool to list, link, unlink, confirm and reject. There is no terminal command for it.
+
+- **Same product** links read both ways; **uses** is one way: the project sees the library, the library does not see it. Links never chain.
+- **Little, and labelled:** linked projects take at most 15% of the session brief (only notes of importance 4 or more, marked "from <project>") and at most one note per prompt, only when it beats the project's own best. `memory_search` and the viewer search the project and its linked ones, each result named with its project.
+- A rejected suggestion never comes back; unlinking counts as a rejection.
+
+**Your rules.** A convention or decision that repeats in projects not linked to each other, or one you said holds "always", is proposed in the viewer as one of *your* rules. Make it yours and it reaches every project and every agent, marked "(you)", in at most 15% of the brief; the project copies are set aside, never deleted, and Undo brings them back. Nothing becomes yours without the yes. On the author's own store the "always" signal still proposes too much (ADR 0018), so expect to say no often for now.
+
+Suggestions and proposals are worked out in the background after distilling, never while you wait; with no link and no rule of yours, what your agent sees is exactly what it saw before. Older binaries (0.5.0) cannot open the database once a newer one has migrated it: update every agent together.
 
 ## Settings
 
