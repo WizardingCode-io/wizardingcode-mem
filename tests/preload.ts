@@ -35,4 +35,7 @@ const PATH_OVERRIDES = [
   "LOCALAPPDATA",
 ];
 for (const name of PATH_OVERRIDES) delete process.env[name];
+// Behaviour, not a path, but a shell that exports it would change the module set in every
+// spawned hook, server and viewer.
+delete process.env.WIZARDINGCODE_MODULES;
 process.on("exit", () => rmSync(testHome, { recursive: true, force: true }));
