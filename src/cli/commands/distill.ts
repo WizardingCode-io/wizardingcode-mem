@@ -1,5 +1,6 @@
 import { ADAPTERS } from "../../adapters/index.ts";
 import { drainQueue } from "../../distill/queue.ts";
+import { healLine, healVectors } from "../../embed/backfill.ts";
 import { loadModel } from "../../embed/model.ts";
 import { makeJudge } from "../../judge/index.ts";
 import { type Db, openDb } from "../../store/db.ts";
@@ -32,6 +33,10 @@ export async function run(): Promise<number> {
     process.stdout.write(
       `distill: ${report.claimed} claimed, ${report.done} done, ${report.skipped} skipped, ${report.failed} failed\n`,
     );
+    // Memories written without the model (imports, edits while it was off, a download that
+    // came later) get their vector here, a bounded pass at a time: nobody has to run a backfill.
+    const healed = await healVectors(db, loadModel({ dataDir }), { now: Date.now });
+    if (healed) process.stdout.write(healLine(healed));
     return 0;
   } catch (error) {
     logError("distill", error);

@@ -49,8 +49,12 @@ export async function runBackfill(
     judge: Judge;
     now: () => number;
     roots: { claudeCode: string; codex: string };
-    /** The semantic model, when present: history memories get their vector as they are written. */
-    model?: Model | null;
+    /**
+     * The semantic model, when present: history memories get their vector as they are written.
+     * A getter is asked once per batch, so a model that arrives mid-run (a download that finishes
+     * after the import started) is used from the next batch on.
+     */
+    model?: Model | null | (() => Model | null);
   },
   options: {
     days: number;
@@ -103,7 +107,7 @@ export async function runBackfill(
         judge: deps.judge,
         adapters: ADAPTERS,
         now: deps.now,
-        model: deps.model ?? null,
+        model: typeof deps.model === "function" ? deps.model() : (deps.model ?? null),
       },
       { owner, maxTurns: BATCH, maxMs: Math.max(1000, options.maxMs - (deps.now() - started)) },
     );

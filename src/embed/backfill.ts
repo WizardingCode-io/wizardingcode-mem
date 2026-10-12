@@ -5,7 +5,13 @@
  */
 
 import { type Db, withWrite } from "../store/db.ts";
-import { claimLease, EMBED_LEASE, releaseLease } from "../store/meta.ts";
+import {
+  claimLease,
+  EMBED_DOWNLOAD_LEASE,
+  EMBED_LEASE,
+  leaseActive,
+  releaseLease,
+} from "../store/meta.ts";
 import type { Model } from "./model.ts";
 import { writeMemoryVector } from "./vectors.ts";
 
@@ -59,4 +65,31 @@ export async function runEmbedBackfill(
   const remaining =
     db.query<{ n: number }, [string]>(`SELECT count(*) AS n ${TODO}`).get(model.id)?.n ?? 0;
   return { written, remaining };
+}
+
+/** What a background command prints after an automatic pass. */
+export const healLine = (out: { written: number; remaining: number }): string =>
+  `embed: ${out.written} vectors written, ${out.remaining} remaining\n`;
+
+/** How many vectors one automatic pass writes at most; the next background run continues. */
+export const HEAL_LIMIT = 500;
+
+/**
+ * The automatic pass at the end of background work (a drain, a history import): memories written
+ * while the model was absent or switched off, imports, edits, get their vector without anyone
+ * running `embed backfill`. Never on the hook path. Null, and no write at all, when there is no
+ * model, nothing missing, or a backfill or a download already holds its lease.
+ */
+export async function healVectors(
+  db: Db,
+  model: Model | null,
+  options: { now: () => number; limit?: number },
+): Promise<{ written: number; remaining: number } | null> {
+  if (model === null) return null;
+  const at = options.now();
+  if (leaseActive(db, EMBED_LEASE, at) || leaseActive(db, EMBED_DOWNLOAD_LEASE, at)) return null;
+  if (db.query<{ x: number }, [string]>(`SELECT 1 AS x ${TODO} LIMIT 1`).get(model.id) === null) {
+    return null;
+  }
+  return runEmbedBackfill(db, model, { now: options.now, limit: options.limit ?? HEAL_LIMIT });
 }
