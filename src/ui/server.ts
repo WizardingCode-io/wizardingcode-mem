@@ -8,6 +8,9 @@ import { targetFor } from "../backup/target.ts";
 import { claudeCodeRoot } from "../adapters/claude-code/history.ts";
 import { codexRoot } from "../adapters/codex/history.ts";
 import { runChecks } from "../doctor/checks.ts";
+import { deleteModel } from "../embed/download.ts";
+import { loadModel } from "../embed/model.ts";
+import { semanticStatus } from "../embed/status.ts";
 import { doctorContext } from "../doctor/context.ts";
 import { replaceAllImports, restoreImports } from "../backfill/replace.ts";
 import { openHistoryDb } from "../history/db.ts";
@@ -24,7 +27,13 @@ import { loadSettings, publicSettings, saveSettings, validatePatch } from "../se
 import { statusReport } from "../status/report.ts";
 import { CompactBusyError, compact } from "../store/compact.ts";
 import { DB_FILE, type Db, openDb } from "../store/db.ts";
-import { drainActive, leaseActive, setMeta } from "../store/meta.ts";
+import {
+  drainActive,
+  EMBED_DOWNLOAD_LEASE,
+  EMBED_LEASE,
+  leaseActive,
+  setMeta,
+} from "../store/meta.ts";
 import { inspectTarget, moveStore } from "../store/move.ts";
 import { logError } from "../util/log.ts";
 import { storeDirOf } from "../util/paths.ts";
@@ -400,15 +409,19 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
         return value === null ? undefined : Number(value);
       };
       return json(
-        listMemories(db, {
-          projectId,
-          q: url.searchParams.get("q") ?? undefined,
-          kind: url.searchParams.get("kind") ?? undefined,
-          status: url.searchParams.get("status") ?? undefined,
-          minImportance: number("minImportance"),
-          limit: number("limit"),
-          offset: number("offset"),
-        }),
+        listMemories(
+          db,
+          {
+            projectId,
+            q: url.searchParams.get("q") ?? undefined,
+            kind: url.searchParams.get("kind") ?? undefined,
+            status: url.searchParams.get("status") ?? undefined,
+            minImportance: number("minImportance"),
+            limit: number("limit"),
+            offset: number("offset"),
+          },
+          loadModel({ dataDir: options.dataDir, env }),
+        ),
       );
     }
     const one = /^\/api\/memories\/(\d+)$/.exec(path);
@@ -428,7 +441,13 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
         if (body === null || typeof body !== "object")
           return problem(400, "body must be an object");
         if (request.method === "PATCH") {
-          const outcome = updateMemory(db, id, body as Parameters<typeof updateMemory>[2], now());
+          const outcome = updateMemory(
+            db,
+            id,
+            body as Parameters<typeof updateMemory>[2],
+            now(),
+            loadModel({ dataDir: options.dataDir, env }),
+          );
           if (outcome === "ok") return json(getMemory(db, id));
           if (outcome === "not-found") return problem(404, "no such memory");
           return problem(
@@ -457,7 +476,12 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
     if (path === "/api/search" && request.method === "GET") {
       const limit = Number(url.searchParams.get("limit") ?? 20);
       return json(
-        searchAll(db, url.searchParams.get("q") ?? "", Number.isFinite(limit) ? limit : 20),
+        searchAll(
+          db,
+          url.searchParams.get("q") ?? "",
+          Number.isFinite(limit) ? limit : 20,
+          loadModel({ dataDir: options.dataDir, env }),
+        ),
       );
     }
     if (path === "/api/status" && request.method === "GET") {
@@ -488,7 +512,12 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
         hdb = openHistoryDb(storeDir, { create: false, busyTimeoutMs: 2000 });
         if (hdb === null) return json({ indexed: false });
         const hits =
-          q === "" ? recentHistory(hdb, { projectId, limit }) : searchHistory(hdb, { query: q, projectId, limit });
+          q === "" ? recentHistory(hdb, { projectId, limit }) : searchHistory(hdb, {
+                query: q,
+                projectId,
+                limit,
+                model: loadModel({ dataDir: options.dataDir, env }),
+              });
         return json({ indexed: true, hits });
       } catch (error) {
         logError("ui history search", error, options.dataDir);
@@ -529,6 +558,42 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
     if (path === "/api/history/offer/dismiss" && request.method === "POST") {
       setMeta(db, HISTORY_OFFER_DISMISSED, "1");
       return json({ dismissed: true });
+    }
+    // Semantic search: the model, its download, the backfill, and the switch.
+    if (path === "/api/semantic" && request.method === "GET") {
+      return json(semanticStatus(db, options.dataDir, env, now()));
+    }
+    if (path === "/api/semantic/download" && request.method === "POST") {
+      if (loadSettings(env, options.dataDir).semantic === "off") {
+        return problem(409, "semantic search is turned off; turn it on first");
+      }
+      const at = now();
+      if (leaseActive(db, EMBED_DOWNLOAD_LEASE, at) || leaseActive(db, EMBED_LEASE, at)) {
+        return json({ started: false });
+      }
+      // One process: the download, then the vectors of the memories already there.
+      spawn("embed", "download", "--backfill");
+      return json({ started: true });
+    }
+    if (path === "/api/semantic/backfill" && request.method === "POST") {
+      if (loadModel({ dataDir: options.dataDir, env }) === null) {
+        return problem(409, "no search model to make vectors with; download it first");
+      }
+      if (leaseActive(db, EMBED_LEASE, now())) return json({ started: false });
+      spawn("embed", "backfill");
+      return json({ started: true });
+    }
+    if ((path === "/api/semantic/on" || path === "/api/semantic/off") && request.method === "POST") {
+      saveSettings(options.dataDir, { WIZARDINGCODE_MEM_SEMANTIC: path.endsWith("/on") ? "on" : "off" });
+      return json(semanticStatus(db, options.dataDir, env, now()));
+    }
+    if (path === "/api/semantic/delete" && request.method === "POST") {
+      const at = now();
+      if (leaseActive(db, EMBED_DOWNLOAD_LEASE, at)) return problem(409, "a download is going; wait for it to finish");
+      if (leaseActive(db, EMBED_LEASE, at)) return problem(409, "memories are getting their vectors; wait for it to finish");
+      if (historyRunning()) return problem(409, "a history run is going; wait for it to finish");
+      if (!deleteModel(options.dataDir, db, storeDir)) return problem(500, "the model could not be removed");
+      return json(semanticStatus(db, options.dataDir, env, now()));
     }
     if (path === "/api/turns" && request.method === "GET") {
       const projectId = Number(url.searchParams.get("project"));

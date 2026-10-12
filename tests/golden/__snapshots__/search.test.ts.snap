@@ -1,0 +1,1548 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`explicit search without a model memory_search, the list and the palette answer as they did before 1`] = `
+[
+  {
+    "global": 
+"[project] #24 [change · 2026-10-05] Hook latency is recorded in the hook_runs table, without payloads.
+[project] #23 [gotcha · 2026-10-05] No macOS o Bun usa o SQLite do sistema, cuja versão varia.
+[project] #22 [decision · 2026-10-05 · src/install/claude-code.ts] The settings file is backed up before install changes it.
+[project] #21 [convention · 2026-10-05] Imports carry an explicit .ts extension.
+[project] #20 [fix · 2026-10-05 · src/spike/support.ts] Fixed: a pending timer kept the process alive for ten seconds."
+,
+    "list": [
+      24,
+      23,
+      22,
+      21,
+      20,
+      19,
+      18,
+      17,
+      16,
+      15,
+    ],
+    "palette": [],
+    "project": 
+"#24 [change · 2026-10-05] Hook latency is recorded in the hook_runs table, without payloads.
+#23 [gotcha · 2026-10-05] No macOS o Bun usa o SQLite do sistema, cuja versão varia.
+#22 [decision · 2026-10-05 · src/install/claude-code.ts] The settings file is backed up before install changes it.
+#21 [convention · 2026-10-05] Imports carry an explicit .ts extension.
+#20 [fix · 2026-10-05 · src/spike/support.ts] Fixed: a pending timer kept the process alive for ten seconds.
+#19 [discovery · 2026-10-05] Claude Code identifies a turn by prompt_id in the UserPromptSubmit and Stop payloads.
+#18 [change · 2026-10-05 · src/cli/commands/status.ts] The status command gained a --json flag.
+#17 [gotcha · 2026-10-05] O Cursor não permite injetar contexto na submissão do prompt.
+#16 [decision · 2026-10-05] O importador do claude-mem só lê a base de dados do próprio utilizador.
+#15 [convention · 2026-10-05] As respostas ao utilizador são sempre em português."
+,
+    "projectFixes": 
+"#20 [fix · 2026-10-05 · src/spike/support.ts] Fixed: a pending timer kept the process alive for ten seconds.
+#8 [fix · 2026-10-05 · src/store/migrations/0001_init.sql] Fixed: full-text search now folds diacritics.
+#2 [fix · 2026-10-05 · src/store/db.ts] Fixed: \`PRAGMA journal_mode = WAL\` does not honour busy_timeout."
+,
+    "query": "",
+  },
+  {
+    "global": 
+"[project] #3 [convention · 2026-10-05] Never mock the database in these tests.
+[project] #1 [gotcha · 2026-10-05 · src/store/db.ts] The pragma busy_timeout must be the first statement on a connection.
+[project] #11 [decision · 2026-10-05] Retrieval uses FTS5 with BM25 and no embeddings in the first version.
+[project] #9 [gotcha · 2026-10-05 · src/retrieve/prompt.ts] Full-text queries use CROSS JOIN to pin the join order.
+[project] #13 [convention · 2026-10-05 · src/hooks/handle.ts] Text is redacted before it is cut to size."
+,
+    "list": [
+      3,
+      1,
+      11,
+      9,
+      13,
+    ],
+    "palette": [
+      3,
+      1,
+      11,
+      9,
+      13,
+    ],
+    "project": 
+"#3 [convention · 2026-10-05] Never mock the database in these tests.
+#1 [gotcha · 2026-10-05 · src/store/db.ts] The pragma busy_timeout must be the first statement on a connection.
+#11 [decision · 2026-10-05] Retrieval uses FTS5 with BM25 and no embeddings in the first version.
+#9 [gotcha · 2026-10-05 · src/retrieve/prompt.ts] Full-text queries use CROSS JOIN to pin the join order.
+#13 [convention · 2026-10-05 · src/hooks/handle.ts] Text is redacted before it is cut to size."
+,
+    "projectFixes": "No memories match.",
+    "query": "why do the db tests get SQLITE_BUSY on the very first query?",
+  },
+  {
+    "global": 
+"[project] #3 [convention · 2026-10-05] Never mock the database in these tests.
+[project] #2 [fix · 2026-10-05 · src/store/db.ts] Fixed: \`PRAGMA journal_mode = WAL\` does not honour busy_timeout."
+,
+    "list": [
+      3,
+      2,
+    ],
+    "palette": [
+      3,
+      2,
+    ],
+    "project": 
+"#3 [convention · 2026-10-05] Never mock the database in these tests.
+#2 [fix · 2026-10-05 · src/store/db.ts] Fixed: \`PRAGMA journal_mode = WAL\` does not honour busy_timeout."
+,
+    "projectFixes": "#2 [fix · 2026-10-05 · src/store/db.ts] Fixed: \`PRAGMA journal_mode = WAL\` does not honour busy_timeout.",
+    "query": "can I use a mock for the database in this new test?",
+  },
+  {
+    "global": 
+"[project] #19 [discovery · 2026-10-05] Claude Code identifies a turn by prompt_id in the UserPromptSubmit and Stop payloads.
+[project] #4 [decision · 2026-10-05 · src/hooks/handle.ts] Turns open at the prompt event, not at turn end.
+[project] #2 [fix · 2026-10-05 · src/store/db.ts] Fixed: \`PRAGMA journal_mode = WAL\` does not honour busy_timeout.
+[project] #9 [gotcha · 2026-10-05 · src/retrieve/prompt.ts] Full-text queries use CROSS JOIN to pin the join order."
+,
+    "list": [
+      19,
+      4,
+      2,
+      9,
+    ],
+    "palette": [
+      19,
+      4,
+      2,
+      9,
+    ],
+    "project": 
+"#19 [discovery · 2026-10-05] Claude Code identifies a turn by prompt_id in the UserPromptSubmit and Stop payloads.
+#4 [decision · 2026-10-05 · src/hooks/handle.ts] Turns open at the prompt event, not at turn end.
+#2 [fix · 2026-10-05 · src/store/db.ts] Fixed: \`PRAGMA journal_mode = WAL\` does not honour busy_timeout.
+#9 [gotcha · 2026-10-05 · src/retrieve/prompt.ts] Full-text queries use CROSS JOIN to pin the join order."
+,
+    "projectFixes": "#2 [fix · 2026-10-05 · src/store/db.ts] Fixed: \`PRAGMA journal_mode = WAL\` does not honour busy_timeout.",
+    "query": "where should the turn row be created, at Stop or at UserPromptSubmit?",
+  },
+  {
+    "global": 
+"[project] #5 [gotcha · 2026-10-05 · src/cli/commands/hook.ts] A hook must never exit with code 2.
+[project] #3 [convention · 2026-10-05] Never mock the database in these tests.
+[project] #2 [fix · 2026-10-05 · src/store/db.ts] Fixed: \`PRAGMA journal_mode = WAL\` does not honour busy_timeout.
+[project] #1 [gotcha · 2026-10-05 · src/store/db.ts] The pragma busy_timeout must be the first statement on a connection.
+[project] #19 [discovery · 2026-10-05] Claude Code identifies a turn by prompt_id in the UserPromptSubmit and Stop payloads."
+,
+    "list": [
+      5,
+      3,
+      2,
+      1,
+      19,
+      24,
+      22,
+      12,
+      7,
+    ],
+    "palette": [
+      5,
+      3,
+      2,
+      1,
+      19,
+      24,
+      22,
+      12,
+      7,
+    ],
+    "project": 
+"#5 [gotcha · 2026-10-05 · src/cli/commands/hook.ts] A hook must never exit with code 2.
+#3 [convention · 2026-10-05] Never mock the database in these tests.
+#2 [fix · 2026-10-05 · src/store/db.ts] Fixed: \`PRAGMA journal_mode = WAL\` does not honour busy_timeout.
+#1 [gotcha · 2026-10-05 · src/store/db.ts] The pragma busy_timeout must be the first statement on a connection.
+#19 [discovery · 2026-10-05] Claude Code identifies a turn by prompt_id in the UserPromptSubmit and Stop payloads.
+#24 [change · 2026-10-05] Hook latency is recorded in the hook_runs table, without payloads.
+#22 [decision · 2026-10-05 · src/install/claude-code.ts] The settings file is backed up before install changes it.
+#12 [decision · 2026-10-05 · src/mcp/server.ts] The MCP server uses @modelcontextprotocol/server 2.x, loaded only by the mcp command.
+#7 [gotcha · 2026-10-05 · scripts/build.ts] A compiled Bun binary loads .env from the working directory by default."
+,
+    "projectFixes": "#2 [fix · 2026-10-05 · src/store/db.ts] Fixed: \`PRAGMA journal_mode = WAL\` does not honour busy_timeout.",
+    "query": "the hook should fail with exit code 2 when the database is locked",
+  },
+  {
+    "global": 
+"[project] #6 [decision · 2026-10-05 · scripts/build.ts] Linux and Windows x64 builds use the baseline Bun runtime.
+[project] #7 [gotcha · 2026-10-05 · scripts/build.ts] A compiled Bun binary loads .env from the working directory by default."
+,
+    "list": [
+      6,
+      7,
+    ],
+    "palette": [
+      6,
+      7,
+    ],
+    "project": 
+"#6 [decision · 2026-10-05 · scripts/build.ts] Linux and Windows x64 builds use the baseline Bun runtime.
+#7 [gotcha · 2026-10-05 · scripts/build.ts] A compiled Bun binary loads .env from the working directory by default."
+,
+    "projectFixes": "No memories match.",
+    "query": "the linux binary crashes with Illegal instruction on the CI runner",
+  },
+  {
+    "global": "[project] #7 [gotcha · 2026-10-05 · scripts/build.ts] A compiled Bun binary loads .env from the working directory by default.",
+    "list": [
+      7,
+    ],
+    "palette": [
+      7,
+    ],
+    "project": "#7 [gotcha · 2026-10-05 · scripts/build.ts] A compiled Bun binary loads .env from the working directory by default.",
+    "projectFixes": "No memories match.",
+    "query": "why is my project's .env being read by the compiled binary?",
+  },
+  {
+    "global": "[project] #8 [fix · 2026-10-05 · src/store/migrations/0001_init.sql] Fixed: full-text search now folds diacritics.",
+    "list": [
+      8,
+    ],
+    "palette": [
+      8,
+    ],
+    "project": "#8 [fix · 2026-10-05 · src/store/migrations/0001_init.sql] Fixed: full-text search now folds diacritics.",
+    "projectFixes": "#8 [fix · 2026-10-05 · src/store/migrations/0001_init.sql] Fixed: full-text search now folds diacritics.",
+    "query": "searching for 'migracao' does not find 'migração', do we fold diacritics?",
+  },
+  {
+    "global": 
+"[project] #9 [gotcha · 2026-10-05 · src/retrieve/prompt.ts] Full-text queries use CROSS JOIN to pin the join order.
+[project] #1 [gotcha · 2026-10-05 · src/store/db.ts] The pragma busy_timeout must be the first statement on a connection."
+,
+    "list": [
+      9,
+      1,
+    ],
+    "palette": [
+      9,
+      1,
+    ],
+    "project": 
+"#9 [gotcha · 2026-10-05 · src/retrieve/prompt.ts] Full-text queries use CROSS JOIN to pin the join order.
+#1 [gotcha · 2026-10-05 · src/store/db.ts] The pragma busy_timeout must be the first statement on a connection."
+,
+    "projectFixes": "No memories match.",
+    "query": "the frequency query is very slow with many memories",
+  },
+  {
+    "global": 
+"[project] #10 [convention · 2026-10-05] Commit messages are written in English and follow conventional commits.
+[project] #22 [decision · 2026-10-05 · src/install/claude-code.ts] The settings file is backed up before install changes it."
+,
+    "list": [
+      10,
+      22,
+    ],
+    "palette": [
+      10,
+      22,
+    ],
+    "project": 
+"#10 [convention · 2026-10-05] Commit messages are written in English and follow conventional commits.
+#22 [decision · 2026-10-05 · src/install/claude-code.ts] The settings file is backed up before install changes it."
+,
+    "projectFixes": "No memories match.",
+    "query": "write the commit message for this change",
+  },
+  {
+    "global": 
+"[project] #11 [decision · 2026-10-05] Retrieval uses FTS5 with BM25 and no embeddings in the first version.
+[project] #9 [gotcha · 2026-10-05 · src/retrieve/prompt.ts] Full-text queries use CROSS JOIN to pin the join order."
+,
+    "list": [
+      11,
+      9,
+    ],
+    "palette": [
+      11,
+      9,
+    ],
+    "project": 
+"#11 [decision · 2026-10-05] Retrieval uses FTS5 with BM25 and no embeddings in the first version.
+#9 [gotcha · 2026-10-05 · src/retrieve/prompt.ts] Full-text queries use CROSS JOIN to pin the join order."
+,
+    "projectFixes": "No memories match.",
+    "query": "should we add a vector index with embeddings for retrieval?",
+  },
+  {
+    "global": 
+"[project] #12 [decision · 2026-10-05 · src/mcp/server.ts] The MCP server uses @modelcontextprotocol/server 2.x, loaded only by the mcp command.
+[project] #24 [change · 2026-10-05] Hook latency is recorded in the hook_runs table, without payloads.
+[project] #21 [convention · 2026-10-05] Imports carry an explicit .ts extension.
+[project] #5 [gotcha · 2026-10-05 · src/cli/commands/hook.ts] A hook must never exit with code 2.
+[project] #9 [gotcha · 2026-10-05 · src/retrieve/prompt.ts] Full-text queries use CROSS JOIN to pin the join order."
+,
+    "list": [
+      12,
+      24,
+      21,
+      5,
+      9,
+      17,
+      7,
+    ],
+    "palette": [
+      12,
+      24,
+      21,
+      5,
+      9,
+      17,
+      7,
+    ],
+    "project": 
+"#12 [decision · 2026-10-05 · src/mcp/server.ts] The MCP server uses @modelcontextprotocol/server 2.x, loaded only by the mcp command.
+#24 [change · 2026-10-05] Hook latency is recorded in the hook_runs table, without payloads.
+#21 [convention · 2026-10-05] Imports carry an explicit .ts extension.
+#5 [gotcha · 2026-10-05 · src/cli/commands/hook.ts] A hook must never exit with code 2.
+#9 [gotcha · 2026-10-05 · src/retrieve/prompt.ts] Full-text queries use CROSS JOIN to pin the join order.
+#17 [gotcha · 2026-10-05] O Cursor não permite injetar contexto na submissão do prompt.
+#7 [gotcha · 2026-10-05 · scripts/build.ts] A compiled Bun binary loads .env from the working directory by default."
+,
+    "projectFixes": "No memories match.",
+    "query": "the hook got slower after I imported the MCP SDK at the top of main.ts",
+  },
+  {
+    "global": 
+"[project] #13 [convention · 2026-10-05 · src/hooks/handle.ts] Text is redacted before it is cut to size.
+[project] #19 [discovery · 2026-10-05] Claude Code identifies a turn by prompt_id in the UserPromptSubmit and Stop payloads.
+[project] #17 [gotcha · 2026-10-05] O Cursor não permite injetar contexto na submissão do prompt.
+[project] #4 [decision · 2026-10-05 · src/hooks/handle.ts] Turns open at the prompt event, not at turn end.
+[project] #9 [gotcha · 2026-10-05 · src/retrieve/prompt.ts] Full-text queries use CROSS JOIN to pin the join order."
+,
+    "list": [
+      13,
+      19,
+      17,
+      4,
+      9,
+    ],
+    "palette": [
+      13,
+      19,
+      17,
+      4,
+      9,
+    ],
+    "project": 
+"#13 [convention · 2026-10-05 · src/hooks/handle.ts] Text is redacted before it is cut to size.
+#19 [discovery · 2026-10-05] Claude Code identifies a turn by prompt_id in the UserPromptSubmit and Stop payloads.
+#17 [gotcha · 2026-10-05] O Cursor não permite injetar contexto na submissão do prompt.
+#4 [decision · 2026-10-05 · src/hooks/handle.ts] Turns open at the prompt event, not at turn end.
+#9 [gotcha · 2026-10-05 · src/retrieve/prompt.ts] Full-text queries use CROSS JOIN to pin the join order."
+,
+    "projectFixes": "No memories match.",
+    "query": "I truncate the prompt to 8k and then call redact, is that right?",
+  },
+  {
+    "global": 
+"[project] #14 [decision · 2026-10-05 · src/distill/queue.ts, src/store/meta.ts] Only one process drains the distill queue at a time, under a lease in the meta table.
+[project] #9 [gotcha · 2026-10-05 · src/retrieve/prompt.ts] Full-text queries use CROSS JOIN to pin the join order.
+[project] #2 [fix · 2026-10-05 · src/store/db.ts] Fixed: \`PRAGMA journal_mode = WAL\` does not honour busy_timeout.
+[project] #20 [fix · 2026-10-05 · src/spike/support.ts] Fixed: a pending timer kept the process alive for ten seconds.
+[project] #11 [decision · 2026-10-05] Retrieval uses FTS5 with BM25 and no embeddings in the first version."
+,
+    "list": [
+      14,
+      9,
+      2,
+      20,
+      11,
+    ],
+    "palette": [
+      14,
+      9,
+      2,
+      20,
+      11,
+    ],
+    "project": 
+"#14 [decision · 2026-10-05 · src/distill/queue.ts, src/store/meta.ts] Only one process drains the distill queue at a time, under a lease in the meta table.
+#9 [gotcha · 2026-10-05 · src/retrieve/prompt.ts] Full-text queries use CROSS JOIN to pin the join order.
+#2 [fix · 2026-10-05 · src/store/db.ts] Fixed: \`PRAGMA journal_mode = WAL\` does not honour busy_timeout.
+#20 [fix · 2026-10-05 · src/spike/support.ts] Fixed: a pending timer kept the process alive for ten seconds.
+#11 [decision · 2026-10-05] Retrieval uses FTS5 with BM25 and no embeddings in the first version."
+,
+    "projectFixes": 
+"#2 [fix · 2026-10-05 · src/store/db.ts] Fixed: \`PRAGMA journal_mode = WAL\` does not honour busy_timeout.
+#20 [fix · 2026-10-05 · src/spike/support.ts] Fixed: a pending timer kept the process alive for ten seconds."
+,
+    "query": "two distill processes ran at the same time and duplicated a memory",
+  },
+  {
+    "global": 
+"[project] #15 [convention · 2026-10-05] As respostas ao utilizador são sempre em português.
+[project] #16 [decision · 2026-10-05] O importador do claude-mem só lê a base de dados do próprio utilizador."
+,
+    "list": [
+      15,
+      16,
+    ],
+    "palette": [
+      15,
+      16,
+    ],
+    "project": 
+"#15 [convention · 2026-10-05] As respostas ao utilizador são sempre em português.
+#16 [decision · 2026-10-05] O importador do claude-mem só lê a base de dados do próprio utilizador."
+,
+    "projectFixes": "No memories match.",
+    "query": "em que língua devo responder ao utilizador?",
+  },
+  {
+    "global": 
+"[project] #16 [decision · 2026-10-05] O importador do claude-mem só lê a base de dados do próprio utilizador.
+[project] #19 [discovery · 2026-10-05] Claude Code identifies a turn by prompt_id in the UserPromptSubmit and Stop payloads.
+[project] #5 [gotcha · 2026-10-05 · src/cli/commands/hook.ts] A hook must never exit with code 2.
+[project] #22 [decision · 2026-10-05 · src/install/claude-code.ts] The settings file is backed up before install changes it."
+,
+    "list": [
+      16,
+      19,
+      5,
+      22,
+    ],
+    "palette": [
+      16,
+      19,
+      5,
+      22,
+    ],
+    "project": 
+"#16 [decision · 2026-10-05] O importador do claude-mem só lê a base de dados do próprio utilizador.
+#19 [discovery · 2026-10-05] Claude Code identifies a turn by prompt_id in the UserPromptSubmit and Stop payloads.
+#5 [gotcha · 2026-10-05 · src/cli/commands/hook.ts] A hook must never exit with code 2.
+#22 [decision · 2026-10-05 · src/install/claude-code.ts] The settings file is backed up before install changes it."
+,
+    "projectFixes": "No memories match.",
+    "query": "posso copiar o esquema da base de dados do claude-mem para o importador?",
+  },
+  {
+    "global": 
+"[project] #17 [gotcha · 2026-10-05] O Cursor não permite injetar contexto na submissão do prompt.
+[project] #19 [discovery · 2026-10-05] Claude Code identifies a turn by prompt_id in the UserPromptSubmit and Stop payloads.
+[project] #4 [decision · 2026-10-05 · src/hooks/handle.ts] Turns open at the prompt event, not at turn end.
+[project] #9 [gotcha · 2026-10-05 · src/retrieve/prompt.ts] Full-text queries use CROSS JOIN to pin the join order."
+,
+    "list": [
+      17,
+      19,
+      4,
+      9,
+    ],
+    "palette": [
+      17,
+      19,
+      4,
+      9,
+    ],
+    "project": 
+"#17 [gotcha · 2026-10-05] O Cursor não permite injetar contexto na submissão do prompt.
+#19 [discovery · 2026-10-05] Claude Code identifies a turn by prompt_id in the UserPromptSubmit and Stop payloads.
+#4 [decision · 2026-10-05 · src/hooks/handle.ts] Turns open at the prompt event, not at turn end.
+#9 [gotcha · 2026-10-05 · src/retrieve/prompt.ts] Full-text queries use CROSS JOIN to pin the join order."
+,
+    "projectFixes": "No memories match.",
+    "query": "o Cursor consegue receber memórias em cada prompt?",
+  },
+  {
+    "global": 
+"[project] #18 [change · 2026-10-05 · src/cli/commands/status.ts] The status command gained a --json flag.
+[project] #12 [decision · 2026-10-05 · src/mcp/server.ts] The MCP server uses @modelcontextprotocol/server 2.x, loaded only by the mcp command."
+,
+    "list": [
+      18,
+      12,
+    ],
+    "palette": [
+      18,
+      12,
+    ],
+    "project": 
+"#18 [change · 2026-10-05 · src/cli/commands/status.ts] The status command gained a --json flag.
+#12 [decision · 2026-10-05 · src/mcp/server.ts] The MCP server uses @modelcontextprotocol/server 2.x, loaded only by the mcp command."
+,
+    "projectFixes": "No memories match.",
+    "query": "add a --json option to the doctor command like status has",
+  },
+  {
+    "global": 
+"[project] #19 [discovery · 2026-10-05] Claude Code identifies a turn by prompt_id in the UserPromptSubmit and Stop payloads.
+[project] #4 [decision · 2026-10-05 · src/hooks/handle.ts] Turns open at the prompt event, not at turn end.
+[project] #24 [change · 2026-10-05] Hook latency is recorded in the hook_runs table, without payloads.
+[project] #17 [gotcha · 2026-10-05] O Cursor não permite injetar contexto na submissão do prompt.
+[project] #9 [gotcha · 2026-10-05 · src/retrieve/prompt.ts] Full-text queries use CROSS JOIN to pin the join order."
+,
+    "list": [
+      19,
+      4,
+      24,
+      17,
+      9,
+    ],
+    "palette": [
+      19,
+      4,
+      24,
+      17,
+      9,
+    ],
+    "project": 
+"#19 [discovery · 2026-10-05] Claude Code identifies a turn by prompt_id in the UserPromptSubmit and Stop payloads.
+#4 [decision · 2026-10-05 · src/hooks/handle.ts] Turns open at the prompt event, not at turn end.
+#24 [change · 2026-10-05] Hook latency is recorded in the hook_runs table, without payloads.
+#17 [gotcha · 2026-10-05] O Cursor não permite injetar contexto na submissão do prompt.
+#9 [gotcha · 2026-10-05 · src/retrieve/prompt.ts] Full-text queries use CROSS JOIN to pin the join order."
+,
+    "projectFixes": "No memories match.",
+    "query": "how do I match a Stop payload to its prompt?",
+  },
+  {
+    "global": 
+"[project] #20 [fix · 2026-10-05 · src/spike/support.ts] Fixed: a pending timer kept the process alive for ten seconds.
+[project] #7 [gotcha · 2026-10-05 · scripts/build.ts] A compiled Bun binary loads .env from the working directory by default.
+[project] #3 [convention · 2026-10-05] Never mock the database in these tests.
+[project] #24 [change · 2026-10-05] Hook latency is recorded in the hook_runs table, without payloads.
+[project] #14 [decision · 2026-10-05 · src/distill/queue.ts, src/store/meta.ts] Only one process drains the distill queue at a time, under a lease in the meta table."
+,
+    "list": [
+      20,
+      7,
+      3,
+      24,
+      14,
+      2,
+      11,
+    ],
+    "palette": [
+      20,
+      7,
+      3,
+      24,
+      14,
+      2,
+      11,
+    ],
+    "project": 
+"#20 [fix · 2026-10-05 · src/spike/support.ts] Fixed: a pending timer kept the process alive for ten seconds.
+#7 [gotcha · 2026-10-05 · scripts/build.ts] A compiled Bun binary loads .env from the working directory by default.
+#3 [convention · 2026-10-05] Never mock the database in these tests.
+#24 [change · 2026-10-05] Hook latency is recorded in the hook_runs table, without payloads.
+#14 [decision · 2026-10-05 · src/distill/queue.ts, src/store/meta.ts] Only one process drains the distill queue at a time, under a lease in the meta table.
+#2 [fix · 2026-10-05 · src/store/db.ts] Fixed: \`PRAGMA journal_mode = WAL\` does not honour busy_timeout.
+#11 [decision · 2026-10-05] Retrieval uses FTS5 with BM25 and no embeddings in the first version."
+,
+    "projectFixes": 
+"#20 [fix · 2026-10-05 · src/spike/support.ts] Fixed: a pending timer kept the process alive for ten seconds.
+#2 [fix · 2026-10-05 · src/store/db.ts] Fixed: \`PRAGMA journal_mode = WAL\` does not honour busy_timeout."
+,
+    "query": "the test process hangs for ten seconds after it passes",
+  },
+  {
+    "global": 
+"[project] #21 [convention · 2026-10-05] Imports carry an explicit .ts extension.
+[project] #4 [decision · 2026-10-05 · src/hooks/handle.ts] Turns open at the prompt event, not at turn end.
+[project] #12 [decision · 2026-10-05 · src/mcp/server.ts] The MCP server uses @modelcontextprotocol/server 2.x, loaded only by the mcp command."
+,
+    "list": [
+      21,
+      4,
+      12,
+    ],
+    "palette": [
+      21,
+      4,
+      12,
+    ],
+    "project": 
+"#21 [convention · 2026-10-05] Imports carry an explicit .ts extension.
+#4 [decision · 2026-10-05 · src/hooks/handle.ts] Turns open at the prompt event, not at turn end.
+#12 [decision · 2026-10-05 · src/mcp/server.ts] The MCP server uses @modelcontextprotocol/server 2.x, loaded only by the mcp command."
+,
+    "projectFixes": "No memories match.",
+    "query": "should imports end in .js or .ts?",
+  },
+  {
+    "global": "[project] #22 [decision · 2026-10-05 · src/install/claude-code.ts] The settings file is backed up before install changes it.",
+    "list": [
+      22,
+    ],
+    "palette": [
+      22,
+    ],
+    "project": "#22 [decision · 2026-10-05 · src/install/claude-code.ts] The settings file is backed up before install changes it.",
+    "projectFixes": "No memories match.",
+    "query": "does uninstall restore my settings.json?",
+  },
+  {
+    "global": "[project] #23 [gotcha · 2026-10-05] No macOS o Bun usa o SQLite do sistema, cuja versão varia.",
+    "list": [
+      23,
+    ],
+    "palette": [
+      23,
+    ],
+    "project": "#23 [gotcha · 2026-10-05] No macOS o Bun usa o SQLite do sistema, cuja versão varia.",
+    "projectFixes": "No memories match.",
+    "query": "porque é que as tabelas não são STRICT?",
+  },
+  {
+    "global": 
+"[project] #24 [change · 2026-10-05] Hook latency is recorded in the hook_runs table, without payloads.
+[project] #5 [gotcha · 2026-10-05 · src/cli/commands/hook.ts] A hook must never exit with code 2.
+[project] #12 [decision · 2026-10-05 · src/mcp/server.ts] The MCP server uses @modelcontextprotocol/server 2.x, loaded only by the mcp command.
+[project] #7 [gotcha · 2026-10-05 · scripts/build.ts] A compiled Bun binary loads .env from the working directory by default."
+,
+    "list": [
+      24,
+      5,
+      12,
+      7,
+    ],
+    "palette": [
+      24,
+      5,
+      12,
+      7,
+    ],
+    "project": 
+"#24 [change · 2026-10-05] Hook latency is recorded in the hook_runs table, without payloads.
+#5 [gotcha · 2026-10-05 · src/cli/commands/hook.ts] A hook must never exit with code 2.
+#12 [decision · 2026-10-05 · src/mcp/server.ts] The MCP server uses @modelcontextprotocol/server 2.x, loaded only by the mcp command.
+#7 [gotcha · 2026-10-05 · scripts/build.ts] A compiled Bun binary loads .env from the working directory by default."
+,
+    "projectFixes": "No memories match.",
+    "query": "where are hook timings stored?",
+  },
+  {
+    "global": 
+"[project] #7 [gotcha · 2026-10-05 · scripts/build.ts] A compiled Bun binary loads .env from the working directory by default.
+[project] #6 [decision · 2026-10-05 · scripts/build.ts] Linux and Windows x64 builds use the baseline Bun runtime."
+,
+    "list": [
+      7,
+      6,
+    ],
+    "palette": [
+      7,
+      6,
+    ],
+    "project": 
+"#7 [gotcha · 2026-10-05 · scripts/build.ts] A compiled Bun binary loads .env from the working directory by default.
+#6 [decision · 2026-10-05 · scripts/build.ts] Linux and Windows x64 builds use the baseline Bun runtime."
+,
+    "projectFixes": "No memories match.",
+    "query": "the build should not autoload dotenv",
+  },
+  {
+    "global": 
+"[project] #20 [fix · 2026-10-05 · src/spike/support.ts] Fixed: a pending timer kept the process alive for ten seconds.
+[project] #13 [convention · 2026-10-05 · src/hooks/handle.ts] Text is redacted before it is cut to size."
+,
+    "list": [
+      20,
+      13,
+    ],
+    "palette": [
+      20,
+      13,
+    ],
+    "project": 
+"#20 [fix · 2026-10-05 · src/spike/support.ts] Fixed: a pending timer kept the process alive for ten seconds.
+#13 [convention · 2026-10-05 · src/hooks/handle.ts] Text is redacted before it is cut to size."
+,
+    "projectFixes": "#20 [fix · 2026-10-05 · src/spike/support.ts] Fixed: a pending timer kept the process alive for ten seconds.",
+    "query": "write a haiku about autumn leaves",
+  },
+  {
+    "global": "No memories match.",
+    "list": [],
+    "palette": [],
+    "project": "No memories match.",
+    "projectFixes": "No memories match.",
+    "query": "what's the weather like in Lisbon today?",
+  },
+  {
+    "global": 
+"[project] #17 [gotcha · 2026-10-05] O Cursor não permite injetar contexto na submissão do prompt.
+[project] #7 [gotcha · 2026-10-05 · scripts/build.ts] A compiled Bun binary loads .env from the working directory by default."
+,
+    "list": [
+      17,
+      7,
+    ],
+    "palette": [
+      17,
+      7,
+    ],
+    "project": 
+"#17 [gotcha · 2026-10-05] O Cursor não permite injetar contexto na submissão do prompt.
+#7 [gotcha · 2026-10-05 · scripts/build.ts] A compiled Bun binary loads .env from the working directory by default."
+,
+    "projectFixes": "No memories match.",
+    "query": "explain how TCP slow start works",
+  },
+  {
+    "global": "No memories match.",
+    "list": [],
+    "palette": [],
+    "project": "No memories match.",
+    "projectFixes": "No memories match.",
+    "query": "rename the variable foo to bar in utils",
+  },
+  {
+    "global": "No memories match.",
+    "list": [],
+    "palette": [],
+    "project": "No memories match.",
+    "projectFixes": "No memories match.",
+    "query": "traduz este parágrafo para francês",
+  },
+  {
+    "global": 
+"[project] #22 [decision · 2026-10-05 · src/install/claude-code.ts] The settings file is backed up before install changes it.
+[project] #2 [fix · 2026-10-05 · src/store/db.ts] Fixed: \`PRAGMA journal_mode = WAL\` does not honour busy_timeout."
+,
+    "list": [
+      22,
+      2,
+    ],
+    "palette": [
+      22,
+      2,
+    ],
+    "project": 
+"#22 [decision · 2026-10-05 · src/install/claude-code.ts] The settings file is backed up before install changes it.
+#2 [fix · 2026-10-05 · src/store/db.ts] Fixed: \`PRAGMA journal_mode = WAL\` does not honour busy_timeout."
+,
+    "projectFixes": "#2 [fix · 2026-10-05 · src/store/db.ts] Fixed: \`PRAGMA journal_mode = WAL\` does not honour busy_timeout.",
+    "query": "add a dark mode toggle to the settings page",
+  },
+  {
+    "global": "No memories match.",
+    "list": [],
+    "palette": [],
+    "project": "No memories match.",
+    "projectFixes": "No memories match.",
+    "query": "how do I center a div with flexbox?",
+  },
+  {
+    "global": "[project] #11 [decision · 2026-10-05] Retrieval uses FTS5 with BM25 and no embeddings in the first version.",
+    "list": [
+      11,
+    ],
+    "palette": [
+      11,
+    ],
+    "project": "#11 [decision · 2026-10-05] Retrieval uses FTS5 with BM25 and no embeddings in the first version.",
+    "projectFixes": "No memories match.",
+    "query": "bump the React version to 19",
+  },
+  {
+    "global": "No memories match.",
+    "list": [],
+    "palette": [],
+    "project": "No memories match.",
+    "projectFixes": "No memories match.",
+    "query": "qual é a capital da Austrália?",
+  },
+  {
+    "global": "No memories match.",
+    "list": [],
+    "palette": [],
+    "project": "No memories match.",
+    "projectFixes": "No memories match.",
+    "query": "generate a logo for the landing page",
+  },
+  {
+    "global": "[project] #9 [gotcha · 2026-10-05 · src/retrieve/prompt.ts] Full-text queries use CROSS JOIN to pin the join order.",
+    "list": [
+      9,
+    ],
+    "palette": [
+      9,
+    ],
+    "project": "#9 [gotcha · 2026-10-05 · src/retrieve/prompt.ts] Full-text queries use CROSS JOIN to pin the join order.",
+    "projectFixes": "No memories match.",
+    "query": "sort this list of numbers in descending order",
+  },
+  {
+    "global": 
+"[project] #18 [change · 2026-10-05 · src/cli/commands/status.ts] The status command gained a --json flag.
+[project] #5 [gotcha · 2026-10-05 · src/cli/commands/hook.ts] A hook must never exit with code 2.
+[project] #19 [discovery · 2026-10-05] Claude Code identifies a turn by prompt_id in the UserPromptSubmit and Stop payloads.
+[project] #22 [decision · 2026-10-05 · src/install/claude-code.ts] The settings file is backed up before install changes it."
+,
+    "list": [
+      18,
+      5,
+      19,
+      22,
+    ],
+    "palette": [
+      18,
+      5,
+      19,
+      22,
+    ],
+    "project": 
+"#18 [change · 2026-10-05 · src/cli/commands/status.ts] The status command gained a --json flag.
+#5 [gotcha · 2026-10-05 · src/cli/commands/hook.ts] A hook must never exit with code 2.
+#19 [discovery · 2026-10-05] Claude Code identifies a turn by prompt_id in the UserPromptSubmit and Stop payloads.
+#22 [decision · 2026-10-05 · src/install/claude-code.ts] The settings file is backed up before install changes it."
+,
+    "projectFixes": "No memories match.",
+    "query": "what does the status code 418 mean?",
+  },
+  {
+    "global": "No memories match.",
+    "list": [],
+    "palette": [],
+    "project": "No memories match.",
+    "projectFixes": "No memories match.",
+    "query": "Rename the variable \`value\` to \`total\` in the invoice module",
+  },
+  {
+    "global": "No memories match.",
+    "list": [],
+    "palette": [],
+    "project": "No memories match.",
+    "projectFixes": "No memories match.",
+    "query": "How do I center a div in CSS when using TypeScript?",
+  },
+  {
+    "global": 
+"[project] #3 [convention · 2026-10-05] Never mock the database in these tests.
+[project] #1 [gotcha · 2026-10-05 · src/store/db.ts] The pragma busy_timeout must be the first statement on a connection.
+[project] #5 [gotcha · 2026-10-05 · src/cli/commands/hook.ts] A hook must never exit with code 2.
+[project] #19 [discovery · 2026-10-05] Claude Code identifies a turn by prompt_id in the UserPromptSubmit and Stop payloads.
+[project] #22 [decision · 2026-10-05 · src/install/claude-code.ts] The settings file is backed up before install changes it."
+,
+    "list": [
+      3,
+      1,
+      5,
+      19,
+      22,
+    ],
+    "palette": [
+      3,
+      1,
+      5,
+      19,
+      22,
+    ],
+    "project": 
+"#3 [convention · 2026-10-05] Never mock the database in these tests.
+#1 [gotcha · 2026-10-05 · src/store/db.ts] The pragma busy_timeout must be the first statement on a connection.
+#5 [gotcha · 2026-10-05 · src/cli/commands/hook.ts] A hook must never exit with code 2.
+#19 [discovery · 2026-10-05] Claude Code identifies a turn by prompt_id in the UserPromptSubmit and Stop payloads.
+#22 [decision · 2026-10-05 · src/install/claude-code.ts] The settings file is backed up before install changes it."
+,
+    "projectFixes": "No memories match.",
+    "query": "please fix the failing test in the code for the pricing page",
+  },
+  {
+    "global": 
+"[project] #22 [decision · 2026-10-05 · src/install/claude-code.ts] The settings file is backed up before install changes it.
+[project] #3 [convention · 2026-10-05] Never mock the database in these tests."
+,
+    "list": [
+      22,
+      3,
+    ],
+    "palette": [
+      22,
+      3,
+    ],
+    "project": 
+"#22 [decision · 2026-10-05 · src/install/claude-code.ts] The settings file is backed up before install changes it.
+#3 [convention · 2026-10-05] Never mock the database in these tests."
+,
+    "projectFixes": "No memories match.",
+    "query": "add a new function to the utils file",
+  },
+  {
+    "global": 
+"[project] #3 [convention · 2026-10-05] Never mock the database in these tests.
+[project] #1 [gotcha · 2026-10-05 · src/store/db.ts] The pragma busy_timeout must be the first statement on a connection."
+,
+    "list": [
+      3,
+      1,
+    ],
+    "palette": [
+      3,
+      1,
+    ],
+    "project": 
+"#3 [convention · 2026-10-05] Never mock the database in these tests.
+#1 [gotcha · 2026-10-05 · src/store/db.ts] The pragma busy_timeout must be the first statement on a connection."
+,
+    "projectFixes": "No memories match.",
+    "query": "why does this test fail?",
+  },
+  {
+    "global": "No memories match.",
+    "list": [],
+    "palette": [],
+    "project": "No memories match.",
+    "projectFixes": "No memories match.",
+    "query": "refactor this function to use async await",
+  },
+  {
+    "global": 
+"[project] #6 [decision · 2026-10-05 · scripts/build.ts] Linux and Windows x64 builds use the baseline Bun runtime.
+[project] #7 [gotcha · 2026-10-05 · scripts/build.ts] A compiled Bun binary loads .env from the working directory by default."
+,
+    "list": [
+      6,
+      7,
+    ],
+    "palette": [
+      6,
+      7,
+    ],
+    "project": 
+"#6 [decision · 2026-10-05 · scripts/build.ts] Linux and Windows x64 builds use the baseline Bun runtime.
+#7 [gotcha · 2026-10-05 · scripts/build.ts] A compiled Bun binary loads .env from the working directory by default."
+,
+    "projectFixes": "No memories match.",
+    "query": "can you check the error in the build output?",
+  },
+  {
+    "global": "[project] #22 [decision · 2026-10-05 · src/install/claude-code.ts] The settings file is backed up before install changes it.",
+    "list": [
+      22,
+    ],
+    "palette": [
+      22,
+    ],
+    "project": "#22 [decision · 2026-10-05 · src/install/claude-code.ts] The settings file is backed up before install changes it.",
+    "projectFixes": "No memories match.",
+    "query": "update the README with the install steps",
+  },
+  {
+    "global": 
+"[project] #7 [gotcha · 2026-10-05 · scripts/build.ts] A compiled Bun binary loads .env from the working directory by default.
+[project] #12 [decision · 2026-10-05 · src/mcp/server.ts] The MCP server uses @modelcontextprotocol/server 2.x, loaded only by the mcp command."
+,
+    "list": [
+      7,
+      12,
+    ],
+    "palette": [
+      7,
+      12,
+    ],
+    "project": 
+"#7 [gotcha · 2026-10-05 · scripts/build.ts] A compiled Bun binary loads .env from the working directory by default.
+#12 [decision · 2026-10-05 · src/mcp/server.ts] The MCP server uses @modelcontextprotocol/server 2.x, loaded only by the mcp command."
+,
+    "projectFixes": "No memories match.",
+    "query": "the page loads slowly on mobile, any idea why?",
+  },
+  {
+    "global": "No memories match.",
+    "list": [],
+    "palette": [],
+    "project": "No memories match.",
+    "projectFixes": "No memories match.",
+    "query": "cria um componente novo para a página de preços",
+  },
+  {
+    "global": "[project] #3 [convention · 2026-10-05] Never mock the database in these tests.",
+    "list": [
+      3,
+    ],
+    "palette": [
+      3,
+    ],
+    "project": "#3 [convention · 2026-10-05] Never mock the database in these tests.",
+    "projectFixes": "No memories match.",
+    "query": "corrige o erro no teste do formulário de login",
+  },
+  {
+    "global": 
+"[project] #1 [gotcha · 2026-10-05 · src/store/db.ts] The pragma busy_timeout must be the first statement on a connection.
+[project] #3 [convention · 2026-10-05] Never mock the database in these tests.
+[project] #2 [fix · 2026-10-05 · src/store/db.ts] Fixed: \`PRAGMA journal_mode = WAL\` does not honour busy_timeout.
+[project] #11 [decision · 2026-10-05] Retrieval uses FTS5 with BM25 and no embeddings in the first version.
+[project] #24 [change · 2026-10-05] Hook latency is recorded in the hook_runs table, without payloads."
+,
+    "list": [
+      1,
+      3,
+      2,
+      11,
+      24,
+      13,
+    ],
+    "palette": [
+      1,
+      3,
+      2,
+      11,
+      24,
+      13,
+    ],
+    "project": 
+"#1 [gotcha · 2026-10-05 · src/store/db.ts] The pragma busy_timeout must be the first statement on a connection.
+#3 [convention · 2026-10-05] Never mock the database in these tests.
+#2 [fix · 2026-10-05 · src/store/db.ts] Fixed: \`PRAGMA journal_mode = WAL\` does not honour busy_timeout.
+#11 [decision · 2026-10-05] Retrieval uses FTS5 with BM25 and no embeddings in the first version.
+#24 [change · 2026-10-05] Hook latency is recorded in the hook_runs table, without payloads.
+#13 [convention · 2026-10-05 · src/hooks/handle.ts] Text is redacted before it is cut to size."
+,
+    "projectFixes": "#2 [fix · 2026-10-05 · src/store/db.ts] Fixed: \`PRAGMA journal_mode = WAL\` does not honour busy_timeout.",
+    "query": "the very first statement after connecting gets a locked database error",
+  },
+  {
+    "global": "[project] #16 [decision · 2026-10-05] O importador do claude-mem só lê a base de dados do próprio utilizador.",
+    "list": [
+      16,
+    ],
+    "palette": [
+      16,
+    ],
+    "project": "#16 [decision · 2026-10-05] O importador do claude-mem só lê a base de dados do próprio utilizador.",
+    "projectFixes": "No memories match.",
+    "query": "porque é que a primeira consulta falha logo com a base bloqueada?",
+  },
+  {
+    "global": 
+"[project] #2 [fix · 2026-10-05 · src/store/db.ts] Fixed: \`PRAGMA journal_mode = WAL\` does not honour busy_timeout.
+[project] #22 [decision · 2026-10-05 · src/install/claude-code.ts] The settings file is backed up before install changes it."
+,
+    "list": [
+      2,
+      22,
+    ],
+    "palette": [
+      2,
+      22,
+    ],
+    "project": 
+"#2 [fix · 2026-10-05 · src/store/db.ts] Fixed: \`PRAGMA journal_mode = WAL\` does not honour busy_timeout.
+#22 [decision · 2026-10-05 · src/install/claude-code.ts] The settings file is backed up before install changes it."
+,
+    "projectFixes": "#2 [fix · 2026-10-05 · src/store/db.ts] Fixed: \`PRAGMA journal_mode = WAL\` does not honour busy_timeout.",
+    "query": "switching the journal to write-ahead logging ignores the wait setting",
+  },
+  {
+    "global": 
+"[project] #3 [convention · 2026-10-05] Never mock the database in these tests.
+[project] #22 [decision · 2026-10-05 · src/install/claude-code.ts] The settings file is backed up before install changes it."
+,
+    "list": [
+      3,
+      22,
+    ],
+    "palette": [
+      3,
+      22,
+    ],
+    "project": 
+"#3 [convention · 2026-10-05] Never mock the database in these tests.
+#22 [decision · 2026-10-05 · src/install/claude-code.ts] The settings file is backed up before install changes it."
+,
+    "projectFixes": "No memories match.",
+    "query": "can I fake the storage layer in unit tests instead of a real file?",
+  },
+  {
+    "global": 
+"[project] #16 [decision · 2026-10-05] O importador do claude-mem só lê a base de dados do próprio utilizador.
+[project] #3 [convention · 2026-10-05] Never mock the database in these tests."
+,
+    "list": [
+      16,
+      3,
+    ],
+    "palette": [
+      16,
+      3,
+    ],
+    "project": 
+"#16 [decision · 2026-10-05] O importador do claude-mem só lê a base de dados do próprio utilizador.
+#3 [convention · 2026-10-05] Never mock the database in these tests."
+,
+    "projectFixes": "No memories match.",
+    "query": "posso simular a base de dados nos testes?",
+  },
+  {
+    "global": 
+"[project] #4 [decision · 2026-10-05 · src/hooks/handle.ts] Turns open at the prompt event, not at turn end.
+[project] #2 [fix · 2026-10-05 · src/store/db.ts] Fixed: \`PRAGMA journal_mode = WAL\` does not honour busy_timeout.
+[project] #5 [gotcha · 2026-10-05 · src/cli/commands/hook.ts] A hook must never exit with code 2."
+,
+    "list": [
+      4,
+      2,
+      5,
+    ],
+    "palette": [
+      4,
+      2,
+      5,
+    ],
+    "project": 
+"#4 [decision · 2026-10-05 · src/hooks/handle.ts] Turns open at the prompt event, not at turn end.
+#2 [fix · 2026-10-05 · src/store/db.ts] Fixed: \`PRAGMA journal_mode = WAL\` does not honour busy_timeout.
+#5 [gotcha · 2026-10-05 · src/cli/commands/hook.ts] A hook must never exit with code 2."
+,
+    "projectFixes": "#2 [fix · 2026-10-05 · src/store/db.ts] Fixed: \`PRAGMA journal_mode = WAL\` does not honour busy_timeout.",
+    "query": "interrupted requests vanish from the log because we create them too late",
+  },
+  {
+    "global": 
+"[project] #15 [convention · 2026-10-05] As respostas ao utilizador são sempre em português.
+[project] #16 [decision · 2026-10-05] O importador do claude-mem só lê a base de dados do próprio utilizador."
+,
+    "list": [
+      15,
+      16,
+    ],
+    "palette": [
+      15,
+      16,
+    ],
+    "project": 
+"#15 [convention · 2026-10-05] As respostas ao utilizador são sempre em português.
+#16 [decision · 2026-10-05] O importador do claude-mem só lê a base de dados do próprio utilizador."
+,
+    "projectFixes": "No memories match.",
+    "query": "o agente bloqueia a ação do utilizador quando o nosso script termina mal",
+  },
+  {
+    "global": "[project] #6 [decision · 2026-10-05 · scripts/build.ts] Linux and Windows x64 builds use the baseline Bun runtime.",
+    "list": [
+      6,
+    ],
+    "palette": [
+      6,
+    ],
+    "project": "#6 [decision · 2026-10-05 · scripts/build.ts] Linux and Windows x64 builds use the baseline Bun runtime.",
+    "projectFixes": "No memories match.",
+    "query": "the release crashes on an old processor without AVX2",
+  },
+  {
+    "global": "No memories match.",
+    "list": [],
+    "palette": [],
+    "project": "No memories match.",
+    "projectFixes": "No memories match.",
+    "query": "o binário está a ler as variáveis secretas da pasta do projeto",
+  },
+  {
+    "global": "No memories match.",
+    "list": [],
+    "palette": [],
+    "project": "No memories match.",
+    "projectFixes": "No memories match.",
+    "query": "accented words are not found when typed without accents",
+  },
+  {
+    "global": "No memories match.",
+    "list": [],
+    "palette": [],
+    "project": "No memories match.",
+    "projectFixes": "No memories match.",
+    "query": "a pesquisa por palavras sem acentos não encontra nada",
+  },
+  {
+    "global": 
+"[project] #9 [gotcha · 2026-10-05 · src/retrieve/prompt.ts] Full-text queries use CROSS JOIN to pin the join order.
+[project] #8 [fix · 2026-10-05 · src/store/migrations/0001_init.sql] Fixed: full-text search now folds diacritics.
+[project] #14 [decision · 2026-10-05 · src/distill/queue.ts, src/store/meta.ts] Only one process drains the distill queue at a time, under a lease in the meta table.
+[project] #1 [gotcha · 2026-10-05 · src/store/db.ts] The pragma busy_timeout must be the first statement on a connection."
+,
+    "list": [
+      9,
+      8,
+      14,
+      1,
+    ],
+    "palette": [
+      9,
+      8,
+      14,
+      1,
+    ],
+    "project": 
+"#9 [gotcha · 2026-10-05 · src/retrieve/prompt.ts] Full-text queries use CROSS JOIN to pin the join order.
+#8 [fix · 2026-10-05 · src/store/migrations/0001_init.sql] Fixed: full-text search now folds diacritics.
+#14 [decision · 2026-10-05 · src/distill/queue.ts, src/store/meta.ts] Only one process drains the distill queue at a time, under a lease in the meta table.
+#1 [gotcha · 2026-10-05 · src/store/db.ts] The pragma busy_timeout must be the first statement on a connection."
+,
+    "projectFixes": "#8 [fix · 2026-10-05 · src/store/migrations/0001_init.sql] Fixed: full-text search now folds diacritics.",
+    "query": "the query planner walks every row and the search is a hundred times slower",
+  },
+  {
+    "global": "No memories match.",
+    "list": [],
+    "palette": [],
+    "project": "No memories match.",
+    "projectFixes": "No memories match.",
+    "query": "devíamos usar vetores semânticos na pesquisa?",
+  },
+  {
+    "global": 
+"[project] #12 [decision · 2026-10-05 · src/mcp/server.ts] The MCP server uses @modelcontextprotocol/server 2.x, loaded only by the mcp command.
+[project] #21 [convention · 2026-10-05] Imports carry an explicit .ts extension.
+[project] #24 [change · 2026-10-05] Hook latency is recorded in the hook_runs table, without payloads.
+[project] #5 [gotcha · 2026-10-05 · src/cli/commands/hook.ts] A hook must never exit with code 2.
+[project] #9 [gotcha · 2026-10-05 · src/retrieve/prompt.ts] Full-text queries use CROSS JOIN to pin the join order."
+,
+    "list": [
+      12,
+      21,
+      24,
+      5,
+      9,
+      7,
+    ],
+    "palette": [
+      12,
+      21,
+      24,
+      5,
+      9,
+      7,
+    ],
+    "project": 
+"#12 [decision · 2026-10-05 · src/mcp/server.ts] The MCP server uses @modelcontextprotocol/server 2.x, loaded only by the mcp command.
+#21 [convention · 2026-10-05] Imports carry an explicit .ts extension.
+#24 [change · 2026-10-05] Hook latency is recorded in the hook_runs table, without payloads.
+#5 [gotcha · 2026-10-05 · src/cli/commands/hook.ts] A hook must never exit with code 2.
+#9 [gotcha · 2026-10-05 · src/retrieve/prompt.ts] Full-text queries use CROSS JOIN to pin the join order.
+#7 [gotcha · 2026-10-05 · scripts/build.ts] A compiled Bun binary loads .env from the working directory by default."
+,
+    "projectFixes": "No memories match.",
+    "query": "importing the protocol library at startup made every hook slower",
+  },
+  {
+    "global": 
+"[project] #13 [convention · 2026-10-05 · src/hooks/handle.ts] Text is redacted before it is cut to size.
+[project] #22 [decision · 2026-10-05 · src/install/claude-code.ts] The settings file is backed up before install changes it.
+[project] #7 [gotcha · 2026-10-05 · scripts/build.ts] A compiled Bun binary loads .env from the working directory by default.
+[project] #8 [fix · 2026-10-05 · src/store/migrations/0001_init.sql] Fixed: full-text search now folds diacritics.
+[project] #9 [gotcha · 2026-10-05 · src/retrieve/prompt.ts] Full-text queries use CROSS JOIN to pin the join order."
+,
+    "list": [
+      13,
+      22,
+      7,
+      8,
+      9,
+      20,
+    ],
+    "palette": [
+      13,
+      22,
+      7,
+      8,
+      9,
+      20,
+    ],
+    "project": 
+"#13 [convention · 2026-10-05 · src/hooks/handle.ts] Text is redacted before it is cut to size.
+#22 [decision · 2026-10-05 · src/install/claude-code.ts] The settings file is backed up before install changes it.
+#7 [gotcha · 2026-10-05 · scripts/build.ts] A compiled Bun binary loads .env from the working directory by default.
+#8 [fix · 2026-10-05 · src/store/migrations/0001_init.sql] Fixed: full-text search now folds diacritics.
+#9 [gotcha · 2026-10-05 · src/retrieve/prompt.ts] Full-text queries use CROSS JOIN to pin the join order.
+#20 [fix · 2026-10-05 · src/spike/support.ts] Fixed: a pending timer kept the process alive for ten seconds."
+,
+    "projectFixes": 
+"#8 [fix · 2026-10-05 · src/store/migrations/0001_init.sql] Fixed: full-text search now folds diacritics.
+#20 [fix · 2026-10-05 · src/spike/support.ts] Fixed: a pending timer kept the process alive for ten seconds."
+,
+    "query": "cutting the text before hiding secrets may leave half a key visible",
+  },
+  {
+    "global": "No memories match.",
+    "list": [],
+    "palette": [],
+    "project": "No memories match.",
+    "projectFixes": "No memories match.",
+    "query": "dois processos a esvaziar a fila ao mesmo tempo criaram duplicados",
+  },
+  {
+    "global": 
+"[project] #19 [discovery · 2026-10-05] Claude Code identifies a turn by prompt_id in the UserPromptSubmit and Stop payloads.
+[project] #5 [gotcha · 2026-10-05 · src/cli/commands/hook.ts] A hook must never exit with code 2.
+[project] #7 [gotcha · 2026-10-05 · scripts/build.ts] A compiled Bun binary loads .env from the working directory by default."
+,
+    "list": [
+      19,
+      5,
+      7,
+    ],
+    "palette": [
+      19,
+      5,
+      7,
+    ],
+    "project": 
+"#19 [discovery · 2026-10-05] Claude Code identifies a turn by prompt_id in the UserPromptSubmit and Stop payloads.
+#5 [gotcha · 2026-10-05 · src/cli/commands/hook.ts] A hook must never exit with code 2.
+#7 [gotcha · 2026-10-05 · scripts/build.ts] A compiled Bun binary loads .env from the working directory by default."
+,
+    "projectFixes": "No memories match.",
+    "query": "which language should the replies to the user be in?",
+  },
+  {
+    "global": 
+"[project] #17 [gotcha · 2026-10-05] O Cursor não permite injetar contexto na submissão do prompt.
+[project] #10 [convention · 2026-10-05] Commit messages are written in English and follow conventional commits."
+,
+    "list": [
+      17,
+      10,
+    ],
+    "palette": [
+      17,
+      10,
+    ],
+    "project": 
+"#17 [gotcha · 2026-10-05] O Cursor não permite injetar contexto na submissão do prompt.
+#10 [convention · 2026-10-05] Commit messages are written in English and follow conventional commits."
+,
+    "projectFixes": "No memories match.",
+    "query": "can Cursor get notes injected on every message?",
+  },
+  {
+    "global": 
+"[project] #3 [convention · 2026-10-05] Never mock the database in these tests.
+[project] #17 [gotcha · 2026-10-05] O Cursor não permite injetar contexto na submissão do prompt."
+,
+    "list": [
+      3,
+      17,
+    ],
+    "palette": [
+      3,
+      17,
+    ],
+    "project": 
+"#3 [convention · 2026-10-05] Never mock the database in these tests.
+#17 [gotcha · 2026-10-05] O Cursor não permite injetar contexto na submissão do prompt."
+,
+    "projectFixes": "No memories match.",
+    "query": "o processo de testes fica pendurado dez segundos depois de passar",
+  },
+  {
+    "global": 
+"[project] #24 [change · 2026-10-05] Hook latency is recorded in the hook_runs table, without payloads.
+[project] #5 [gotcha · 2026-10-05 · src/cli/commands/hook.ts] A hook must never exit with code 2.
+[project] #12 [decision · 2026-10-05 · src/mcp/server.ts] The MCP server uses @modelcontextprotocol/server 2.x, loaded only by the mcp command.
+[project] #7 [gotcha · 2026-10-05 · scripts/build.ts] A compiled Bun binary loads .env from the working directory by default."
+,
+    "list": [
+      24,
+      5,
+      12,
+      7,
+    ],
+    "palette": [
+      24,
+      5,
+      12,
+      7,
+    ],
+    "project": 
+"#24 [change · 2026-10-05] Hook latency is recorded in the hook_runs table, without payloads.
+#5 [gotcha · 2026-10-05 · src/cli/commands/hook.ts] A hook must never exit with code 2.
+#12 [decision · 2026-10-05 · src/mcp/server.ts] The MCP server uses @modelcontextprotocol/server 2.x, loaded only by the mcp command.
+#7 [gotcha · 2026-10-05 · scripts/build.ts] A compiled Bun binary loads .env from the working directory by default."
+,
+    "projectFixes": "No memories match.",
+    "query": "where do we keep how long each hook took?",
+  },
+  {
+    "global": "No memories match.",
+    "list": [],
+    "palette": [],
+    "project": "No memories match.",
+    "projectFixes": "No memories match.",
+    "query": "plan a three-day trip to Porto",
+  },
+  {
+    "global": "No memories match.",
+    "list": [],
+    "palette": [],
+    "project": "No memories match.",
+    "projectFixes": "No memories match.",
+    "query": "convert this recipe from cups to grams",
+  },
+  {
+    "global": "No memories match.",
+    "list": [],
+    "palette": [],
+    "project": "No memories match.",
+    "projectFixes": "No memories match.",
+    "query": "write a cover letter for a marketing job",
+  },
+  {
+    "global": "No memories match.",
+    "list": [],
+    "palette": [],
+    "project": "No memories match.",
+    "projectFixes": "No memories match.",
+    "query": "explain the difference between a virus and a bacterium",
+  },
+  {
+    "global": "No memories match.",
+    "list": [],
+    "palette": [],
+    "project": "No memories match.",
+    "projectFixes": "No memories match.",
+    "query": "qual é a melhor altura para visitar os Açores?",
+  },
+  {
+    "global": "No memories match.",
+    "list": [],
+    "palette": [],
+    "project": "No memories match.",
+    "projectFixes": "No memories match.",
+    "query": "faz um resumo deste livro em cinco frases",
+  },
+  {
+    "global": "No memories match.",
+    "list": [],
+    "palette": [],
+    "project": "No memories match.",
+    "projectFixes": "No memories match.",
+    "query": "what rhymes with orange?",
+  },
+  {
+    "global": "No memories match.",
+    "list": [],
+    "palette": [],
+    "project": "No memories match.",
+    "projectFixes": "No memories match.",
+    "query": "draw an ASCII cat",
+  },
+  {
+    "global": "No memories match.",
+    "list": [],
+    "palette": [],
+    "project": "No memories match.",
+    "projectFixes": "No memories match.",
+    "query": "how many calories are in a banana?",
+  },
+  {
+    "global": "No memories match.",
+    "list": [],
+    "palette": [],
+    "project": "No memories match.",
+    "projectFixes": "No memories match.",
+    "query": "escreve um poema sobre o mar",
+  },
+  {
+    "global": 
+"[project] #22 [decision · 2026-10-05 · src/install/claude-code.ts] The settings file is backed up before install changes it.
+[project] #5 [gotcha · 2026-10-05 · src/cli/commands/hook.ts] A hook must never exit with code 2."
+,
+    "list": [
+      22,
+      5,
+    ],
+    "palette": [
+      22,
+      5,
+    ],
+    "project": 
+"#22 [decision · 2026-10-05 · src/install/claude-code.ts] The settings file is backed up before install changes it.
+#5 [gotcha · 2026-10-05 · src/cli/commands/hook.ts] A hook must never exit with code 2."
+,
+    "projectFixes": "No memories match.",
+    "query": "set up a GitHub Actions workflow for a Python package",
+  },
+  {
+    "global": "No memories match.",
+    "list": [],
+    "palette": [],
+    "project": "No memories match.",
+    "projectFixes": "No memories match.",
+    "query": "add pagination to the products API",
+  },
+  {
+    "global": "No memories match.",
+    "list": [],
+    "palette": [],
+    "project": "No memories match.",
+    "projectFixes": "No memories match.",
+    "query": "style the login button with a gradient",
+  },
+  {
+    "global": "No memories match.",
+    "list": [],
+    "palette": [],
+    "project": "No memories match.",
+    "projectFixes": "No memories match.",
+    "query": "migrate the Express app to Fastify",
+  },
+  {
+    "global": "[project] #2 [fix · 2026-10-05 · src/store/db.ts] Fixed: \`PRAGMA journal_mode = WAL\` does not honour busy_timeout.",
+    "list": [
+      2,
+    ],
+    "palette": [
+      2,
+    ],
+    "project": "#2 [fix · 2026-10-05 · src/store/db.ts] Fixed: \`PRAGMA journal_mode = WAL\` does not honour busy_timeout.",
+    "projectFixes": "#2 [fix · 2026-10-05 · src/store/db.ts] Fixed: \`PRAGMA journal_mode = WAL\` does not honour busy_timeout.",
+    "query": "create a Dockerfile for the Next.js frontend",
+  },
+  {
+    "global": "No memories match.",
+    "list": [],
+    "palette": [],
+    "project": "No memories match.",
+    "projectFixes": "No memories match.",
+    "query": "adiciona validação de email ao formulário de registo",
+  },
+  {
+    "global": "No memories match.",
+    "list": [],
+    "palette": [],
+    "project": "No memories match.",
+    "projectFixes": "No memories match.",
+    "query": "muda a cor do cabeçalho para azul",
+  },
+  {
+    "global": "[project] #3 [convention · 2026-10-05] Never mock the database in these tests.",
+    "list": [
+      3,
+    ],
+    "palette": [
+      3,
+    ],
+    "project": "#3 [convention · 2026-10-05] Never mock the database in these tests.",
+    "projectFixes": "No memories match.",
+    "query": "write unit tests for the date formatter",
+  },
+  {
+    "global": "No memories match.",
+    "list": [],
+    "palette": [],
+    "project": "No memories match.",
+    "projectFixes": "No memories match.",
+    "query": "optimise the images on the homepage",
+  },
+  {
+    "global": "No memories match.",
+    "list": [],
+    "palette": [],
+    "project": "No memories match.",
+    "projectFixes": "No memories match.",
+    "query": "o carrinho de compras não atualiza o total",
+  },
+]
+`;

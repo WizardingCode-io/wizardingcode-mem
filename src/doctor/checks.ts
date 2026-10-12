@@ -2,6 +2,7 @@ import { Database } from "bun:sqlite";
 import { accessSync, constants, existsSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { lastBackup } from "../backup/schedule.ts";
+import { semanticStatus } from "../embed/status.ts";
 import { ANTIGRAVITY } from "../install/antigravity.ts";
 import { CLAUDE_CODE } from "../install/claude-code.ts";
 import { claudeDesktopServer, hasClaudeDesktop } from "../install/claude-desktop.ts";
@@ -423,6 +424,55 @@ function typeSafe(context: DoctorContext, db: Db | null): Check {
   return { name, status: "ok", detail: `configured (key …${fingerprint.slice(-6)})` };
 }
 
+const MB = 1024 * 1024;
+
+function semanticSearch(context: DoctorContext, db: Db | null): Check {
+  const name = "semantic search";
+  const s = semanticStatus(db, context.dataDir, process.env, context.now);
+  const size = `${Math.round(s.model.bytes / MB)} MB`;
+  if (!s.model.enabled) {
+    const by =
+      s.model.source === "env"
+        ? "by WIZARDINGCODE_MEM_SEMANTIC in the environment"
+        : "in the settings";
+    return {
+      name,
+      status: "ok",
+      detail: `turned off ${by}; searches match words only${s.model.present ? ` (the model is kept, ${size})` : ""}`,
+    };
+  }
+  if (s.download.running) {
+    return {
+      name,
+      status: "ok",
+      detail: "the search model is downloading; searches match words until it is ready",
+    };
+  }
+  if (!s.model.present) {
+    return {
+      name,
+      status: "ok",
+      detail: `not downloaded; searches match words only. To find notes by meaning too, run: wizardingcode-mem embed download${s.download.error ? `; the last download failed (${s.download.error})` : ""}`,
+    };
+  }
+  if (s.model.problem !== null) {
+    return {
+      name,
+      status: "warn",
+      detail: `the model cannot be used (${s.model.problem}); searches match words only. Run: wizardingcode-mem embed delete, then wizardingcode-mem embed download`,
+    };
+  }
+  const { active, withVectors } = s.memories;
+  const missing = active - withVectors;
+  const vectors = `${withVectors} of ${active} active memories have a vector`;
+  const rest = s.backfill.running
+    ? "; the backfill is running"
+    : missing > 0
+      ? `; run: wizardingcode-mem embed backfill`
+      : "";
+  return { name, status: "ok", detail: `ready (${size}); ${vectors}${rest}` };
+}
+
 /** What is left of shibaox-mem, this product's name until 0.3.0; null when nothing is. */
 function legacy(context: DoctorContext): Check | null {
   const problems = findLegacyPlugins(context).map(
@@ -465,6 +515,7 @@ export function runChecks(context: DoctorContext): Check[] {
         : queue(db, context.now),
       hookSpeed(db),
       typeSafe(context, db),
+      semanticSearch(context, db),
       backups(context, db),
       // Claude Code is the host this started on: its absence is a warning, not a skip.
       hooksHost("Claude Code", CLAUDE_CODE, context.settingsPath, null, context),

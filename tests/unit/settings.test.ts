@@ -28,6 +28,7 @@ describe("loadSettings", () => {
     expect(loadSettings({}, dir())).toEqual({
       typesafeKey: null,
       typesafe: "on",
+      semantic: "on",
       retentionDays: 90,
       historyDays: 180,
       uiAutoOpen: true,
@@ -64,6 +65,7 @@ describe("loadSettings", () => {
     expect(s).toEqual({
       typesafeKey: "sk-file",
       typesafe: "off",
+      semantic: "on",
       retentionDays: 30,
       historyDays: 180,
       uiAutoOpen: false,

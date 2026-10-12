@@ -1,6 +1,8 @@
 // The viewer's client for /api. The token comes from the URL the binary opened.
 import type { HistoryOffer, HistoryProgress, HistoryStatus, PastSearch } from "./history";
+import type { SemanticStatus } from "./semantic";
 
+export type { SemanticStatus } from "./semantic";
 export type { HistoryOffer, HistoryProgress, HistoryQueue, HistoryRun, HistoryRunState, HistoryStatus, PastSearch, PastTurn } from "./history";
 
 export const TOKEN = new URLSearchParams(location.search).get("token") ?? "";
@@ -253,6 +255,12 @@ export const api = {
   },
   restoreImports: () => call<{ restored: number }>("/api/history/restore-imports", { method: "POST", body: "{}" }),
   dismissHistoryOffer: () => call<{ dismissed: true }>("/api/history/offer/dismiss", { method: "POST", body: "{}" }),
+  semantic: () => call<SemanticStatus>("/api/semantic"),
+  /** Downloads the model, then gives the memories their vectors; `started: false` when one is going. */
+  semanticDownload: () => call<{ started: boolean }>("/api/semantic/download", { method: "POST", body: "{}" }),
+  semanticBackfill: () => call<{ started: boolean }>("/api/semantic/backfill", { method: "POST", body: "{}" }),
+  semanticSwitch: (on: boolean) => call<SemanticStatus>(`/api/semantic/${on ? "on" : "off"}`, { method: "POST", body: "{}" }),
+  semanticDelete: () => call<SemanticStatus>("/api/semantic/delete", { method: "POST", body: "{}" }),
   compact: (dryRun: boolean) =>
     call<CompactReport>("/api/compact", { method: "POST", body: JSON.stringify({ dryRun }) }),
 };

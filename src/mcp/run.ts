@@ -1,4 +1,5 @@
 import { resolveProject } from "../core/project.ts";
+import { loadModel, type Model } from "../embed/model.ts";
 import { openHistoryDb } from "../history/db.ts";
 import { historyReadFailure, renderHits, searchHistory } from "../history/search.ts";
 import { makeJudge } from "../judge/index.ts";
@@ -72,7 +73,7 @@ export async function toolSchemas(global = false) {
 
 export const TOOL_DESCRIPTIONS: Record<(typeof TOOL_NAMES)[number], string> = {
   memory_search:
-    "Search notes saved from earlier sessions in this project; returns one heading per note.",
+    "Search notes saved from earlier sessions in this project, by words and, when the optional model is installed, by meaning; returns one heading per note.",
   memory_get: "Read saved notes in full, by the ids that memory_search returned.",
   memory_save:
     "Save something worth knowing in later sessions: a decision and its reason, a rule the user stated, a pitfall, a fix.",
@@ -82,7 +83,7 @@ export const TOOL_DESCRIPTIONS: Record<(typeof TOOL_NAMES)[number], string> = {
 
 export const GLOBAL_TOOL_DESCRIPTIONS: Record<ToolName, string> = {
   memory_search:
-    "Search notes saved while working on any of the user's projects; each heading names its project.",
+    "Search notes saved while working on any of the user's projects, by words and, when the optional model is installed, by meaning; each heading names its project.",
   memory_get: "Read saved notes in full, by the ids that memory_search returned.",
   memory_save:
     "Save something worth knowing later, into the project it belongs to: a decision and its reason, a rule the user stated, a pitfall.",
@@ -169,6 +170,7 @@ const NO_HISTORY =
 /** Searches the history index, if there is one; never creates it. */
 function searchPast(
   storeDir: string,
+  model: Model | null,
   args: { query: string; limit?: number; project?: string },
   projectId?: number,
 ): string {
@@ -181,6 +183,7 @@ function searchPast(
       limit: args.limit,
       projectId,
       projectName: args.project,
+      model,
     });
     return hits.length === 0 ? "No past conversations match." : renderHits(hits);
   } catch (error) {
@@ -199,7 +202,12 @@ export async function runGlobalTool(name: ToolName, args: unknown): Promise<stri
     const now = Date.now();
     switch (name) {
       case "memory_search":
-        return globalSearch(db, now, args as Parameters<typeof globalSearch>[2]);
+        return globalSearch(
+          db,
+          now,
+          args as Parameters<typeof globalSearch>[2],
+          loadModel({ dataDir }),
+        );
       case "memory_get":
         return globalGet(db, now, args as Parameters<typeof globalGet>[2]);
       case "memory_save":
@@ -208,9 +216,14 @@ export async function runGlobalTool(name: ToolName, args: unknown): Promise<stri
           makeJudge({ db, dataDir }),
           now,
           args as Parameters<typeof globalSave>[3],
+          loadModel({ dataDir }),
         );
       case "history_search":
-        return searchPast(storeDir, args as Parameters<typeof searchPast>[1]);
+        return searchPast(
+          storeDir,
+          loadModel({ dataDir }),
+          args as Parameters<typeof searchPast>[2],
+        );
       case "memory_projects":
         return listProjects(db, now, args as Parameters<typeof listProjects>[2]);
     }
@@ -240,13 +253,26 @@ export async function runTool(name: ToolName, args: unknown, projectDir: string)
     };
     switch (name) {
       case "memory_search":
-        return searchMemories(context, args as Parameters<typeof searchMemories>[1]);
+        // Loaded once per process (cached); without it, search is by words alone.
+        return searchMemories(
+          { ...context, model: loadModel({ dataDir }) },
+          args as Parameters<typeof searchMemories>[1],
+        );
       case "memory_get":
         return getMemories(context, args as Parameters<typeof getMemories>[1]);
       case "memory_save":
-        return await saveMemory(context, args as Parameters<typeof saveMemory>[1]);
+        // Cached per process: a get does not need it.
+        return await saveMemory(
+          { ...context, model: loadModel({ dataDir }) },
+          args as Parameters<typeof saveMemory>[1],
+        );
       case "history_search":
-        return searchPast(storeDir, { ...(args as { query: string; limit?: number }) }, project.id);
+        return searchPast(
+          storeDir,
+          loadModel({ dataDir }),
+          { ...(args as { query: string; limit?: number }) },
+          project.id,
+        );
       case "memory_projects":
         return "memory_projects answers only without a project folder (wizardingcode-mem mcp --global).";
     }

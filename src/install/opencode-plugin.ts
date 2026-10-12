@@ -85,7 +85,7 @@ ${factoryExport}function createPlugin(deps) {
       run([BINARY, "tool", name, "--project", state(ctx?.sessionID).cwd], JSON.stringify(args ?? {}));
     const tools = toolApi === null ? undefined : {
       memory_search: toolApi({
-        description: "Search notes saved from earlier sessions in this project; returns one heading per note.",
+        description: "Search notes saved from earlier sessions in this project, by words and, when the optional model is installed, by meaning; returns one heading per note.",
         args: {
           query: toolApi.schema.string(),
           kind: toolApi.schema.string().optional(),

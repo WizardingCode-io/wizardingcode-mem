@@ -4,10 +4,12 @@ import type { MemoryKind } from "../core/types.ts";
 import { consolidate } from "../distill/consolidate.ts";
 import { TITLE_MAX_CHARS } from "../distill/policy.ts";
 import { splitSentences } from "../distill/segment.ts";
+import type { Model } from "../embed/model.ts";
 import type { Judge } from "../judge/types.ts";
 import { MEMORY_COLUMNS, type MemoryRow, prior, ranks, toNote } from "../retrieve/notes.ts";
 import { explicitMatch } from "../retrieve/query.ts";
 import { renderHeading, renderNote } from "../retrieve/render.ts";
+import { RRF_K, SEMANTIC_FLOOR, semanticCandidates } from "../retrieve/semantic.ts";
 import { type Db, withWrite } from "../store/db.ts";
 import { insertMemory, supersede } from "../store/memories.ts";
 import { clip } from "../util/text.ts";
@@ -25,6 +27,8 @@ export interface ToolContext {
   root: string;
   branch: string | null;
   now: number;
+  /** The semantic model, when loaded: a saved memory gets its vector. */
+  model?: Model | null;
 }
 
 const DEFAULT_LIMIT = 10;
@@ -33,11 +37,11 @@ const SEARCH_POOL = 50;
 const MAX_IDS = 20;
 const BODY_MAX_CHARS = 2000;
 const MAX_FILES = 10;
-const RRF_K = 60;
 
 /**
  * Finds memories by words, symbols or file names and answers with one heading per
  * memory. Unlike injection, an explicit search asks for no evidence: one word is enough.
+ * With the semantic model, memories that mean what was asked are fused in as well.
  */
 export function searchMemories(
   context: ToolContext,
@@ -45,50 +49,7 @@ export function searchMemories(
 ): string {
   const { db, projectId } = context;
   const limit = Math.min(MAX_LIMIT, Math.max(1, Math.trunc(args.limit ?? DEFAULT_LIMIT)));
-  const kind = args.kind ?? null;
-
-  let rows: (MemoryRow & { projectId: number })[];
-  if (args.query.trim() === "") {
-    rows = db
-      .query<
-        MemoryRow & { projectId: number },
-        [number | null, number | null, string | null, string | null, number]
-      >(
-        `SELECT ${MEMORY_COLUMNS}, m.project_id AS projectId FROM memories m
-          WHERE (? IS NULL OR m.project_id = ?) AND m.status = 'active' AND (? IS NULL OR m.kind = ?)
-          ORDER BY m.importance DESC, m.updated_at DESC LIMIT ?`,
-      )
-      .all(projectId, projectId, kind, kind, SEARCH_POOL)
-      .sort((a, b) => prior(b, context) - prior(a, context) || b.id - a.id);
-  } else {
-    const match = explicitMatch(args.query);
-    if (match === null) return "No memories match.";
-    const found = db
-      .query<
-        MemoryRow & { projectId: number; bm25: number },
-        [string, number | null, number | null, string | null, string | null, number]
-      >(
-        `SELECT ${MEMORY_COLUMNS}, m.project_id AS projectId, bm25(memories_fts, 4.0, 1.0, 2.0, 0.0) AS bm25
-           FROM memories_fts CROSS JOIN memories m ON m.id = memories_fts.rowid
-          WHERE memories_fts MATCH ? AND (? IS NULL OR m.project_id = ?) AND m.status = 'active'
-            AND (? IS NULL OR m.kind = ?)
-          ORDER BY bm25 LIMIT ?`,
-      )
-      .all(
-        projectId === null ? `{title body terms} : (${match})` : inProject(match, projectId),
-        projectId,
-        projectId,
-        kind,
-        kind,
-        SEARCH_POOL,
-      );
-    const byText = ranks(found, (row) => -row.bm25);
-    const byPrior = ranks(found, (row) => prior(row, context));
-    const fused = (row: MemoryRow & { projectId: number; bm25: number }) =>
-      1 / (RRF_K + (byText.get(row) ?? 0)) + 1 / (RRF_K + (byPrior.get(row) ?? 0));
-    rows = found.sort((a, b) => fused(b) - fused(a) || b.id - a.id);
-  }
-
+  const rows = rankMemories(context, args);
   if (rows.length === 0) return "No memories match.";
   const shown = rows.slice(0, limit);
   if (projectId !== null) {
@@ -105,6 +66,96 @@ export function searchMemories(
   return shown
     .map((row) => `[${names.get(row.projectId) ?? "?"}] ${renderHeading(toNote(db, row))}`)
     .join("\n");
+}
+
+type Ranked = MemoryRow & { projectId: number };
+
+/**
+ * The memories a search answers with, best first, before the limit. Without a model, or when
+ * nothing passes the floor, this is the lexical ranking alone, unchanged. `floor` is for
+ * calibration (scripts/embed/search-floor.ts).
+ */
+export function rankMemories(
+  context: ToolContext,
+  args: { query: string; kind?: MemoryKind },
+  floor: number = SEMANTIC_FLOOR,
+): Ranked[] {
+  const { db, projectId } = context;
+  const kind = args.kind ?? null;
+  const model = context.model ?? null;
+
+  if (args.query.trim() === "") {
+    return db
+      .query<Ranked, [number | null, number | null, string | null, string | null, number]>(
+        `SELECT ${MEMORY_COLUMNS}, m.project_id AS projectId FROM memories m
+          WHERE (? IS NULL OR m.project_id = ?) AND m.status = 'active' AND (? IS NULL OR m.kind = ?)
+          ORDER BY m.importance DESC, m.updated_at DESC LIMIT ?`,
+      )
+      .all(projectId, projectId, kind, kind, SEARCH_POOL)
+      .sort((a, b) => prior(b, context) - prior(a, context) || b.id - a.id);
+  }
+  const meaning = semanticCandidates(db, model, args.query, {
+    projectId,
+    kind,
+    limit: SEARCH_POOL,
+    floor,
+  });
+  const match = explicitMatch(args.query);
+  const found =
+    match === null
+      ? []
+      : db
+          .query<
+            Ranked & { bm25: number },
+            [string, number | null, number | null, string | null, string | null, number]
+          >(
+            `SELECT ${MEMORY_COLUMNS}, m.project_id AS projectId, bm25(memories_fts, 4.0, 1.0, 2.0, 0.0) AS bm25
+               FROM memories_fts CROSS JOIN memories m ON m.id = memories_fts.rowid
+              WHERE memories_fts MATCH ? AND (? IS NULL OR m.project_id = ?) AND m.status = 'active'
+                AND (? IS NULL OR m.kind = ?)
+              ORDER BY bm25 LIMIT ?`,
+          )
+          .all(
+            projectId === null ? `{title body terms} : (${match})` : inProject(match, projectId),
+            projectId,
+            projectId,
+            kind,
+            kind,
+            SEARCH_POOL,
+          );
+  const byText = ranks(found, (row) => -row.bm25);
+  if (meaning.length === 0) {
+    // Words alone: exactly the ranking explicit search always had.
+    const byPrior = ranks(found, (row) => prior(row, context));
+    const fused = (row: Ranked & { bm25: number }) =>
+      1 / (RRF_K + (byText.get(row) ?? 0)) + 1 / (RRF_K + (byPrior.get(row) ?? 0));
+    return found.sort((a, b) => fused(b) - fused(a) || b.id - a.id);
+  }
+
+  // Words and meaning: memories found only by meaning join the pool, and each ranking that
+  // found a memory adds to its score; the prior ranks the whole pool.
+  const lexical = new Map(found.map((row) => [row.id, row]));
+  const getRow = db.query<Ranked, [number]>(
+    `SELECT ${MEMORY_COLUMNS}, m.project_id AS projectId FROM memories m
+      WHERE m.id = ? AND m.status = 'active'`,
+  );
+  const pool: Ranked[] = [...found];
+  for (const hit of meaning) {
+    if (lexical.has(hit.id)) continue;
+    const row = getRow.get(hit.id);
+    if (row !== null) pool.push(row);
+  }
+  const score = new Map(meaning.map((hit) => [hit.id, hit.score]));
+  const byMeaning = ranks(
+    pool.filter((row) => score.has(row.id)),
+    (row) => score.get(row.id) ?? 0,
+  );
+  const byPrior = ranks(pool, (row) => prior(row, context));
+  const textRank = new Map(found.map((row) => [row.id, byText.get(row) ?? 0]));
+  const term = (rank: number | undefined) => (rank === undefined ? 0 : 1 / (RRF_K + rank));
+  const fused = (row: Ranked) =>
+    term(textRank.get(row.id)) + term(byMeaning.get(row)) + term(byPrior.get(row));
+  return pool.sort((a, b) => fused(b) - fused(a) || b.id - a.id);
 }
 
 /**
@@ -257,26 +308,30 @@ export async function saveMemory(
   }
 
   const id = withWrite(db, () => {
-    const created = insertMemory(db, {
-      projectId,
-      kind: draft.kind,
-      title: draft.title,
-      body: draft.body,
-      terms: searchTerms(
-        draft.title,
-        draft.body,
-        draft.files.map((file) => file.path),
-      ),
-      importance: draft.importance,
-      branch: context.branch,
-      commit: null,
-      origin: "manual",
-      judge: "agent",
-      judgeVersion: "1",
-      sourceTurnId: null,
-      files: draft.files,
-      now,
-    });
+    const created = insertMemory(
+      db,
+      {
+        projectId,
+        kind: draft.kind,
+        title: draft.title,
+        body: draft.body,
+        terms: searchTerms(
+          draft.title,
+          draft.body,
+          draft.files.map((file) => file.path),
+        ),
+        importance: draft.importance,
+        branch: context.branch,
+        commit: null,
+        origin: "manual",
+        judge: "agent",
+        judgeVersion: "1",
+        sourceTurnId: null,
+        files: draft.files,
+        now,
+      },
+      context.model ?? null,
+    );
     for (const oldId of action.supersedes) supersede(db, oldId, created, now);
     return created;
   });

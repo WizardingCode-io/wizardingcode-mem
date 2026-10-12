@@ -1,7 +1,10 @@
 import type { ProjectRef } from "../core/project.ts";
 import { redact } from "../core/redact.ts";
 import { MEMORY_KINDS, type MemoryKind } from "../core/types.ts";
+import type { Model } from "../embed/model.ts";
+import { refreshMemoryVector } from "../embed/vectors.ts";
 import { explicitMatch } from "../retrieve/query.ts";
+import { fuseRanks, SEMANTIC_POOL, semanticCandidates } from "../retrieve/semantic.ts";
 import { hookLatency } from "../status/report.ts";
 import { type Db, withWrite } from "../store/db.ts";
 import { inProject } from "../util/words.ts";
@@ -66,6 +69,8 @@ const ITEM_COLUMNS = `m.id, m.project_id AS projectId, m.kind, m.title, m.import
   m.use_count AS useCount, m.created_at AS createdAt, m.updated_at AS updatedAt`;
 const STATUSES = new Set(["active", "archived", "superseded", "all"]);
 const MAX_LIMIT = 200;
+/** How many memories found by words a list search fuses with those found by meaning. */
+const LIST_FUSION_WORDS = 500;
 
 type Row = Omit<MemoryItem, "files">;
 
@@ -87,8 +92,15 @@ export interface ListOptions {
   offset?: number;
 }
 
-/** A project's memories, newest first, or by relevance when there is a query. */
-export function listMemories(db: Db, options: ListOptions): { total: number; items: MemoryItem[] } {
+/**
+ * A project's memories, newest first, or by relevance when there is a query: by words, and by
+ * meaning too when the model is loaded and the list is of active memories.
+ */
+export function listMemories(
+  db: Db,
+  options: ListOptions,
+  model: Model | null = null,
+): { total: number; items: MemoryItem[] } {
   const status =
     options.status !== undefined && STATUSES.has(options.status) ? options.status : "active";
   const kind: string | null =
@@ -104,6 +116,48 @@ export function listMemories(db: Db, options: ListOptions): { total: number; ite
   const q = (options.q ?? "").trim();
   if (q !== "") {
     const words = explicitMatch(q);
+    // Only active memories have a semantic side.
+    const meaning =
+      status === "active"
+        ? semanticCandidates(db, model, q, {
+            projectId: options.projectId,
+            kind,
+            limit: SEMANTIC_POOL,
+          })
+        : [];
+    if (meaning.length > 0) {
+      // The best LIST_FUSION_WORDS by words are enough to fuse with: a page beyond them is
+      // never reached by a person scrolling a search.
+      const lexical =
+        words === null
+          ? []
+          : db
+              .query<{ id: number }, (string | number | null)[]>(
+                `SELECT m.id FROM memories_fts CROSS JOIN memories m ON m.id = memories_fts.rowid
+                  WHERE memories_fts MATCH ? AND ${where}
+                  ORDER BY bm25(memories_fts, 4.0, 1.0, 2.0, 0.0) LIMIT ?`,
+              )
+              .all(inProject(words, options.projectId), ...params, LIST_FUSION_WORDS)
+              .map((row) => row.id);
+      // Found by meaning but outside the list's filters (importance) is dropped.
+      const ids = meaning.map((hit) => hit.id);
+      const allowed = new Set(
+        db
+          .query<{ id: number }, (string | number | null)[]>(
+            `SELECT m.id FROM memories m
+              WHERE m.id IN (${ids.map(() => "?").join(", ")}) AND ${where}`,
+          )
+          .all(...ids, ...params)
+          .map((row) => row.id),
+      );
+      const fused = fuseRanks([lexical, ids.filter((id) => allowed.has(id))]);
+      const page = fused.slice(offset, offset + limit);
+      const getRow = db.query<Row, [number]>(
+        `SELECT ${ITEM_COLUMNS} FROM memories m WHERE m.id = ?`,
+      );
+      const rows = page.map((id) => getRow.get(id)).filter((row): row is Row => row !== null);
+      return { total: fused.length, items: attachFiles(db, rows) };
+    }
     if (words === null) return { total: 0, items: [] };
     const match = inProject(words, options.projectId);
     const total =
@@ -220,6 +274,8 @@ export function updateMemory(
   id: number,
   changes: MemoryChanges,
   now: number,
+  /** The semantic model, when loaded: a new text gets a new vector. */
+  model: Model | null = null,
 ): "ok" | "not-found" | "invalid" {
   const allowed = new Set(["title", "body", "kind", "importance"]);
   const keys = Object.keys(changes);
@@ -268,6 +324,9 @@ export function updateMemory(
     sets.push("judge = 'user'", "judge_version = '1'", "updated_at = ?");
     params.push(now, id);
     db.run(`UPDATE memories SET ${sets.join(", ")} WHERE id = ?`, params);
+    if (changes.title !== undefined || changes.body !== undefined) {
+      refreshMemoryVector(db, model, id);
+    }
     outcome = "ok";
   });
   return outcome;
@@ -451,19 +510,50 @@ export interface SearchHit {
   importance: number;
 }
 
-/** Active memories of every project matching a query, best first; for the command palette. */
-export function searchAll(db: Db, q: string, limit = 20): SearchHit[] {
-  const match = explicitMatch(q.trim());
-  if (match === null) return [];
-  return db
-    .query<SearchHit, [string, number]>(
-      `SELECT m.id, m.project_id AS projectId, p.name AS projectName, m.title, m.kind, m.importance
-         FROM memories_fts CROSS JOIN memories m ON m.id = memories_fts.rowid
-         JOIN projects p ON p.id = m.project_id
-        WHERE memories_fts MATCH ? AND m.status = 'active'
-        ORDER BY bm25(memories_fts, 4.0, 1.0, 2.0, 0.0) LIMIT ?`,
-    )
-    .all(`{title body terms} : (${match})`, Math.min(MAX_LIMIT, Math.max(1, limit)));
+const HIT_COLUMNS =
+  "m.id, m.project_id AS projectId, p.name AS projectName, m.title, m.kind, m.importance";
+
+/**
+ * Active memories of every project matching a query, best first; for the command palette.
+ * With the model, those that mean what was typed are fused in.
+ */
+export function searchAll(db: Db, q: string, limit = 20, model: Model | null = null): SearchHit[] {
+  const query = q.trim();
+  const match = explicitMatch(query);
+  const max = Math.min(MAX_LIMIT, Math.max(1, limit));
+  const meaning = semanticCandidates(db, model, query, {
+    projectId: null,
+    limit: Math.max(max, SEMANTIC_POOL),
+  });
+  if (match === null && meaning.length === 0) return [];
+  const lexical =
+    match === null
+      ? []
+      : db
+          .query<SearchHit, [string, number]>(
+            `SELECT ${HIT_COLUMNS}
+               FROM memories_fts CROSS JOIN memories m ON m.id = memories_fts.rowid
+               JOIN projects p ON p.id = m.project_id
+              WHERE memories_fts MATCH ? AND m.status = 'active'
+              ORDER BY bm25(memories_fts, 4.0, 1.0, 2.0, 0.0) LIMIT ?`,
+          )
+          .all(
+            `{title body terms} : (${match})`,
+            meaning.length === 0 ? max : Math.max(max, SEMANTIC_POOL),
+          );
+  if (meaning.length === 0) return lexical;
+  const hits = new Map(lexical.map((hit) => [hit.id, hit]));
+  const getHit = db.query<SearchHit, [number]>(
+    `SELECT ${HIT_COLUMNS} FROM memories m JOIN projects p ON p.id = m.project_id
+      WHERE m.id = ? AND m.status = 'active'`,
+  );
+  const out: SearchHit[] = [];
+  for (const id of fuseRanks([lexical.map((hit) => hit.id), meaning.map((hit) => hit.id)])) {
+    const hit = hits.get(id) ?? getHit.get(id);
+    if (hit !== null && hit !== undefined) out.push(hit);
+    if (out.length === max) break;
+  }
+  return out;
 }
 
 /** A project as the status report wants it; the viewer has no working tree to inspect. */

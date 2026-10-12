@@ -1,10 +1,20 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveProject } from "../../src/core/project.ts";
 import type { Redacted } from "../../src/core/redact.ts";
 import type { MemoryKind } from "../../src/core/types.ts";
+import { loadModel, modelPath } from "../../src/embed/model.ts";
+import { writeMemoryVector } from "../../src/embed/vectors.ts";
 import { openHistoryDb } from "../../src/history/db.ts";
 import { type Db, openDb } from "../../src/store/db.ts";
 import { insertMemory } from "../../src/store/memories.ts";
@@ -308,6 +318,61 @@ describe("wizardingcode-mem ui: the API", () => {
       ).status,
     ).toBe(400);
     expect((await api(s, "/api/memories/1", { method: "POST", body: "nope" })).status).toBe(400);
+  });
+
+  test("with the semantic model, an edit writes the memory's new vector", async () => {
+    mkdirSync(join(dataDir, "models"), { recursive: true });
+    copyFileSync(join(import.meta.dir, "../fixtures/embed/subset.wcpack"), modelPath(dataDir));
+    const s = await start({ env: {} });
+    const edited = await api(s, "/api/memories/1", {
+      method: "PATCH",
+      body: JSON.stringify({ title: "Never mock the database in these tests." }),
+    });
+    expect(edited.status).toBe(200);
+    const db = openDb({ dataDir, busyTimeoutMs: 2000 });
+    expect(db.query("SELECT memory_id, model FROM memory_vectors").all()).toEqual([
+      { memory_id: 1, model: loadModel({ dataDir, env: {} })?.id },
+    ]);
+    db.close();
+  });
+
+  test("with the semantic model, the list and the palette find by meaning too", async () => {
+    mkdirSync(join(dataDir, "models"), { recursive: true });
+    copyFileSync(join(import.meta.dir, "../fixtures/embed/subset.wcpack"), modelPath(dataDir));
+    const db = openDb({ dataDir, busyTimeoutMs: 2000 });
+    const id = seed(
+      db,
+      "A hook must never exit with code 2.",
+      "Claude Code treats exit code 2 as a request to block the user's action.",
+      { kind: "gotcha" },
+    );
+    writeMemoryVector(
+      db,
+      loadModel({ dataDir, env: {} }),
+      id,
+      "A hook must never exit with code 2.",
+      "Claude Code treats exit code 2 as a request to block the user's action.",
+    );
+    db.close();
+    // Shares no word with the memory.
+    const q = encodeURIComponent(
+      "o agente bloqueia a ação do utilizador quando o nosso script termina mal",
+    );
+    const without = await start({ env: { WIZARDINGCODE_MEM_SEMANTIC: "off" } });
+    const none = (await (
+      await api(without, `/api/memories?project=${projectId}&q=${q}`)
+    ).json()) as {
+      items: { id: number }[];
+    };
+    expect(none.items.map((m) => m.id)).not.toContain(id);
+    await without.stop();
+    const s = await start({ env: {} });
+    const list = (await (await api(s, `/api/memories?project=${projectId}&q=${q}`)).json()) as {
+      items: { id: number }[];
+    };
+    expect(list.items.map((m) => m.id)).toContain(id);
+    const hits = (await (await api(s, `/api/search?q=${q}`)).json()) as { id: number }[];
+    expect(hits.map((hit) => hit.id)).toContain(id);
   });
 
   test("a memory can be edited: title, body, kind and importance; the judge becomes the user", async () => {
@@ -795,5 +860,194 @@ describe("wizardingcode-mem ui: lifecycle", () => {
     await api(s, "/api/overview");
     await Bun.sleep(150);
     expect(idle).toBe(1);
+  });
+});
+
+describe("wizardingcode-mem ui: semantic search", () => {
+  const post = (s: UiServer, path: string) => api(s, path, { method: "POST", body: "{}" });
+  const placeModel = () => {
+    mkdirSync(join(dataDir, "models"), { recursive: true });
+    copyFileSync(join(import.meta.dir, "../fixtures/embed/subset.wcpack"), modelPath(dataDir));
+  };
+  const hold = (key: string, until = NOW + 60_000) => {
+    const db = openDb({ dataDir, busyTimeoutMs: 2000 });
+    setMeta(db, key, JSON.stringify({ owner: `${process.pid}-x`, until }));
+    db.close();
+  };
+  const startSpying = async (env: Record<string, string | undefined> = {}) => {
+    const spawned: string[][] = [];
+    const s = await start({ env, spawn: (...args: string[]) => void spawned.push(args) });
+    return { s, spawned };
+  };
+  type SemanticState = {
+    model: {
+      present: boolean;
+      bytes: number;
+      expectedBytes: number;
+      enabled: boolean;
+      source: string;
+      problem: string | null;
+    };
+    download: { running: boolean; done: number; total: number; error: string | null };
+    backfill: { running: boolean };
+    memories: { active: number; withVectors: number };
+  };
+  const state = async (s: UiServer) =>
+    (await (await api(s, "/api/semantic")).json()) as SemanticState;
+
+  test("every route needs the token", async () => {
+    const s = await start({ env: {} });
+    expect((await fetch(`${s.origin}/api/semantic`)).status).toBe(401);
+    for (const path of ["download", "on", "off", "delete"]) {
+      expect((await fetch(`${s.origin}/api/semantic/${path}`, { method: "POST" })).status).toBe(
+        401,
+      );
+    }
+  });
+
+  test("the state without a model: not downloaded, the size to expect, no vectors", async () => {
+    const { s } = await startSpying();
+    const got = await state(s);
+    expect(got.model).toMatchObject({ present: false, bytes: 0, enabled: true, problem: null });
+    expect(got.model.expectedBytes).toBeGreaterThan(100_000_000);
+    expect(got.download).toEqual({ running: false, done: 0, total: 0, error: null });
+    expect(got.backfill).toEqual({ running: false });
+    // Two active in the project, one in the other; the archived one does not count.
+    expect(got.memories).toEqual({ active: 3, withVectors: 0 });
+  });
+
+  test("with the model: present, and the memories that have a vector of it", async () => {
+    placeModel();
+    const db = openDb({ dataDir, busyTimeoutMs: 2000 });
+    const model = loadModel({ dataDir, env: {} });
+    writeMemoryVector(db, model, 1, "The cart total is rounded once, at the end.", "x");
+    // The archived memory's vector is not counted.
+    writeMemoryVector(db, model, 3, "Ran the formatter on three files.", "");
+    db.close();
+    const { s } = await startSpying();
+    const got = await state(s);
+    expect(got.model.present).toBe(true);
+    expect(got.model.bytes).toBeGreaterThan(0);
+    expect(got.memories).toEqual({ active: 3, withVectors: 1 });
+  });
+
+  test("download starts the download and then the backfill, detached; once at a time", async () => {
+    const { s, spawned } = await startSpying();
+    expect(await (await post(s, "/api/semantic/download")).json()).toEqual({ started: true });
+    expect(spawned).toEqual([["embed", "download", "--backfill"]]);
+    hold("embed.download.lease");
+    expect(await (await post(s, "/api/semantic/download")).json()).toEqual({ started: false });
+    hold("embed.download.lease", NOW - 1000);
+    hold("embed.lease");
+    expect(await (await post(s, "/api/semantic/download")).json()).toEqual({ started: false });
+    expect(spawned).toHaveLength(1);
+  });
+
+  test("backfill starts alone when the model is there, once at a time", async () => {
+    const { s, spawned } = await startSpying();
+    expect((await post(s, "/api/semantic/backfill")).status).toBe(409);
+    placeModel();
+    expect(await (await post(s, "/api/semantic/backfill")).json()).toEqual({ started: true });
+    hold("embed.lease");
+    expect(await (await post(s, "/api/semantic/backfill")).json()).toEqual({ started: false });
+    expect(spawned).toEqual([["embed", "backfill"]]);
+    expect((await fetch(`${s.origin}/api/semantic/backfill`, { method: "POST" })).status).toBe(401);
+  });
+
+  test("the state carries the download's progress and its last error", async () => {
+    const { s } = await startSpying();
+    const db = openDb({ dataDir, busyTimeoutMs: 2000 });
+    setMeta(db, "embed.download.done", "1000");
+    setMeta(db, "embed.download.total", "4000");
+    setMeta(db, "embed.download.error", "download failed: offline");
+    db.close();
+    hold("embed.download.lease");
+    hold("embed.lease");
+    const got = await state(s);
+    expect(got.download).toEqual({
+      running: true,
+      done: 1000,
+      total: 4000,
+      error: "download failed: offline",
+    });
+    expect(got.backfill).toEqual({ running: true });
+  });
+
+  test("off and on save the setting; the environment still wins", async () => {
+    const { s } = await startSpying();
+    const off = (await (await post(s, "/api/semantic/off")).json()) as SemanticState;
+    expect(off.model).toMatchObject({ enabled: false, source: "file" });
+    expect((await state(s)).model.enabled).toBe(false);
+    const on = (await (await post(s, "/api/semantic/on")).json()) as SemanticState;
+    expect(on.model.enabled).toBe(true);
+    await s.stop();
+    const pinned = await startSpying({ WIZARDINGCODE_MEM_SEMANTIC: "on" });
+    const still = (await (await post(pinned.s, "/api/semantic/off")).json()) as SemanticState;
+    expect(still.model).toMatchObject({ enabled: true, source: "env" });
+  });
+
+  test("delete removes the model, the memory vectors and the past turns' vectors", async () => {
+    placeModel();
+    const db = openDb({ dataDir, busyTimeoutMs: 2000 });
+    writeMemoryVector(db, loadModel({ dataDir, env: {} }), 1, "t", "b");
+    db.close();
+    const hdb = openHistoryDb(dataDir, { create: true }) as NonNullable<
+      ReturnType<typeof openHistoryDb>
+    >;
+    hdb.run(
+      "INSERT INTO files (path, agent, size, mtime, indexed_at) VALUES ('/t', 'codex', 1, 1, 1)",
+    );
+    hdb.run(
+      `INSERT INTO turns (id, path, agent, session_id, turn_id, project_id, project_name, cwd, started_at, ended_at, prompt, final_text)
+       VALUES (1, '/t', 'codex', 's', 't', NULL, 'p', '/', 1, 1, 'q', 'a')`,
+    );
+    hdb.run("INSERT INTO turn_vectors (turn_id, model, scale, vec) VALUES (1, 'm', 1, x'00')");
+    hdb.close();
+    const { s } = await startSpying();
+    hold("embed.lease");
+    expect((await post(s, "/api/semantic/delete")).status).toBe(409);
+    expect(existsSync(modelPath(dataDir))).toBe(true);
+    hold("embed.lease", NOW - 1000);
+    hold("embed.download.lease");
+    expect((await post(s, "/api/semantic/delete")).status).toBe(409);
+    hold("embed.download.lease", NOW - 1000);
+    const gone = await post(s, "/api/semantic/delete");
+    expect(gone.status).toBe(200);
+    expect(((await gone.json()) as SemanticState).model.present).toBe(false);
+    expect(existsSync(modelPath(dataDir))).toBe(false);
+    const check = openDb({ dataDir, busyTimeoutMs: 2000 });
+    expect(check.query("SELECT count(*) AS n FROM memory_vectors").get()).toEqual({ n: 0 });
+    check.close();
+    const after = openHistoryDb(dataDir, { create: false }) as NonNullable<
+      ReturnType<typeof openHistoryDb>
+    >;
+    expect(after.query("SELECT count(*) AS n FROM turn_vectors").get()).toEqual({ n: 0 });
+    expect(after.query("SELECT count(*) AS n FROM turns").get()).toEqual({ n: 1 });
+    after.close();
+  });
+
+  test("delete is refused while a history run holds its lease", async () => {
+    placeModel();
+    const { s } = await startSpying();
+    hold("history.lease");
+    const refused = await post(s, "/api/semantic/delete");
+    expect(refused.status).toBe(409);
+    expect(((await refused.json()) as { error: string }).error).toContain("history run");
+    expect(existsSync(modelPath(dataDir))).toBe(true);
+  });
+
+  test("download honours the switch: refused while semantic search is off", async () => {
+    const { s, spawned } = await startSpying({ WIZARDINGCODE_MEM_SEMANTIC: "off" });
+    const refused = await post(s, "/api/semantic/download");
+    expect(refused.status).toBe(409);
+    expect(((await refused.json()) as { error: string }).error).toContain("turned off");
+    expect(spawned).toEqual([]);
+  });
+
+  test("delete never creates the history index", async () => {
+    placeModel();
+    const { s } = await startSpying();
+    expect((await post(s, "/api/semantic/delete")).status).toBe(200);
+    expect(existsSync(join(dataDir, "history.db"))).toBe(false);
   });
 });

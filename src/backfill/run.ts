@@ -6,6 +6,7 @@ import { listCodexTranscripts, readCodexHistory } from "../adapters/codex/histor
 import { ADAPTERS } from "../adapters/index.ts";
 import type { ProjectRef } from "../core/project.ts";
 import { drainQueue } from "../distill/queue.ts";
+import type { Model } from "../embed/model.ts";
 import type { Judge } from "../judge/types.ts";
 import type { Db } from "../store/db.ts";
 import { enqueueHistory } from "./enqueue.ts";
@@ -43,7 +44,18 @@ const READERS = {
  * it again continues where it stopped.
  */
 export async function runBackfill(
-  deps: { db: Db; judge: Judge; now: () => number; roots: { claudeCode: string; codex: string } },
+  deps: {
+    db: Db;
+    judge: Judge;
+    now: () => number;
+    roots: { claudeCode: string; codex: string };
+    /**
+     * The semantic model, when present: history memories get their vector as they are written.
+     * A getter is asked once per batch, so a model that arrives mid-run (a download that finishes
+     * after the import started) is used from the next batch on.
+     */
+    model?: Model | null | (() => Model | null);
+  },
   options: {
     days: number;
     maxMs: number;
@@ -90,7 +102,13 @@ export async function runBackfill(
   while (deps.now() - started < options.maxMs) {
     options.onProgress?.();
     const drained = await drainQueue(
-      { db: deps.db, judge: deps.judge, adapters: ADAPTERS, now: deps.now },
+      {
+        db: deps.db,
+        judge: deps.judge,
+        adapters: ADAPTERS,
+        now: deps.now,
+        model: typeof deps.model === "function" ? deps.model() : (deps.model ?? null),
+      },
       { owner, maxTurns: BATCH, maxMs: Math.max(1000, options.maxMs - (deps.now() - started)) },
     );
     report.distilled += drained.done + drained.skipped;

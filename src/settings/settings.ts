@@ -10,6 +10,7 @@ export { ENV_FILE };
 export const SETTING_KEYS = [
   "TYPESAFE_API_KEY",
   "WIZARDINGCODE_MEM_TYPESAFE",
+  "WIZARDINGCODE_MEM_SEMANTIC",
   "WIZARDINGCODE_MEM_RETENTION_DAYS",
   "WIZARDINGCODE_MEM_HISTORY_DAYS",
   "WIZARDINGCODE_MEM_UI_AUTO_OPEN",
@@ -34,6 +35,8 @@ export interface Settings {
   typesafeKey: string | null;
   /** `off` keeps the heuristic judge even with a key configured. */
   typesafe: "on" | "off";
+  /** `off` never loads the embedding model, even when it is installed. */
+  semantic: "on" | "off";
   retentionDays: number;
   /** How far back history is distilled. Older history is only indexed. */
   historyDays: number;
@@ -108,6 +111,7 @@ export function loadSettings(env: Env = process.env, dataDir: string): Settings 
   return {
     typesafeKey: value("TYPESAFE_API_KEY"),
     typesafe: onOff(value("WIZARDINGCODE_MEM_TYPESAFE"), true) ? "on" : "off",
+    semantic: onOff(value("WIZARDINGCODE_MEM_SEMANTIC"), true) ? "on" : "off",
     retentionDays: integer(
       value("WIZARDINGCODE_MEM_RETENTION_DAYS"),
       RETENTION,
@@ -153,6 +157,7 @@ const S3_URL = /^s3:\/\/[a-z0-9][a-z0-9.-]{1,61}[a-z0-9](\/[^\s]*)?$/i;
 const RULES: Record<SettingKey, (value: string) => string | null> = {
   TYPESAFE_API_KEY: (v) => (v === "" ? "the key cannot be empty; clear it instead" : null),
   WIZARDINGCODE_MEM_TYPESAFE: (v) => (v === "on" || v === "off" ? null : "on or off"),
+  WIZARDINGCODE_MEM_SEMANTIC: (v) => (v === "on" || v === "off" ? null : "on or off"),
   WIZARDINGCODE_MEM_RETENTION_DAYS: (v) =>
     /^\d+$/.test(v) && Number(v) >= RETENTION.min && Number(v) <= RETENTION.max
       ? null
@@ -244,6 +249,7 @@ export function publicSettings(env: Env = process.env, dataDir: string): PublicS
   const settings = loadSettings(env, dataDir);
   const defaults: Partial<Record<SettingKey, string>> = {
     WIZARDINGCODE_MEM_TYPESAFE: settings.typesafe,
+    WIZARDINGCODE_MEM_SEMANTIC: settings.semantic,
     WIZARDINGCODE_MEM_RETENTION_DAYS: String(settings.retentionDays),
     WIZARDINGCODE_MEM_HISTORY_DAYS: String(settings.historyDays),
     WIZARDINGCODE_MEM_UI_AUTO_OPEN: settings.uiAutoOpen ? "on" : "off",

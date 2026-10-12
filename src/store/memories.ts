@@ -1,5 +1,7 @@
 import type { Redacted } from "../core/redact.ts";
 import type { MemoryKind } from "../core/types.ts";
+import type { Model } from "../embed/model.ts";
+import { refreshMemoryVector, writeMemoryVector } from "../embed/vectors.ts";
 import { anyOf, inProject, tokens } from "../util/words.ts";
 import type { Db } from "./db.ts";
 
@@ -35,8 +37,9 @@ function insertFiles(db: Db, memoryId: number, files: NewMemory["files"]): void 
 /**
  * Stores a memory with its file anchors. Storing the memory of a turn that already
  * has one updates that memory and returns its id: a turn yields one memory, its latest.
+ * With the semantic model, the memory's vector is written in the same transaction.
  */
-export function insertMemory(db: Db, memory: NewMemory): number {
+export function insertMemory(db: Db, memory: NewMemory, model: Model | null = null): number {
   const inserted = db
     .query<{ id: number }, (string | number | null)[]>(
       `INSERT INTO memories (project_id, kind, title, body, terms, importance, branch, commit_sha,
@@ -83,10 +86,12 @@ export function insertMemory(db: Db, memory: NewMemory): number {
     );
     db.run("DELETE FROM memory_files WHERE memory_id = ?", [existing.id]);
     insertFiles(db, existing.id, memory.files);
+    refreshMemoryVector(db, model, existing.id);
     return existing.id;
   }
 
   insertFiles(db, inserted.id, memory.files);
+  writeMemoryVector(db, model, inserted.id, memory.title, memory.body);
   if (memory.sourceTurnId !== null) {
     db.run("INSERT INTO memory_sources (memory_id, turn_id, relation) VALUES (?, ?, 'origin')", [
       inserted.id,

@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveProject } from "../../src/core/project.ts";
 import type { Redacted } from "../../src/core/redact.ts";
 import type { MemoryKind } from "../../src/core/types.ts";
+import { loadModel, modelPath } from "../../src/embed/model.ts";
 import { heuristicJudge } from "../../src/judge/heuristic.ts";
 import { getMemories, saveMemory, searchMemories } from "../../src/mcp/tools.ts";
 import { refreshStaleness } from "../../src/retrieve/staleness.ts";
@@ -172,6 +173,19 @@ describe("memory_save", () => {
         "SELECT kind, title, body, origin, importance, status, evidence_count FROM memories ORDER BY id",
       )
       .all();
+
+  test("with the semantic model, a saved memory gets its vector", async () => {
+    mkdirSync(join(dataDir, "models"), { recursive: true });
+    copyFileSync(join(import.meta.dir, "../fixtures/embed/subset.wcpack"), modelPath(dataDir));
+    const model = loadModel({ dataDir, env: {} });
+    expect(model).not.toBeNull();
+    const out = await saveMemory(
+      { ...context(), model },
+      { text: "Never mock the database in these tests.", kind: "convention" },
+    );
+    expect(out).toStartWith("Saved as #");
+    expect(db.query("SELECT model FROM memory_vectors").all()).toEqual([{ model: model?.id }]);
+  });
 
   test("stores what the agent was told to remember, title first", async () => {
     expect(

@@ -11,6 +11,7 @@ import Health from "./settings/Health.vue";
 import History from "./settings/History.vue";
 import Judge from "./settings/Judge.vue";
 import Retention from "./settings/Retention.vue";
+import Semantic from "./settings/Semantic.vue";
 import Storage from "./settings/Storage.vue";
 import Team from "./settings/Team.vue";
 import Viewer from "./settings/Viewer.vue";
@@ -31,8 +32,8 @@ const AGENT_CHECKS = ["Claude Code", "Claude Desktop", "Codex", "Cursor", "OpenC
 const agentChecks = computed(() => (checks.value ?? []).filter((c) => AGENT_CHECKS.includes(c.name)));
 const healthChecks = computed(() => (checks.value ?? []).filter((c) => !AGENT_CHECKS.includes(c.name)));
 
-type Page = "agents" | "health" | "judge" | "retention" | "history" | "storage" | "backups" | "viewer" | "team" | "about";
-const PAGES: Page[] = ["agents", "health", "judge", "retention", "history", "storage", "backups", "viewer", "team", "about"];
+type Page = "agents" | "health" | "judge" | "retention" | "history" | "semantic" | "storage" | "backups" | "viewer" | "team" | "about";
+const PAGES: Page[] = ["agents", "health", "judge", "retention", "history", "semantic", "storage", "backups", "viewer", "team", "about"];
 // #settings/<page> opens that page (a link from the offer, or from elsewhere).
 const linked = /^#settings\/([a-z]+)$/.exec(location.hash)?.[1] as Page | undefined;
 const page = ref<Page>(linked && PAGES.includes(linked) ? linked : "agents");
@@ -50,6 +51,7 @@ const GROUPS = computed<{ label: string; items: { id: Page; label: string; icon:
       { id: "judge", label: "Judge", icon: "i-lucide-scale" },
       { id: "retention", label: "Retention", icon: "i-lucide-timer" },
       { id: "history", label: "History", icon: "i-lucide-history" },
+      { id: "semantic", label: "Search", icon: "i-lucide-brain" },
     ],
   },
   {
@@ -101,6 +103,7 @@ const GROUPS = computed<{ label: string; items: { id: Page; label: string; icon:
           <Judge v-else-if="page === 'judge'" />
           <Retention v-else-if="page === 'retention'" />
           <History v-else-if="page === 'history'" />
+          <Semantic v-else-if="page === 'semantic'" />
           <Storage v-else-if="page === 'storage'" />
           <Backups v-else-if="page === 'backups'" />
           <Viewer v-else-if="page === 'viewer'" />

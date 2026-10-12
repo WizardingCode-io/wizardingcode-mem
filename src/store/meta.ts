@@ -23,6 +23,9 @@ export function setMeta(db: Db, key: string, value: string): void {
 export const DRAIN_LEASE = "drain.lease";
 export const BACKUP_LEASE = "backup.lease";
 export const HISTORY_LEASE = "history.lease";
+export const EMBED_LEASE = "embed.lease";
+/** Held by `embed download` while it fetches the model: one download at a time. */
+export const EMBED_DOWNLOAD_LEASE = "embed.download.lease";
 
 interface Lease {
   owner: string;
@@ -88,6 +91,26 @@ export function releaseLease(db: Db, key: string, owner: string): void {
   });
 }
 
+/**
+ * Passes work from one lease to the next in a single write: `to` is claimed for `owner`
+ * before `from` is released, so no reader ever sees neither held. False when another process
+ * holds `to` (`from` is released all the same).
+ */
+export function handOverLease(
+  db: Db,
+  from: string,
+  to: string,
+  owner: string,
+  now: number,
+  leaseMs: number,
+): boolean {
+  return withWrite(db, () => {
+    const claimed = claimLease(db, to, owner, now, leaseMs);
+    releaseLease(db, from, owner);
+    return claimed;
+  });
+}
+
 export const drainActive = (db: Db, now: number): boolean => leaseActive(db, DRAIN_LEASE, now);
 export const claimDrain = (db: Db, owner: string, now: number, leaseMs: number): boolean =>
   claimLease(db, DRAIN_LEASE, owner, now, leaseMs);
@@ -98,6 +121,10 @@ export function anyLeaseActive(db: Db, now: number): boolean {
   return (
     leaseActive(db, DRAIN_LEASE, now) ||
     leaseActive(db, BACKUP_LEASE, now) ||
-    leaseActive(db, HISTORY_LEASE, now)
+    leaseActive(db, HISTORY_LEASE, now) ||
+    leaseActive(db, EMBED_LEASE, now) ||
+    // A download ends in a backfill on this store: moving it mid-download would leave the
+    // backfill a stale path.
+    leaseActive(db, EMBED_DOWNLOAD_LEASE, now)
   );
 }

@@ -7,9 +7,18 @@ import {
 import { listCodexTranscripts, readCodexHistory } from "../adapters/codex/history.ts";
 import { isFromTheHost } from "../core/host-prompt.ts";
 import { type ProjectRef, resolveProject } from "../core/project.ts";
+import type { Model } from "../embed/model.ts";
 import { FINAL_TEXT_MAX_CHARS, PROMPT_MAX_CHARS, stored } from "../hooks/handle.ts";
 import type { Db } from "../store/db.ts";
 import { logError } from "../util/log.ts";
+import {
+  ensureTurnVectors,
+  fillTurnVectors,
+  putTurnVector,
+  TRANSCRIPT_EMBED_MAX,
+  turnText,
+  turnVector,
+} from "./vectors.ts";
 
 type Agent = "claude-code" | "codex";
 
@@ -33,7 +42,7 @@ export function indexTranscript(
   main: Db,
   agent: Agent,
   path: string,
-  options: { now: number; projects: Map<string, ProjectRef> },
+  options: { now: number; projects: Map<string, ProjectRef>; model?: Model | null },
 ): number {
   const stat = statSync(path);
   const turns = (
@@ -57,6 +66,22 @@ export function indexTranscript(
       },
     ];
   });
+  // Vectors are made before the write transaction (embedding is the slow part), for this
+  // transcript's own turns only and at most TRANSCRIPT_EMBED_MAX of them; the index pass
+  // fills the rest. A failure leaves the turn without a vector, which the fill writes later.
+  const model = options.model ?? null;
+  const vectors = new Map<number, ReturnType<typeof turnVector>>();
+  if (model !== null) {
+    try {
+      rows.slice(0, TRANSCRIPT_EMBED_MAX).forEach((row, at) => {
+        vectors.set(at, turnVector(model, turnText(row.prompt, row.final)));
+      });
+      ensureTurnVectors(hdb);
+    } catch (error) {
+      vectors.clear();
+      logError("history-vectors", error);
+    }
+  }
   hdb
     .transaction(() => {
       hdb.run("DELETE FROM files WHERE path = ?", [path]); // cascades; triggers clean turns_fts
@@ -67,8 +92,8 @@ export function indexTranscript(
         Math.trunc(stat.mtimeMs),
         options.now,
       ]);
-      for (const { turn, project, prompt, final } of rows) {
-        hdb.run(
+      rows.forEach(({ turn, project, prompt, final }, at) => {
+        const inserted = hdb.run(
           `INSERT INTO turns (path, agent, session_id, turn_id, project_id, project_name, cwd,
                               started_at, ended_at, prompt, final_text)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -86,7 +111,11 @@ export function indexTranscript(
             final,
           ],
         );
-      }
+        const vector = vectors.get(at);
+        if (model !== null && vector !== undefined) {
+          putTurnVector(hdb, model, Number(inserted.lastInsertRowid), vector);
+        }
+      });
     })
     .immediate();
   return rows.length;
@@ -100,7 +129,14 @@ export function indexAll(
   hdb: Database,
   main: Db,
   roots: { claudeCode: string; codex: string },
-  options: { now: number; maxMs: number; agents: Agent[]; onProgress?: () => void },
+  options: {
+    now: number;
+    maxMs: number;
+    agents: Agent[];
+    onProgress?: () => void;
+    /** With a model, turns without a vector of it are embedded after the files (bounded). */
+    model?: Model | null;
+  },
 ): IndexReport {
   const report: IndexReport = {
     files: 0,
@@ -150,6 +186,7 @@ export function indexAll(
         report.turns += indexTranscript(hdb, main, agent, path, {
           now: options.now,
           projects,
+          model: options.model,
         });
         report.indexed++;
       } catch (error) {
@@ -172,5 +209,11 @@ export function indexAll(
       logError("history-index", error);
     }
   }
+  // The turns indexed earlier, or by a process without the model, get their vectors now: a
+  // bounded amount per pass, in the time left, so no single run is long.
+  fillTurnVectors(hdb, options.model ?? null, {
+    deadline,
+    onProgress: options.onProgress,
+  });
   return report;
 }

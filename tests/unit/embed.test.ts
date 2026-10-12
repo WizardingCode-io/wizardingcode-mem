@@ -2,7 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { cosine, dequantize, embed, quantize } from "../../src/embed/embed.ts";
+import {
+  cosine,
+  dequantize,
+  embed,
+  quantize,
+  resetFailureLogForTests,
+} from "../../src/embed/embed.ts";
 import { openPack } from "../../src/embed/pack.ts";
 
 const fixtures = join(import.meta.dir, "../fixtures/embed");
@@ -103,6 +109,7 @@ describe("guards", () => {
     const dataDir = mkdtempSync(join(tmpdir(), "wcmem-embed-log-"));
     const saved = process.env.WIZARDINGCODE_MEM_DATA_DIR;
     process.env.WIZARDINGCODE_MEM_DATA_DIR = dataDir;
+    resetFailureLogForTests();
     try {
       const broken = {
         ...pack,

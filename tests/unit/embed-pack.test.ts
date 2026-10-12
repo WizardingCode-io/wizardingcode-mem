@@ -1,7 +1,9 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import {
   appendFileSync,
+  mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   renameSync,
   rmSync,
@@ -209,6 +211,38 @@ describe("embed pack", () => {
     expect(Array.from(openPack(path2).ok ? (openPack(path2) as any).pack.charsmap : [])).toEqual([
       1, 2, 3, 4, 5,
     ]);
+  });
+
+  test("a write through a private mapping never reaches the file", () => {
+    const path2 = make("private.wcpack", pieces);
+    const before = readFileSync(path2);
+    const bytes = Bun.mmap(path2, { shared: false }) as Uint8Array;
+    bytes[bytes.length - 1] = bytes[bytes.length - 1]! ^ 0xff;
+    expect(readFileSync(path2).equals(before)).toBe(true);
+  });
+
+  test("a header that is JSON null, or not an object, is refused without throwing", () => {
+    for (const json of ["null", "7", '"x"']) {
+      const body = new TextEncoder().encode(json.padEnd(8));
+      const bytes = new Uint8Array(8 + 4 + body.length);
+      bytes.set(new TextEncoder().encode("WCMEMEMB"));
+      new DataView(bytes.buffer).setUint32(8, body.length, true);
+      bytes.set(body, 12);
+      const path2 = join(dir, `hdr-${json.length}-${json[0]}.wcpack`);
+      writeFileSync(path2, bytes);
+      const r = openPack(path2);
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.reason).toBe("bad header");
+    }
+  });
+
+  test("writePack's temporary file is unique and removed when the rename fails", () => {
+    const target = join(dir, "is-a-dir.wcpack");
+    mkdirSync(target);
+    expect(() =>
+      writePack(target, { header: base, charsmap: new Uint8Array(0), pieces }),
+    ).toThrow();
+    expect(readdirSync(dir).filter((f) => f.endsWith(".tmp"))).toEqual([]);
   });
 
   test("without a mapping the whole file is read into memory and answers the same", () => {

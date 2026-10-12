@@ -28,6 +28,7 @@ import type { InstallResult } from "../../install/hooks-file.ts";
 import { findLegacyPlugins } from "../../install/legacy-plugins.ts";
 import { installOpenCode, opencodePluginPath } from "../../install/opencode.ts";
 import { installQwen, qwenContext } from "../../install/qwen.ts";
+import { offerSemanticModelHere } from "../../install/semantic-offer.ts";
 import {
   describeImport,
   describeStop,
@@ -63,7 +64,7 @@ export const AGENT_NAMES: Record<string, string> = {
   antigravity: "Antigravity",
 };
 
-const USAGE = `Usage: wizardingcode-mem install [<agent>] [--binary <path>] [--yes] [--keep-claude-mem] [--no-import] [--import-history | --no-import-history]
+const USAGE = `Usage: wizardingcode-mem install [<agent>] [--binary <path>] [--yes] [--keep-claude-mem] [--no-import] [--import-history | --no-import-history] [--semantic | --no-semantic]
 
   <agent>             claude-code | claude-desktop | codex | cursor | opencode | qwen | droid | copilot | antigravity; none installs for every one found
   --binary <path>     The wizardingcode-mem binary the hooks will run (needed when running from source)
@@ -72,6 +73,8 @@ const USAGE = `Usage: wizardingcode-mem install [<agent>] [--binary <path>] [--y
   --no-import         Do not import claude-mem's memories
   --import-history    Learn from past Claude Code and Codex sessions without asking
   --no-import-history Do not offer to learn from past sessions
+  --semantic          Download the 140 MB search model without asking, so searches also find notes by meaning
+  --no-semantic       Do not offer the search model
 `;
 
 /** The lines every install ends with: where the hooks went, which binary, how MCP stands. */
@@ -188,6 +191,7 @@ export function run(argv: string[]): number {
     // Once per run, not once per agent, and only when an agent whose transcripts are read was installed.
     if (code === 0 && (found.includes("claude-code") || found.includes("codex")))
       offerHistory(rest);
+    if (code === 0) offerSemantic(rest);
     const missing = [...AGENT_ORDER, "claude-desktop" as const]
       .filter((each) => !found.includes(each))
       .map((each) => AGENT_NAMES[each]);
@@ -195,7 +199,9 @@ export function run(argv: string[]): number {
       process.stdout.write(`Not found on this machine: ${missing.join(", ")}\n`);
     return code;
   }
-  return installOne(agent, rest);
+  const code = installOne(agent, rest);
+  if (code === 0) offerSemantic(rest);
+  return code;
 }
 
 /** An old Gemini CLI install of ours: offered for removal, once per run. */
@@ -215,6 +221,15 @@ function offerHistory(rest: string[]): void {
     if (lines.length > 0) process.stdout.write(`${lines.join("\n")}\n`);
   } catch {
     // The offer is a courtesy: a store that cannot be read must not fail the install.
+  }
+}
+
+function offerSemantic(rest: string[]): void {
+  try {
+    const lines = offerSemanticModelHere(rest, confirm);
+    if (lines.length > 0) process.stdout.write(`${lines.join("\n")}\n`);
+  } catch {
+    // A courtesy too: nothing about it may fail the install.
   }
 }
 

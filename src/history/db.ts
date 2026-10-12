@@ -6,6 +6,13 @@ import { HISTORY_DB_FILE, historyDbPath } from "./path.ts";
 
 export { HISTORY_DB_FILE, historyDbPath };
 
+/** A vector per turn, of the model named; made with the schema, or later in an older file. */
+export const TURN_VECTORS_DDL = `
+CREATE TABLE IF NOT EXISTS turn_vectors (
+  turn_id INTEGER PRIMARY KEY REFERENCES turns(id) ON DELETE CASCADE,
+  model TEXT NOT NULL, scale REAL NOT NULL, vec BLOB NOT NULL
+);`;
+
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS files (
   path TEXT PRIMARY KEY, agent TEXT NOT NULL, size INTEGER NOT NULL, mtime INTEGER NOT NULL, indexed_at INTEGER NOT NULL
@@ -30,6 +37,7 @@ END;
 CREATE TRIGGER IF NOT EXISTS turns_fts_delete AFTER DELETE ON turns BEGIN
   INSERT INTO turns_fts(turns_fts, rowid, prompt, final_text) VALUES ('delete', old.id, old.prompt, old.final_text);
 END;
+${TURN_VECTORS_DDL}
 `;
 
 /**
