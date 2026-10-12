@@ -12,7 +12,9 @@ export function compose(
   onError?: (moduleId: string, error: unknown) => void,
 ): string | null {
   const budget = MOMENT_BUDGET[input.moment];
-  const budgets = shares(modules, budget);
+  // The blank lines between contributions are text too: set their worst case aside first.
+  const speaking = modules.filter((module) => module.contribute !== undefined).length;
+  const budgets = shares(modules, budget, 2 * Math.max(0, speaking - 1));
   const parts: string[] = [];
   for (const [i, module] of modules.entries()) {
     if (module.contribute === undefined) continue;
@@ -35,10 +37,10 @@ export function compose(
  * Each module's characters for one moment, by position. Declared shares are taken first,
  * in order, each at most what the earlier ones left; then a "remainder" module gets what
  * is left over. Counted in characters, so rounding can never make them sum above the
- * budget. A module that never contributes takes nothing.
+ * budget once the separators are paid for. A module that never contributes takes nothing.
  */
-function shares(modules: readonly EngineModule[], budget: number): number[] {
-  let left = budget;
+function shares(modules: readonly EngineModule[], budget: number, separators: number): number[] {
+  let left = Math.max(0, budget - separators);
   const out = modules.map((module) => {
     if (module.contribute === undefined || module.share === "remainder") return 0;
     const chars = Math.min(left, Math.floor(clampShare(module.share) * budget));

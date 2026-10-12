@@ -53,6 +53,23 @@ describe("compose", () => {
     expect(out).toBe("first\n\nsecond");
   });
 
+  test("the blank lines between contributions come out of the budget, so the text fits it", () => {
+    // Modules that fill whatever they are given.
+    const fill = (id: string, share: EngineModule["share"]): EngineModule => ({
+      id,
+      name: id,
+      share,
+      contribute: (given) => "x".repeat(given.budgetChars),
+    });
+    const full = [fill("a", 0.4), fill("b", 0.4), fill("c", "remainder")];
+    const out = compose(full, input("prompt"));
+    expect(out?.length).toBeLessThanOrEqual(2400);
+    // Alone, a module still has the whole budget: no separator to pay for.
+    const alone: number[] = [];
+    compose([says("m", "remainder", "x", alone)], input("prompt"));
+    expect(alone).toEqual([2400]);
+  });
+
   test("a module alone with the whole share gets the whole budget, and its text unchanged", () => {
     const budgets: number[] = [];
     const out = compose([says("memory", 1, "  text \n", budgets)], input("session-start"));
@@ -66,7 +83,8 @@ describe("compose", () => {
     const c: number[] = [];
     compose([says("a", 0.7, "x", a), says("b", 0.7, "y", b), says("c", 0.5, "z", c)], input());
     expect(a).toEqual([Math.floor(0.7 * 2400)]);
-    expect(b).toEqual([2400 - Math.floor(0.7 * 2400)]);
+    // Two blank lines between three modules come off the budget first.
+    expect(b).toEqual([2400 - 4 - Math.floor(0.7 * 2400)]);
     expect(c).toEqual([0]);
     expect([...a, ...b, ...c].reduce((sum, n) => sum + n, 0)).toBeLessThanOrEqual(2400);
   });
@@ -76,7 +94,7 @@ describe("compose", () => {
     const b: number[] = [];
     compose([says("a", -1, "x", a), says("b", 5, "y", b)], input("file-read"));
     expect(a).toEqual([0]);
-    expect(b).toEqual([1200]);
+    expect(b).toEqual([1200 - 2]);
   });
 
   test("a contribution longer than its share is dropped whole, never cut", () => {
@@ -173,7 +191,7 @@ describe("compose: the remainder", () => {
     );
     expect(out).toBe("first\n\nsecond");
     expect(other).toEqual([600]);
-    expect(memory).toEqual([1800]);
+    expect(memory).toEqual([1800 - 2]);
   });
 
   test("shares that take the whole budget leave the remainder nothing", () => {
