@@ -16,8 +16,8 @@ export const TOOL_NAMES = ["memory_search", "memory_get", "memory_save", "histor
 /** Claude Desktop's chat has no project folder: there the tools span every project, plus a list of them. */
 export const GLOBAL_TOOL_NAMES = [...TOOL_NAMES, "memory_projects"] as const;
 /**
- * What the MCP server offers inside a project: the tools, and linking projects by hand. The
- * `tool` command (OpenCode's way in) keeps to TOOL_NAMES: linking is the agent's, through MCP.
+ * What the agent gets inside a project, through the MCP server or the `tool` bridge (OpenCode):
+ * the tools, and linking projects by hand.
  */
 export const PROJECT_TOOL_NAMES = [...TOOL_NAMES, "project_links"] as const;
 export type ToolName = (typeof GLOBAL_TOOL_NAMES)[number] | "project_links";

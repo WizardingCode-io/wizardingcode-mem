@@ -85,11 +85,12 @@ ${factoryExport}function createPlugin(deps) {
       run([BINARY, "tool", name, "--project", state(ctx?.sessionID).cwd], JSON.stringify(args ?? {}));
     const tools = toolApi === null ? undefined : {
       memory_search: toolApi({
-        description: "Search notes saved from earlier sessions in this project, by words and, when the optional model is installed, by meaning; returns one heading per note.",
+        description: "Search notes saved from earlier sessions in this project and its linked projects, by words and, when the optional model is installed, by meaning; returns one heading per note.",
         args: {
           query: toolApi.schema.string(),
           kind: toolApi.schema.string().optional(),
           limit: toolApi.schema.number().int().optional(),
+          project: toolApi.schema.string().optional(),
         },
         execute: (args, ctx) => call("memory_search", args, ctx),
       }),
@@ -115,6 +116,16 @@ ${factoryExport}function createPlugin(deps) {
           limit: toolApi.schema.number().int().optional(),
         },
         execute: (args, ctx) => call("history_search", args, ctx),
+      }),
+      project_links: toolApi({
+        description: "List, link or unlink the projects whose notes this project reads (same product, or one it uses), and confirm or reject suggested links; only when the user asks.",
+        args: {
+          action: toolApi.schema.enum(["list", "link", "unlink", "confirm", "reject"]),
+          project: toolApi.schema.string().optional(),
+          kind: toolApi.schema.enum(["product", "uses"]).optional(),
+          id: toolApi.schema.number().int().optional(),
+        },
+        execute: (args, ctx) => call("project_links", args, ctx),
       }),
     };
 
