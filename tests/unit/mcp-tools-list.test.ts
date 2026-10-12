@@ -21,7 +21,7 @@ beforeAll(() => {
     WIZARDINGCODE_HOME: join(base, "home"),
     WIZARDINGCODE_MEM_STORE_DIR: join(base, "store"),
     WIZARDINGCODE_MEM_MIGRATE: "off",
-    WIZARDINGCODE_MODULES: "",
+    WIZARDINGCODE_MODULES: "", // blank means the default, memory
     // Whatever the shell has, nothing here can reach a real home or a real store.
     HOME: join(base, "home"),
     USERPROFILE: join(base, "home"),
@@ -142,7 +142,7 @@ describe("the OpenCode bridge's names with memory alone", () => {
 });
 
 describe("the bridge follows the setting", () => {
-  test("with memory switched off, it offers none of memory's tools", async () => {
+  test("a list without memory still offers memory's tools (memory is always on)", async () => {
     const result = await runCliWith(
       {
         input: JSON.stringify({ query: "x" }),
@@ -153,7 +153,6 @@ describe("the bridge follows the setting", () => {
       "--project",
       join(base, "project"),
     );
-    expect(result.stderr).toContain('unknown tool "memory_search"');
-    expect(result.exitCode).toBe(64);
+    expect(result.stderr).not.toContain("unknown tool");
   });
 });

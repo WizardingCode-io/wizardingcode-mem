@@ -180,12 +180,13 @@ const RULES: Record<SettingKey, (value: string) => string | null> = {
       : `a whole number of days from ${HISTORY_DAYS.min} to ${HISTORY_DAYS.max}`,
   WIZARDINGCODE_MEM_UI_AUTO_OPEN: (v) => (v === "on" || v === "off" ? null : "on or off"),
   WIZARDINGCODE_MEM_STORE_DIR: () => "the store directory is changed by moving the store, not here",
-  WIZARDINGCODE_MODULES: (v) =>
-    moduleList(v)
-      .split(",")
-      .every((id) => MODULE_ID.test(id))
+  WIZARDINGCODE_MODULES: (v) => {
+    const ids = moduleList(v).split(",");
+    if (!ids.every((id) => MODULE_ID.test(id))) return "a comma list of module ids, such as memory";
+    return ids.includes("memory")
       ? null
-      : "a comma list of module ids, such as memory",
+      : "memory is always on in this version: list it first, then the modules to add";
+  },
   WIZARDINGCODE_MEM_BACKUP_TO: (v) =>
     absolutePath(v) || S3_URL.test(v) ? null : "an absolute folder path or s3://bucket/prefix",
   WIZARDINGCODE_MEM_BACKUP_EVERY_HOURS: (v) =>

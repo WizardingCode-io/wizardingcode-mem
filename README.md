@@ -232,7 +232,7 @@ Memories are kept as what they are: a title, a body of sentences that were actua
 
 ## Modules
 
-wizardingcode-mem is one engine with modules: each module can add context at the hook moments, offer tools to the agent and add views to the viewer, all inside one budget. Memory is the one module shipped today; `WIZARDINGCODE_MODULES` (default `memory`) chooses which are on. See [ADR 0019](docs/adr/0019-one-engine.md).
+wizardingcode-mem is one engine with modules: each module can add context at the hook moments, offer tools to the agent and add views to the viewer, all inside one budget. Memory is the one module shipped today; `WIZARDINGCODE_MODULES` (default `memory`) adds modules: memory is always on, and stopping it for a project is the existing per-project "memory off". See [ADR 0019](docs/adr/0019-one-engine.md).
 
 ## The viewer
 

@@ -51,9 +51,11 @@ describe("GET /api/modules", () => {
     expect(on[1]?.views).toEqual([ECHO_VIEW]);
   });
 
-  test("a module that is off shows nothing", async () => {
+  test("a module that is off shows nothing, and memory cannot be off", async () => {
     const s = await start({ WIZARDINGCODE_MODULES: "echo" });
-    expect((await modules(s)).map((m) => m.id)).toEqual(["echo"]);
+    expect((await modules(s)).map((m) => m.id)).toEqual(["memory", "echo"]);
+    const alone = await start({ WIZARDINGCODE_MODULES: "knowledge" });
+    expect((await modules(alone)).map((m) => m.id)).toEqual(["memory"]);
   });
 
   test("behind the token, like every other route", async () => {

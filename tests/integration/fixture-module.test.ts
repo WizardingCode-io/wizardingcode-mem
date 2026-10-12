@@ -168,9 +168,10 @@ describe("a second module", () => {
     expect(moments(off.hook, off.project)).toEqual(moments(alone.hook, alone.project));
   });
 
-  test("with memory left off, nothing is injected", () => {
-    const none = world(enabledModules("knowledge", [memory], () => {}));
-    expect(moments(none.hook, none.project)).toEqual(["", "", "", ""]);
+  test("a list without memory still injects memory's text", () => {
+    const alone = world([memory]);
+    const kept = world(enabledModules("knowledge", [memory], () => {}));
+    expect(moments(kept.hook, kept.project)).toEqual(moments(alone.hook, alone.project));
   });
 });
 
@@ -215,10 +216,12 @@ describe("WIZARDINGCODE_MODULES through the hook command", () => {
     expect(out.stdout).toContain("Run the pinned bun for tests");
   });
 
-  test("a list without memory, from the file: nothing injected, exit 0, the unknown id logged", async () => {
+  test("a list without memory, from the file: memory still injects, exit 0, the unknown id logged", async () => {
     const { dir, project } = dataDir();
     writeFileSync(join(dir, "env"), "WIZARDINGCODE_MODULES=knowledge\n");
-    expect(await run(dir, project)).toEqual({ exitCode: 0, stdout: "", stderr: "" });
+    const out = await run(dir, project);
+    expect(out.exitCode).toBe(0);
+    expect(out.stdout).toContain("Run the pinned bun for tests");
     const log = join(dir, "logs", "wizardingcode-mem.log");
     expect(existsSync(log) && readFileSync(log, "utf8")).toContain("unknown module: knowledge");
   });

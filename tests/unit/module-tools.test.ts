@@ -36,7 +36,7 @@ describe("tools come from the modules", () => {
         enabledModules("echo", both, () => {}),
         "project",
       ),
-    ).toEqual(["echo_say"]);
+    ).toEqual([...PROJECT, "echo_say"]);
   });
 
   test("global mode is unchanged by a module without global tools", async () => {

@@ -137,6 +137,14 @@ describe("WIZARDINGCODE_MODULES", () => {
     });
   });
 
+  test("refuses a list without memory, which cannot be switched off", () => {
+    for (const value of ["knowledge", "echo,knowledge"]) {
+      const result = validatePatch({ WIZARDINGCODE_MODULES: value });
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.errors.WIZARDINGCODE_MODULES).toContain("memory");
+    }
+  });
+
   test("rejects what is not a list of module ids", () => {
     for (const value of ["", "memory;rm -rf", "memory,,", "mem ory", 3]) {
       const result = validatePatch({ WIZARDINGCODE_MODULES: value });

@@ -53,8 +53,8 @@ describe("enabledModules", () => {
     });
   });
 
-  test("a list without memory leaves memory off", () => {
-    expect(parse("echo").ids).toEqual(["echo"]);
-    expect(parse("knowledge")).toEqual({ ids: [], logged: ["knowledge"] });
+  test("memory is always on: a list without it still has it, first", () => {
+    expect(parse("echo").ids).toEqual(["memory", "echo"]);
+    expect(parse("knowledge")).toEqual({ ids: ["memory"], logged: ["knowledge"] });
   });
 });

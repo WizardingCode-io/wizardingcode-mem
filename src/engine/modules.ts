@@ -12,6 +12,9 @@ export const BUILT_IN: readonly EngineModule[] = [memory];
 /** The modules on when the setting names none: the settings' own default. */
 const DEFAULT_IDS = DEFAULTS.modules.split(",");
 
+/** On whatever the setting says: capture, distilling and the viewer are memory's (ruling F9). */
+const ALWAYS_ON = "memory";
+
 /** The seam for a later licence check: today every built-in module is allowed. */
 export function moduleAllowed(_id: string): boolean {
   return true;
@@ -27,8 +30,8 @@ function logUnknown(id: string): void {
 
 /**
  * The modules on, from `WIZARDINGCODE_MODULES` (a comma list). Unset or blank means the
- * default, memory alone; otherwise exactly the known ids named, so a list without memory
- * leaves it off. Unknown ids are ignored and told once each; duplicates collapse; the
+ * default, memory alone; otherwise the known ids named plus memory, which cannot be switched
+ * off in this version (ruling F9: stopping it for a project is the per-project "memory off"). Unknown ids are ignored and told once each; duplicates collapse; the
  * order is always `available`'s.
  */
 export function enabledModules(
@@ -40,7 +43,7 @@ export function enabledModules(
     .split(",")
     .map((id) => id.trim().toLowerCase())
     .filter((id) => id !== "");
-  const wanted = new Set(named.length === 0 ? DEFAULT_IDS : named);
+  const wanted = new Set([ALWAYS_ON, ...(named.length === 0 ? DEFAULT_IDS : named)]);
   const known = new Set(available.map((module) => module.id));
   for (const id of wanted) if (!known.has(id)) onUnknown(id);
   return available.filter((module) => wanted.has(module.id) && moduleAllowed(module.id));
