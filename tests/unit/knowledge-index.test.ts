@@ -100,6 +100,21 @@ describe("knowledge/index-store", () => {
     expect(searchKnowledge(db, projectId, "retry policy", 1)).toHaveLength(1);
     expect(searchKnowledge(db, projectId, "", 5)).toEqual([]);
     expect(searchKnowledge(db, projectId, '"unbalanced (quote AND OR', 5)).toEqual([]);
+    for (const query of [
+      'retry" OR "x',
+      "retry NEAR(policy) *",
+      "title : retry ^policy",
+      "-retry +policy",
+    ]) {
+      expect(() => searchKnowledge(db, projectId, query, 5)).not.toThrow();
+    }
+  });
+
+  test("an index error gives no results, never an exception", () => {
+    entry("one", { title: "Alpha retry policy" }, "Retry three times.");
+    refreshIndex(db, projectId, dir);
+    db.run("DROP TABLE knowledge_fts");
+    expect(searchKnowledge(db, projectId, "retry policy", 5)).toEqual([]);
   });
 
   test("fingerprint unchanged: no work; force re-reads", () => {

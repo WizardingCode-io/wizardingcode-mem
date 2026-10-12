@@ -146,6 +146,20 @@ export function searchKnowledge(
 ): (KnowledgeEntry & { score: number })[] {
   const match = explicitMatch(query);
   if (match === null || limit <= 0) return [];
+  try {
+    return searchIndex(db, projectId, match, limit);
+  } catch {
+    // A malformed match or a damaged index: no results; the files are still the truth.
+    return [];
+  }
+}
+
+function searchIndex(
+  db: Db,
+  projectId: number,
+  match: string,
+  limit: number,
+): (KnowledgeEntry & { score: number })[] {
   return db
     .query<EntryRow & { bm25: number }, [string, number, number]>(
       `SELECT ${COLUMNS}, f.bm25

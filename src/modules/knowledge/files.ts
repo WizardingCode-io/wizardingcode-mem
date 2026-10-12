@@ -1,5 +1,6 @@
 import {
   closeSync,
+  constants,
   fstatSync,
   openSync,
   readdirSync,
@@ -144,7 +145,13 @@ function readInside(realDir: string, full: string): Read {
   if (!real.startsWith(realDir + sep)) {
     return { refused: "the file is a link to outside the knowledge folder; not read" };
   }
-  const fd = openSync(real, "r");
+  // Only a regular file is opened: opening a FIFO would block the hook until a writer came,
+  // and a folder cannot be opened on Windows.
+  if (!statSync(real).isFile()) return null;
+  // Non-blocking and not through a link, should the path change between the checks (the
+  // flags are absent on Windows, where neither applies).
+  const flags = constants.O_RDONLY | (constants.O_NONBLOCK ?? 0) | (constants.O_NOFOLLOW ?? 0);
+  const fd = openSync(real, flags);
   try {
     const stat = fstatSync(fd);
     if (!stat.isFile()) return null;
@@ -246,6 +253,8 @@ function parseFrontmatter(lines: string[]): Map<string, Value> | number {
     if (raw === "") {
       fields.set(key, []);
       listKey = key;
+    } else if (/^[|>][+-]?\d*$/.test(raw)) {
+      return i + 1; // a block scalar: not part of the subset
     } else if (raw.startsWith("[") && raw.endsWith("]")) {
       const list = flowList(raw);
       if (list === null) return i + 1;
@@ -268,7 +277,12 @@ function split(text: string): { front: string[] | null; body: string; open: bool
   return { front: lines.slice(1, end), body: lines.slice(end + 1).join("\n"), open: false };
 }
 
-const BOOLEAN: Record<string, boolean> = { true: true, yes: true, false: false, no: false };
+const BOOLEAN = new Map([
+  ["true", true],
+  ["yes", true],
+  ["false", false],
+  ["no", false],
+]);
 
 function parseEntry(slug: string, path: string, text: string): KnowledgeEntry {
   const problems: string[] = [];
@@ -286,11 +300,18 @@ function parseEntry(slug: string, path: string, text: string): KnowledgeEntry {
     body: body.trim(),
     problem: null,
   };
-  if (open) problems.push("the frontmatter is never closed (no second ---)");
-  else if (front === null) problems.push("no frontmatter: indexed by its file name");
+  // Frontmatter there but unreadable may have said anything, `status: draft` included:
+  // never put such an entry in front of the agent until it is fixed.
+  if (open) {
+    entry.status = "draft";
+    problems.push("the frontmatter is never closed (no second ---); treated as a draft");
+  } else if (front === null) problems.push("no frontmatter: indexed by its file name");
   const fields = front === null ? null : parseFrontmatter(front);
   if (typeof fields === "number") {
-    problems.push(`frontmatter line ${fields} is not "key: value"; indexed by its file name`);
+    entry.status = "draft";
+    problems.push(
+      `frontmatter line ${fields} is not "key: value"; indexed by its file name, treated as a draft`,
+    );
   } else if (fields !== null) {
     const text = (key: string): string | null => {
       const value = fields.get(key);
@@ -324,7 +345,7 @@ function parseEntry(slug: string, path: string, text: string): KnowledgeEntry {
 
     const essential = text("essential");
     if (essential !== null) {
-      const flag = BOOLEAN[essential.toLowerCase()];
+      const flag = BOOLEAN.get(essential.toLowerCase());
       if (flag === undefined) problems.push(`essential "${essential}" is not true or false`);
       else entry.essential = flag;
     }

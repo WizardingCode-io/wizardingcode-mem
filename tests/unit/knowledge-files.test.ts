@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -124,6 +125,49 @@ describe("knowledge/files", () => {
     expect(entry.body).toContain("The body.");
     expect(entry.problem).toContain("closed");
   });
+
+  test("frontmatter that cannot be read makes the entry a draft, whatever it said", () => {
+    write("open.md", "---\ntitle: Open\nstatus: draft\nkind: rule\nThe body.\n");
+    write("block.md", "---\ntitle: Block\nstatus: draft\nsummary: |\n  a block\n---\nB\n");
+    write("unread.md", "---\ntitle: Unread\nkind: rule\nnot yaml\n---\nB\n");
+    const entries = readEntries(dir);
+    expect(entries.map((entry) => [entry.slug, entry.status])).toEqual([
+      ["block", "draft"],
+      ["open", "draft"],
+      ["unread", "draft"],
+    ]);
+    for (const entry of entries) expect(entry.problem).not.toBeNull();
+  });
+
+  test("a missing frontmatter keeps the entry active (nothing was misread)", () => {
+    write("plain-notes.md", "Some notes.\n");
+    expect(only().status).toBe("active");
+  });
+
+  test("booleans: only true, false, yes, no; never a prototype key", () => {
+    for (const [name, value] of [
+      ["ctor", "constructor"],
+      ["proto", "__proto__"],
+      ["tostring", "toString"],
+    ] as const) {
+      write(`${name}.md`, `---\ntitle: T\nkind: rule\nessential: ${value}\n---\nB\n`);
+    }
+    for (const entry of readEntries(dir)) {
+      expect(entry.essential).toBe(false);
+      expect(entry.problem).toContain("essential");
+    }
+  });
+
+  test.skipIf(process.platform === "win32")(
+    "a FIFO or a folder named *.md is skipped without blocking",
+    () => {
+      expect(spawnSync("mkfifo", [join(dir, "pipe.md")]).status).toBe(0);
+      mkdirSync(join(dir, "folder.md"));
+      write("real.md", "---\ntitle: Real\nkind: rule\n---\nB\n");
+      expect(readEntries(dir).map((entry) => entry.slug)).toEqual(["real"]);
+    },
+    5000,
+  );
 
   test("bad values are flagged; a bad status is never active", () => {
     write(
