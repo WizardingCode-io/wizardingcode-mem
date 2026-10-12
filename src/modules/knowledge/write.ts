@@ -173,15 +173,26 @@ function failure(error: unknown, dir: string): WriteResult {
   throw error;
 }
 
-/** Writes `text` to a hidden temp file in the folder, flushed; returns its path. */
-function tempFile(dir: string, slug: string, text: string, mode = 0o644): string {
+/**
+ * Writes `text` to a hidden temp file in the folder, flushed; returns its path. A new entry
+ * is created 0644 less the umask; a changed one is given the mode the entry had, where the
+ * filesystem allows it (vfat, exFAT and some network mounts refuse chmod: that is no reason
+ * to refuse the write).
+ */
+function tempFile(dir: string, slug: string, text: string, keepMode?: number): string {
   const temp = join(dir, `.${slug}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`);
-  const fd = openSync(temp, "wx", mode);
+  const fd = openSync(temp, "wx", keepMode ?? 0o644);
   try {
     writeSync(fd, text);
     fsyncSync(fd);
-    // The umask may have narrowed it: the entry keeps the mode it had.
-    fchmodSync(fd, mode);
+    if (keepMode !== undefined) {
+      try {
+        // The umask may have narrowed it: the entry keeps the mode it had.
+        fchmodSync(fd, keepMode);
+      } catch {
+        // A filesystem without modes: the file is written all the same.
+      }
+    }
   } catch (error) {
     closeSync(fd);
     rmSync(temp, { force: true });
@@ -217,6 +228,18 @@ export function prepareFolder(
   return { dir };
 }
 
+/**
+ * Why the folder may no longer be written, asked once more right before the entry is put in
+ * place (`folderProblem`): it narrows the window in which a link swapped in after the first
+ * check would be written through. Node cannot hold a folder open to close it entirely.
+ */
+export type FolderGuard = () => string | null;
+
+function lastCheck(guard: FolderGuard | undefined): { refused: string } | null {
+  const problem = guard?.() ?? null;
+  return problem === null ? null : { refused: `${problem} Nothing was written.` };
+}
+
 /** The entry file already there under this name, in any case (case-insensitive disks). */
 function existing(dir: string, slug: string): string | null {
   const wanted = `${slug}.md`.toLowerCase();
@@ -232,13 +255,20 @@ function existing(dir: string, slug: string): string | null {
  * case). The temp file is linked into place, which fails rather than replace a file that
  * appeared meanwhile; where links are not supported, it is renamed after a last check.
  */
-export function writeNewEntry(dir: string, slug: string, text: string): NewResult {
+export function writeNewEntry(
+  dir: string,
+  slug: string,
+  text: string,
+  guard?: FolderGuard,
+): NewResult {
   const path = entryPath(dir, slug);
   let temp: string | null = null;
   try {
     const taken = existing(dir, slug);
     if (taken !== null) return { exists: taken };
     temp = tempFile(dir, slug, text);
+    const late = lastCheck(guard);
+    if (late !== null) return late;
     try {
       linkSync(temp, path);
     } catch (error) {
@@ -283,11 +313,18 @@ export function readForEdit(dir: string, slug: string): { text: string } | { ref
 }
 
 /** Replaces an existing entry's file atomically: temp file, then rename over it. */
-export function replaceEntry(dir: string, slug: string, text: string): WriteResult {
+export function replaceEntry(
+  dir: string,
+  slug: string,
+  text: string,
+  guard?: FolderGuard,
+): WriteResult {
   const path = entryPath(dir, slug);
   let temp: string | null = null;
   try {
     temp = tempFile(dir, slug, text, lstatSync(path).mode & 0o777);
+    const late = lastCheck(guard);
+    if (late !== null) return late;
     renameSync(temp, path);
     temp = null;
     return { path };

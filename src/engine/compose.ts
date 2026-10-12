@@ -21,11 +21,12 @@ export function compose(
   const speaking = modules.filter((module) => module.contribute !== undefined).length;
   const budgets = shares(modules, budget, 2 * Math.max(0, speaking - 1));
   const parts: (string | null)[] = modules.map(() => null);
+  const ids = modules.map((module) => module.id);
   const ask = (i: number, module: EngineModule, budgetChars: number): void => {
     if (module.contribute === undefined) return;
     let text: string | null;
     try {
-      text = module.contribute({ ...input, budgetChars });
+      text = module.contribute({ ...input, budgetChars, modules: ids });
     } catch (error) {
       onError?.(module.id, error);
       return;

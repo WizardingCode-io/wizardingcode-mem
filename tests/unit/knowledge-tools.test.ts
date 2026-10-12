@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
+import * as fs from "node:fs";
 import {
   chmodSync,
   existsSync,
@@ -25,7 +26,7 @@ import {
   searchEntries,
   updateEntry,
 } from "../../src/modules/knowledge/tools.ts";
-import { checkSlug } from "../../src/modules/knowledge/write.ts";
+import { checkSlug, replaceEntry, writeNewEntry } from "../../src/modules/knowledge/write.ts";
 import { type Db, openDb } from "../../src/store/db.ts";
 import { runCliWith } from "../helpers/cli.ts";
 
@@ -619,5 +620,48 @@ describe("writes keep what the author had (fix round 1)", () => {
     handWritten("open", text);
     expect(updateEntry(ctx, { slug: "open", title: "X" })).toMatch(/never closed/);
     expect(readFileSync(join(dir, "open.md"), "utf8")).toBe(text);
+  });
+});
+
+describe("writes on filesystems that refuse chmod, and the last folder check (Task 4)", () => {
+  const eperm = () => {
+    throw Object.assign(new Error("operation not permitted"), { code: "EPERM" });
+  };
+
+  test("a new entry honours the umask: nothing forces its mode", () => {
+    if (process.platform === "win32") return;
+    const before = process.umask(0o077);
+    try {
+      expect(saveEntry(ctx, { title: "Private", kind: "rule", body: "B." })).toMatch(/^Saved/);
+    } finally {
+      process.umask(before);
+    }
+    const { statSync } = require("node:fs") as typeof import("node:fs");
+    expect(statSync(join(dir, "private.md")).mode & 0o777).toBe(0o600);
+  });
+
+  test("save and update still work where chmod is refused (vfat, some SMB/NFS)", () => {
+    const spy = spyOn(fs, "fchmodSync").mockImplementation(eperm);
+    try {
+      expect(saveEntry(ctx, { title: "On vfat", kind: "rule", body: "B." })).toMatch(/^Saved/);
+      expect(updateEntry(ctx, { slug: "on-vfat", title: "Still" })).toMatch(/^Updated/);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(readFileSync(join(dir, "on-vfat.md"), "utf8")).toContain('title: "Still"');
+    expect(readdirSync(dir)).toEqual(["on-vfat.md"]);
+  });
+
+  test("the folder is checked again right before the entry is put in place", () => {
+    mkdirSync(dir, { recursive: true });
+    const refused = writeNewEntry(dir, "late", "text\n", () => "Swapped for a link.");
+    expect(refused).toEqual({ refused: "Swapped for a link. Nothing was written." });
+    expect(readdirSync(dir)).toEqual([]);
+    handWritten("kept", "old\n");
+    expect(replaceEntry(dir, "kept", "new\n", () => "Swapped.")).toEqual({
+      refused: "Swapped. Nothing was written.",
+    });
+    expect(readFileSync(join(dir, "kept.md"), "utf8")).toBe("old\n");
+    expect(readdirSync(dir)).toEqual(["kept.md"]);
   });
 });

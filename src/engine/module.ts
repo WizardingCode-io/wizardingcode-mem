@@ -30,6 +30,11 @@ export interface MomentInput {
   now: number;
   /** This module's share of the moment's budget, in characters. */
   budgetChars: number;
+  /**
+   * The ids of the modules asked at this moment, set by the composer: a module may leave
+   * to another what that one says (memory leaves a promoted memory to knowledge).
+   */
+  modules?: readonly string[];
 }
 
 /** Text already rendered in the module's own wrapper; null or "" contributes nothing. */

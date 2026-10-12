@@ -1,5 +1,6 @@
 import type { MemoryKind } from "../core/types.ts";
 import type { Db } from "../store/db.ts";
+import { logError } from "../util/log.ts";
 import type { Note } from "./render.ts";
 
 export interface MemoryRow {
@@ -58,6 +59,38 @@ export function toNote(db: Db, row: MemoryRow, origin?: string): Note {
   };
   if (origin !== undefined) note.origin = origin;
   return note;
+}
+
+let promotedFailed = false;
+
+/**
+ * The project's memories made knowledge whose entry is still in the project's knowledge
+ * index: the entry says them now, so memory leaves them out. One indexed lookup; when the
+ * entry is gone (its file deleted, the index refreshed) the memory's notes come back. On
+ * any error, none: memory then shows everything, as it did before knowledge.
+ */
+export function promotedIds(db: Db, projectId: number): number[] {
+  try {
+    return db
+      .query<{ id: number }, [number]>(
+        `SELECT p.memory_id AS id FROM promoted_memories p
+           JOIN knowledge_entries e ON e.project_id = p.project_id AND e.slug = p.slug
+          WHERE p.project_id = ?`,
+      )
+      .all(projectId)
+      .map((row) => row.id);
+  } catch (error) {
+    if (!promotedFailed) {
+      promotedFailed = true;
+      logError("knowledge.promoted", error);
+    }
+    return [];
+  }
+}
+
+/** ` AND m.id NOT IN (…)` for those ids, or nothing at all: the query is then as it was. */
+export function exceptIds(ids: readonly number[]): string {
+  return ids.length === 0 ? "" : ` AND m.id NOT IN (${ids.map((n) => Math.trunc(n)).join(", ")})`;
 }
 
 /**

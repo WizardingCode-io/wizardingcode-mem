@@ -148,7 +148,7 @@ export function saveEntry(ctx: KnowledgeContext, args: SaveArgs): string {
     },
     args.body,
   );
-  const result = writeNewEntry(dir, slug, text);
+  const result = writeNewEntry(dir, slug, text, () => problemOf(ctx));
   if ("exists" in result) {
     const existing = result.exists.slice(0, -".md".length);
     return `An entry named "${existing}" already exists; nothing was written. Change it with knowledge_update (slug "${existing}"), or save under another slug.`;
@@ -190,7 +190,7 @@ export function updateEntry(ctx: KnowledgeContext, args: UpdateArgs): string {
   };
   const edited = editEntry(read.text, changes, args.body);
   if ("refused" in edited) return edited.refused;
-  const result = replaceEntry(dir, checked.slug, edited.text);
+  const result = replaceEntry(dir, checked.slug, edited.text, () => problemOf(ctx));
   if ("refused" in result) return result.refused;
   refreshIndex(ctx.db, ctx.projectId, dir, { force: true });
   return `Updated ${checked.slug}: ${result.path}`;

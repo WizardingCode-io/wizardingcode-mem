@@ -61,11 +61,14 @@ describe("module migrations", () => {
         "knowledge_fts",
         "knowledge_state",
         "knowledge_shown",
+        "knowledge_proposals",
+        "promoted_memories",
       ]),
     );
     expect(recorded(db)).toEqual([
       { module: "knowledge", version: 1 },
       { module: "knowledge", version: 2 },
+      { module: "knowledge", version: 3 },
     ]);
     db.close();
   });
@@ -128,6 +131,7 @@ describe("module migrations", () => {
     expect(recorded(db)).toEqual([
       { module: "knowledge", version: 1 },
       { module: "knowledge", version: 2 },
+      { module: "knowledge", version: 3 },
     ]);
     expect(db.query("SELECT count(*) AS n FROM projects").get()).toEqual({ n: 1 });
     db.close();
@@ -180,6 +184,7 @@ describe("module migrations", () => {
       { module: "fake", version: 1 },
       { module: "knowledge", version: 1 },
       { module: "knowledge", version: 2 },
+      { module: "knowledge", version: 3 },
     ]);
     db.close();
   }, 60_000);
