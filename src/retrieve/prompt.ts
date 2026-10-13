@@ -167,6 +167,21 @@ function scoredRules(db: Db, rules: Candidate[], query: Query, context: Context)
   }
 }
 
+/**
+ * Ranking every memory that holds any word of a long prompt costs, in a large project,
+ * more than a prompt's budget: bm25 is computed for each of them, and a word found in
+ * thousands of memories brings thousands. So once the prompt's words are held, together,
+ * by more than POSTINGS_BUDGET memories of the index, its commonest words are left out of
+ * the search, the commonest first, until the rest fit. Only a word held by more than
+ * COMMON_SHARE of the index, and by more than COMMON_FLOOR memories, is left out, and
+ * never an identifier: a short prompt, a small store and a rare word search as before.
+ * A word left out still counts as evidence in the memories the other terms find.
+ */
+const POSTINGS_BUDGET = 20_000;
+const COMMON_SHARE = 0.02;
+const COMMON_FLOOR = 1000;
+/** When every term is that common, the rarest few are searched for. */
+const RAREST_KEPT = 3;
 let vocabFailed = false;
 
 /** How many memories of the index hold each one-word term; none known if it cannot tell. */
@@ -180,6 +195,29 @@ function termCounts(db: Db, terms: string[]): Map<string, number> {
     }
     return new Map();
   }
+}
+
+/** The query's search without its common words: see COMMON_SHARE. Identifiers always stay. */
+function withoutCommonTerms(db: Db, query: Query, counts: Map<string, number>): string {
+  const terms = matchTerms(query.match);
+  const total = db.query<{ n: number }, []>("SELECT count(*) AS n FROM memories").get()?.n ?? 0;
+  const limit = Math.max(COMMON_FLOOR, total * COMMON_SHARE);
+  const identifiers = new Set(query.identifiers);
+  // A phrase is not counted: only a one-word term is.
+  const held = (term: string) => counts.get(term) ?? 0;
+  let postings = terms.reduce((sum, term) => sum + held(term), 0);
+  const dropped = new Set<string>();
+  for (const term of terms
+    .filter((term) => !identifiers.has(term) && held(term) > limit)
+    .sort((a, b) => held(b) - held(a))) {
+    if (postings <= POSTINGS_BUDGET) break;
+    dropped.add(term);
+    postings -= held(term);
+  }
+  const kept = terms.filter((term) => !dropped.has(term));
+  if (kept.length === terms.length) return query.match;
+  if (kept.length > 0) return anyOf(kept);
+  return anyOf([...terms].sort((a, b) => held(a) - held(b)).slice(0, RAREST_KEPT));
 }
 
 type Context = { branch: string | null; now: number };
@@ -314,7 +352,11 @@ export function retrieveForPrompt(
         WHERE memories_fts MATCH ? AND m.project_id = ? AND m.status = 'active' AND ${unseen} AND ${kindFilter}
         ORDER BY bm25 LIMIT ?`,
     )
-    .all(inProject(query.match, input.projectId), input.projectId, CANDIDATES_PER_CHANNEL);
+    .all(
+      inProject(withoutCommonTerms(db, query, counts), input.projectId),
+      input.projectId,
+      CANDIDATES_PER_CHANNEL,
+    );
   for (const { bm25, ...row } of matched) candidates.set(row.id, { row, bm25, overlap: 0 });
 
   const files = sessionFiles(db, input.sessionId);
