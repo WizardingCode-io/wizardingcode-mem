@@ -2,7 +2,9 @@ import { Database } from "bun:sqlite";
 import { accessSync, constants, existsSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { lastBackup } from "../backup/schedule.ts";
+import { readGitInfo } from "../core/git.ts";
 import { semanticStatus } from "../embed/status.ts";
+import { enabledModules } from "../engine/modules.ts";
 import { ANTIGRAVITY } from "../install/antigravity.ts";
 import { CLAUDE_CODE } from "../install/claude-code.ts";
 import { claudeDesktopServer, hasClaudeDesktop } from "../install/claude-desktop.ts";
@@ -21,6 +23,7 @@ import { PLUGIN_MARKER } from "../install/opencode-plugin.ts";
 import { QWEN } from "../install/qwen.ts";
 import { Breaker } from "../judge/breaker.ts";
 import { keyFingerprint } from "../judge/key.ts";
+import { folderProblem, knowledgeDir, readEntries } from "../modules/knowledge/files.ts";
 import { loadSettings } from "../settings/settings.ts";
 import { hookLatency } from "../status/report.ts";
 import { DB_FILE, type Db, LATEST_VERSION, openExisting, SchemaTooNewError } from "../store/db.ts";
@@ -55,6 +58,10 @@ export interface DoctorContext {
   claudeDesktopConfigPath?: string;
   /** SHIBAOX_* variables set in the environment: the names until 0.3.0. */
   legacyVariables?: string[];
+  /** The folder `doctor` runs in, whose project's knowledge it looks at; the viewer has none. */
+  cwd?: string;
+  /** The environment (the home folder, the brand's home, the modules); the process's by default. */
+  env?: Record<string, string | undefined>;
 }
 
 // Folders that copy files behind SQLite's back, or cannot lock them properly.
@@ -502,6 +509,67 @@ function geminiLeftover(context: DoctorContext): Check | null {
   };
 }
 
+/** How many problems the knowledge check names before "and N more". */
+const KNOWLEDGE_PROBLEMS_SHOWN = 5;
+
+/**
+ * The knowledge folder of the project `doctor` runs in: its entries' problems (a bad
+ * frontmatter line makes an entry a draft that is never injected), a linked folder, or knowledge
+ * off. Reads the files themselves, never the index: `doctor` opens the database read-only and
+ * the knowledge tables may not exist yet. Null when there is no folder to look at (the viewer).
+ */
+export function knowledgeCheck(
+  context: Pick<DoctorContext, "dataDir" | "cwd" | "env">,
+): Check | null {
+  const name = "knowledge";
+  if (context.cwd === undefined) return null;
+  const env = context.env ?? process.env;
+  const on = enabledModules(loadSettings(env, context.dataDir).modules, undefined, () => {});
+  if (!on.some((module) => module.id === "knowledge")) {
+    return { name, status: "skip", detail: "knowledge is off (WIZARDINGCODE_MODULES)" };
+  }
+  let root = context.cwd;
+  try {
+    root = readGitInfo(context.cwd)?.root ?? context.cwd;
+  } catch {
+    // Not a repository we can read: the folder itself.
+  }
+  const problem = folderProblem(root, env);
+  if (problem !== null) {
+    return problem.startsWith("Knowledge is off here")
+      ? {
+          name,
+          status: "skip",
+          detail: "knowledge is off here (the home folder or wizardingcode's data)",
+        }
+      : { name, status: "warn", detail: problem };
+  }
+  const dir = knowledgeDir(root);
+  if (!existsSync(dir)) return { name, status: "skip", detail: `no knowledge folder in ${root}` };
+  const entries = readEntries(dir);
+  const flagged = entries.filter((entry) => entry.problem !== null);
+  if (flagged.length > 0) {
+    const named = flagged
+      .slice(0, KNOWLEDGE_PROBLEMS_SHOWN)
+      .map(
+        (entry) => `${entry.slug}${entry.status === "draft" ? " (draft)" : ""}: ${entry.problem}`,
+      );
+    const more = flagged.length - named.length;
+    return {
+      name,
+      status: "warn",
+      detail: `${flagged.length} of ${entries.length} entries need attention: ${named.join("; ")}${more > 0 ? `; and ${more} more` : ""}`,
+    };
+  }
+  const essential = entries.filter((entry) => entry.essential && entry.status === "active").length;
+  const retired = entries.filter((entry) => entry.status !== "active").length;
+  return {
+    name,
+    status: "ok",
+    detail: `${entries.length} entries (${essential} essential, ${retired} draft or superseded)`,
+  };
+}
+
 /** Looks, and changes nothing: no directory, database or setting is created or altered. */
 export function runChecks(context: DoctorContext): Check[] {
   const { check: databaseCheck, db } = database(context);
@@ -517,6 +585,7 @@ export function runChecks(context: DoctorContext): Check[] {
       typeSafe(context, db),
       semanticSearch(context, db),
       backups(context, db),
+      knowledgeCheck(context),
       // Claude Code is the host this started on: its absence is a warning, not a skip.
       hooksHost("Claude Code", CLAUDE_CODE, context.settingsPath, null, context),
       hooksHost("Codex", CODEX, context.codexHooksPath, "codex", context),

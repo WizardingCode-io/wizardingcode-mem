@@ -2,7 +2,7 @@ import { MOMENT_BUDGET } from "../engine/budget.ts";
 import type { Db } from "../store/db.ts";
 import { visibleProjects } from "../store/links.ts";
 import { logError } from "../util/log.ts";
-import { MEMORY_COLUMNS, type MemoryRow, prior, toNote } from "./notes.ts";
+import { exceptIds, MEMORY_COLUMNS, type MemoryRow, prior, promotedIds, toNote } from "./notes.ts";
 import { type LastTurn, type Note, renderBrief, renderHeading } from "./render.ts";
 
 const POOL = 200;
@@ -27,8 +27,16 @@ export function sessionBrief(
     projectId: number;
     branch: string | null;
     now: number;
+    /** The context the brief is for; without it, no memory is left to knowledge. */
+    sessionId?: number;
+    epoch?: number;
     /** Default 4,200 characters. */
     budgetChars?: number;
+    /**
+     * Memories made knowledge whose entry knowledge showed in this context, left out; looked
+     * up (`promotedIds`) when not given. The memory module passes [] when knowledge is off.
+     */
+    promoted?: readonly number[];
   },
 ): { text: string; notes: Note[] } {
   const budgetChars = input.budgetChars ?? MOMENT_BUDGET["session-start"];
@@ -43,7 +51,18 @@ export function sessionBrief(
 
   const rank = (rows: MemoryRow[]) =>
     rows.sort((a, b) => prior(b, input) - prior(a, input) || b.id - a.id);
-  const extra = extraPools(db, input.projectId);
+  // The knowledge entry says these now (none unless some were promoted).
+  const hidden =
+    input.promoted ??
+    (input.sessionId === undefined || input.epoch === undefined
+      ? []
+      : promotedIds(db, input.projectId, input.sessionId, input.epoch));
+  const kept = (row: MemoryRow) => !hidden.includes(row.id);
+  const pools = extraPools(db, input.projectId);
+  const extra =
+    hidden.length === 0
+      ? pools
+      : { ...pools, user: pools.user.filter(kept), linked: pools.linked.filter(kept) };
   const rules = new Set(extra.user.map((row) => row.id));
 
   // Memories whose files are gone are left out here: unprompted, they are more likely
@@ -52,7 +71,7 @@ export function sessionBrief(
     db
       .query<MemoryRow, [number, number]>(
         `SELECT ${MEMORY_COLUMNS} FROM memories m
-          WHERE m.project_id = ? AND m.status = 'active' AND m.stale = 0
+          WHERE m.project_id = ? AND m.status = 'active' AND m.stale = 0${exceptIds(hidden)}
           ORDER BY m.importance DESC, m.updated_at DESC LIMIT ?`,
       )
       .all(input.projectId, POOL),

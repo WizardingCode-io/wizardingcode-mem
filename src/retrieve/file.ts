@@ -1,6 +1,6 @@
 import { MOMENT_BUDGET } from "../engine/budget.ts";
 import type { Db } from "../store/db.ts";
-import { MEMORY_COLUMNS, type MemoryRow, prior, toNote } from "./notes.ts";
+import { exceptIds, MEMORY_COLUMNS, type MemoryRow, prior, promotedIds, toNote } from "./notes.ts";
 import { notYetShown } from "./prompt.ts";
 import { type Note, renderNotes } from "./render.ts";
 
@@ -26,6 +26,11 @@ export function notesForFile(
     budgetChars?: number;
     /** The intro the notes will be shown with, which counts against the budget. */
     intro?: string;
+    /**
+     * Memories made knowledge whose entry knowledge showed in this context, left out; looked
+     * up (`promotedIds`) when not given. The memory module passes [] when knowledge is off.
+     */
+    promoted?: readonly number[];
   },
 ): Note[] {
   const budgetChars = input.budgetChars ?? MOMENT_BUDGET["file-read"];
@@ -34,7 +39,9 @@ export function notesForFile(
       `SELECT ${MEMORY_COLUMNS}, MIN(f.role) AS role
          FROM memories m JOIN memory_files f ON f.memory_id = m.id
         WHERE m.project_id = ? AND f.path = ? AND m.status = 'active' AND m.kind IN ${KINDS}
-          AND ${notYetShown(db, input.sessionId, input.epoch)}
+          AND ${notYetShown(db, input.sessionId, input.epoch)}${exceptIds(
+            input.promoted ?? promotedIds(db, input.projectId, input.sessionId, input.epoch),
+          )}
         GROUP BY m.id`,
     )
     .all(input.projectId, input.path);

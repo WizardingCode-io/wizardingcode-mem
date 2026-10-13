@@ -39,6 +39,11 @@ export function notesForFailure(
     now: number;
     /** Default 1,200 characters. */
     budgetChars?: number;
+    /**
+     * Memories made knowledge whose entry knowledge showed in this context, left out; looked
+     * up (`promotedIds`) when not given. The memory module passes [] when knowledge is off.
+     */
+    promoted?: readonly number[];
   },
 ): Note[] {
   const prompt = failureQuery(input.error);
@@ -53,5 +58,6 @@ export function notesForFailure(
     kinds: ["fix", "gotcha"],
     maxNotes: MAX_NOTES,
     budgetChars: input.budgetChars ?? MOMENT_BUDGET["tool-failed"],
+    ...(input.promoted === undefined ? {} : { promoted: input.promoted }),
   });
 }

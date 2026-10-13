@@ -37,6 +37,7 @@ import {
   setMeta,
 } from "../store/meta.ts";
 import { inspectTarget, moveStore } from "../store/move.ts";
+import { acceptPromotion, listPromotions, rejectPromotion } from "../modules/knowledge/promote.ts";
 import { logError } from "../util/log.ts";
 import { brandHome, storeDirOf } from "../util/paths.ts";
 import { spawnDetached } from "../util/self.ts";
@@ -51,6 +52,8 @@ import {
   proposalStatus,
   getMemory,
   getTurn,
+  knowledgeEntry,
+  knowledgeOf,
   listLinks,
   listMemories,
   listProjects,
@@ -545,6 +548,50 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
           : problem(409, "this proposal was decided meanwhile");
       }
       const outcome = acceptProposal(db, id, now(), loadModel({ dataDir: options.dataDir, env }));
+      return "refused" in outcome ? problem(409, outcome.refused) : json(outcome);
+    }
+    // Knowledge: the project's entries (read only: editing happens in the repository or
+    // through the agent), and the proposals to make memories knowledge, on the author's click.
+    if (path === "/api/knowledge" && request.method === "GET") {
+      const projectId = Number(url.searchParams.get("project") ?? Number.NaN);
+      if (!Number.isInteger(projectId)) return problem(400, "project is required");
+      return json(knowledgeOf(db, projectId, env));
+    }
+    if (path === "/api/knowledge/proposals" && request.method === "GET") {
+      const project = url.searchParams.get("project");
+      const projectId = project === null || project === "" ? undefined : Number(project);
+      if (projectId !== undefined && !Number.isInteger(projectId)) {
+        return problem(400, "project must be an id");
+      }
+      return json(listPromotions(db, projectId));
+    }
+    const knowledgeOne = /^\/api\/knowledge\/entries\/([^/]+)$/.exec(path);
+    if (knowledgeOne !== null && request.method === "GET") {
+      const projectId = Number(url.searchParams.get("project") ?? Number.NaN);
+      if (!Number.isInteger(projectId)) return problem(400, "project is required");
+      let slug: string;
+      try {
+        slug = decodeURIComponent(knowledgeOne[1] ?? "");
+      } catch {
+        return problem(400, "the entry's name is not a valid escape");
+      }
+      const found = knowledgeEntry(db, projectId, slug, env);
+      return found === null ? problem(404, "no such entry") : json(found);
+    }
+    const promotion = /^\/api\/knowledge\/proposals\/(\d+)\/(accept|reject)$/.exec(path);
+    if (promotion !== null && request.method === "POST") {
+      const id = Number(promotion[1]);
+      const status = db
+        .query<{ status: string }, [number]>("SELECT status FROM knowledge_proposals WHERE id = ?")
+        .get(id)?.status;
+      if (status === undefined) return problem(404, "no such proposal");
+      if (status !== "proposed") return problem(409, `this proposal is already ${status}`);
+      if (promotion[2] === "reject") {
+        return rejectPromotion(db, id, now())
+          ? json({ rejected: true })
+          : problem(409, "this proposal was decided meanwhile");
+      }
+      const outcome = acceptPromotion(db, id, { now: now(), env });
       return "refused" in outcome ? problem(409, outcome.refused) : json(outcome);
     }
     if (path === "/api/links" && request.method === "GET") {

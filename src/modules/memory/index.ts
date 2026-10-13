@@ -1,11 +1,13 @@
+import { existsSync } from "node:fs";
 import type { EngineModule, MomentInput } from "../../engine/module.ts";
 import { sessionBrief } from "../../retrieve/brief.ts";
 import { notesForFailure } from "../../retrieve/failure.ts";
 import { notesForFile } from "../../retrieve/file.ts";
-import { recordInjections } from "../../retrieve/notes.ts";
+import { promotedIds, recordInjections } from "../../retrieve/notes.ts";
 import { retrieveForPrompt } from "../../retrieve/prompt.ts";
 import { inert, type Note, renderNotes } from "../../retrieve/render.ts";
 import { withWrite } from "../../store/db.ts";
+import { folderProblem, knowledgeDir } from "../knowledge/files.ts";
 import { MEMORY_VIEWS } from "./views.ts";
 
 // Memory as a module: what earlier sessions learned, at each moment, recorded as shown so
@@ -27,11 +29,31 @@ function fitting(notes: Note[], intro: string | undefined, budgetChars: number):
   return kept;
 }
 
+/**
+ * The memories made knowledge whose entry knowledge has put in this context, so memory leaves
+ * them out (ruling K9): none unless knowledge is asked at this moment too and its folder is
+ * there and readable (not deleted, not a link, not the home folder). Knowledge is asked
+ * first (F5′), so an entry it shows at this very moment counts. One indexed lookup; the
+ * folder is looked at only when some were promoted.
+ */
+function leftToKnowledge(input: MomentInput): number[] {
+  if (input.modules !== undefined && !input.modules.includes("knowledge")) return [];
+  const ids = promotedIds(input.db, input.projectId, input.sessionId, input.epoch);
+  if (ids.length === 0) return ids;
+  try {
+    const root = input.projectRoot;
+    return existsSync(knowledgeDir(root)) && folderProblem(root) === null ? ids : [];
+  } catch {
+    return [];
+  }
+}
+
 function contribute(input: MomentInput): string | null {
   const { db, sessionId, epoch, projectId, branch, now, budgetChars } = input;
+  const promoted = leftToKnowledge(input);
   switch (input.moment) {
     case "session-start": {
-      const brief = sessionBrief(db, { projectId, branch, now, budgetChars });
+      const brief = sessionBrief(db, { projectId, branch, now, budgetChars, promoted });
       // The last turn alone can be longer than a small share: then nothing, and nothing
       // recorded as shown.
       if (brief.text.length > budgetChars) return null;
@@ -48,6 +70,7 @@ function contribute(input: MomentInput): string | null {
         branch,
         now,
         budgetChars,
+        promoted,
       });
       const notes = fitting(found, undefined, budgetChars);
       recordInjections(db, { sessionId, epoch, event: "prompt", notes, now });
@@ -70,6 +93,7 @@ function contribute(input: MomentInput): string | null {
           now,
           budgetChars,
           intro,
+          promoted,
         });
         const notes = recordInjections(db, {
           sessionId,
@@ -94,6 +118,7 @@ function contribute(input: MomentInput): string | null {
           branch,
           now,
           budgetChars,
+          promoted,
         });
         const notes = recordInjections(db, {
           sessionId,

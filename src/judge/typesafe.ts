@@ -9,6 +9,9 @@ import {
   personalQuestions,
   personalState,
   personalVerdict,
+  standingQuestions,
+  standingState,
+  standingVerdict,
 } from "./questions.ts";
 import type {
   ConsolidateInput,
@@ -18,6 +21,8 @@ import type {
   Judge,
   PersonalInput,
   PersonalVerdict,
+  StandingInput,
+  StandingVerdict,
 } from "./types.ts";
 
 export interface TypeSafeJudgeOptions {
@@ -73,6 +78,12 @@ export class TypeSafeJudge implements Judge {
   async personal(input: PersonalInput): Promise<PersonalVerdict> {
     const answers = await this.ask({ state: personalState(input), questions: personalQuestions() });
     return personalVerdict(answers);
+  }
+
+  /** One request per memory proposed as knowledge, in the background, never on a hook path. */
+  async standing(input: StandingInput): Promise<StandingVerdict> {
+    const answers = await this.ask({ state: standingState(input), questions: standingQuestions() });
+    return standingVerdict(answers);
   }
 
   private async ask(request: SystemOneRequest): Promise<Record<string, Answer>> {

@@ -1,7 +1,11 @@
+import { existsSync } from "node:fs";
 import type { ProjectRef } from "../core/project.ts";
 import { redact } from "../core/redact.ts";
 import { MEMORY_KINDS, type MemoryKind } from "../core/types.ts";
 import type { Model } from "../embed/model.ts";
+import { folderProblem, type KnowledgeEntry, knowledgeDir } from "../modules/knowledge/files.ts";
+import { entriesBySlug, listEntries, refreshIndex } from "../modules/knowledge/index-store.ts";
+import { projectRoot } from "../modules/knowledge/promote.ts";
 import { refreshMemoryVector } from "../embed/vectors.ts";
 import { explicitMatch } from "../retrieve/query.ts";
 import { fuseRanks, SEMANTIC_POOL, semanticCandidates } from "../retrieve/semantic.ts";
@@ -813,4 +817,62 @@ export function dismissLinksOffer(db: Db): void {
   const max = (table: string) =>
     db.query<{ n: number | null }, []>(`SELECT max(id) AS n FROM ${table}`).get()?.n ?? 0;
   setMeta(db, LINKS_OFFER_SEEN, JSON.stringify({ link: max("project_links"), rule: max("rule_proposals") }));
+}
+
+// ---- Knowledge: the project's entries as its folder has them, read only. ----
+
+/** A folder is listed up to this many entries (as many as a folder is read). */
+const KNOWLEDGE_LIST_MAX = 2000;
+
+/**
+ * Where the project's knowledge stands: `unknown` until a session says where the project
+ * lives; `off` where knowledge is never read (the home folder, a linked folder; `problem`
+ * says why); `missing` with no folder yet (`dir` is where the files would go); `ok` with one.
+ */
+export interface KnowledgeView {
+  state: "unknown" | "off" | "missing" | "ok";
+  root: string | null;
+  dir: string | null;
+  problem: string | null;
+  /** In the list, without their bodies: `GET /api/knowledge/entries/:slug` has one in full. */
+  entries: Omit<KnowledgeEntry, "body">[];
+}
+
+type Env = Record<string, string | undefined>;
+
+/** The project's folder and whether knowledge may be read there. */
+function knowledgePlace(
+  db: Db,
+  projectId: number,
+  env: Env,
+): { root: string | null; problem: string | null } {
+  const root = projectRoot(db, projectId);
+  return { root, problem: root === null ? null : folderProblem(root, env) };
+}
+
+/**
+ * The project's entries, after bringing the index in line with the folder (skipped when the
+ * folder has not changed): the viewer shows what the files say now, not what a hook last saw.
+ */
+export function knowledgeOf(db: Db, projectId: number, env: Env): KnowledgeView {
+  const { root, problem } = knowledgePlace(db, projectId, env);
+  if (root === null) return { state: "unknown", root: null, dir: null, problem: null, entries: [] };
+  const dir = knowledgeDir(root);
+  if (problem !== null) return { state: "off", root, dir, problem, entries: [] };
+  refreshIndex(db, projectId, dir);
+  const entries = listEntries(db, projectId, KNOWLEDGE_LIST_MAX).map(({ body: _, ...entry }) => entry);
+  const state = existsSync(dir) ? "ok" : "missing";
+  return { state, root, dir, problem: null, entries };
+}
+
+/** One entry in full, from the index; null when there is none, or knowledge is off there. */
+export function knowledgeEntry(
+  db: Db,
+  projectId: number,
+  slug: string,
+  env: Env,
+): KnowledgeEntry | null {
+  const { root, problem } = knowledgePlace(db, projectId, env);
+  if (root === null || problem !== null) return null;
+  return entriesBySlug(db, projectId, [slug])[0] ?? null;
 }

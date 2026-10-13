@@ -232,7 +232,7 @@ Memories are kept as what they are: a title, a body of sentences that were actua
 
 ## Modules
 
-wizardingcode-mem is one engine with modules: each module can add context at the hook moments, offer tools to the agent and add views to the viewer, all inside one budget. Memory is the one module shipped today; `WIZARDINGCODE_MODULES` (default `memory`) adds modules: memory is always on, and stopping it for a project is the existing per-project "memory off". See [ADR 0019](docs/adr/0019-one-engine.md).
+wizardingcode-mem is one engine with modules: each module can add context at the hook moments, offer tools to the agent and add views to the viewer, all inside one budget. Two modules ship: memory and [knowledge](#knowledge). `WIZARDINGCODE_MODULES` (default `memory,knowledge`) lists the modules on: memory is always on, and stopping it for a project is the existing per-project "memory off"; set it to `memory` to turn knowledge off. See [ADR 0019](docs/adr/0019-one-engine.md).
 
 ## The viewer
 
@@ -247,9 +247,10 @@ A local page over your memories, in WizardingCode's app design:
 - **Overview** — the project's numbers and charts: memories and turns per week, by kind, by importance, and how fast the hooks have been.
 - **History** — past conversations with Claude Code and Codex, searchable, for one project or all of them (see [Learn from past sessions](#learn-from-past-sessions)).
 - **Across projects** — which projects read each other, the suggested links with the signal behind each (Link / Reject), and your rules: proposals to make yours and the ones you accepted (Undo). See [Linked projects and your rules](#linked-projects-and-your-rules).
+- **Knowledge** — the project's knowledge entries grouped by kind, read only, each with its file and the memory it came from; and the memories proposed as knowledge (Make knowledge / Reject). See [Knowledge](#knowledge).
 - **Settings** — agents, health, the judge, retention, history, search, storage, backups and the viewer, one page each.
 
-⌘K (or the search in the top bar) searches the project and the ones linked to it, or every project at once with one switch. Light and dark; `[` folds the projects panel, `1`–`6` switch views. It listens on the loopback only, behind a token in the URL, loads nothing from the network, and stops itself after half an hour without you or a tab. It opens by itself when a session starts, in any agent — one viewer per machine, never a second tab — and stays closed under CI, over SSH, or when you turn that off.
+⌘K (or the search in the top bar) searches the project and the ones linked to it, or every project at once with one switch. Light and dark; `[` folds the projects panel, `1`–`7` switch views. It listens on the loopback only, behind a token in the URL, loads nothing from the network, and stops itself after half an hour without you or a tab. It opens by itself when a session starts, in any agent — one viewer per machine, never a second tab — and stays closed under CI, over SSH, or when you turn that off.
 
 ## Learn from past sessions
 
@@ -300,6 +301,31 @@ Each session reads its own project. Two things widen that, and both wait for you
 **Your rules.** A convention or decision that repeats in projects not linked to each other, or one you said holds everywhere, is proposed in the viewer as one of *your* rules. "Said" means you typed it, in a short sentence that holds both a rule phrase ("always", "in every project", "sempre que", "usa sempre", "a partir de agora") and the rule's own words: pasted reports, code, quotes and long prompts do not count, and with a TypeSafe key the judge must be sure the rule is personal. Make it yours and it reaches every project and every agent, marked "(you)", in at most 15% of the brief; the project copies are set aside, never deleted, and Undo brings them back. Nothing becomes yours without the yes.
 
 Suggestions and proposals are worked out in the background after distilling, never while you wait; with no link and no rule of yours, what your agent sees is exactly what it saw before. Older binaries (0.5.0) cannot open the database once a newer one has migrated it: update every agent together.
+
+## Knowledge
+
+Memory is what happened, and it may be out of date. Knowledge is what is simply true in a project: decisions taken, business rules, the glossary, how the architecture fits. It lives in the repository, one Markdown file per entry, so it is versioned with the code, reviewed in pull requests and read by every agent, not just the one whose instructions file you wrote it in.
+
+```markdown
+<!-- .wizardingcode/knowledge/orders-are-never-deleted.md -->
+---
+title: Orders are never deleted, only cancelled
+kind: rule            # decision | rule | glossary | architecture | howto
+essential: true       # shown at every session start
+status: active        # active | draft | superseded
+tags: [orders, billing]
+updated: 2026-10-12
+---
+Cancelling sets `status = cancelled`; refunds go through billing. Reports count every order.
+```
+
+- **Little, labelled as knowledge:** at session start, the essential entries, one line each; beside a prompt, at most two entries that clearly bear on it (one shared word is never enough). Together at most a fifth of the budget, in a `<wizardingcode-knowledge>` block that tells the agent to treat it as current unless the code says otherwise. Never the same entry twice in one context; drafts and superseded entries are never injected.
+- **The rest on demand:** the agent has `knowledge_search`, `knowledge_get`, `knowledge_save` and `knowledge_update`. Say "save this as knowledge" and it writes the file; it never overwrites an existing entry.
+- **From memory:** important decisions and conventions agents keep needing, across sessions and days, are proposed in the viewer's **Knowledge** view; records of a session (agents dispatched, review verdicts, pull requests, plans for the day) are left out. Make knowledge writes the file, and where the entry is in front of the agent the memory no longer repeats it as a note; Reject and it never comes back. `wizardingcode-mem doctor` reports entries that need attention. Nothing is written to your repository without your click or your request.
+- **Hand edits work:** the files are the truth; the index in the database follows them and can be rebuilt at any time.
+- **What it costs:** a project without the folder pays one `stat` per hook and sees exactly what it saw before. Knowledge is off for a project rooted in your home folder, and it never reads or writes through a linked folder.
+
+See [ADR 0020](docs/adr/0020-knowledge.md).
 
 ## Settings
 
