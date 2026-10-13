@@ -224,6 +224,58 @@ function withoutCommonTerms(db: Db, query: Query, counts: Map<string, number>): 
   return anyOf([...terms].sort((a, b) => held(a) - held(b)).slice(0, RAREST_KEPT));
 }
 
+/** How many of the index's best matches are ranked before any memory is read. */
+const PREFETCH = 100;
+
+/**
+ * The project's best CANDIDATES_PER_CHANNEL text matches that pass `filters` (a condition on
+ * `m`), best first. In a large project a prompt matches thousands of memories, and reading
+ * every one of them, body and all, to keep twenty cost most of the prompt's budget: so the
+ * index ranks its matches alone, and only the best PREFETCH are read and filtered. That is
+ * exact when the index has no more matches than those, or when enough of them pass: every
+ * memory past them ranks no better. Otherwise, rarely, every match is read, as before.
+ */
+export function projectMatches(
+  db: Db,
+  search: string,
+  projectId: number,
+  filters: string,
+): (MemoryRow & { bm25: number })[] {
+  const ranked = db
+    .query<{ id: number; bm25: number }, [string]>(
+      `SELECT rowid AS id, bm25(memories_fts, 4.0, 1.0, 2.0, 0.0) AS bm25 FROM memories_fts
+        WHERE memories_fts MATCH ? ORDER BY bm25 LIMIT ${PREFETCH}`,
+    )
+    .all(search);
+  if (ranked.length === 0) return [];
+  const rows = new Map(
+    db
+      .query<MemoryRow, [string, number]>(
+        `SELECT ${MEMORY_COLUMNS} FROM memories m
+          WHERE m.id IN (SELECT value FROM json_each(?))
+            AND m.project_id = ? AND m.status = 'active' AND ${filters}`,
+      )
+      .all(JSON.stringify(ranked.map((match) => match.id)), projectId)
+      .map((row) => [row.id, row]),
+  );
+  const kept: (MemoryRow & { bm25: number })[] = [];
+  for (const { id, bm25 } of ranked) {
+    const row = rows.get(id);
+    if (row === undefined) continue;
+    kept.push({ ...row, bm25 });
+    if (kept.length === CANDIDATES_PER_CHANNEL) return kept;
+  }
+  if (ranked.length < PREFETCH) return kept;
+  return db
+    .query<MemoryRow & { bm25: number }, [string, number, number]>(
+      `SELECT ${MEMORY_COLUMNS}, bm25(memories_fts, 4.0, 1.0, 2.0, 0.0) AS bm25
+         FROM memories_fts CROSS JOIN memories m ON m.id = memories_fts.rowid
+        WHERE memories_fts MATCH ? AND m.project_id = ? AND m.status = 'active' AND ${filters}
+        ORDER BY bm25 LIMIT ?`,
+    )
+    .all(search, projectId, CANDIDATES_PER_CHANNEL);
+}
+
 type Context = { branch: string | null; now: number };
 
 interface Candidate {
@@ -349,18 +401,12 @@ export function retrieveForPrompt(
   const unseen = notYetShown(db, input.sessionId, input.epoch);
   const counts = termCounts(db, matchTerms(query.match));
   const candidates = new Map<number, Candidate>();
-  const matched = db
-    .query<MemoryRow & { bm25: number }, [string, number, number]>(
-      `SELECT ${MEMORY_COLUMNS}, bm25(memories_fts, 4.0, 1.0, 2.0, 0.0) AS bm25
-         FROM memories_fts CROSS JOIN memories m ON m.id = memories_fts.rowid
-        WHERE memories_fts MATCH ? AND m.project_id = ? AND m.status = 'active' AND ${unseen} AND ${kindFilter}
-        ORDER BY bm25 LIMIT ?`,
-    )
-    .all(
-      inProject(withoutCommonTerms(db, query, counts), input.projectId),
-      input.projectId,
-      CANDIDATES_PER_CHANNEL,
-    );
+  const matched = projectMatches(
+    db,
+    inProject(withoutCommonTerms(db, query, counts), input.projectId),
+    input.projectId,
+    `${unseen} AND ${kindFilter}`,
+  );
   for (const { bm25, ...row } of matched) candidates.set(row.id, { row, bm25, overlap: 0 });
 
   const files = sessionFiles(db, input.sessionId);
