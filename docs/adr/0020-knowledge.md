@@ -1,6 +1,8 @@
 # ADR 0020 — Knowledge: the project's curated truth, as the engine's second module
 
-Date: 2026-10-12 · Status: accepted; built and measured on a synthetic project and on a copy of real data (see [The proof](#the-proof)). **Gate:** K7 turns knowledge on by default, so D2a ships to users only with the promotion fix of the final review (I1: structural evidence, the session-artifact filter, the optional judge) in place and re-measured; that re-measure is recorded below. Roadmap item D2a, wave 3, on the engine of [ADR 0019](0019-one-engine.md). Design: `docs/superpowers/specs/2026-10-12-knowledge-design.md`; plan: `docs/superpowers/plans/2026-10-12-knowledge.md`. D2b (personas) follows with its own design.
+**Withdrawn from wizardingcode-mem (2026-10-13):** knowledge and personas are a separate product, started after the mem is consolidated. This module was built, reviewed and measured here, then removed before any release; its code lives on the branch `archive/knowledge-module`. Kept as the record of what was built and measured.
+
+Date: 2026-10-12 · Status: withdrawn 2026-10-13 (see above); was accepted, built and measured on a synthetic project and on a copy of real data (see [The proof](#the-proof)). **Gate:** K7 turns knowledge on by default, so D2a ships to users only with the promotion fix of the final review (I1: structural evidence, the session-artifact filter, the optional judge) in place and re-measured; that re-measure is recorded below. Roadmap item D2a, wave 3, on the engine of [ADR 0019](0019-one-engine.md). Design: `docs/superpowers/specs/2026-10-12-knowledge-design.md`; plan: `docs/superpowers/plans/2026-10-12-knowledge.md`. D2b (personas) follows with its own design.
 
 ## Context
 

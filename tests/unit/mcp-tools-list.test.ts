@@ -5,10 +5,8 @@ import { join } from "node:path";
 import { runCliWith } from "../helpers/cli.ts";
 
 // What an agent is offered, pinned from the code before the tools came from the modules:
-// memory's part of the MCP tool lists (inside a project and with --global: names, titles,
-// descriptions, schemas, order) and of the names the OpenCode bridge accepts never changes.
-// With the default modules, knowledge's four tools follow memory's inside a project, and
-// add nothing with --global (knowledge is per project).
+// with memory alone, the MCP tool lists (inside a project and with --global: names,
+// titles, descriptions, schemas, order) and the names the OpenCode bridge accepts never change.
 
 const MAIN = new URL("../../src/cli/main.ts", import.meta.url).pathname;
 
@@ -23,7 +21,7 @@ beforeAll(() => {
     WIZARDINGCODE_HOME: join(base, "home"),
     WIZARDINGCODE_MEM_STORE_DIR: join(base, "store"),
     WIZARDINGCODE_MEM_MIGRATE: "off",
-    WIZARDINGCODE_MODULES: "", // blank means the default, memory and knowledge
+    WIZARDINGCODE_MODULES: "", // blank means the default, memory
     // Whatever the shell has, nothing here can reach a real home or a real store.
     HOME: join(base, "home"),
     USERPROFILE: join(base, "home"),
@@ -78,7 +76,7 @@ async function listTools(...flags: string[]): Promise<{ tools: unknown[] }> {
   }
 }
 
-describe("MCP tool list with the default modules", () => {
+describe("MCP tool list with memory alone", () => {
   test("inside a project", async () => {
     expect(await listTools()).toMatchSnapshot();
   }, 20_000);
@@ -88,7 +86,7 @@ describe("MCP tool list with the default modules", () => {
   }, 20_000);
 });
 
-describe("the OpenCode bridge's names with the default modules", () => {
+describe("the OpenCode bridge's names with memory alone", () => {
   const usage = async (...args: string[]) =>
     (await runCliWith({ input: "{}", env }, "tool", ...args)).stderr;
 
@@ -107,10 +105,6 @@ describe("the OpenCode bridge's names with the default modules", () => {
       "history_search",
       "project_links",
       "memory_projects",
-      "knowledge_search",
-      "knowledge_get",
-      "knowledge_save",
-      "knowledge_update",
     ];
     const flags = ["--project", join(base, "project")];
     const result: Record<string, boolean> = {};
@@ -122,10 +116,6 @@ describe("the OpenCode bridge's names with the default modules", () => {
       history_search: true,
       project_links: true,
       memory_projects: false,
-      knowledge_search: true,
-      knowledge_get: true,
-      knowledge_save: true,
-      knowledge_update: true,
     });
   }, 30_000);
 
@@ -137,10 +127,6 @@ describe("the OpenCode bridge's names with the default modules", () => {
       "history_search",
       "memory_projects",
       "project_links",
-      "knowledge_search",
-      "knowledge_get",
-      "knowledge_save",
-      "knowledge_update",
     ];
     const result: Record<string, boolean> = {};
     for (const name of names) result[name] = await accepted(name, "--global");
@@ -151,10 +137,6 @@ describe("the OpenCode bridge's names with the default modules", () => {
       history_search: true,
       memory_projects: true,
       project_links: false,
-      knowledge_search: false,
-      knowledge_get: false,
-      knowledge_save: false,
-      knowledge_update: false,
     });
   }, 30_000);
 });
@@ -164,7 +146,7 @@ describe("the bridge follows the setting", () => {
     const result = await runCliWith(
       {
         input: JSON.stringify({ query: "x" }),
-        env: { ...env, WIZARDINGCODE_MODULES: "personas" },
+        env: { ...env, WIZARDINGCODE_MODULES: "knowledge" },
       },
       "tool",
       "memory_search",

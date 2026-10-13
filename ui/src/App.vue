@@ -14,10 +14,8 @@ import Settings from "./components/Settings.vue";
 import Sidebar from "./components/Sidebar.vue";
 import TopBar from "./components/TopBar.vue";
 import HistoryView from "./components/HistoryView.vue";
-import KnowledgeView from "./components/KnowledgeView.vue";
 import TurnsView from "./components/TurnsView.vue";
 import { ago, hue } from "./format";
-import { openFromHash } from "./knowledge";
 import { viewKeys } from "./modules";
 import { closeDetail, loadLinks, loadList, loadModules, loadOverview, loadRules, MACHINE_TABS, move, openCross, project, rail, reload, select, selectProject, sidebarOpen, startHeartbeat, state, type Tab } from "./viewer";
 
@@ -41,7 +39,6 @@ const tab = computed({
     // Leaving a view closes its dock, so coming back shows what the address says.
     state.linkProject = null;
     state.rule = null;
-    state.knowledgeOpen = null;
     history.replaceState(null, "", t === "memories" ? "#" : `#${t}`);
     if (t === "projects" || t === "you") void Promise.all([loadLinks(), loadRules()]);
     void reload();
@@ -105,7 +102,6 @@ function onKey(e: KeyboardEvent) {
     else if (state.tab === "history" && state.pastId !== null) state.pastId = null;
     else if (state.tab === "projects" && state.linkProject !== null) openCross("projects", null);
     else if (state.tab === "you" && state.rule !== null) openCross("you", null);
-    else if (state.tab === "knowledge" && state.knowledgeOpen !== null) state.knowledgeOpen = null;
     else if (state.selected !== null) closeDetail();
     return;
   }
@@ -137,7 +133,7 @@ onMounted(async () => {
   onBeforeUnmount(startHeartbeat());
   const deep = /^#m(\d+)$/.exec(location.hash);
   if (location.hash === "#search") palette.value = true;
-  const hashTab = (/^#(turns|overview|history|settings|projects|you|knowledge)$/.exec(location.hash)?.[1] ?? (/^#settings\/[a-z]+$/.test(location.hash) ? "settings" : undefined)) as Tab | undefined;
+  const hashTab = (/^#(turns|overview|history|settings|projects|you)$/.exec(location.hash)?.[1] ?? (/^#settings\/[a-z]+$/.test(location.hash) ? "settings" : undefined)) as Tab | undefined;
   if (hashTab) state.tab = hashTab;
   // A project's links (#projects/12) or a rule (#you/p3, #you/r45) open with their dock.
   const crossDeep = /^#(projects)\/(\d+)$|^#(you)\/([pr]\d+)$/.exec(location.hash);
@@ -147,12 +143,6 @@ onMounted(async () => {
   } else if (crossDeep?.[3]) {
     state.tab = "you";
     state.rule = crossDeep[4] ?? null;
-  }
-  // The Knowledge view's open entry (#knowledge/e:<slug>) or proposal (#knowledge/p<id>).
-  const knowledgeDeep = openFromHash(location.hash);
-  if (knowledgeDeep) {
-    state.tab = "knowledge";
-    state.knowledgeOpen = knowledgeDeep.open;
   }
   try {
     await Promise.all([loadModules(), loadOverview()]);
@@ -193,15 +183,7 @@ onMounted(async () => {
                 <span class="text-(--ink-muted)">Projects</span><span class="text-(--line-strong)">/</span>
                 <h1 class="m-0 max-w-[280px] truncate text-[13px] font-semibold" :title="project?.key">{{ project?.name ?? "…" }}</h1>
               </nav>
-              <!-- On the Knowledge page, its own numbers: entries, essential, needing attention, proposals. -->
-              <span v-if="state.tab === 'knowledge' && state.knowledgeCrumb" class="ml-2 flex min-w-0 items-center gap-2 overflow-hidden text-xs leading-4 whitespace-nowrap text-(--ink-muted)">
-                <span><span class="font-mono font-medium text-(--ink)">{{ state.knowledgeCrumb.entries.toLocaleString("en-GB") }}</span> {{ state.knowledgeCrumb.entries === 1 ? "entry" : "entries" }}</span>
-                <span class="text-(--line-strong)">·</span>
-                <span><span class="font-mono font-medium text-(--ink)">{{ state.knowledgeCrumb.essential.toLocaleString("en-GB") }}</span> essential</span>
-                <template v-if="state.knowledgeCrumb.attention"><span class="text-(--line-strong)">·</span><span class="inline-flex items-center gap-1"><span class="size-1.5 rounded-[1px] bg-(--warn)" /><span class="text-(--warn)">{{ state.knowledgeCrumb.attention.toLocaleString("en-GB") }} need attention</span></span></template>
-                <template v-if="state.knowledgeCrumb.proposals"><span class="text-(--line-strong)">·</span><span><span class="font-mono font-medium text-(--ink)">{{ state.knowledgeCrumb.proposals.toLocaleString("en-GB") }}</span> proposed</span></template>
-              </span>
-              <span v-else-if="project && state.tab !== 'knowledge'" class="ml-2 flex min-w-0 items-center gap-2 overflow-hidden text-xs leading-4 whitespace-nowrap text-(--ink-muted)">
+              <span v-if="project" class="ml-2 flex min-w-0 items-center gap-2 overflow-hidden text-xs leading-4 whitespace-nowrap text-(--ink-muted)">
                 <span><span class="font-mono font-medium text-(--ink)">{{ project.active.toLocaleString("en-GB") }}</span> active</span>
                 <span class="text-(--line-strong)">·</span>
                 <span><span class="font-mono font-medium text-(--ink)">{{ project.archived.toLocaleString("en-GB") }}</span> archived</span>
@@ -225,10 +207,6 @@ onMounted(async () => {
               >
                 <span aria-hidden="true" class="size-2.5 rounded-[3px]" :style="{ background: t.hue }" />{{ t.label }}<span v-if="t.n" class="font-mono text-[10.5px] text-(--ink-muted)">{{ t.n }}</span>
               </button>
-            </template>
-            <!-- The Knowledge view is one page: its one tab. -->
-            <template v-else-if="state.tab === 'knowledge'">
-              <span class="flex h-9 items-center gap-2 border-b-2 border-(--ink) pt-0.5 text-[12.5px] font-semibold whitespace-nowrap"><span aria-hidden="true" class="size-2.5 rounded-[3px] bg-[#2EE6C8]" />Knowledge</span>
             </template>
             <template v-else-if="state.tab !== 'settings'">
               <button
@@ -259,7 +237,6 @@ onMounted(async () => {
           <Settings v-else-if="state.tab === 'settings'" />
           <ProjectsView v-else-if="state.tab === 'projects'" :docked="isWide && state.linkProject !== null" />
           <RulesView v-else-if="state.tab === 'you'" :docked="isWide && state.rule !== null" />
-          <KnowledgeView v-else-if="state.tab === 'knowledge'" :docked="isWide && state.knowledgeOpen !== null" @open-memory="openMemory" />
           <ProjectStats v-else />
         </main>
       </div>

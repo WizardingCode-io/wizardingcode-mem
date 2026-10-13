@@ -44,7 +44,7 @@ export interface Settings {
   uiAutoOpen: boolean;
   /** Where the database lives when it was moved away from the data directory. */
   storeDir: string | null;
-  /** The modules on, as the comma list it was given; null means the default (memory and knowledge). */
+  /** The modules on, as the comma list it was given; null means the default (memory). */
   modules: string | null;
   backup: {
     /** A folder, or `s3://bucket/prefix`. */
@@ -68,7 +68,7 @@ export const DEFAULTS = {
   uiAutoOpen: true,
   backupEveryHours: 24,
   backupKeep: 10,
-  modules: "memory,knowledge",
+  modules: "memory",
 } as const;
 
 const RETENTION = { min: 7, max: 3650 };

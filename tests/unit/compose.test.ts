@@ -10,7 +10,6 @@ const input = (moment: Moment = "prompt"): Omit<MomentInput, "budgetChars"> => (
   projectId: 1,
   branch: null,
   root: "/work/app",
-  projectRoot: "/work/app",
   sessionId: 1,
   epoch: 0,
   prompt: moment === "prompt" ? "why" : null,
@@ -183,70 +182,25 @@ describe("compose: the remainder", () => {
     expect(budgets).toEqual([4200]);
   });
 
-  test("the others' text comes off the top, wherever the remainder module stands", () => {
+  test("the others' shares come off the top, wherever the remainder module stands", () => {
     const memory: number[] = [];
     const other: number[] = [];
     const out = compose(
       [says("memory", "remainder", "first", memory), says("other", 0.25, "second", other)],
       input("prompt"),
     );
-    // The engine's order in the text, whoever was asked first.
     expect(out).toBe("first\n\nsecond");
     expect(other).toEqual([600]);
-    // What the other actually said, and the blank line that joins it, and no more.
-    expect(memory).toEqual([2400 - "second".length - 2]);
+    expect(memory).toEqual([1800 - 2]);
   });
 
-  test("a share its module leaves unused stays with the remainder, to the character", () => {
-    for (const silent of [null, ""]) {
-      const memory: number[] = [];
-      const out = compose(
-        [says("memory", "remainder", "first", memory), says("other", 0.2, silent)],
-        input("session-start"),
-      );
-      expect(out).toBe("first");
-      expect(memory).toEqual([4200]);
-    }
-  });
-
-  test("a share that overran and was dropped stays with the remainder too", () => {
+  test("shares that take the whole budget leave the remainder nothing", () => {
     const memory: number[] = [];
     compose(
-      [says("memory", "remainder", "x", memory), says("other", 0.25, "y".repeat(601))],
-      input("prompt"),
-    );
-    expect(memory).toEqual([2400]);
-  });
-
-  test("a throwing module's share stays with the remainder", () => {
-    const memory: number[] = [];
-    const thrower: EngineModule = {
-      id: "broken",
-      name: "Broken",
-      share: 0.2,
-      contribute: () => {
-        throw new Error("broken");
-      },
-    };
-    const out = compose([says("memory", "remainder", "kept", memory), thrower], input("prompt"));
-    expect(out).toBe("kept");
-    expect(memory).toEqual([2400]);
-  });
-
-  test("shares that fill the whole budget leave the remainder nothing, and the text fits", () => {
-    const memory: number[] = [];
-    const fill = (id: string, share: number): EngineModule => ({
-      id,
-      name: id,
-      share,
-      contribute: (given) => "x".repeat(given.budgetChars),
-    });
-    const out = compose(
-      [says("memory", "remainder", "x", memory), fill("a", 0.7), fill("b", 0.7)],
+      [says("memory", "remainder", "x", memory), says("a", 0.7, "y"), says("b", 0.7, "z")],
       input("prompt"),
     );
     expect(memory).toEqual([0]);
-    expect(out?.length).toBeLessThanOrEqual(2400);
   });
 
   test("a module without contribute leaves the remainder whole", () => {

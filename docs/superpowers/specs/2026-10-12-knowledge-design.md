@@ -1,5 +1,7 @@
 # Knowledge: the project's curated truth, as the engine's second module — design
 
+**Withdrawn from wizardingcode-mem (2026-10-13):** knowledge and personas are a separate product, started after the mem is consolidated. This module was built, reviewed and measured here, then removed before any release; its code lives on the branch `archive/knowledge-module`. Kept as the record of what was built and measured.
+
 Date: 2026-10-12. Status: built and measured on branch `design/knowledge`; see ADR 0020 (`docs/adr/0020-knowledge.md`) for the rulings made in the build and the proof. Roadmap item D2a (wave 3). D2b (personas) follows with its own spec. Built on ADR 0019 (one engine with modules).
 
 ## Why

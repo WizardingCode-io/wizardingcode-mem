@@ -1,4 +1,3 @@
-import { knowledge } from "../modules/knowledge/index.ts";
 import { memory } from "../modules/memory/index.ts";
 import { DEFAULTS } from "../settings/settings.ts";
 import { logError } from "../util/log.ts";
@@ -8,7 +7,7 @@ import type { EngineModule } from "./module.ts";
 // composer asks them in (memory first, ruling F3); the setting only switches them.
 
 /** Every module shipped in this binary, in the engine's order. */
-export const BUILT_IN: readonly EngineModule[] = [memory, knowledge];
+export const BUILT_IN: readonly EngineModule[] = [memory];
 
 /** The modules on when the setting names none: the settings' own default. */
 const DEFAULT_IDS = DEFAULTS.modules.split(",");
@@ -31,10 +30,8 @@ function logUnknown(id: string): void {
 
 /**
  * The modules on, from `WIZARDINGCODE_MODULES` (a comma list). Unset or blank means the
- * default (memory and knowledge, ruling K7); otherwise the known ids named plus memory,
- * which cannot be switched off in this version (ruling F9: stopping it for a project is the
- * per-project "memory off"). Unknown ids named are ignored and told once each (a default id
- * this list lacks is not the user's mistake, and is not told); duplicates collapse; the
+ * default, memory alone; otherwise the known ids named plus memory, which cannot be switched
+ * off in this version (ruling F9: stopping it for a project is the per-project "memory off"). Unknown ids are ignored and told once each; duplicates collapse; the
  * order is always `available`'s.
  */
 export function enabledModules(
@@ -48,6 +45,6 @@ export function enabledModules(
     .filter((id) => id !== "");
   const wanted = new Set([ALWAYS_ON, ...(named.length === 0 ? DEFAULT_IDS : named)]);
   const known = new Set(available.map((module) => module.id));
-  for (const id of new Set(named)) if (!known.has(id)) onUnknown(id);
+  for (const id of wanted) if (!known.has(id)) onUnknown(id);
   return available.filter((module) => wanted.has(module.id) && moduleAllowed(module.id));
 }

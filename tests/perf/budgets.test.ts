@@ -1,12 +1,10 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { cpSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveProject } from "../../src/core/project.ts";
 import type { Redacted } from "../../src/core/redact.ts";
 import { MEMORY_KINDS } from "../../src/core/types.ts";
-import { knowledgeDir } from "../../src/modules/knowledge/files.ts";
-import { refreshIndex } from "../../src/modules/knowledge/index-store.ts";
 import { openDb, withWrite } from "../../src/store/db.ts";
 import { insertMemory } from "../../src/store/memories.ts";
 import { hostBinary, runBinary } from "../helpers/binary.ts";
@@ -413,97 +411,3 @@ describe(`hook latency with ${LINKED_PROJECTS} linked projects of ${LINKED_MEMOR
     expect(result.value).toBeLessThanOrEqual(BUDGET_MS["session-start"]);
   }, 120_000);
 });
-
-// Knowledge (K4, K5): the same store and project, now with a knowledge folder. Up to 50
-// files a hook re-indexes a changed folder itself; above that it uses the index it has
-// (here built beforehand, as the drain would) and only compares the folder's fingerprint.
-for (const ENTRIES of [50, 500]) {
-  describe(`hook latency with ${ENTRIES} knowledge entries beside ${MEMORIES} memories`, () => {
-    const folder = () => knowledgeDir(project);
-    const write = (i: number, word: () => string, extra = "") =>
-      writeFileSync(
-        join(folder(), `entry-${String(i).padStart(3, "0")}.md`),
-        [
-          "---",
-          `title: The ${word()} ${word()} must ${word()} before the ${word()} ${i}`,
-          `kind: ${["rule", "decision", "glossary", "architecture", "howto"][i % 5]}`,
-          `essential: ${i % 10 === 0}`,
-          `tags: [${word()}, ${word()}]`,
-          `updated: 2026-${String(1 + (i % 9)).padStart(2, "0")}-${String(10 + (i % 18))}`,
-          "---",
-          `Because the ${word()} ${word()} would otherwise ${word()} the ${word()}. ${extra}`,
-          `The ${word()} ${word()} is checked in src/${word()}/${word()}.ts before every ${word()}.`,
-          "",
-        ].join("\n"),
-      );
-
-    beforeAll(() => {
-      rmSync(folder(), { recursive: true, force: true });
-      mkdirSync(folder(), { recursive: true });
-      const next = generator(99);
-      const word = () => WORDS[next(WORDS.length)] as string;
-      for (let i = 0; i < ENTRIES; i++) write(i, word);
-      // What the drain does for a large folder; a small one the first hook indexes itself.
-      const db = openDb({ dataDir, busyTimeoutMs: 5000 });
-      refreshIndex(db, resolveProject(db, project).id, folder());
-      db.close();
-    });
-    afterAll(() => {
-      rmSync(folder(), { recursive: true, force: true });
-    });
-
-    const promptText = (word: () => string) =>
-      `why does the ${word()} ${word()} ${word()} when the ${word()} ${word()} is slow? I checked the ${word()} and the ${word()}, the ${word()} looks fine, but the ${word()} ${word()} keeps hitting the ${word()} ${word()} and then the ${word()} ${word()} fails on the ${word()} ${word()}. Could the ${word()} ${word()} be the problem?`;
-
-    test(`a prompt is answered within ${BUDGET_MS.prompt} ms`, async () => {
-      const next = generator(7);
-      const word = () => WORDS[next(WORDS.length)] as string;
-      // A new session each run: nothing already shown, the whole lookup every time.
-      const result = await measure("prompt", (run) => ({
-        session_id: `perf-k${ENTRIES}-prompt-${run}`,
-        prompt_id: `p${run}`,
-        prompt: promptText(word),
-      }));
-      const withKnowledge = result.outputs.filter((out) =>
-        out.includes("wizardingcode-knowledge"),
-      ).length;
-      console.log(
-        `prompt, ${ENTRIES} entries: ${result.shown} (${withKnowledge} of ${RUNS} with knowledge)`,
-      );
-      expect(withKnowledge).toBeGreaterThan(RUNS / 2);
-      expect(result.value).toBeLessThanOrEqual(BUDGET_MS.prompt);
-    }, 120_000);
-
-    test(`a session start is answered within ${BUDGET_MS["session-start"]} ms`, async () => {
-      const result = await measure("session-start", (run) => ({
-        session_id: `perf-k${ENTRIES}-start-${run}`,
-        source: "startup",
-      }));
-      console.log(`session-start, ${ENTRIES} entries: ${result.shown}`);
-      expect(
-        result.outputs.every(
-          (out) =>
-            out.includes("Known about this project") && out.includes("wizardingcode-knowledge"),
-        ),
-      ).toBe(true);
-      expect(result.value).toBeLessThanOrEqual(BUDGET_MS["session-start"]);
-    }, 120_000);
-
-    test(`a prompt after an entry was edited is answered within ${BUDGET_MS.prompt} ms`, async () => {
-      const next = generator(13);
-      const word = () => WORDS[next(WORDS.length)] as string;
-      // One file edited before every run: at 50 the hook re-indexes the folder inline; at
-      // 500 it finds the change and leaves it to the drain.
-      const result = await measure("prompt", (run) => {
-        write(run + 1, word, `Edited on run ${run}.`);
-        return {
-          session_id: `perf-k${ENTRIES}-edited-${run}`,
-          prompt_id: `p${run}`,
-          prompt: promptText(word),
-        };
-      });
-      console.log(`prompt after an edit, ${ENTRIES} entries: ${result.shown}`);
-      expect(result.value).toBeLessThanOrEqual(BUDGET_MS.prompt);
-    }, 120_000);
-  });
-}

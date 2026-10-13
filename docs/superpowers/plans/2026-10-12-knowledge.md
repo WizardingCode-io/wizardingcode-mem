@@ -1,5 +1,7 @@
 # Knowledge, the engine's second module (D2a) — Implementation Plan
 
+**Withdrawn from wizardingcode-mem (2026-10-13):** knowledge and personas are a separate product, started after the mem is consolidated. This module was built, reviewed and measured here, then removed before any release; its code lives on the branch `archive/knowledge-module`. Kept as the record of what was built and measured.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** A project's curated knowledge — Markdown files with frontmatter in `.wizardingcode/knowledge/` — reaches every agent: essential entries at session start and the most relevant ones per prompt within a 20% share, the rest through MCP tools; the agent writes entries when asked, and the mem proposes promoting memories, which the author accepts in the viewer.

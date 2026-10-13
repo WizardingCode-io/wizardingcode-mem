@@ -1,5 +1,5 @@
 import type { ZodType } from "zod";
-import type { Db, ModuleMigration } from "../store/db.ts";
+import type { Db } from "../store/db.ts";
 
 // What a module is to the engine: something that may add context at each injection
 // moment, the tools it offers the agent and the views it adds to the viewer. The hooks ask
@@ -16,8 +16,6 @@ export interface MomentInput {
   branch: string | null;
   /** The directory the agent works in (the hook's cwd). */
   root: string;
-  /** The project's working tree root (the git root, or the folder itself outside git). */
-  projectRoot: string;
   sessionId: number;
   /** The session's context epoch, already advanced when the context was cleared or compacted. */
   epoch: number;
@@ -30,11 +28,6 @@ export interface MomentInput {
   now: number;
   /** This module's share of the moment's budget, in characters. */
   budgetChars: number;
-  /**
-   * The ids of the modules asked at this moment, set by the composer: a module may leave
-   * to another what that one says (memory leaves a promoted memory to knowledge).
-   */
-  modules?: readonly string[];
 }
 
 /** Text already rendered in the module's own wrapper; null or "" contributes nothing. */
@@ -98,10 +91,4 @@ export interface EngineModule {
   tools?(mode: ToolMode): Promise<ModuleTool[]> | ModuleTool[];
   /** The viewer's rail buttons for this module, in order. */
   views?: ModuleView[];
-  /**
-   * The module's own tables, numbered from 1 in its namespace (ruling K8): applied by
-   * `openDb` after the core migrations, recorded in `module_migrations`. The same array is
-   * listed in `src/engine/module-schemas.ts`, which the store reads without loading modules.
-   */
-  migrations?: readonly ModuleMigration[];
 }

@@ -6,15 +6,7 @@ import { visibleProjects } from "../store/links.ts";
 import { logError } from "../util/log.ts";
 import { anyOf, inProject, isGeneric, stem } from "../util/words.ts";
 import { LINKED_POOL, MAX_LINKED_NOTES } from "./brief.ts";
-import {
-  exceptIds,
-  MEMORY_COLUMNS,
-  type MemoryRow,
-  prior,
-  promotedIds,
-  ranks,
-  toNote,
-} from "./notes.ts";
+import { MEMORY_COLUMNS, type MemoryRow, prior, ranks, toNote } from "./notes.ts";
 import { buildQuery, type Query, searchTokens } from "./query.ts";
 import { type Note, renderNote, renderNotes } from "./render.ts";
 
@@ -281,11 +273,6 @@ export function retrieveForPrompt(
     maxNotes?: number;
     /** Default 2,400 characters. */
     budgetChars?: number;
-    /**
-     * Memories made knowledge whose entry knowledge showed in this context, left out; looked
-     * up (`promotedIds`) when not given. The memory module passes [] when knowledge is off.
-     */
-    promoted?: readonly number[];
   },
 ): Note[] {
   const maxNotes = input.maxNotes ?? MAX_NOTES;
@@ -301,10 +288,7 @@ export function retrieveForPrompt(
   const query = buildQuery(input.prompt);
   if (query === null) return [];
 
-  // Not shown in this context yet, and not said by a knowledge entry now.
-  const unseen = `${notYetShown(db, input.sessionId, input.epoch)}${exceptIds(
-    input.promoted ?? promotedIds(db, input.projectId, input.sessionId, input.epoch),
-  )}`;
+  const unseen = notYetShown(db, input.sessionId, input.epoch);
   const candidates = new Map<number, Candidate>();
   const matched = db
     .query<MemoryRow & { bm25: number }, [string, number, number]>(

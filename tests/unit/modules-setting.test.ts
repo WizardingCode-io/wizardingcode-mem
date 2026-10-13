@@ -15,8 +15,8 @@ function parse(raw: string | undefined, available: readonly EngineModule[] = AVA
 }
 
 describe("BUILT_IN", () => {
-  test("is memory, then knowledge", () => {
-    expect(ids([...BUILT_IN])).toEqual(["memory", "knowledge"]);
+  test("is memory alone", () => {
+    expect(ids([...BUILT_IN])).toEqual(["memory"]);
   });
 });
 
@@ -27,15 +27,14 @@ describe("moduleAllowed", () => {
 });
 
 describe("enabledModules", () => {
-  test("unset, empty, whitespace or only commas mean the default, of what is available", () => {
+  test("unset, empty, whitespace or only commas mean memory alone", () => {
     for (const raw of [undefined, "", "   ", " , ,"]) {
       expect(parse(raw)).toEqual({ ids: ["memory"], logged: [] });
     }
   });
 
-  test("defaults to memory and knowledge (ruling K7)", () => {
-    expect(ids(enabledModules(undefined))).toEqual(["memory", "knowledge"]);
-    expect(ids(enabledModules("memory,knowledge"))).toEqual(["memory", "knowledge"]);
+  test("defaults to the built-in list", () => {
+    expect(ids(enabledModules(undefined))).toEqual(["memory"]);
     expect(ids(enabledModules("memory"))).toEqual(["memory"]);
   });
 
@@ -48,14 +47,14 @@ describe("enabledModules", () => {
   });
 
   test("unknown ids are ignored and told once each", () => {
-    expect(parse("memory,vault,vault,personas")).toEqual({
+    expect(parse("memory,knowledge,knowledge,personas")).toEqual({
       ids: ["memory"],
-      logged: ["vault", "personas"],
+      logged: ["knowledge", "personas"],
     });
   });
 
   test("memory is always on: a list without it still has it, first", () => {
     expect(parse("echo").ids).toEqual(["memory", "echo"]);
-    expect(parse("personas")).toEqual({ ids: ["memory"], logged: ["personas"] });
+    expect(parse("knowledge")).toEqual({ ids: ["memory"], logged: ["knowledge"] });
   });
 });

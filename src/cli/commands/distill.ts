@@ -2,13 +2,9 @@ import { ADAPTERS } from "../../adapters/index.ts";
 import { drainQueue } from "../../distill/queue.ts";
 import { healLine, healVectors } from "../../embed/backfill.ts";
 import { loadModel } from "../../embed/model.ts";
-import { enabledModules } from "../../engine/modules.ts";
 import { makeJudge } from "../../judge/index.ts";
 import { proposeRulesSafely } from "../../links/rules.ts";
 import { suggestLinksSafely } from "../../links/suggest.ts";
-import { proposePromotionsSafely } from "../../modules/knowledge/promote.ts";
-import { refreshActiveProjects } from "../../modules/knowledge/refresh.ts";
-import { loadSettings } from "../../settings/settings.ts";
 import { type Db, openDb } from "../../store/db.ts";
 import { logError } from "../../util/log.ts";
 import { resolvePaths } from "../../util/paths.ts";
@@ -49,15 +45,6 @@ export async function run(): Promise<number> {
     suggestLinksSafely(db, Date.now());
     // The author's own rules: proposed from the newest conventions and decisions, bounded, never fatal.
     await proposeRulesSafely(db, { judge, now: Date.now(), model });
-    // The knowledge indexes of the projects worked in lately: a folder too large for a hook
-    // to re-index is brought up to date here (K5). Bounded, never fatal.
-    const modules = enabledModules(loadSettings(process.env, dataDir).modules);
-    if (modules.some((module) => module.id === "knowledge")) {
-      refreshActiveProjects(db, Date.now());
-      // Memories worth keeping, proposed as knowledge after the rules: bounded, a cursor,
-      // never a file written (only the author's click writes one). Never fatal.
-      await proposePromotionsSafely(db, { now: Date.now(), judge });
-    }
     return 0;
   } catch (error) {
     logError("distill", error);
