@@ -54,7 +54,7 @@ describe("GET /api/modules", () => {
   test("a module that is off shows nothing, and memory cannot be off", async () => {
     const s = await start({ WIZARDINGCODE_MODULES: "echo" });
     expect((await modules(s)).map((m) => m.id)).toEqual(["memory", "echo"]);
-    const alone = await start({ WIZARDINGCODE_MODULES: "personas" });
+    const alone = await start({ WIZARDINGCODE_MODULES: "knowledge" });
     expect((await modules(alone)).map((m) => m.id)).toEqual(["memory"]);
   });
 

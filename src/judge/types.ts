@@ -70,21 +70,6 @@ export interface PersonalVerdict {
   confidence: number;
 }
 
-export interface StandingInput {
-  title: string;
-  body: string;
-  kind: MemoryKind;
-  /** The name of the project the memory belongs to. */
-  project: string;
-}
-
-export interface StandingVerdict {
-  /** Whether the memory states a rule or decision that stays true beyond its session. */
-  standing: boolean;
-  /** How sure the judge is of `standing`, 0.5 to 1; 0 when no judge could say. */
-  confidence: number;
-}
-
 export interface Judge {
   readonly name: JudgeSource | "fallback";
   /** Recorded on each memory, so that it can be judged again when a judge improves. */
@@ -95,6 +80,4 @@ export interface Judge {
   consolidate(input: ConsolidateInput): Promise<ConsolidateVerdict>;
   /** Only judges that can tell have it; without it, a proposed rule stands and the author decides. */
   personal?(input: PersonalInput): Promise<PersonalVerdict>;
-  /** Only judges that can tell have it; without it, a proposed promotion stands and the author decides. */
-  standing?(input: StandingInput): Promise<StandingVerdict>;
 }

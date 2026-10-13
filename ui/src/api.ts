@@ -1,12 +1,10 @@
 // The viewer's client for /api. The token comes from the URL the binary opened.
 import type { HistoryOffer, HistoryProgress, HistoryStatus, PastSearch } from "./history";
-import type { KnowledgeEntry, KnowledgeView, Promotion } from "./knowledge";
 import type { LinkKind, LinksList, LinksOffer, LinkView, RulesList } from "./links";
 import type { ModuleInfo } from "./modules";
 import type { SemanticStatus } from "./semantic";
 
 export type { SemanticStatus } from "./semantic";
-export type { KnowledgeEntry, KnowledgeListEntry, KnowledgeView, Promotion } from "./knowledge";
 export type { ModuleInfo, ModuleViewInfo } from "./modules";
 export type { AcceptedRule, LinkKind, LinksList, LinksOffer, LinkView, ProposedRule, RulesList } from "./links";
 export type { HistoryOffer, HistoryProgress, HistoryQueue, HistoryRun, HistoryRunState, HistoryStatus, PastSearch, PastTurn } from "./history";
@@ -287,15 +285,6 @@ export const api = {
   semanticBackfill: () => call<{ started: boolean }>("/api/semantic/backfill", { method: "POST", body: "{}" }),
   semanticSwitch: (on: boolean) => call<SemanticStatus>(`/api/semantic/${on ? "on" : "off"}`, { method: "POST", body: "{}" }),
   semanticDelete: () => call<SemanticStatus>("/api/semantic/delete", { method: "POST", body: "{}" }),
-  /** The project's knowledge as its folder has it now (read only). */
-  knowledge: (projectId: number) => call<KnowledgeView>(`/api/knowledge?project=${projectId}`),
-  knowledgeEntry: (projectId: number, slug: string) =>
-    call<KnowledgeEntry>(`/api/knowledge/entries/${encodeURIComponent(slug)}?project=${projectId}`),
-  /** Memories proposed as knowledge, that could still be accepted. */
-  promotions: (projectId: number) => call<Promotion[]>(`/api/knowledge/proposals?project=${projectId}`),
-  /** Make knowledge (writes the entry file) or reject (never proposed again). */
-  decidePromotion: (id: number, change: "accept" | "reject") =>
-    call<{ slug: string; path: string } | { rejected: true }>(`/api/knowledge/proposals/${id}/${change}`, { method: "POST", body: "{}" }),
   compact: (dryRun: boolean) =>
     call<CompactReport>("/api/compact", { method: "POST", body: JSON.stringify({ dryRun }) }),
 };

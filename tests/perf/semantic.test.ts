@@ -65,8 +65,7 @@ beforeAll(() => {
       vector.run(id, model.id, scale, new Uint8Array(q.buffer));
     }
   });
-  // Seeding this many rows outlasts bun's 5 s hook default on slower CI runners.
-}, 60_000);
+});
 afterAll(() => {
   db.close();
   rmSync(base, { recursive: true, force: true });

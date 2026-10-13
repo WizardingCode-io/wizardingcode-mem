@@ -12,14 +12,9 @@ import { qwenContext } from "../install/qwen.ts";
 import { storeDirOf } from "../util/paths.ts";
 import type { DoctorContext } from "./checks.ts";
 
-/**
- * Where everything is on this machine, as `doctor` and the viewer's Agents panel see it.
- * `cwd`, given by `doctor` only, is the folder whose project's knowledge it looks at.
- */
-export function doctorContext(dataDir: string, now = Date.now(), cwd?: string): DoctorContext {
+/** Where everything is on this machine, as `doctor` and the viewer's Agents panel see it. */
+export function doctorContext(dataDir: string, now = Date.now()): DoctorContext {
   return {
-    ...(cwd === undefined ? {} : { cwd }),
-    env: process.env,
     dataDir,
     storeDir: storeDirOf(dataDir),
     settingsPath: join(

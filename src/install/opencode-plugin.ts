@@ -127,44 +127,6 @@ ${factoryExport}function createPlugin(deps) {
         },
         execute: (args, ctx) => call("project_links", args, ctx),
       }),
-      knowledge_search: toolApi({
-        description: "Search this project's curated knowledge (decisions, rules, glossary, architecture, how-tos kept in its repository), by words and their forms; returns one heading per entry.",
-        args: {
-          query: toolApi.schema.string(),
-          limit: toolApi.schema.number().int().optional(),
-        },
-        execute: (args, ctx) => call("knowledge_search", args, ctx),
-      }),
-      knowledge_get: toolApi({
-        description: "Read knowledge entries in full, by the slugs that knowledge_search returned.",
-        args: { slugs: toolApi.schema.array(toolApi.schema.string()) },
-        execute: (args, ctx) => call("knowledge_get", args, ctx),
-      }),
-      knowledge_save: toolApi({
-        description: "Write a new knowledge entry into the project's repository (.wizardingcode/knowledge), only when the user asks to keep something as knowledge; never replaces an existing entry.",
-        args: {
-          title: toolApi.schema.string(),
-          kind: toolApi.schema.enum(["decision", "rule", "glossary", "architecture", "howto"]),
-          body: toolApi.schema.string(),
-          essential: toolApi.schema.boolean().optional(),
-          tags: toolApi.schema.array(toolApi.schema.string()).optional(),
-          slug: toolApi.schema.string().optional(),
-        },
-        execute: (args, ctx) => call("knowledge_save", args, ctx),
-      }),
-      knowledge_update: toolApi({
-        description: "Change an existing knowledge entry's fields or body (for example mark it superseded), only when the user asks.",
-        args: {
-          slug: toolApi.schema.string(),
-          title: toolApi.schema.string().optional(),
-          kind: toolApi.schema.enum(["decision", "rule", "glossary", "architecture", "howto"]).optional(),
-          body: toolApi.schema.string().optional(),
-          essential: toolApi.schema.boolean().optional(),
-          status: toolApi.schema.enum(["active", "draft", "superseded"]).optional(),
-          tags: toolApi.schema.array(toolApi.schema.string()).optional(),
-        },
-        execute: (args, ctx) => call("knowledge_update", args, ctx),
-      }),
     };
 
     return {

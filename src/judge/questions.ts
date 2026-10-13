@@ -8,8 +8,6 @@ import type {
   DistillVerdict,
   PersonalInput,
   PersonalVerdict,
-  StandingInput,
-  StandingVerdict,
 } from "./types.ts";
 
 // The questions a System One model is asked, and how its answers become verdicts.
@@ -227,31 +225,4 @@ export function personalQuestions(): Record<string, Question> {
 export function personalVerdict(answers: Record<string, Answer>): PersonalVerdict {
   const p = noul(answers, "personal");
   return p >= 0.5 ? { personal: true, confidence: p } : { personal: false, confidence: 1 - p };
-}
-
-export function standingState(input: StandingInput) {
-  return {
-    memory: { title: input.title, body: input.body, kind: input.kind },
-    project: input.project,
-  };
-}
-
-export function standingQuestions(): Record<string, Question> {
-  return {
-    standing: {
-      type: "noul",
-      instructions:
-        "Does `memory` state a rule or decision that stays true for `project` beyond the session it was written in, rather than a record of something that happened in a session (work done, an agent dispatched, a review verdict, a pull request opened, a plan for a session)?",
-      criteria: {
-        true: "A standing rule, constraint, convention or decision about the project's code, data, architecture or way of working, that a later session should still follow.",
-        false:
-          "A record of a session's events or progress: what was done or is to be done next, who or which agent was asked to do it, what a review concluded, what was opened, merged or deployed, or the plan for this session.",
-      },
-    },
-  };
-}
-
-export function standingVerdict(answers: Record<string, Answer>): StandingVerdict {
-  const p = noul(answers, "standing");
-  return p >= 0.5 ? { standing: true, confidence: p } : { standing: false, confidence: 1 - p };
 }

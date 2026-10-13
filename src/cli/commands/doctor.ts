@@ -12,7 +12,7 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 /** `wizardingcode-mem doctor`: checks the installation and says what to do about anything wrong. */
 export function run(): number {
-  const checks = runChecks(doctorContext(defaultDataDir(), Date.now(), process.cwd()));
+  const checks = runChecks(doctorContext(defaultDataDir()));
   const failures = checks.filter((check) => check.status === "fail").length;
   const warnings = checks.filter((check) => check.status === "warn").length;
   const summary =

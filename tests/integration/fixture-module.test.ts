@@ -170,7 +170,7 @@ describe("a second module", () => {
 
   test("a list without memory still injects memory's text", () => {
     const alone = world([memory]);
-    const kept = world(enabledModules("personas", [memory], () => {}));
+    const kept = world(enabledModules("knowledge", [memory], () => {}));
     expect(moments(kept.hook, kept.project)).toEqual(moments(alone.hook, alone.project));
   });
 });
@@ -218,17 +218,17 @@ describe("WIZARDINGCODE_MODULES through the hook command", () => {
 
   test("a list without memory, from the file: memory still injects, exit 0, the unknown id logged", async () => {
     const { dir, project } = dataDir();
-    writeFileSync(join(dir, "env"), "WIZARDINGCODE_MODULES=personas\n");
+    writeFileSync(join(dir, "env"), "WIZARDINGCODE_MODULES=knowledge\n");
     const out = await run(dir, project);
     expect(out.exitCode).toBe(0);
     expect(out.stdout).toContain("Run the pinned bun for tests");
     const log = join(dir, "logs", "wizardingcode-mem.log");
-    expect(existsSync(log) && readFileSync(log, "utf8")).toContain("unknown module: personas");
+    expect(existsSync(log) && readFileSync(log, "utf8")).toContain("unknown module: knowledge");
   });
 
   test("the environment wins over the file", async () => {
     const { dir, project } = dataDir();
-    writeFileSync(join(dir, "env"), "WIZARDINGCODE_MODULES=personas\n");
+    writeFileSync(join(dir, "env"), "WIZARDINGCODE_MODULES=knowledge\n");
     const out = await run(dir, project, { WIZARDINGCODE_MODULES: "memory" });
     expect(out.exitCode).toBe(0);
     expect(out.stdout).toContain("Run the pinned bun for tests");
