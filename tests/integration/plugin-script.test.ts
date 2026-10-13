@@ -22,7 +22,11 @@ const os = process.platform === "darwin" ? "darwin" : "linux";
 const arch = process.arch === "arm64" ? "arm64" : "x64";
 const FILE = `wizardingcode-mem-${os}-${arch}`;
 const fake = (version: string) =>
-  `#!/bin/sh\nif [ "$1" = "--version" ]; then echo ${version}; exit 0; fi\ncat > "$(dirname "$0")/stdin.txt"\necho "ran: $*"\n`;
+  `#!/bin/sh\necho "$*" >> "$(dirname "$0")/calls.txt"\nif [ "$1" = "--version" ]; then echo ${version}; exit 0; fi\ncat > "$(dirname "$0")/stdin.txt"\necho "ran: $*"\n`;
+const calls = () =>
+  readFileSync(join(home, ".wizardingcode", "mem", "bin", "calls.txt"), "utf8")
+    .trim()
+    .split("\n");
 
 let home: string;
 let server: ReturnType<typeof Bun.serve> | undefined;
@@ -167,6 +171,18 @@ describe("plugin/wizardingcode-mem.sh", () => {
     expect(readFileSync(join(home, ".wizardingcode", "mem", "bin", "stdin.txt"), "utf8")).toBe(
       '{"session_id":"s","cwd":"/p"}',
     );
+  });
+
+  test("a prompt, stop or file hook hands over at once: the binary's version is asked at the session start only", async () => {
+    place(pkg.version);
+    for (const event of ["prompt", "turn-end", "session-end", "file-read"]) {
+      expect((await hook("claude-code", event)).stdout).toBe(
+        `ran: hook claude-code ${event} --via-plugin\n`,
+      );
+    }
+    expect(calls().filter((call) => call === "--version")).toEqual([]);
+    await hook("claude-code", "session-start");
+    expect(calls().filter((call) => call === "--version")).toEqual(["--version"]);
   });
 
   test("without the binary, a prompt or stop hook does nothing and never waits on a download", async () => {
