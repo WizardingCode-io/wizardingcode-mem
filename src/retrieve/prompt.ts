@@ -7,8 +7,9 @@ import { logError } from "../util/log.ts";
 import { anyOf, inProject, isGeneric, stem } from "../util/words.ts";
 import { LINKED_POOL, MAX_LINKED_NOTES } from "./brief.ts";
 import { MEMORY_COLUMNS, type MemoryRow, prior, ranks, toNote } from "./notes.ts";
-import { buildQuery, type Query, searchTokens } from "./query.ts";
+import { buildQuery, matchTerms, type Query, searchTokens } from "./query.ts";
 import { type Note, renderNote, renderNotes } from "./render.ts";
+import { documentCounts } from "./vocab.ts";
 
 export { recordInjections } from "./notes.ts";
 
@@ -145,9 +146,7 @@ function extraCandidates(
 function scoredRules(db: Db, rules: Candidate[], query: Query, context: Context): Candidate[] {
   if (rules.length === 0) return [];
   try {
-    const terms = [...query.match.matchAll(/"((?:[^"]|"")*)"/g)].map((found) =>
-      (found[1] as string).replaceAll('""', '"'),
-    );
+    const terms = matchTerms(query.match);
     const lookup = db.query<{ bm25: number }, [string, number]>(
       `SELECT bm25(memories_fts, 4.0, 1.0, 2.0, 0.0) AS bm25 FROM memories_fts
         WHERE memories_fts MATCH ? AND rowid = ?`,
@@ -165,6 +164,21 @@ function scoredRules(db: Db, rules: Candidate[], query: Query, context: Context)
   } catch (error) {
     failOpen(error);
     return [];
+  }
+}
+
+let vocabFailed = false;
+
+/** How many memories of the index hold each one-word term; none known if it cannot tell. */
+function termCounts(db: Db, terms: string[]): Map<string, number> {
+  try {
+    return documentCounts(db, terms);
+  } catch (error) {
+    if (!vocabFailed) {
+      vocabFailed = true;
+      logError("prompt.vocab", error);
+    }
+    return new Map();
   }
 }
 
@@ -240,18 +254,20 @@ function hasEvidence(candidate: Candidate, query: Query, isRare: (word: string) 
   const matched = query.words.filter((word) => stems.has(stem(searchTokens(word)[0] ?? "")));
   // Shared words are weighed, not counted: a word few memories have says most, an
   // ordinary one less, and one found in any talk about code ("fix", "test") least.
-  let weight = 0;
-  let telling = 0;
-  for (const word of matched) {
-    if (isGeneric(word)) {
-      weight += 0.5;
-    } else {
-      telling++;
-      weight += isRare(word) ? 1.5 : 1;
-    }
+  const telling = matched.filter((word) => !isGeneric(word));
+  if (telling.length === 0) return false;
+  if (candidate.overlap > 0) return true;
+  // Each telling word weighs one, and half again if it is rare. Whether it is rare costs a
+  // lookup, so it is asked only while the answer could still change the outcome.
+  let weight = (matched.length - telling.length) * 0.5 + telling.length;
+  let unknown = telling.length;
+  for (const word of telling) {
+    if (weight >= EVIDENCE_WEIGHT) return true;
+    if (weight + unknown * 0.5 < EVIDENCE_WEIGHT) return false;
+    unknown--;
+    if (isRare(word)) weight += 0.5;
   }
-  if (telling === 0) return false;
-  return candidate.overlap > 0 || weight >= EVIDENCE_WEIGHT;
+  return weight >= EVIDENCE_WEIGHT;
 }
 
 /**
@@ -289,6 +305,7 @@ export function retrieveForPrompt(
   if (query === null) return [];
 
   const unseen = notYetShown(db, input.sessionId, input.epoch);
+  const counts = termCounts(db, matchTerms(query.match));
   const candidates = new Map<number, Candidate>();
   const matched = db
     .query<MemoryRow & { bm25: number }, [string, number, number]>(
@@ -350,7 +367,11 @@ export function retrieveForPrompt(
     let rare = known.get(word);
     if (rare === undefined) {
       const forms = new Set([word, stem(searchTokens(word)[0] ?? word)]);
+      // The project's memories are some of the index's: a word that few memories of the
+      // whole index hold is rare in the project too, and needs no counting there.
+      const atMost = [...forms].reduce((sum, form) => sum + (counts.get(form) ?? Infinity), 0);
       rare =
+        atMost <= rareLimit ||
         (frequency.get(inProject(anyOf(forms), input.projectId), input.projectId, rareLimit + 1)
           ?.n ?? 0) <= rareLimit;
       known.set(word, rare);
