@@ -68,3 +68,7 @@ Writing the migration test exposed a real leak: the viewer, started by tests tha
 ## Project identity is the engine's
 
 `src/core/project.ts` and the links store (`src/store/links.ts`, ADR 0018) are engine-level: every module keys its data by the same project ids and reads the same visible-projects set.
+
+## Note (2026-10-13): knowledge and personas are a separate product
+
+The author decided that knowledge and personas are not modules of wizardingcode-mem but a product of their own, started after the mem is consolidated (ADR 0020 records the knowledge module that was built here and withdrawn before release). The engine contract stays as the mem's internal seam; memory is its only module. How the separate product and the mem share an app and avoid injecting the same context twice is that product's design.

@@ -28,10 +28,13 @@ export const day = (epochMs: number) => new Date(epochMs).toISOString().slice(0,
 const oneLine = (text: string) => text.replace(/\s+/g, " ").trim();
 
 // shibaox-mem-notes: the wrapper's name until 0.3.0, still in older sessions' transcripts.
-const OWN_TAG = /<(\s*\/?\s*(?:wizardingcode|shibaox)-mem-notes\s*)>/gi;
+// Any `wizardingcode-…` tag counts: other WizardingCode products wrap their context the same
+// way, and a memory must not be able to pose as one of their blocks.
+const OWN_TAG = /<(\s*\/?\s*(?:wizardingcode-[a-z0-9-]+|shibaox-mem-notes)\s*)>/gi;
 /**
  * Stored text is shown inside our wrapper and must not be able to close or reopen it:
- * our own tag, wherever it appears in that text, loses its angle brackets.
+ * our own tag, or any WizardingCode tag, wherever it appears in that text, loses its
+ * angle brackets.
  */
 export const inert = (text: string) => text.replace(OWN_TAG, "‹$1›");
 
