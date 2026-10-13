@@ -2,7 +2,7 @@ import { statSync } from "node:fs";
 import { claudeCodeRoot } from "../../adapters/claude-code/history.ts";
 import { codexRoot } from "../../adapters/codex/history.ts";
 import { replaceAllImports, restoreImports } from "../../backfill/replace.ts";
-import { runBackfill } from "../../backfill/run.ts";
+import { backfillLine, runBackfill } from "../../backfill/run.ts";
 import { healLine, healVectors } from "../../embed/backfill.ts";
 import { loadModel } from "../../embed/model.ts";
 import { HISTORY_DB_FILE, openHistoryDb } from "../../history/db.ts";
@@ -225,9 +225,7 @@ export async function run(argv: string[]): Promise<number> {
           onProgress: renew,
         },
       );
-      process.stdout.write(
-        `history: ${backfill.transcripts} transcripts, ${backfill.queued} queued, ${backfill.known} known, ${backfill.skipped} skipped (window ${backfill.skippedBy.window}, host ${backfill.skippedBy.host}, disabled ${backfill.skippedBy.disabled}, unresolved ${backfill.skippedBy.unresolved}), ${backfill.distilled} distilled, ${backfill.remaining} remaining, ${backfill.ready} projects ready for replace-imports\n`,
-      );
+      process.stdout.write(backfillLine(backfill));
       // What was written before the model arrived (or by an earlier import) gets its vector now.
       const healed = await healVectors(db as Db, loadModel({ dataDir }), { now: Date.now });
       if (healed) process.stdout.write(healLine(healed));

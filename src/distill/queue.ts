@@ -14,6 +14,8 @@ const DRAIN_LEASE_MS = 120_000;
 const HOOK_RUNS_KEPT = 2000;
 
 export interface DrainReport {
+  /** True when nothing was claimed because another process holds the drain. */
+  held: boolean;
   claimed: number;
   done: number;
   skipped: number;
@@ -103,8 +105,8 @@ export async function drainQueue(
   options: { owner: string; maxTurns: number; maxMs: number },
 ): Promise<DrainReport> {
   const { db } = deps;
-  const report: DrainReport = { claimed: 0, done: 0, skipped: 0, failed: 0 };
-  if (!claimDrain(db, options.owner, deps.now(), DRAIN_LEASE_MS)) return report;
+  const report: DrainReport = { held: false, claimed: 0, done: 0, skipped: 0, failed: 0 };
+  if (!claimDrain(db, options.owner, deps.now(), DRAIN_LEASE_MS)) return { ...report, held: true };
 
   const started = performance.now();
   const projects = new Set<number>();
