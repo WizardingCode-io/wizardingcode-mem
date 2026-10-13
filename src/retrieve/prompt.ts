@@ -207,7 +207,10 @@ function withoutCommonTerms(db: Db, query: Query, counts: Map<string, number>): 
   const held = (term: string) => counts.get(term) ?? 0;
   let postings = terms.reduce((sum, term) => sum + held(term), 0);
   if (postings <= POSTINGS_BUDGET) return query.match;
-  const total = db.query<{ n: number }, []>("SELECT count(*) AS n FROM memories").get()?.n ?? 0;
+  // How many memories the index holds. Memories are never deleted, only archived or
+  // superseded, and their ids are given in order: the highest is the count, read from the
+  // end of the table instead of counted over all of it.
+  const total = db.query<{ n: number }, []>("SELECT max(id) AS n FROM memories").get()?.n ?? 0;
   const limit = Math.max(COMMON_FLOOR, total * COMMON_SHARE);
   const identifiers = new Set(query.identifiers);
   const dropped = new Set<string>();
@@ -222,6 +225,58 @@ function withoutCommonTerms(db: Db, query: Query, counts: Map<string, number>): 
   if (kept.length === terms.length) return query.match;
   if (kept.length > 0) return anyOf(kept);
   return anyOf([...terms].sort((a, b) => held(a) - held(b)).slice(0, RAREST_KEPT));
+}
+
+/** How many of the index's best matches are ranked before any memory is read. */
+const PREFETCH = 100;
+
+/**
+ * The project's best CANDIDATES_PER_CHANNEL text matches that pass `filters` (a condition on
+ * `m`), best first. In a large project a prompt matches thousands of memories, and reading
+ * every one of them, body and all, to keep twenty cost most of the prompt's budget: so the
+ * index ranks its matches alone, and only the best PREFETCH are read and filtered. That is
+ * exact when the index has no more matches than those, or when enough of them pass: every
+ * memory past them ranks no better. Otherwise, rarely, every match is read, as before.
+ */
+export function projectMatches(
+  db: Db,
+  search: string,
+  projectId: number,
+  filters: string,
+): (MemoryRow & { bm25: number })[] {
+  const ranked = db
+    .query<{ id: number; bm25: number }, [string]>(
+      `SELECT rowid AS id, bm25(memories_fts, 4.0, 1.0, 2.0, 0.0) AS bm25 FROM memories_fts
+        WHERE memories_fts MATCH ? ORDER BY bm25 LIMIT ${PREFETCH}`,
+    )
+    .all(search);
+  if (ranked.length === 0) return [];
+  const rows = new Map(
+    db
+      .query<MemoryRow, [string, number]>(
+        `SELECT ${MEMORY_COLUMNS} FROM memories m
+          WHERE m.id IN (SELECT value FROM json_each(?))
+            AND m.project_id = ? AND m.status = 'active' AND ${filters}`,
+      )
+      .all(JSON.stringify(ranked.map((match) => match.id)), projectId)
+      .map((row) => [row.id, row]),
+  );
+  const kept: (MemoryRow & { bm25: number })[] = [];
+  for (const { id, bm25 } of ranked) {
+    const row = rows.get(id);
+    if (row === undefined) continue;
+    kept.push({ ...row, bm25 });
+    if (kept.length === CANDIDATES_PER_CHANNEL) return kept;
+  }
+  if (ranked.length < PREFETCH) return kept;
+  return db
+    .query<MemoryRow & { bm25: number }, [string, number, number]>(
+      `SELECT ${MEMORY_COLUMNS}, bm25(memories_fts, 4.0, 1.0, 2.0, 0.0) AS bm25
+         FROM memories_fts CROSS JOIN memories m ON m.id = memories_fts.rowid
+        WHERE memories_fts MATCH ? AND m.project_id = ? AND m.status = 'active' AND ${filters}
+        ORDER BY bm25 LIMIT ?`,
+    )
+    .all(search, projectId, CANDIDATES_PER_CHANNEL);
 }
 
 type Context = { branch: string | null; now: number };
@@ -349,18 +404,12 @@ export function retrieveForPrompt(
   const unseen = notYetShown(db, input.sessionId, input.epoch);
   const counts = termCounts(db, matchTerms(query.match));
   const candidates = new Map<number, Candidate>();
-  const matched = db
-    .query<MemoryRow & { bm25: number }, [string, number, number]>(
-      `SELECT ${MEMORY_COLUMNS}, bm25(memories_fts, 4.0, 1.0, 2.0, 0.0) AS bm25
-         FROM memories_fts CROSS JOIN memories m ON m.id = memories_fts.rowid
-        WHERE memories_fts MATCH ? AND m.project_id = ? AND m.status = 'active' AND ${unseen} AND ${kindFilter}
-        ORDER BY bm25 LIMIT ?`,
-    )
-    .all(
-      inProject(withoutCommonTerms(db, query, counts), input.projectId),
-      input.projectId,
-      CANDIDATES_PER_CHANNEL,
-    );
+  const matched = projectMatches(
+    db,
+    inProject(withoutCommonTerms(db, query, counts), input.projectId),
+    input.projectId,
+    `${unseen} AND ${kindFilter}`,
+  );
   for (const { bm25, ...row } of matched) candidates.set(row.id, { row, bm25, overlap: 0 });
 
   const files = sessionFiles(db, input.sessionId);
@@ -394,14 +443,21 @@ export function retrieveForPrompt(
   // A word is rare when few of the project's memories contain it. CROSS JOIN, here and
   // in every full-text query, pins the join order: left to itself the planner may walk
   // the memories and probe the index once per row, which is a hundred times slower.
-  const total =
-    db
-      .query<{ n: number }, [number]>(
-        "SELECT count(*) AS n FROM memories WHERE project_id = ? AND status = 'active'",
-      )
-      .get(input.projectId)?.n ?? 0;
-  // Never below one: in a small project, a word two memories share is not rare.
-  const rareLimit = Math.max(1, Math.ceil(total * 0.05));
+  // Counted when first needed: most prompts' evidence is settled without asking.
+  let rareLimit: number | undefined;
+  const limitOfRare = () => {
+    if (rareLimit === undefined) {
+      const total =
+        db
+          .query<{ n: number }, [number]>(
+            "SELECT count(*) AS n FROM memories WHERE project_id = ? AND status = 'active'",
+          )
+          .get(input.projectId)?.n ?? 0;
+      // Never below one: in a small project, a word two memories share is not rare.
+      rareLimit = Math.max(1, Math.ceil(total * 0.05));
+    }
+    return rareLimit;
+  };
   // Counted only as far as the limit: past it the word is common, however common.
   const frequency = db.query<{ n: number }, [string, number, number]>(
     `SELECT count(*) AS n FROM (
@@ -416,10 +472,11 @@ export function retrieveForPrompt(
       // The project's memories are some of the index's: a word that few memories of the
       // whole index hold is rare in the project too, and needs no counting there.
       const atMost = [...forms].reduce((sum, form) => sum + (counts.get(form) ?? Infinity), 0);
+      const limit = limitOfRare();
       rare =
-        atMost <= rareLimit ||
-        (frequency.get(inProject(anyOf(forms), input.projectId), input.projectId, rareLimit + 1)
-          ?.n ?? 0) <= rareLimit;
+        atMost <= limit ||
+        (frequency.get(inProject(anyOf(forms), input.projectId), input.projectId, limit + 1)?.n ??
+          0) <= limit;
       known.set(word, rare);
     }
     return rare;

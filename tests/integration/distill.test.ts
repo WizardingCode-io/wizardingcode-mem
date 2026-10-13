@@ -113,7 +113,7 @@ describe("distill: from a queued turn to a memory", () => {
 
   test("a turn worth keeping becomes one memory", async () => {
     turn("the tests fail with a timeout", FIX);
-    expect(await drain()).toEqual({ claimed: 1, done: 1, skipped: 0, failed: 0 });
+    expect(await drain()).toEqual({ held: false, claimed: 1, done: 1, skipped: 0, failed: 0 });
     expect(memories()).toEqual([
       {
         id: 1,
@@ -170,7 +170,7 @@ describe("distill: from a queued turn to a memory", () => {
 
   test("a turn not worth keeping is skipped", async () => {
     turn("thanks!", "You're welcome! Let me know if you need anything else.");
-    expect(await drain()).toEqual({ claimed: 1, done: 0, skipped: 1, failed: 0 });
+    expect(await drain()).toEqual({ held: false, claimed: 1, done: 0, skipped: 1, failed: 0 });
     expect(memories()).toEqual([]);
     expect(turnStates()).toEqual(["skipped"]);
   });
@@ -393,7 +393,7 @@ describe("distill: the queue", () => {
     // One run retries until the attempts run out, so fail exactly once per run.
     const judge = throwing(1);
     const first = await drainQueue(deps(judge), { owner: "a", maxTurns: 1, maxMs: 10_000 });
-    expect(first).toEqual({ claimed: 1, done: 0, skipped: 0, failed: 0 });
+    expect(first).toEqual({ held: false, claimed: 1, done: 0, skipped: 0, failed: 0 });
     expect(turnStates()).toEqual(["pending"]);
     expect(memories()).toEqual([]);
 
@@ -405,7 +405,7 @@ describe("distill: the queue", () => {
   test("a turn that keeps failing is given up on after three attempts, with the reason kept", async () => {
     turn("the tests fail with a timeout", FIX);
     const report = await drain(throwing(99));
-    expect(report).toEqual({ claimed: 3, done: 0, skipped: 0, failed: 1 });
+    expect(report).toEqual({ held: false, claimed: 3, done: 0, skipped: 0, failed: 1 });
     expect(db.query("SELECT state, attempts, last_error FROM turns").all()).toEqual([
       { state: "failed", attempts: 3, last_error: "Error: judge unavailable" },
     ]);
@@ -451,7 +451,7 @@ describe("distill: the queue", () => {
     db.run("INSERT INTO meta (key, value) VALUES ('drain.lease', ?)", [
       JSON.stringify({ owner: "someone-else", until: clock + 60_000 }),
     ]);
-    expect(await drain()).toEqual({ claimed: 0, done: 0, skipped: 0, failed: 0 });
+    expect(await drain()).toEqual({ held: true, claimed: 0, done: 0, skipped: 0, failed: 0 });
     expect(turnStates()).toEqual(["pending"]);
 
     clock += 120_000;
@@ -519,7 +519,7 @@ describe("distill: what must not become a memory", () => {
       '<agent-message from="a1">\nNever mock the database in these tests. Always use a real SQLite file.\n</agent-message>',
       "Understood.",
     );
-    expect(await drain()).toEqual({ claimed: 1, done: 0, skipped: 1, failed: 0 });
+    expect(await drain()).toEqual({ held: false, claimed: 1, done: 0, skipped: 1, failed: 0 });
     expect(memories()).toEqual([]);
   });
 

@@ -14,6 +14,8 @@ import { projectsReadyForReplacement } from "./replace.ts";
 
 const DAY = 86_400_000;
 const BATCH = 50;
+/** How long to wait, each time, for another process's drain to let go. */
+const HELD_WAIT_MS = 2000;
 
 export interface BackfillReport {
   transcripts: number;
@@ -26,6 +28,17 @@ export interface BackfillReport {
   ready: number;
   /** History turns still waiting; a later run continues with them. */
   remaining: number;
+  /** True when the run ended waiting for another process's drain, not for want of turns. */
+  drainHeld: boolean;
+}
+
+/** The line `history import` prints. */
+export function backfillLine(report: BackfillReport): string {
+  const remaining =
+    report.drainHeld && report.remaining > 0
+      ? `${report.remaining} remaining because another process was distilling; run it again to continue`
+      : `${report.remaining} remaining`;
+  return `history: ${report.transcripts} transcripts, ${report.queued} queued, ${report.known} known, ${report.skipped} skipped (window ${report.skippedBy.window}, host ${report.skippedBy.host}, disabled ${report.skippedBy.disabled}, unresolved ${report.skippedBy.unresolved}), ${report.distilled} distilled, ${remaining}, ${report.ready} projects ready for replace-imports\n`;
 }
 
 const READERS = {
@@ -55,6 +68,8 @@ export async function runBackfill(
      * after the import started) is used from the next batch on.
      */
     model?: Model | null | (() => Model | null);
+    /** Waits while another process holds the drain; Bun.sleep by default. */
+    sleep?: (ms: number) => Promise<void>;
   },
   options: {
     days: number;
@@ -75,7 +90,9 @@ export async function runBackfill(
     distilled: 0,
     ready: 0,
     remaining: 0,
+    drainHeld: false,
   };
+  const sleep = deps.sleep ?? ((ms: number) => Bun.sleep(ms));
 
   // One map for the whole run: each working directory is resolved (git) once.
   const projects = new Map<string, ProjectRef>();
@@ -112,7 +129,16 @@ export async function runBackfill(
       { owner, maxTurns: BATCH, maxMs: Math.max(1000, options.maxMs - (deps.now() - started)) },
     );
     report.distilled += drained.done + drained.skipped;
-    // Nothing claimed: the queue is empty, or another process holds the drain; either way a later run continues.
+    report.drainHeld = drained.held;
+    if (drained.held) {
+      // Another process is draining the same queue, history turns included: wait for it to
+      // let go, within this run's time, rather than give up on the turns it has not reached.
+      const left = options.maxMs - (deps.now() - started);
+      if (left <= 0) break;
+      await sleep(Math.min(HELD_WAIT_MS, left));
+      continue;
+    }
+    // Nothing claimed: the queue is empty.
     if (drained.claimed === 0) break;
   }
 

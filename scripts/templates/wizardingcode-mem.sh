@@ -60,11 +60,10 @@ installed() {
 
 case "$mode" in
   hook)
-    if older "$(installed)" "$VERSION"; then
-      # Only the session start fetches: a prompt or stop hook must not wait on a download.
-      if [ "${3:-}" = "session-start" ]; then
-        fetch > /dev/null 2>&1 || true
-      fi
+    # Only the session start fetches: a prompt or stop hook must not wait on a download, nor
+    # on asking the binary its version, which would only matter to a fetch.
+    if [ "${3:-}" = "session-start" ] && older "$(installed)" "$VERSION"; then
+      fetch > /dev/null 2>&1 || true
     fi
     [ -x "$bin" ] || exit 0
     exec "$bin" hook "${2:-}" "${3:-}" --via-plugin
