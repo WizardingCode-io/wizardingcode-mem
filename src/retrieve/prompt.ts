@@ -207,7 +207,10 @@ function withoutCommonTerms(db: Db, query: Query, counts: Map<string, number>): 
   const held = (term: string) => counts.get(term) ?? 0;
   let postings = terms.reduce((sum, term) => sum + held(term), 0);
   if (postings <= POSTINGS_BUDGET) return query.match;
-  const total = db.query<{ n: number }, []>("SELECT count(*) AS n FROM memories").get()?.n ?? 0;
+  // How many memories the index holds. Memories are never deleted, only archived or
+  // superseded, and their ids are given in order: the highest is the count, read from the
+  // end of the table instead of counted over all of it.
+  const total = db.query<{ n: number }, []>("SELECT max(id) AS n FROM memories").get()?.n ?? 0;
   const limit = Math.max(COMMON_FLOOR, total * COMMON_SHARE);
   const identifiers = new Set(query.identifiers);
   const dropped = new Set<string>();
@@ -440,14 +443,21 @@ export function retrieveForPrompt(
   // A word is rare when few of the project's memories contain it. CROSS JOIN, here and
   // in every full-text query, pins the join order: left to itself the planner may walk
   // the memories and probe the index once per row, which is a hundred times slower.
-  const total =
-    db
-      .query<{ n: number }, [number]>(
-        "SELECT count(*) AS n FROM memories WHERE project_id = ? AND status = 'active'",
-      )
-      .get(input.projectId)?.n ?? 0;
-  // Never below one: in a small project, a word two memories share is not rare.
-  const rareLimit = Math.max(1, Math.ceil(total * 0.05));
+  // Counted when first needed: most prompts' evidence is settled without asking.
+  let rareLimit: number | undefined;
+  const limitOfRare = () => {
+    if (rareLimit === undefined) {
+      const total =
+        db
+          .query<{ n: number }, [number]>(
+            "SELECT count(*) AS n FROM memories WHERE project_id = ? AND status = 'active'",
+          )
+          .get(input.projectId)?.n ?? 0;
+      // Never below one: in a small project, a word two memories share is not rare.
+      rareLimit = Math.max(1, Math.ceil(total * 0.05));
+    }
+    return rareLimit;
+  };
   // Counted only as far as the limit: past it the word is common, however common.
   const frequency = db.query<{ n: number }, [string, number, number]>(
     `SELECT count(*) AS n FROM (
@@ -462,10 +472,11 @@ export function retrieveForPrompt(
       // The project's memories are some of the index's: a word that few memories of the
       // whole index hold is rare in the project too, and needs no counting there.
       const atMost = [...forms].reduce((sum, form) => sum + (counts.get(form) ?? Infinity), 0);
+      const limit = limitOfRare();
       rare =
-        atMost <= rareLimit ||
-        (frequency.get(inProject(anyOf(forms), input.projectId), input.projectId, rareLimit + 1)
-          ?.n ?? 0) <= rareLimit;
+        atMost <= limit ||
+        (frequency.get(inProject(anyOf(forms), input.projectId), input.projectId, limit + 1)?.n ??
+          0) <= limit;
       known.set(word, rare);
     }
     return rare;
