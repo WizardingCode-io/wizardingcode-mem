@@ -502,6 +502,32 @@ function geminiLeftover(context: DoctorContext): Check | null {
   };
 }
 
+/**
+ * A check that reads the database. One from before a migration lacks the newer tables, and
+ * doctor only looks, so it does not migrate it: a check that needs what it lacks is skipped.
+ */
+function readingDb(name: string, db: Db | null, check: () => Check): Check {
+  try {
+    return check();
+  } catch (error) {
+    const version =
+      db?.query<{ user_version: number }, []>("PRAGMA user_version").get()?.user_version ??
+      LATEST_VERSION;
+    if (version < LATEST_VERSION) {
+      return {
+        name,
+        status: "skip",
+        detail: `needs the newer schema; the database (version ${version}) will be migrated on next use`,
+      };
+    }
+    return {
+      name,
+      status: "fail",
+      detail: `could not be checked: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
 /** Looks, and changes nothing: no directory, database or setting is created or altered. */
 export function runChecks(context: DoctorContext): Check[] {
   const { check: databaseCheck, db } = database(context);
@@ -512,11 +538,11 @@ export function runChecks(context: DoctorContext): Check[] {
       fullTextSearch(),
       databaseCheck.status === "fail"
         ? { name: "queue", status: "skip", detail: "the database could not be read" }
-        : queue(db, context.now),
-      hookSpeed(db),
-      typeSafe(context, db),
-      semanticSearch(context, db),
-      backups(context, db),
+        : readingDb("queue", db, () => queue(db, context.now)),
+      readingDb("hook speed", db, () => hookSpeed(db)),
+      readingDb("TypeSafe", db, () => typeSafe(context, db)),
+      readingDb("semantic search", db, () => semanticSearch(context, db)),
+      readingDb("backups", db, () => backups(context, db)),
       // Claude Code is the host this started on: its absence is a warning, not a skip.
       hooksHost("Claude Code", CLAUDE_CODE, context.settingsPath, null, context),
       hooksHost("Codex", CODEX, context.codexHooksPath, "codex", context),

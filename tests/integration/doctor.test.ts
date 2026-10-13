@@ -7,7 +7,7 @@ import { resolveProject } from "../../src/core/project.ts";
 import type { Redacted } from "../../src/core/redact.ts";
 import { loadModel } from "../../src/embed/model.ts";
 import { writeMemoryVector } from "../../src/embed/vectors.ts";
-import { type Db, openDb } from "../../src/store/db.ts";
+import { type Db, MIGRATIONS, openDb } from "../../src/store/db.ts";
 import { insertMemory } from "../../src/store/memories.ts";
 import { setMeta } from "../../src/store/meta.ts";
 import { runCliWith } from "../helpers/cli.ts";
@@ -285,6 +285,34 @@ describe("wizardingcode-mem doctor", () => {
     expect(result.exitCode).toBe(1);
     expect(line(result.stdout, "database")).toStartWith("FAIL");
     expect(line(result.stdout, "database")).toContain("upgrade wizardingcode-mem");
+  });
+
+  test("a database from before a migration is read as it is: its version, that it will be migrated, and no check that needs a newer table", async () => {
+    const old = openDb({ dataDir, busyTimeoutMs: 2000, migrations: MIGRATIONS.slice(0, 2) });
+    old.run("INSERT INTO projects (key, name, created_at) VALUES ('path:/p', 'p', 1)");
+    old.run(
+      `INSERT INTO memories (project_id, kind, title, body, importance, origin, judge, judge_version, created_at, updated_at)
+       VALUES (1, 'decision', 't', 'b', 3, 'manual', 'heuristic', '1', 1, 1)`,
+    );
+    old.close();
+    mkdirSync(join(dataDir, "models"), { recursive: true });
+    copyFileSync(
+      join(import.meta.dir, "../fixtures/embed/subset.wcpack"),
+      join(dataDir, "models", "potion-multilingual-128M.wcpack"),
+    );
+    const result = await cli("doctor");
+    expect(result.stderr).toBe("");
+    expect(line(result.stdout, "database")).toStartWith("ok");
+    expect(line(result.stdout, "database")).toContain(
+      "schema version 2, will be migrated on next use",
+    );
+    expect(line(result.stdout, "semantic search")).toStartWith("skip");
+    expect(line(result.stdout, "semantic search")).toContain("migrated");
+    expect(result.stdout).not.toContain("no such table");
+    // Looked at only: still version 2.
+    const after = new (await import("bun:sqlite")).Database(join(dataDir, "wizardingcode-mem.db"));
+    expect(after.query("PRAGMA user_version").get()).toEqual({ user_version: 2 });
+    after.close();
   });
 
   test("hooks that point at a binary that is gone fail", async () => {
