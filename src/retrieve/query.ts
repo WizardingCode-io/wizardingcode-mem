@@ -90,6 +90,13 @@ export function buildQuery(prompt: string): Query | null {
   };
 }
 
+/** The terms an FTS expression made by `anyOf` is made of, unquoted. */
+export function matchTerms(match: string): string[] {
+  return [...match.matchAll(/"((?:[^"]|"")*)"/g)].map((found) =>
+    (found[1] as string).replaceAll('""', '"'),
+  );
+}
+
 /**
  * The FTS match for a query typed on purpose (a tool call, the viewer's search box): the
  * prompt query when it finds enough to go on, otherwise any of the words or their stems.

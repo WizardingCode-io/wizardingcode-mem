@@ -7,8 +7,9 @@ import { logError } from "../util/log.ts";
 import { anyOf, inProject, isGeneric, stem } from "../util/words.ts";
 import { LINKED_POOL, MAX_LINKED_NOTES } from "./brief.ts";
 import { MEMORY_COLUMNS, type MemoryRow, prior, ranks, toNote } from "./notes.ts";
-import { buildQuery, type Query, searchTokens } from "./query.ts";
+import { buildQuery, matchTerms, type Query, searchTokens } from "./query.ts";
 import { type Note, renderNote, renderNotes } from "./render.ts";
+import { documentCounts } from "./vocab.ts";
 
 export { recordInjections } from "./notes.ts";
 
@@ -145,9 +146,7 @@ function extraCandidates(
 function scoredRules(db: Db, rules: Candidate[], query: Query, context: Context): Candidate[] {
   if (rules.length === 0) return [];
   try {
-    const terms = [...query.match.matchAll(/"((?:[^"]|"")*)"/g)].map((found) =>
-      (found[1] as string).replaceAll('""', '"'),
-    );
+    const terms = matchTerms(query.match);
     const lookup = db.query<{ bm25: number }, [string, number]>(
       `SELECT bm25(memories_fts, 4.0, 1.0, 2.0, 0.0) AS bm25 FROM memories_fts
         WHERE memories_fts MATCH ? AND rowid = ?`,
@@ -166,6 +165,63 @@ function scoredRules(db: Db, rules: Candidate[], query: Query, context: Context)
     failOpen(error);
     return [];
   }
+}
+
+/**
+ * Ranking every memory that holds any word of a long prompt costs, in a large project,
+ * more than a prompt's budget: bm25 is computed for each of them, and a word found in
+ * thousands of memories brings thousands. So once the prompt's words are held, together,
+ * by more than POSTINGS_BUDGET memories of the index, its commonest words are left out of
+ * the search, the commonest first, until the rest fit. Only a word held by more than
+ * COMMON_SHARE of the index, and by more than COMMON_FLOOR memories, is left out, and
+ * never an identifier (kept whole; its camelCase parts are ordinary words, and may go). A
+ * store whose memories number no more than the budget, and a prompt of rare words, search
+ * as before. A short prompt can still be narrowed in a large store: a word and its stem
+ * are counted apart, so two or three words in thousands of memories each can pass it.
+ * A word left out still counts as evidence in the memories the other terms find.
+ */
+const POSTINGS_BUDGET = 20_000;
+const COMMON_SHARE = 0.02;
+const COMMON_FLOOR = 1000;
+/** When every term is that common, the rarest few are searched for. */
+const RAREST_KEPT = 3;
+let vocabFailed = false;
+
+/** How many memories of the index hold each one-word term; none known if it cannot tell. */
+function termCounts(db: Db, terms: string[]): Map<string, number> {
+  try {
+    return documentCounts(db, terms);
+  } catch (error) {
+    if (!vocabFailed) {
+      vocabFailed = true;
+      logError("prompt.vocab", error);
+    }
+    return new Map();
+  }
+}
+
+/** The query's search without its common words: see POSTINGS_BUDGET. Identifiers stay whole. */
+function withoutCommonTerms(db: Db, query: Query, counts: Map<string, number>): string {
+  const terms = matchTerms(query.match);
+  // A phrase is not counted: only a one-word term is.
+  const held = (term: string) => counts.get(term) ?? 0;
+  let postings = terms.reduce((sum, term) => sum + held(term), 0);
+  if (postings <= POSTINGS_BUDGET) return query.match;
+  const total = db.query<{ n: number }, []>("SELECT count(*) AS n FROM memories").get()?.n ?? 0;
+  const limit = Math.max(COMMON_FLOOR, total * COMMON_SHARE);
+  const identifiers = new Set(query.identifiers);
+  const dropped = new Set<string>();
+  for (const term of terms
+    .filter((term) => !identifiers.has(term) && held(term) > limit)
+    .sort((a, b) => held(b) - held(a))) {
+    if (postings <= POSTINGS_BUDGET) break;
+    dropped.add(term);
+    postings -= held(term);
+  }
+  const kept = terms.filter((term) => !dropped.has(term));
+  if (kept.length === terms.length) return query.match;
+  if (kept.length > 0) return anyOf(kept);
+  return anyOf([...terms].sort((a, b) => held(a) - held(b)).slice(0, RAREST_KEPT));
 }
 
 type Context = { branch: string | null; now: number };
@@ -240,18 +296,20 @@ function hasEvidence(candidate: Candidate, query: Query, isRare: (word: string) 
   const matched = query.words.filter((word) => stems.has(stem(searchTokens(word)[0] ?? "")));
   // Shared words are weighed, not counted: a word few memories have says most, an
   // ordinary one less, and one found in any talk about code ("fix", "test") least.
-  let weight = 0;
-  let telling = 0;
-  for (const word of matched) {
-    if (isGeneric(word)) {
-      weight += 0.5;
-    } else {
-      telling++;
-      weight += isRare(word) ? 1.5 : 1;
-    }
+  const telling = matched.filter((word) => !isGeneric(word));
+  if (telling.length === 0) return false;
+  if (candidate.overlap > 0) return true;
+  // Each telling word weighs one, and half again if it is rare. Whether it is rare costs a
+  // lookup, so it is asked only while the answer could still change the outcome.
+  let weight = (matched.length - telling.length) * 0.5 + telling.length;
+  let unknown = telling.length;
+  for (const word of telling) {
+    if (weight >= EVIDENCE_WEIGHT) return true;
+    if (weight + unknown * 0.5 < EVIDENCE_WEIGHT) return false;
+    unknown--;
+    if (isRare(word)) weight += 0.5;
   }
-  if (telling === 0) return false;
-  return candidate.overlap > 0 || weight >= EVIDENCE_WEIGHT;
+  return weight >= EVIDENCE_WEIGHT;
 }
 
 /**
@@ -289,6 +347,7 @@ export function retrieveForPrompt(
   if (query === null) return [];
 
   const unseen = notYetShown(db, input.sessionId, input.epoch);
+  const counts = termCounts(db, matchTerms(query.match));
   const candidates = new Map<number, Candidate>();
   const matched = db
     .query<MemoryRow & { bm25: number }, [string, number, number]>(
@@ -297,7 +356,11 @@ export function retrieveForPrompt(
         WHERE memories_fts MATCH ? AND m.project_id = ? AND m.status = 'active' AND ${unseen} AND ${kindFilter}
         ORDER BY bm25 LIMIT ?`,
     )
-    .all(inProject(query.match, input.projectId), input.projectId, CANDIDATES_PER_CHANNEL);
+    .all(
+      inProject(withoutCommonTerms(db, query, counts), input.projectId),
+      input.projectId,
+      CANDIDATES_PER_CHANNEL,
+    );
   for (const { bm25, ...row } of matched) candidates.set(row.id, { row, bm25, overlap: 0 });
 
   const files = sessionFiles(db, input.sessionId);
@@ -350,7 +413,11 @@ export function retrieveForPrompt(
     let rare = known.get(word);
     if (rare === undefined) {
       const forms = new Set([word, stem(searchTokens(word)[0] ?? word)]);
+      // The project's memories are some of the index's: a word that few memories of the
+      // whole index hold is rare in the project too, and needs no counting there.
+      const atMost = [...forms].reduce((sum, form) => sum + (counts.get(form) ?? Infinity), 0);
       rare =
+        atMost <= rareLimit ||
         (frequency.get(inProject(anyOf(forms), input.projectId), input.projectId, rareLimit + 1)
           ?.n ?? 0) <= rareLimit;
       known.set(word, rare);
