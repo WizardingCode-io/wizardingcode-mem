@@ -12,8 +12,10 @@ const VOCAB =
 
 /**
  * How many memories of the whole index, every project and every status, hold each word,
- * keyed by the word as given; a word of more than one token is left out. A word is looked
- * up the way the index folds it.
+ * keyed by the word as given. A word is looked up the way `searchTokens` folds it, and the
+ * index folds only Latin accents: a word it does not find may still be there in another
+ * form ("йогурт", "άλφα"), so it is left out, unknown, never counted as held by none. A word
+ * of more than one token is left out too.
  */
 export function documentCounts(db: Db, words: readonly string[]): Map<string, number> {
   const counts = new Map<string, number>();
@@ -33,6 +35,9 @@ export function documentCounts(db: Db, words: readonly string[]): Map<string, nu
       .all(...terms)
       .map((row) => [row.term, row.doc]),
   );
-  for (const [word, term] of folded) counts.set(word, found.get(term) ?? 0);
+  for (const [word, term] of folded) {
+    const n = found.get(term);
+    if (n !== undefined) counts.set(word, n);
+  }
   return counts;
 }

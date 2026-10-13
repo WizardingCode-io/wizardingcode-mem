@@ -174,7 +174,10 @@ function scoredRules(db: Db, rules: Candidate[], query: Query, context: Context)
  * by more than POSTINGS_BUDGET memories of the index, its commonest words are left out of
  * the search, the commonest first, until the rest fit. Only a word held by more than
  * COMMON_SHARE of the index, and by more than COMMON_FLOOR memories, is left out, and
- * never an identifier: a short prompt, a small store and a rare word search as before.
+ * never an identifier (kept whole; its camelCase parts are ordinary words, and may go). A
+ * store whose memories number no more than the budget, and a prompt of rare words, search
+ * as before. A short prompt can still be narrowed in a large store: a word and its stem
+ * are counted apart, so two or three words in thousands of memories each can pass it.
  * A word left out still counts as evidence in the memories the other terms find.
  */
 const POSTINGS_BUDGET = 20_000;
@@ -197,15 +200,16 @@ function termCounts(db: Db, terms: string[]): Map<string, number> {
   }
 }
 
-/** The query's search without its common words: see COMMON_SHARE. Identifiers always stay. */
+/** The query's search without its common words: see POSTINGS_BUDGET. Identifiers stay whole. */
 function withoutCommonTerms(db: Db, query: Query, counts: Map<string, number>): string {
   const terms = matchTerms(query.match);
-  const total = db.query<{ n: number }, []>("SELECT count(*) AS n FROM memories").get()?.n ?? 0;
-  const limit = Math.max(COMMON_FLOOR, total * COMMON_SHARE);
-  const identifiers = new Set(query.identifiers);
   // A phrase is not counted: only a one-word term is.
   const held = (term: string) => counts.get(term) ?? 0;
   let postings = terms.reduce((sum, term) => sum + held(term), 0);
+  if (postings <= POSTINGS_BUDGET) return query.match;
+  const total = db.query<{ n: number }, []>("SELECT count(*) AS n FROM memories").get()?.n ?? 0;
+  const limit = Math.max(COMMON_FLOOR, total * COMMON_SHARE);
+  const identifiers = new Set(query.identifiers);
   const dropped = new Set<string>();
   for (const term of terms
     .filter((term) => !identifiers.has(term) && held(term) > limit)

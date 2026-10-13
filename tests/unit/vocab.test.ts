@@ -22,7 +22,7 @@ beforeEach(() => {
     "The queue lease expires.",
     "A lease on the queue.",
     "Código do worker.",
-    "Queue only.",
+    "Queue only. Йогурт и άλφα.",
   ];
   for (const [i, title] of texts.entries()) {
     insertMemory(db, {
@@ -50,15 +50,21 @@ afterEach(() => {
 
 describe("documentCounts", () => {
   test("counts the memories of the whole index that hold each word", () => {
-    const counts = documentCounts(db, ["queue", "lease", "worker", "absent"]);
+    const counts = documentCounts(db, ["queue", "lease", "worker"]);
     expect(counts).toEqual(
       new Map([
         ["queue", 3],
         ["lease", 2],
         ["worker", 1],
-        ["absent", 0],
       ]),
     );
+  });
+
+  // The index folds only Latin accents; a word it holds in another form must not read as
+  // held by none, which would make it rare. Unknown is left out, for the caller to count.
+  test("never says none for a word it cannot find", () => {
+    const counts = documentCounts(db, ["йогурт", "άλφα", "absent"]);
+    for (const word of ["йогурт", "άλφα", "absent"]) expect(counts.get(word)).not.toBe(0);
   });
 
   test("folds a word the way the index does", () => {
