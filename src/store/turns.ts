@@ -159,13 +159,15 @@ export function abandonStaleTurns(db: Db, now: number, olderThanMs: number): num
   ).changes;
 }
 
+/**
+ * The states repeat the partial index's own condition: without it SQLite cannot tell the
+ * index holds every row asked for, and reads the whole table, every finished turn included.
+ */
+export const QUEUED_TURNS = `SELECT 1 FROM turns
+  WHERE state IN ('open','pending','processing')
+    AND (state = 'pending' OR (state = 'processing' AND lease_until < ?)) LIMIT 1`;
+
 /** True when there is work for a distiller: a waiting turn, or one whose worker went silent. */
 export function hasQueuedTurns(db: Db, now: number): boolean {
-  return (
-    db
-      .query(
-        "SELECT 1 FROM turns WHERE state = 'pending' OR (state = 'processing' AND lease_until < ?) LIMIT 1",
-      )
-      .get(now) !== null
-  );
+  return db.query(QUEUED_TURNS).get(now) !== null;
 }
