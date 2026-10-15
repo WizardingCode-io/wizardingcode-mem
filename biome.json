@@ -14,7 +14,8 @@
       "!**/plugins",
       "!**/plugin",
       "!**/.claude-plugin",
-      "!**/hooks/hooks.json"
+      "!**/hooks/hooks.json",
+      "!**/.crew"
     ]
   },
   "formatter": { "indentStyle": "space", "indentWidth": 2, "lineWidth": 100 },
