@@ -16,7 +16,7 @@ export interface NoisePattern {
 /** A block element: to its close, or to the end of the text when it never closes. */
 const block = (tag: string) => new RegExp(`<${tag}\\b[^>]*>[\\s\\S]*?(?:</${tag}>|$)`, "g");
 /** `<summary>` is inline: to its close, or to the end of its line. */
-const SUMMARY = /<summary\b[^>]*>(?:[\s\S]*?<\/summary>|[^\n]*)/g;
+const SUMMARY = /<summary\b[^>]*>(?:[^\n]*?<\/summary>|[^\n]*)/g;
 const DETAILS = /<\/?details\b[^>]*>/g;
 
 const HOST_BLOCKS: readonly RegExp[] = [
@@ -50,12 +50,13 @@ export const NOISE_PATTERNS: readonly NoisePattern[] = [
   // Two or more colon-separated parts: `[arka:gate:4]`, `[arka:routing]`. A one-part
   // bracket (`[x]`, `[en]`, `[2024]`) is not a protocol tag.
   { name: "protocol-tag", pattern: /^\[[a-z][a-z0-9-]*(?::[a-z0-9-]+)+\]/i },
-  // The verdict word with a verdict, or the verdict opening the sentence. "Only APPROVED
-  // campaigns are sent" is a rule and passes.
+  // The capitalised verdict label, a short gap and a colon, then the verdict word; or the
+  // verdict opening the sentence. "Only APPROVED campaigns are sent" and "If the verdict
+  // is FAILED, ..." are rules and pass.
   {
     name: "verdict",
     pattern:
-      /\b(?:[Vv]erdict|[Vv]eredicto)\b[\s\S]*\b(?:REJECTED|APPROVED|PASSED|FAILED)\b|^(?:REJECTED|APPROVED|PASSED|FAILED)\s*[:—–-]/,
+      /\b(?:Verdict|Veredicto)\b[^:\n]{0,40}:\s*(?:REJECTED|APPROVED|PASSED|FAILED)\b|^(?:REJECTED|APPROVED|PASSED|FAILED)\s*[:—–-]/,
   },
 ];
 

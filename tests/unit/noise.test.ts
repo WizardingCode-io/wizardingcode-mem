@@ -42,6 +42,10 @@ describe("stripHost: the host's own text leaves before segmentation", () => {
     );
   });
 
+  test("a summary never crosses a newline, even when a later one is closed", () => {
+    expect(stripHost("a <summary>x\nb\n<summary>y</summary> c")).toBe("a \nb\n c");
+  });
+
   test("ordinary text with angle brackets is untouched", () => {
     const text = "Use `Array<string>` here; a <b>bold</b> tag in HTML stays.";
     expect(stripHost(text)).toBe(text);
@@ -79,6 +83,8 @@ describe("dropNoise: sentences that are never knowledge", () => {
     expect(dropped("REJECTED: the diff touches the generated plugin files.")).toBe("verdict");
     expect(dropped("Only APPROVED campaigns are sent by the nightly job.")).toBeNull();
     expect(dropped("The reviewer approved the plan because the budget is fixed.")).toBeNull();
+    expect(dropped("If the verdict is FAILED, the pipeline halts.")).toBeNull();
+    expect(dropped("A Verdict of FAILED halts the pipeline.")).toBeNull();
   });
 
   test("host frame sentences", () => {
