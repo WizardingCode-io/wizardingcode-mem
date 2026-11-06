@@ -409,7 +409,7 @@ describe("withFallback", () => {
     expect((await judge.distill(distillInput)).source).toBe("typesafe");
     expect(judge.name).toBe("fallback");
     // Each memory records the version of the judge that actually produced it.
-    expect(judge.versions).toEqual({ typesafe: "1", heuristic: "1" });
+    expect(judge.versions).toEqual({ typesafe: "1", heuristic: "2" });
   });
 
   test("falls back when the primary fails, reports the failure, and remembers it", async () => {

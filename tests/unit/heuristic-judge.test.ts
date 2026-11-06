@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Redacted } from "../../src/core/redact.ts";
 import { SAVE_THRESHOLD } from "../../src/distill/policy.ts";
-import { heuristicJudge } from "../../src/judge/heuristic.ts";
+import { heuristicJudge, heuristicJudgeV1 } from "../../src/judge/heuristic.ts";
 import type { ConsolidateInput } from "../../src/judge/types.ts";
 import { distillInput } from "../helpers/judge-input.ts";
 
@@ -349,5 +349,96 @@ describe("heuristic judge: how a new memory relates to existing ones", () => {
       },
     );
     expect(verdict?.relation).toBe("related");
+  });
+});
+
+describe("heuristic judge, version 2: records of a session", () => {
+  test("identifies as version 2", () => {
+    expect(heuristicJudge.version).toBe("2");
+    expect(heuristicJudge.versions).toEqual({ heuristic: "2" });
+  });
+
+  test("a sentence that reports a merge with its hash is not durable", async () => {
+    expect(
+      await durability(
+        "merge it",
+        "PR #2941 MERGED em `dev` — merge commit `b3282d5fe`, confirmado no remoto.",
+        "MERGED",
+      ),
+    ).toBeLessThan(0.5);
+  });
+
+  test("a verdict line and a test count are not durable", async () => {
+    expect(
+      await durability(
+        "status?",
+        "Quality Gate verdict for round 2: REJECTED, two findings in src/gate.ts.",
+        "REJECTED",
+      ),
+    ).toBeLessThan(0.5);
+    expect(
+      await durability(
+        "run them",
+        "All 286/286 tests pass after the change to src/store/db.ts.",
+        "286/286",
+      ),
+    ).toBeLessThan(0.5);
+  });
+
+  test("a cause with a path keeps its durability", async () => {
+    expect(
+      await durability(
+        "why?",
+        "The cause was a pending timer in src/hooks/stop.ts that kept the process alive.",
+        "pending timer",
+      ),
+    ).toBeGreaterThanOrEqual(0.5);
+  });
+
+  test("a report with a cue word in it is not worth saving when every sentence is a report", async () => {
+    const verdict = await distill(
+      "merge it",
+      "Fixed and merged: PR #88 merged after the gate PASSED. Wave 4 closed in `909ce45cf`. All 120/120 tests pass.",
+    );
+    expect(verdict.worthSaving).toBeLessThan(SAVE_THRESHOLD);
+  });
+
+  test("an answer that is mostly a report is not worth saving, even after edits", async () => {
+    const verdict = await distill(
+      "close the wave",
+      "Wave 4 closed in `909ce45cf` and pushed to `origin/dev`. PR #88 merged after the gate PASSED. All 120/120 tests pass on src/app/index.ts.",
+      { filesChanged: ["src/app/index.ts"] },
+    );
+    expect(verdict.worthSaving).toBeLessThan(SAVE_THRESHOLD);
+  });
+});
+
+describe("heuristic judge, version 1: the report signals off", () => {
+  test("identifies as version 1", () => {
+    expect(heuristicJudgeV1.version).toBe("1");
+    expect(heuristicJudgeV1.versions).toEqual({ heuristic: "1" });
+  });
+
+  test("report sentences keep their version 1 durability, and a report answer its worth", async () => {
+    const merge = distillInput(
+      "merge it",
+      "PR #2941 MERGED em `dev` — merge commit `b3282d5fe`, confirmado no remoto.",
+    );
+    expect((await heuristicJudgeV1.distill(merge)).durable).toEqual([0.6]);
+    const report = await heuristicJudgeV1.distill(
+      distillInput(
+        "merge it",
+        "Fixed and merged: PR #88 merged after the gate PASSED. Wave 4 closed in `909ce45cf`. All 120/120 tests pass.",
+      ),
+    );
+    expect(report.worthSaving).toBeGreaterThanOrEqual(SAVE_THRESHOLD);
+  });
+
+  test("on a turn with no report signal, both versions answer the same", async () => {
+    const input = distillInput(
+      "why?",
+      "The cause was a pending timer in src/hooks/stop.ts that kept the process alive.",
+    );
+    expect(await heuristicJudgeV1.distill(input)).toEqual(await heuristicJudge.distill(input));
   });
 });
