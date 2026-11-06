@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { dropNoise, NOISE_PATTERNS, stripHost } from "../../src/distill/noise.ts";
+import { dropNoise, NOISE_PATTERNS, stripHost, withoutSentences } from "../../src/distill/noise.ts";
 import { candidates } from "../../src/distill/segment.ts";
 
 const HAND_BACK = `Another Claude session sent a message:
@@ -69,6 +69,23 @@ describe("stripHost: the host's own text leaves before segmentation", () => {
 });
 
 const sentence = (text: string) => ({ idx: 0, source: "final" as const, text });
+
+describe("withoutSentences: a dropped sentence leaves the text the judge reads", () => {
+  test("found through collapsed whitespace, list markers and emphasis", () => {
+    expect(
+      withoutSentences("- **Status:**  all tests green.\nThe cause was a timer.", [
+        "Status: all tests green.",
+      ]),
+    ).toBe("- \nThe cause was a timer.");
+  });
+
+  test("a clipped sentence goes to the end of its line; one not found changes nothing", () => {
+    expect(withoutSentences("Status: a very long line\nKept.", ["Status: a very…"])).toBe(
+      "\nKept.",
+    );
+    expect(withoutSentences("Kept.", ["Status: elsewhere."])).toBe("Kept.");
+  });
+});
 
 describe("dropNoise: sentences that are never knowledge", () => {
   const dropped = (text: string) => dropNoise([sentence(text)]).dropped[0]?.pattern ?? null;

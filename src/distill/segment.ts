@@ -46,6 +46,11 @@ const ABBREVIATIONS = new Set([
   "al",
 ]);
 
+/** The words of a text, as the segmenter counts them (letters first, then letters, digits, `_`, `'`, `-`). */
+export function wordCount(text: string): number {
+  return (text.match(WORD) ?? []).length;
+}
+
 function endsWithAbbreviation(before: string): boolean {
   const token = (before.match(/\S+$/)?.[0] ?? "").replace(/^[("'[]+/, "").toLowerCase();
   return token.length === 1 || ABBREVIATIONS.has(token);
@@ -104,7 +109,7 @@ export function segment(text: string, options: { maxCandidates?: number } = {}):
         .replace(/\s+/g, " ")
         .trim();
       if (sentence.length < MIN_CHARS) continue;
-      if ((sentence.match(WORD) ?? []).length < MIN_WORDS) continue;
+      if (wordCount(sentence) < MIN_WORDS) continue;
       const key = sentence.toLowerCase();
       if (seen.has(key)) continue;
       seen.add(key);

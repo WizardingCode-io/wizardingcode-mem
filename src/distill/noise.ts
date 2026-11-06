@@ -91,3 +91,25 @@ export function dropNoise<T extends { idx: number; text: string }>(
   }
   return { kept, dropped };
 }
+
+const escapeRegExp = (char: string) => char.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * The text without the given sentences, as the segmenter returned them (`candidates()`): the
+ * segmenter collapsed whitespace and dropped emphasis markers, so any run of whitespace in a
+ * sentence matches any run in the text, and `*` or `**` may sit between its characters. A
+ * sentence the segmenter clipped (ending in "…") goes to the end of its line. A sentence
+ * that is not found is left alone.
+ */
+export function withoutSentences(text: string, sentences: string[]): string {
+  let out = text;
+  for (const sentence of sentences) {
+    const clipped = sentence.endsWith("…");
+    const body = clipped ? sentence.slice(0, -1) : sentence;
+    const pattern = [...body]
+      .map((char) => (/\s/.test(char) ? "\\s+" : `${escapeRegExp(char)}\\*{0,2}`))
+      .join("");
+    out = out.replace(new RegExp(`\\*{0,2}${pattern}${clipped ? "[^\\n]*" : ""}`), "");
+  }
+  return out;
+}
