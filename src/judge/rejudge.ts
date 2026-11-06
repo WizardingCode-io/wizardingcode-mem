@@ -2,7 +2,7 @@ import type { Redacted } from "../core/redact.ts";
 import { SAVE_THRESHOLD } from "../distill/policy.ts";
 import type { Db } from "../store/db.ts";
 import { withWrite } from "../store/db.ts";
-import type { DistillVerdict, Judge } from "./types.ts";
+import type { DistillInput, DistillVerdict, Judge } from "./types.ts";
 
 // Judges imported memories again with TypeSafe. The importer could only map the other
 // tool's type onto ours and give every memory of a type the same importance; here each
@@ -31,6 +31,13 @@ export interface RejudgeReport {
   /** Imported memories still waiting for a TypeSafe verdict. */
   remaining: number;
 }
+
+/**
+ * The import rejudge keeps the version 1 questions (ADR 0023, D-2): the wording it asks in,
+ * and the version it stamps, both from this one constant, so they cannot drift apart.
+ */
+export const IMPORT_WORDING = 1;
+export const IMPORT_JUDGE_VERSION = String(IMPORT_WORDING);
 
 /** After this many failures in a row the service is taken to be down and the run stops. */
 export const STOP_AFTER_FAILURES = 5;
@@ -74,7 +81,7 @@ function filesChanged(db: Db, memoryId: number): string[] {
 }
 
 /** The memory as the judge sees it: a turn with no prompt, no candidates to rate, and the text as its final message. */
-function asInput(db: Db, row: Row) {
+function asInput(db: Db, row: Row): DistillInput {
   return {
     prompt: "" as Redacted,
     finalText: `${row.title}\n${row.body}` as Redacted,
@@ -82,6 +89,7 @@ function asInput(db: Db, row: Row) {
     filesChanged: filesChanged(db, row.id),
     commands: [],
     hadErrors: false,
+    wording: IMPORT_WORDING,
   };
 }
 
@@ -119,8 +127,7 @@ async function judgeAll(
 }
 
 export async function rejudge(db: Db, options: RejudgeOptions): Promise<RejudgeReport> {
-  const version = options.judge.versions.typesafe;
-  if (version === undefined)
+  if (options.judge.versions.typesafe === undefined)
     throw new Error("rejudge needs a judge that can answer through TypeSafe");
   const report: RejudgeReport = { judged: 0, archived: 0, kindChanged: 0, failed: 0, remaining: 0 };
   const limit = options.limit ?? Number.POSITIVE_INFINITY;
@@ -156,7 +163,13 @@ export async function rejudge(db: Db, options: RejudgeOptions): Promise<RejudgeR
         }
         const keep = verdict.worthSaving >= SAVE_THRESHOLD;
         const kind = keep && verdict.kind !== "none" ? verdict.kind : row.kind;
-        update.run(kind, verdict.importance, keep ? "active" : "archived", version, row.id);
+        update.run(
+          kind,
+          verdict.importance,
+          keep ? "active" : "archived",
+          IMPORT_JUDGE_VERSION,
+          row.id,
+        );
         report.judged++;
         if (!keep) report.archived++;
         if (kind !== row.kind) report.kindChanged++;
