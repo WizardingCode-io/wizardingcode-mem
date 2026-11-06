@@ -4,7 +4,8 @@
 // (97–100% of hits were records of a session). Every pattern is named, so that the
 // proof's report can say what each one dropped. The medium signals (commit hashes,
 // "PR #", status verbs, test counts) are not here: they hit knowledge too often, and
-// they are the judge's to weigh.
+// they are the judge's to weigh. Nor are verdict words and bracketed protocol tags
+// (ADR 0023, D-3): their precision on the sample was too low to drop a sentence unseen.
 
 export interface NoisePattern {
   name: string;
@@ -13,25 +14,44 @@ export interface NoisePattern {
 
 // --- Blocks: the host speaking, quoted by the assistant --------------------------
 
-/** A block element: to its close, or to the end of the text when it never closes. */
-const block = (tag: string) => new RegExp(`<${tag}\\b[^>]*>[\\s\\S]*?(?:</${tag}>|$)`, "g");
+const BLOCK_TAGS = ["agent-message", "task-notification", "system-reminder"] as const;
+/** A block element, from its opening tag to its close. */
+const CLOSED_BLOCKS = BLOCK_TAGS.map(
+  (tag) => new RegExp(`<${tag}\\b[^>]*>[\\s\\S]*?</${tag}>`, "g"),
+);
+/** A block tag opening a line: where a host block cut short begins. */
+const OPENS_A_LINE = new RegExp(`^[ \\t]*<(?:${BLOCK_TAGS.join("|")})\\b[^>]*>`);
+const FENCE = /^[ \t]*(?:```|~~~)/;
 /** `<summary>` is inline: to its close, or to the end of its line. */
 const SUMMARY = /<summary\b[^>]*>(?:[^\n]*?<\/summary>|[^\n]*)/g;
 const DETAILS = /<\/?details\b[^>]*>/g;
 
-const HOST_BLOCKS: readonly RegExp[] = [
-  block("agent-message"),
-  block("task-notification"),
-  block("system-reminder"),
-  SUMMARY,
-  DETAILS,
-];
+/**
+ * Where a host block that never closes begins: a block tag that opens a line outside a
+ * fenced block. A tag named in prose or in backticks does not open a line, and is text.
+ */
+function cutShortAt(text: string): number {
+  let inFence = false;
+  let at = 0;
+  for (const line of text.split("\n")) {
+    if (FENCE.test(line)) inFence = !inFence;
+    else if (!inFence && OPENS_A_LINE.test(line)) return at;
+    at += line.length + 1;
+  }
+  return -1;
+}
 
-/** The text without the host's blocks. Ordinary angle brackets (generics, HTML) stay. */
+/**
+ * The text without the host's blocks: each block to its close; one that never closes, to the
+ * end of the text when its tag opens a line outside a fence (a host block cut short).
+ * Ordinary angle brackets (generics, HTML) and tags named in prose or in backticks stay.
+ */
 export function stripHost(text: string): string {
   let out = text;
-  for (const pattern of HOST_BLOCKS) out = out.replace(pattern, "");
-  return out;
+  for (const pattern of CLOSED_BLOCKS) out = out.replace(pattern, "");
+  const cut = cutShortAt(out);
+  if (cut >= 0) out = out.slice(0, cut);
+  return out.replace(SUMMARY, "").replace(DETAILS, "");
 }
 
 // --- Sentences: never knowledge ---------------------------------------------------
@@ -39,25 +59,15 @@ export function stripHost(text: string): string {
 /** In the order they are tried; the first match names the drop. */
 export const NOISE_PATTERNS: readonly NoisePattern[] = [
   {
-    // What a host frame leaves once its tags are gone: the lines around a subagent's
-    // report, and the metadata of a background task.
+    // What a host frame leaves once its tags are gone: the fixed lines around a subagent's
+    // report, and the metadata of a background task. Anchored at the start of the sentence:
+    // a sentence that quotes one of these phrases while discussing the host is not the host.
     name: "host-frame",
     pattern:
-      /^(?:\[Subagent hand-back\]|Another Claude session sent a message|That "other Claude session" is an agent|The report follows|The harness indents every line|Async agent launched successfully|The agent is working in the background|Do not duplicate this agent's work|Do NOT Read or tail this file|agentId:|output_file:)|This tool result is internal metadata|NOT a message from the user|carr(?:y|ies) no user authority/,
+      /^(?:\[Subagent hand-back\]|Another Claude session sent a message|That "other Claude session" is an agent|The report follows|It is model output, NOT a message from the user|The harness indents every line|This tool result is internal metadata|Async agent launched successfully|The agent is working in the background|Do not duplicate this agent's work|Do NOT Read or tail this file|agentId:|output_file:)/,
   },
   { name: "status-label", pattern: /^(?:Status|Estado|State)\s*:/ },
   { name: "template-label", pattern: /^(?:Title|Body|Título|Corpo)\s*:\s/ },
-  // Two or more colon-separated parts: `[arka:gate:4]`, `[arka:routing]`. A one-part
-  // bracket (`[x]`, `[en]`, `[2024]`) is not a protocol tag.
-  { name: "protocol-tag", pattern: /^\[[a-z][a-z0-9-]*(?::[a-z0-9-]+)+\]/i },
-  // The capitalised verdict label, a short gap and a colon, then the verdict word; or the
-  // verdict opening the sentence. "Only APPROVED campaigns are sent" and "If the verdict
-  // is FAILED, ..." are rules and pass.
-  {
-    name: "verdict",
-    pattern:
-      /\b(?:Verdict|Veredicto)\b[^:\n]{0,40}:\s*(?:REJECTED|APPROVED|PASSED|FAILED)\b|^(?:REJECTED|APPROVED|PASSED|FAILED)\s*[:—–-]/,
-  },
 ];
 
 export function noiseOf(text: string): string | null {
