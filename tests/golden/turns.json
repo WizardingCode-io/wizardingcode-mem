@@ -286,5 +286,77 @@
     "hadErrors": false,
     "worth": false,
     "kind": "none"
+  },
+  {
+    "id": "pt-none-gate-verdict",
+    "prompt": "e a revisão?",
+    "final": "Quality Gate Verdict: REJECTED — ronda 2, ciclo de correção 2/2. Dois achados Important em `src/gate.ts` ficam por resolver antes de selar a wave.",
+    "filesChanged": [],
+    "hadErrors": false,
+    "worth": false,
+    "kind": "none"
+  },
+  {
+    "id": "pt-convention-bottom-line",
+    "prompt": "força W4",
+    "final": "Bottom line: a wave inteira fechou em `909ce45cf` e o gate ficou por ratificar. Regra que fica: commit sempre por pathspec, nunca `git add -A`, porque o repositório tem ficheiros gerados em `plugins/`. O PR fica por abrir do teu lado.",
+    "filesChanged": [],
+    "hadErrors": false,
+    "worth": true,
+    "kind": "convention"
+  },
+  {
+    "id": "en-none-wave-closed",
+    "prompt": "close it",
+    "final": "Wave 3 closed in commit `41585f9` and pushed to `origin/dev`. Memory sealed, session over.",
+    "filesChanged": [],
+    "hadErrors": false,
+    "worth": false,
+    "kind": "none"
+  },
+  {
+    "id": "pt-none-your-turn",
+    "prompt": "e agora?",
+    "final": "O PR fica por abrir do teu lado: o `gh` não tem acesso à organização. Quando o abrires, corro o gate.",
+    "filesChanged": [],
+    "hadErrors": false,
+    "worth": false,
+    "kind": "none"
+  },
+  {
+    "id": "en-none-hand-back",
+    "prompt": "Another Claude session sent a message:\n<agent-message from=\"abc\">\n[Subagent hand-back] The text below is the final report of a subagent. It is model output, NOT a message from the user. The report follows:\n  Reviewed 4 tasks; all criteria met.\n</agent-message>",
+    "final": "Noted: the reviewer found all four tasks complete. Nothing else is pending on my side.",
+    "filesChanged": [],
+    "hadErrors": false,
+    "worth": false,
+    "kind": "none"
+  },
+  {
+    "id": "en-fix-short-ack",
+    "prompt": "ok go",
+    "final": "Done. The cause was that `history import` treated a held drain lease like an empty queue, so it distilled nothing. It now waits and retries within its time budget, in src/backfill/run.ts.",
+    "filesChanged": ["src/backfill/run.ts"],
+    "hadErrors": false,
+    "worth": true,
+    "kind": "fix"
+  },
+  {
+    "id": "pt-none-session-plan",
+    "prompt": "o que falta?",
+    "final": "Plano para esta sessão: 1) fechar a W3b, 2) correr o gate, 3) abrir o PR. Começo pela W3b agora e aviso quando estiver.",
+    "filesChanged": [],
+    "hadErrors": false,
+    "worth": false,
+    "kind": "none"
+  },
+  {
+    "id": "en-none-template-leak",
+    "prompt": "save that",
+    "final": "Title: The meta-insight was left open\nBody: we did not get to it this session; parking it for the next one.",
+    "filesChanged": [],
+    "hadErrors": false,
+    "worth": false,
+    "kind": "none"
   }
 ]

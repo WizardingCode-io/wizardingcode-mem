@@ -13,11 +13,13 @@ import recorded from "./typesafe-answers.json" with { type: "json" };
 
 const answersByTurn = recorded.turns as Record<string, { answers: unknown; inputTokens: number }>;
 
+/** The golden turn being scored: the recording is looked up by its id. */
+let replaying = "";
+
 /** A TypeSafe judge whose service is the recording. */
 function replayingJudge(): Judge {
-  let current = "";
   const fetchFn = (async () => {
-    const entry = answersByTurn[current];
+    const entry = answersByTurn[replaying];
     if (entry === undefined) return new Response("{}", { status: 422 });
     return new Response(
       JSON.stringify({
@@ -27,18 +29,7 @@ function replayingJudge(): Judge {
       }),
     );
   }) as unknown as typeof fetch;
-  const judge = new TypeSafeJudge({ apiKey: "recorded", fetch: fetchFn });
-  return {
-    ...judge,
-    name: "typesafe",
-    version: "1",
-    versions: { typesafe: "1" },
-    distill: (input) => {
-      current = turns.find((turn) => turn.prompt === input.prompt)?.id ?? "";
-      return judge.distill(input);
-    },
-    consolidate: (input) => judge.consolidate(input),
-  };
+  return new TypeSafeJudge({ apiKey: "recorded", fetch: fetchFn });
 }
 
 interface Scored {
@@ -53,6 +44,7 @@ interface Scored {
 async function score(name: string, judge: Judge): Promise<Scored> {
   const verdicts: { id: string; worth: boolean; kind: string; verdict: DistillVerdict }[] = [];
   for (const turn of turns) {
+    replaying = turn.id;
     const verdict = await judge.distill(
       distillInput(turn.prompt, turn.final, {
         filesChanged: turn.filesChanged,
@@ -103,6 +95,7 @@ describe("golden set: the two judges side by side", () => {
     const durability = async (id: string, fragment: string) => {
       const turn = turns.find((t) => t.id === id);
       if (turn === undefined) throw new Error(`golden turn ${id} missing`);
+      replaying = id;
       const input = distillInput(turn.prompt, turn.final, {
         filesChanged: turn.filesChanged,
         hadErrors: turn.hadErrors,
