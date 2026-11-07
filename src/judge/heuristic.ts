@@ -89,13 +89,34 @@ const SUPERSEDES = [
   /\b(?:já não|deixou de|substitu\w+|revertid[oa]|removid[oa]|passou a|passa a|agora usa|mudou para)\b/i,
 ];
 
+// --- Records of a session ---------------------------------------------------------
+// The medium signals of the 2026-10-13 sample: they mark a report of what was done more
+// often than not, but they sit on knowledge too ("Decisão aplicada (commit 5808e41)"), so
+// they lower a sentence's knowledge probability instead of dropping it. "done" and "feito"
+// are left out on purpose: too common in ordinary sentences.
+
+/** 7 to 40 hex characters with a digit and a letter: neither "2026" nor "facade". */
+const COMMIT_HASH = /\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}\b/;
+const PULL_REQUEST = /\b(?:PR|MR)\s*[#!]\s*\d+\b|\/(?:pull|merge_requests)\/\d+/i;
+const STATUS_VERB =
+  /\b(?:delivered|merged|committed|closed|shipped|pushed|entregues?|fechad[oa]s?|conclu[ií]d[oa]s?|commitad[oa]s?|integrad[oa]s?|fundid[oa]s?|gravad[oa]s?|selad[oa]s?|lançad[oa]s?|despachad[oa]s?)\b/i;
+const VERDICT = /\b(?:verdict|veredicto|REJECTED|APPROVED)\b/;
+const TEST_COUNT =
+  /\b\d+\s*\/\s*\d+\b|\btests? (?:pass(?:es|ed)?|green)\b|\btestes? (?:passam|passou|verdes?)\b/i;
+const REPORT = [COMMIT_HASH, PULL_REQUEST, STATUS_VERB, VERDICT, TEST_COUNT];
+/** What a sentence with a report signal loses; the floor of 0.05 still holds. */
+const REPORT_PENALTY = 0.25;
+/** An answer with at least this share of report sentences gets the worth discount. */
+const REPORT_SHARE = 0.6;
+const REPORT_DISCOUNT = 0.2;
+
 const SUBSTANTIVE_CHARS = 120;
 const THIN_CHARS = 80;
 
 const any = (text: string, patterns: RegExp[]) => patterns.some((pattern) => pattern.test(text));
 const clamp = (value: number, min = 0, max = 1) => Math.min(max, Math.max(min, value));
 
-function durability(candidate: DistillCandidate): number {
+function durability(candidate: DistillCandidate, reportSignals: boolean): number {
   const text: string = candidate.text;
   if (candidate.source === "prompt") return isStandingRule(text) ? 0.75 : 0.1;
   if (any(text, NOT_A_FACT)) return 0.05;
@@ -104,10 +125,11 @@ function durability(candidate: DistillCandidate): number {
   if (any(text, [...RESOLUTION, ...DECISION, ...GOTCHA, ...DISCOVERY])) score += 0.2;
   if (text.length >= 40 && text.length <= 300) score += 0.1;
   if (LEANS_ON_CONTEXT.test(text)) score -= 0.2;
+  if (reportSignals && any(text, REPORT)) score -= REPORT_PENALTY;
   return clamp(score, 0.05, 0.95);
 }
 
-function distill(input: DistillInput): DistillVerdict {
+function distill(input: DistillInput, reportSignals: boolean): DistillVerdict {
   const prompt: string = input.prompt;
   const final: string = input.finalText;
 
@@ -122,7 +144,7 @@ function distill(input: DistillInput): DistillVerdict {
   const edits = input.filesChanged.length > 0;
   const cue = resolution || decision || gotcha || discovery;
 
-  const durable = input.candidates.map(durability);
+  const durable = input.candidates.map((candidate) => durability(candidate, reportSignals));
   const hasDurable = durable.some((p) => p >= 0.5);
 
   let worth = 0.15;
@@ -134,6 +156,13 @@ function distill(input: DistillInput): DistillVerdict {
   // A short answer cannot carry knowledge, unless the knowledge is the user's own rule.
   if (final.length < THIN_CHARS && !correction) worth -= 0.35;
   if (!edits && !cue && !correction) worth -= 0.2;
+  // Mostly a report of the session: the cue words it carries ("fixed", "merged") are news,
+  // not knowledge.
+  const finals = input.candidates.filter((candidate) => candidate.source === "final");
+  const reporting = finals.filter((candidate) => any(candidate.text, REPORT)).length;
+  if (reportSignals && finals.length > 0 && reporting / finals.length >= REPORT_SHARE) {
+    worth -= REPORT_DISCOUNT;
+  }
   // With no sentence to keep, there is nothing to make a memory from.
   if (!hasDurable) worth = Math.min(worth, 0.3);
 
@@ -214,8 +243,20 @@ function consolidate(input: ConsolidateInput): ConsolidateVerdict {
 
 export const heuristicJudge: Judge = {
   name: "heuristic",
+  version: "2",
+  versions: { heuristic: "2" },
+  distill: async (input) => distill(input, true),
+  consolidate: async (input) => consolidate(input),
+};
+
+/**
+ * Version 1 of the heuristic: the same rules without the report signals. Never used by the
+ * drain; the quality proof compares it with version 2 (ADR 0023, D-6).
+ */
+export const heuristicJudgeV1: Judge = {
+  name: "heuristic",
   version: "1",
   versions: { heuristic: "1" },
-  distill: async (input) => distill(input),
+  distill: async (input) => distill(input, false),
   consolidate: async (input) => consolidate(input),
 };
