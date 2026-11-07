@@ -159,9 +159,9 @@ const distillAnswers = {
     confidence: 0.96,
   },
   importance: { type: "score", score: 2.79, legend: {}, probabilities: {}, confidence: 0.8 },
-  durable_0: { type: "noul", noul: 0.13 },
-  durable_1: { type: "noul", noul: 0.79 },
-  durable_2: { type: "noul", noul: 0.81 },
+  knowledge_0: { type: "noul", noul: 0.13 },
+  knowledge_1: { type: "noul", noul: 0.79 },
+  knowledge_2: { type: "noul", noul: 0.81 },
   title: { type: "choice", choice: "c1", probabilities: {}, confidence: 0.7 },
 };
 
@@ -193,7 +193,7 @@ describe("TypeSafeJudge", () => {
       questions: Record<string, unknown>;
     };
     expect(Object.keys(request.questions).sort()).toEqual(
-      ["durable_0", "durable_1", "durable_2", "importance", "kind", "title", "worth"].sort(),
+      ["knowledge_0", "knowledge_1", "knowledge_2", "importance", "kind", "title", "worth"].sort(),
     );
     expect(request.state).toMatchObject({
       user_prompt: "the tests fail with a timeout",

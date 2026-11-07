@@ -49,8 +49,8 @@ function scripted(
 ): Judge {
   return {
     name: "typesafe",
-    version: "1",
-    versions: { typesafe: "1" },
+    version: "2",
+    versions: { typesafe: "2" },
     distill: async (input) => {
       const title = input.finalText.split("\n")[0] ?? "";
       seen.push(title);
