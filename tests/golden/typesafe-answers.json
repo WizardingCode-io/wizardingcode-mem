@@ -1,411 +1,411 @@
 {
   "model": "jev-latest",
-  "recordedAt": "2026-10-05T15:54:36.868Z",
+  "recordedAt": "2026-11-07T13:39:58.769Z",
   "turns": {
     "en-fix-stdin-tty": {
       "answers": {
         "worth": {
           "type": "noul",
-          "noul": 0.9
+          "noul": 0.86
         },
         "kind": {
           "type": "choice",
           "choice": "fix",
-          "confidence": 1,
+          "confidence": 0.93,
           "probabilities": {
-            "convention": 0,
-            "gotcha": 0,
-            "none": 0,
             "decision": 0,
+            "fix": 0.94,
+            "gotcha": 0.02,
+            "convention": 0,
+            "change": 0.04,
             "discovery": 0,
-            "fix": 1,
-            "change": 0
+            "none": 0
           }
         },
         "importance": {
           "type": "score",
-          "score": 2.73,
-          "confidence": 0.77,
+          "score": 1.93,
+          "confidence": 0.91,
           "legend": {
-            "0": "Trivial: nothing is lost",
-            "1": "Minor: saves a few minutes",
-            "2": "Useful: avoids a wrong turn or a repeated investigation",
-            "3": "Important: avoids a bug, a rejected approach, or repeating a user correction",
-            "4": "Critical: avoids data loss, a security problem, or breaking a hard project rule"
+            "0": "Nothing: they would do the same without it",
+            "1": "Minutes: a detail they would find quickly in the code or the docs",
+            "2": "An investigation: a cause, a behaviour or a location that takes real time to find",
+            "3": "A mistake: a rule of the project, an approach already rejected, or a correction the author gave",
+            "4": "Damage: data loss, a security problem, or breaking a hard rule of the project"
+          },
+          "probabilities": {
+            "0": 0,
+            "1": 0.09,
+            "2": 0.89,
+            "3": 0.02,
+            "4": 0
+          }
+        },
+        "knowledge_0": {
+          "type": "noul",
+          "noul": 0.78
+        },
+        "knowledge_1": {
+          "type": "noul",
+          "noul": 0.78
+        },
+        "knowledge_2": {
+          "type": "noul",
+          "noul": 0.46
+        },
+        "knowledge_3": {
+          "type": "noul",
+          "noul": 0.16
+        },
+        "title": {
+          "type": "choice",
+          "choice": "c2",
+          "confidence": 0.47,
+          "probabilities": {
+            "c0": 0.04,
+            "c1": 0.19,
+            "c2": 0.58,
+            "c3": 0.16,
+            "none": 0.03
+          }
+        }
+      },
+      "inputTokens": 1987
+    },
+    "pt-fix-wal-busy": {
+      "answers": {
+        "worth": {
+          "type": "noul",
+          "noul": 0.91
+        },
+        "kind": {
+          "type": "choice",
+          "choice": "fix",
+          "confidence": 0.84,
+          "probabilities": {
+            "decision": 0,
+            "fix": 0.86,
+            "gotcha": 0.11,
+            "convention": 0,
+            "change": 0.01,
+            "discovery": 0.01,
+            "none": 0.01
+          }
+        },
+        "importance": {
+          "type": "score",
+          "score": 2.05,
+          "confidence": 0.94,
+          "legend": {
+            "0": "Nothing: they would do the same without it",
+            "1": "Minutes: a detail they would find quickly in the code or the docs",
+            "2": "An investigation: a cause, a behaviour or a location that takes real time to find",
+            "3": "A mistake: a rule of the project, an approach already rejected, or a correction the author gave",
+            "4": "Damage: data loss, a security problem, or breaking a hard rule of the project"
           },
           "probabilities": {
             "0": 0,
             "1": 0.01,
-            "2": 0.24,
-            "3": 0.75,
+            "2": 0.93,
+            "3": 0.06,
             "4": 0
           }
         },
-        "durable_0": {
+        "knowledge_0": {
           "type": "noul",
-          "noul": 0.62
+          "noul": 0.21
         },
-        "durable_1": {
+        "knowledge_1": {
           "type": "noul",
-          "noul": 0.75
+          "noul": 0.88
         },
-        "durable_2": {
+        "knowledge_2": {
           "type": "noul",
-          "noul": 0.83
+          "noul": 0.17
         },
-        "durable_3": {
+        "knowledge_3": {
           "type": "noul",
-          "noul": 0.76
+          "noul": 0.15
         },
         "title": {
           "type": "choice",
           "choice": "c1",
-          "confidence": 0.57,
+          "confidence": 0.74,
           "probabilities": {
-            "c2": 0.12,
-            "none": 0,
-            "c0": 0.21,
-            "c1": 0.66,
-            "c3": 0.01
+            "c0": 0.02,
+            "c1": 0.79,
+            "c2": 0.11,
+            "c3": 0.03,
+            "none": 0.05
           }
         }
       },
-      "inputTokens": 1550
+      "inputTokens": 2023
     },
-    "pt-fix-wal-busy": {
+    "en-convention-no-mocks": {
       "answers": {
-        "durable_2": {
+        "worth": {
           "type": "noul",
-          "noul": 0.67
+          "noul": 0.88
         },
-        "durable_3": {
+        "kind": {
+          "type": "choice",
+          "choice": "convention",
+          "confidence": 0.87,
+          "probabilities": {
+            "decision": 0.03,
+            "fix": 0,
+            "gotcha": 0,
+            "convention": 0.89,
+            "change": 0.05,
+            "discovery": 0,
+            "none": 0.03
+          }
+        },
+        "importance": {
+          "type": "score",
+          "score": 2.72,
+          "confidence": 0.76,
+          "legend": {
+            "0": "Nothing: they would do the same without it",
+            "1": "Minutes: a detail they would find quickly in the code or the docs",
+            "2": "An investigation: a cause, a behaviour or a location that takes real time to find",
+            "3": "A mistake: a rule of the project, an approach already rejected, or a correction the author gave",
+            "4": "Damage: data loss, a security problem, or breaking a hard rule of the project"
+          },
+          "probabilities": {
+            "0": 0.01,
+            "1": 0.12,
+            "2": 0.02,
+            "3": 0.85,
+            "4": 0
+          }
+        },
+        "knowledge_0": {
           "type": "noul",
-          "noul": 0.12
+          "noul": 0.17
+        },
+        "knowledge_1": {
+          "type": "noul",
+          "noul": 0.81
+        },
+        "knowledge_2": {
+          "type": "noul",
+          "noul": 0.18
+        },
+        "title": {
+          "type": "choice",
+          "choice": "c2",
+          "confidence": 0.64,
+          "probabilities": {
+            "c0": 0.02,
+            "c1": 0.23,
+            "c2": 0.73,
+            "none": 0.02
+          }
+        }
+      },
+      "inputTokens": 1704
+    },
+    "pt-convention-clean-room": {
+      "answers": {
+        "worth": {
+          "type": "noul",
+          "noul": 0.79
+        },
+        "kind": {
+          "type": "choice",
+          "choice": "convention",
+          "confidence": 0.81,
+          "probabilities": {
+            "decision": 0.09,
+            "fix": 0,
+            "gotcha": 0,
+            "convention": 0.84,
+            "change": 0.01,
+            "discovery": 0,
+            "none": 0.06
+          }
+        },
+        "importance": {
+          "type": "score",
+          "score": 2.76,
+          "confidence": 0.72,
+          "legend": {
+            "0": "Nothing: they would do the same without it",
+            "1": "Minutes: a detail they would find quickly in the code or the docs",
+            "2": "An investigation: a cause, a behaviour or a location that takes real time to find",
+            "3": "A mistake: a rule of the project, an approach already rejected, or a correction the author gave",
+            "4": "Damage: data loss, a security problem, or breaking a hard rule of the project"
+          },
+          "probabilities": {
+            "0": 0.01,
+            "1": 0.12,
+            "2": 0.02,
+            "3": 0.81,
+            "4": 0.04
+          }
+        },
+        "knowledge_0": {
+          "type": "noul",
+          "noul": 0.59
+        },
+        "knowledge_1": {
+          "type": "noul",
+          "noul": 0.2
+        },
+        "knowledge_2": {
+          "type": "noul",
+          "noul": 0.36
+        },
+        "title": {
+          "type": "choice",
+          "choice": "c2",
+          "confidence": 0.96,
+          "probabilities": {
+            "c0": 0.03,
+            "c1": 0,
+            "c2": 0.97,
+            "none": 0
+          }
+        }
+      },
+      "inputTokens": 1729
+    },
+    "en-decision-no-embeddings": {
+      "answers": {
+        "worth": {
+          "type": "noul",
+          "noul": 0.88
+        },
+        "kind": {
+          "type": "choice",
+          "choice": "decision",
+          "confidence": 0.99,
+          "probabilities": {
+            "decision": 0.99,
+            "fix": 0,
+            "gotcha": 0,
+            "convention": 0.01,
+            "change": 0,
+            "discovery": 0,
+            "none": 0
+          }
+        },
+        "importance": {
+          "type": "score",
+          "score": 2.72,
+          "confidence": 0.78,
+          "legend": {
+            "0": "Nothing: they would do the same without it",
+            "1": "Minutes: a detail they would find quickly in the code or the docs",
+            "2": "An investigation: a cause, a behaviour or a location that takes real time to find",
+            "3": "A mistake: a rule of the project, an approach already rejected, or a correction the author gave",
+            "4": "Damage: data loss, a security problem, or breaking a hard rule of the project"
+          },
+          "probabilities": {
+            "0": 0,
+            "1": 0.07,
+            "2": 0.12,
+            "3": 0.81,
+            "4": 0
+          }
+        },
+        "knowledge_0": {
+          "type": "noul",
+          "noul": 0.11
+        },
+        "knowledge_1": {
+          "type": "noul",
+          "noul": 0.5
+        },
+        "knowledge_2": {
+          "type": "noul",
+          "noul": 0.8
+        },
+        "knowledge_3": {
+          "type": "noul",
+          "noul": 0.37
+        },
+        "title": {
+          "type": "choice",
+          "choice": "c2",
+          "confidence": 0.99,
+          "probabilities": {
+            "c0": 0,
+            "c1": 0.01,
+            "c2": 0.99,
+            "c3": 0,
+            "none": 0
+          }
+        }
+      },
+      "inputTokens": 1946
+    },
+    "pt-decision-typescript": {
+      "answers": {
+        "worth": {
+          "type": "noul",
+          "noul": 0.91
+        },
+        "kind": {
+          "type": "choice",
+          "choice": "decision",
+          "confidence": 0.96,
+          "probabilities": {
+            "decision": 0.97,
+            "fix": 0,
+            "gotcha": 0,
+            "convention": 0.03,
+            "change": 0,
+            "discovery": 0,
+            "none": 0
+          }
+        },
+        "importance": {
+          "type": "score",
+          "score": 2.49,
+          "confidence": 0.58,
+          "legend": {
+            "0": "Nothing: they would do the same without it",
+            "1": "Minutes: a detail they would find quickly in the code or the docs",
+            "2": "An investigation: a cause, a behaviour or a location that takes real time to find",
+            "3": "A mistake: a rule of the project, an approach already rejected, or a correction the author gave",
+            "4": "Damage: data loss, a security problem, or breaking a hard rule of the project"
+          },
+          "probabilities": {
+            "0": 0.01,
+            "1": 0.15,
+            "2": 0.17,
+            "3": 0.67,
+            "4": 0
+          }
+        },
+        "knowledge_0": {
+          "type": "noul",
+          "noul": 0.09
+        },
+        "knowledge_1": {
+          "type": "noul",
+          "noul": 0.81
+        },
+        "knowledge_2": {
+          "type": "noul",
+          "noul": 0.55
         },
         "title": {
           "type": "choice",
           "choice": "c1",
           "confidence": 0.97,
           "probabilities": {
-            "none": 0,
-            "c3": 0,
+            "c0": 0,
             "c1": 0.98,
             "c2": 0.01,
-            "c0": 0.01
-          }
-        },
-        "worth": {
-          "type": "noul",
-          "noul": 0.9
-        },
-        "kind": {
-          "type": "choice",
-          "choice": "fix",
-          "confidence": 0.82,
-          "probabilities": {
-            "change": 0,
-            "none": 0,
-            "gotcha": 0.13,
-            "discovery": 0.01,
-            "convention": 0,
-            "decision": 0,
-            "fix": 0.86
-          }
-        },
-        "importance": {
-          "type": "score",
-          "score": 2.69,
-          "confidence": 0.74,
-          "legend": {
-            "0": "Trivial: nothing is lost",
-            "1": "Minor: saves a few minutes",
-            "2": "Useful: avoids a wrong turn or a repeated investigation",
-            "3": "Important: avoids a bug, a rejected approach, or repeating a user correction",
-            "4": "Critical: avoids data loss, a security problem, or breaking a hard project rule"
-          },
-          "probabilities": {
-            "0": 0,
-            "1": 0,
-            "2": 0.3,
-            "3": 0.7,
-            "4": 0
-          }
-        },
-        "durable_0": {
-          "type": "noul",
-          "noul": 0.34
-        },
-        "durable_1": {
-          "type": "noul",
-          "noul": 0.77
-        }
-      },
-      "inputTokens": 1586
-    },
-    "en-convention-no-mocks": {
-      "answers": {
-        "worth": {
-          "type": "noul",
-          "noul": 0.87
-        },
-        "kind": {
-          "type": "choice",
-          "choice": "convention",
-          "confidence": 0.93,
-          "probabilities": {
-            "decision": 0.01,
-            "none": 0,
-            "change": 0.04,
-            "fix": 0,
-            "convention": 0.95,
-            "gotcha": 0,
-            "discovery": 0
-          }
-        },
-        "importance": {
-          "type": "score",
-          "score": 2.85,
-          "confidence": 0.85,
-          "legend": {
-            "0": "Trivial: nothing is lost",
-            "1": "Minor: saves a few minutes",
-            "2": "Useful: avoids a wrong turn or a repeated investigation",
-            "3": "Important: avoids a bug, a rejected approach, or repeating a user correction",
-            "4": "Critical: avoids data loss, a security problem, or breaking a hard project rule"
-          },
-          "probabilities": {
-            "0": 0,
-            "1": 0.02,
-            "2": 0.12,
-            "3": 0.84,
-            "4": 0.02
-          }
-        },
-        "durable_0": {
-          "type": "noul",
-          "noul": 0.54
-        },
-        "durable_1": {
-          "type": "noul",
-          "noul": 0.91
-        },
-        "durable_2": {
-          "type": "noul",
-          "noul": 0.35
-        },
-        "title": {
-          "type": "choice",
-          "choice": "c1",
-          "confidence": 0.61,
-          "probabilities": {
-            "none": 0.01,
-            "c0": 0.03,
-            "c1": 0.71,
-            "c2": 0.25
-          }
-        }
-      },
-      "inputTokens": 1316
-    },
-    "pt-convention-clean-room": {
-      "answers": {
-        "worth": {
-          "type": "noul",
-          "noul": 0.87
-        },
-        "kind": {
-          "type": "choice",
-          "choice": "convention",
-          "confidence": 0.92,
-          "probabilities": {
-            "none": 0,
-            "discovery": 0,
-            "decision": 0.06,
-            "change": 0.01,
-            "fix": 0,
-            "convention": 0.93,
-            "gotcha": 0
-          }
-        },
-        "importance": {
-          "type": "score",
-          "score": 3.11,
-          "confidence": 0.76,
-          "legend": {
-            "0": "Trivial: nothing is lost",
-            "1": "Minor: saves a few minutes",
-            "2": "Useful: avoids a wrong turn or a repeated investigation",
-            "3": "Important: avoids a bug, a rejected approach, or repeating a user correction",
-            "4": "Critical: avoids data loss, a security problem, or breaking a hard project rule"
-          },
-          "probabilities": {
-            "0": 0.01,
-            "1": 0.01,
-            "2": 0.06,
-            "3": 0.72,
-            "4": 0.2
-          }
-        },
-        "durable_0": {
-          "type": "noul",
-          "noul": 0.61
-        },
-        "durable_1": {
-          "type": "noul",
-          "noul": 0.34
-        },
-        "durable_2": {
-          "type": "noul",
-          "noul": 0.68
-        },
-        "title": {
-          "type": "choice",
-          "choice": "c2",
-          "confidence": 0.69,
-          "probabilities": {
-            "none": 0.01,
-            "c1": 0.01,
-            "c0": 0.21,
-            "c2": 0.77
-          }
-        }
-      },
-      "inputTokens": 1341
-    },
-    "en-decision-no-embeddings": {
-      "answers": {
-        "importance": {
-          "type": "score",
-          "score": 2.19,
-          "confidence": 0.75,
-          "legend": {
-            "0": "Trivial: nothing is lost",
-            "1": "Minor: saves a few minutes",
-            "2": "Useful: avoids a wrong turn or a repeated investigation",
-            "3": "Important: avoids a bug, a rejected approach, or repeating a user correction",
-            "4": "Critical: avoids data loss, a security problem, or breaking a hard project rule"
-          },
-          "probabilities": {
-            "0": 0.01,
-            "1": 0.04,
-            "2": 0.71,
-            "3": 0.24,
-            "4": 0
-          }
-        },
-        "durable_0": {
-          "type": "noul",
-          "noul": 0.04
-        },
-        "durable_1": {
-          "type": "noul",
-          "noul": 0.59
-        },
-        "durable_2": {
-          "type": "noul",
-          "noul": 0.83
-        },
-        "durable_3": {
-          "type": "noul",
-          "noul": 0.4
-        },
-        "title": {
-          "type": "choice",
-          "choice": "c1",
-          "confidence": 0.84,
-          "probabilities": {
-            "c1": 0.88,
-            "c3": 0,
-            "none": 0,
-            "c0": 0.02,
-            "c2": 0.1
-          }
-        },
-        "worth": {
-          "type": "noul",
-          "noul": 0.9
-        },
-        "kind": {
-          "type": "choice",
-          "choice": "decision",
-          "confidence": 1,
-          "probabilities": {
-            "discovery": 0,
-            "change": 0,
-            "none": 0,
-            "convention": 0,
-            "gotcha": 0,
-            "fix": 0,
-            "decision": 1
-          }
-        }
-      },
-      "inputTokens": 1509
-    },
-    "pt-decision-typescript": {
-      "answers": {
-        "worth": {
-          "type": "noul",
-          "noul": 0.93
-        },
-        "kind": {
-          "type": "choice",
-          "choice": "decision",
-          "confidence": 1,
-          "probabilities": {
-            "fix": 0,
-            "convention": 0,
-            "change": 0,
-            "discovery": 0,
-            "gotcha": 0,
-            "decision": 1,
-            "none": 0
-          }
-        },
-        "importance": {
-          "type": "score",
-          "score": 2.4,
-          "confidence": 0.62,
-          "legend": {
-            "0": "Trivial: nothing is lost",
-            "1": "Minor: saves a few minutes",
-            "2": "Useful: avoids a wrong turn or a repeated investigation",
-            "3": "Important: avoids a bug, a rejected approach, or repeating a user correction",
-            "4": "Critical: avoids data loss, a security problem, or breaking a hard project rule"
-          },
-          "probabilities": {
-            "0": 0,
-            "1": 0.02,
-            "2": 0.56,
-            "3": 0.42,
-            "4": 0
-          }
-        },
-        "durable_0": {
-          "type": "noul",
-          "noul": 0.05
-        },
-        "durable_1": {
-          "type": "noul",
-          "noul": 0.82
-        },
-        "durable_2": {
-          "type": "noul",
-          "noul": 0.74
-        },
-        "title": {
-          "type": "choice",
-          "choice": "c1",
-          "confidence": 0.98,
-          "probabilities": {
-            "c1": 0.98,
-            "c2": 0,
-            "c0": 0.01,
             "none": 0.01
           }
         }
       },
-      "inputTokens": 1400
+      "inputTokens": 1788
     },
     "en-gotcha-dotenv": {
       "answers": {
@@ -416,333 +416,523 @@
         "kind": {
           "type": "choice",
           "choice": "fix",
-          "confidence": 0.45,
+          "confidence": 0.62,
           "probabilities": {
-            "none": 0,
-            "gotcha": 0.43,
             "decision": 0,
+            "fix": 0.67,
+            "gotcha": 0.31,
             "convention": 0,
+            "change": 0.01,
             "discovery": 0.01,
-            "change": 0.02,
-            "fix": 0.54
+            "none": 0
           }
         },
         "importance": {
           "type": "score",
-          "score": 3.67,
-          "confidence": 0.73,
+          "score": 2.96,
+          "confidence": 0.14,
           "legend": {
-            "0": "Trivial: nothing is lost",
-            "1": "Minor: saves a few minutes",
-            "2": "Useful: avoids a wrong turn or a repeated investigation",
-            "3": "Important: avoids a bug, a rejected approach, or repeating a user correction",
-            "4": "Critical: avoids data loss, a security problem, or breaking a hard project rule"
+            "0": "Nothing: they would do the same without it",
+            "1": "Minutes: a detail they would find quickly in the code or the docs",
+            "2": "An investigation: a cause, a behaviour or a location that takes real time to find",
+            "3": "A mistake: a rule of the project, an approach already rejected, or a correction the author gave",
+            "4": "Damage: data loss, a security problem, or breaking a hard rule of the project"
           },
           "probabilities": {
             "0": 0,
-            "1": 0,
-            "2": 0.03,
-            "3": 0.25,
-            "4": 0.72
+            "1": 0.06,
+            "2": 0.34,
+            "3": 0.17,
+            "4": 0.43
           }
         },
-        "durable_0": {
+        "knowledge_0": {
           "type": "noul",
-          "noul": 0.08
+          "noul": 0.11
         },
-        "durable_1": {
+        "knowledge_1": {
           "type": "noul",
-          "noul": 0.76
+          "noul": 0.89
         },
-        "durable_2": {
+        "knowledge_2": {
           "type": "noul",
-          "noul": 0.66
+          "noul": 0.75
         },
-        "durable_3": {
+        "knowledge_3": {
           "type": "noul",
-          "noul": 0.79
+          "noul": 0.32
         },
         "title": {
           "type": "choice",
-          "choice": "c1",
-          "confidence": 0.6,
+          "choice": "c3",
+          "confidence": 0.27,
           "probabilities": {
-            "none": 0,
-            "c0": 0.11,
-            "c3": 0.2,
-            "c1": 0.68,
-            "c2": 0.01
+            "c0": 0.02,
+            "c1": 0.33,
+            "c2": 0.13,
+            "c3": 0.42,
+            "none": 0.1
           }
         }
       },
-      "inputTokens": 1538
+      "inputTokens": 1975
     },
     "pt-gotcha-stop-hook": {
       "answers": {
         "worth": {
           "type": "noul",
-          "noul": 0.89
+          "noul": 0.93
         },
         "kind": {
           "type": "choice",
           "choice": "gotcha",
-          "confidence": 0.92,
+          "confidence": 0.87,
           "probabilities": {
             "decision": 0,
-            "gotcha": 0.93,
-            "none": 0,
-            "convention": 0,
-            "discovery": 0.05,
+            "fix": 0.07,
+            "gotcha": 0.89,
+            "convention": 0.01,
             "change": 0,
-            "fix": 0.01
+            "discovery": 0.03,
+            "none": 0
           }
         },
         "importance": {
           "type": "score",
-          "score": 2.89,
-          "confidence": 0.87,
+          "score": 2.14,
+          "confidence": 0.82,
           "legend": {
-            "0": "Trivial: nothing is lost",
-            "1": "Minor: saves a few minutes",
-            "2": "Useful: avoids a wrong turn or a repeated investigation",
-            "3": "Important: avoids a bug, a rejected approach, or repeating a user correction",
-            "4": "Critical: avoids data loss, a security problem, or breaking a hard project rule"
+            "0": "Nothing: they would do the same without it",
+            "1": "Minutes: a detail they would find quickly in the code or the docs",
+            "2": "An investigation: a cause, a behaviour or a location that takes real time to find",
+            "3": "A mistake: a rule of the project, an approach already rejected, or a correction the author gave",
+            "4": "Damage: data loss, a security problem, or breaking a hard rule of the project"
           },
           "probabilities": {
             "0": 0,
-            "1": 0.01,
-            "2": 0.11,
-            "3": 0.86,
-            "4": 0.02
+            "1": 0.04,
+            "2": 0.79,
+            "3": 0.16,
+            "4": 0.01
           }
         },
-        "durable_0": {
+        "knowledge_0": {
           "type": "noul",
           "noul": 0.07
         },
-        "durable_1": {
+        "knowledge_1": {
           "type": "noul",
-          "noul": 0.82
+          "noul": 0.92
         },
-        "durable_2": {
+        "knowledge_2": {
           "type": "noul",
-          "noul": 0.77
+          "noul": 0.61
         },
         "title": {
           "type": "choice",
-          "choice": "c1",
-          "confidence": 0.82,
+          "choice": "c2",
+          "confidence": 0.43,
           "probabilities": {
-            "none": 0,
-            "c0": 0.08,
-            "c1": 0.86,
-            "c2": 0.06
+            "c0": 0,
+            "c1": 0.41,
+            "c2": 0.57,
+            "none": 0.02
           }
         }
       },
-      "inputTokens": 1388
+      "inputTokens": 1776
     },
     "en-change-json-flag": {
       "answers": {
         "worth": {
           "type": "noul",
-          "noul": 0.7
+          "noul": 0.27
         },
         "kind": {
           "type": "choice",
           "choice": "change",
-          "confidence": 1,
+          "confidence": 0.84,
           "probabilities": {
-            "fix": 0,
-            "convention": 0,
-            "change": 1,
-            "gotcha": 0,
             "decision": 0,
-            "none": 0,
-            "discovery": 0
+            "fix": 0,
+            "gotcha": 0,
+            "convention": 0,
+            "change": 0.86,
+            "discovery": 0,
+            "none": 0.14
           }
         },
         "importance": {
           "type": "score",
-          "score": 1.68,
-          "confidence": 0.51,
+          "score": 1.11,
+          "confidence": 0.9,
           "legend": {
-            "0": "Trivial: nothing is lost",
-            "1": "Minor: saves a few minutes",
-            "2": "Useful: avoids a wrong turn or a repeated investigation",
-            "3": "Important: avoids a bug, a rejected approach, or repeating a user correction",
-            "4": "Critical: avoids data loss, a security problem, or breaking a hard project rule"
+            "0": "Nothing: they would do the same without it",
+            "1": "Minutes: a detail they would find quickly in the code or the docs",
+            "2": "An investigation: a cause, a behaviour or a location that takes real time to find",
+            "3": "A mistake: a rule of the project, an approach already rejected, or a correction the author gave",
+            "4": "Damage: data loss, a security problem, or breaking a hard rule of the project"
           },
           "probabilities": {
-            "0": 0.08,
-            "1": 0.28,
-            "2": 0.51,
-            "3": 0.13,
+            "0": 0.01,
+            "1": 0.88,
+            "2": 0.11,
+            "3": 0,
             "4": 0
           }
         },
-        "durable_0": {
+        "knowledge_0": {
           "type": "noul",
-          "noul": 0.19
+          "noul": 0.12
         },
-        "durable_1": {
+        "knowledge_1": {
           "type": "noul",
-          "noul": 0.78
+          "noul": 0.14
         },
-        "durable_2": {
+        "knowledge_2": {
           "type": "noul",
-          "noul": 0.88
+          "noul": 0.7
         },
-        "durable_3": {
+        "knowledge_3": {
           "type": "noul",
-          "noul": 0.77
+          "noul": 0.24
         },
         "title": {
           "type": "choice",
           "choice": "c1",
-          "confidence": 0.5,
+          "confidence": 0.56,
           "probabilities": {
-            "c0": 0.39,
-            "c2": 0.01,
-            "c3": 0,
-            "none": 0,
-            "c1": 0.6
+            "c0": 0.03,
+            "c1": 0.65,
+            "c2": 0.27,
+            "c3": 0.04,
+            "none": 0.01
           }
         }
       },
-      "inputTokens": 1541
+      "inputTokens": 1978
     },
     "pt-change-migration": {
       "answers": {
         "worth": {
           "type": "noul",
-          "noul": 0.67
+          "noul": 0.65
         },
         "kind": {
           "type": "choice",
           "choice": "change",
-          "confidence": 0.99,
+          "confidence": 0.73,
           "probabilities": {
-            "convention": 0,
-            "none": 0,
             "decision": 0,
-            "gotcha": 0,
-            "change": 1,
-            "discovery": 0,
-            "fix": 0
+            "fix": 0,
+            "gotcha": 0.01,
+            "convention": 0,
+            "change": 0.77,
+            "discovery": 0.01,
+            "none": 0.21
           }
         },
         "importance": {
           "type": "score",
-          "score": 2.34,
-          "confidence": 0.4,
+          "score": 1.42,
+          "confidence": 0.63,
           "legend": {
-            "0": "Trivial: nothing is lost",
-            "1": "Minor: saves a few minutes",
-            "2": "Useful: avoids a wrong turn or a repeated investigation",
-            "3": "Important: avoids a bug, a rejected approach, or repeating a user correction",
-            "4": "Critical: avoids data loss, a security problem, or breaking a hard project rule"
+            "0": "Nothing: they would do the same without it",
+            "1": "Minutes: a detail they would find quickly in the code or the docs",
+            "2": "An investigation: a cause, a behaviour or a location that takes real time to find",
+            "3": "A mistake: a rule of the project, an approach already rejected, or a correction the author gave",
+            "4": "Damage: data loss, a security problem, or breaking a hard rule of the project"
           },
           "probabilities": {
-            "0": 0.07,
-            "1": 0.07,
-            "2": 0.34,
-            "3": 0.49,
-            "4": 0.03
+            "0": 0.01,
+            "1": 0.64,
+            "2": 0.29,
+            "3": 0.04,
+            "4": 0.02
           }
         },
-        "durable_0": {
+        "knowledge_0": {
           "type": "noul",
-          "noul": 0.07
+          "noul": 0.08
         },
-        "durable_1": {
+        "knowledge_1": {
           "type": "noul",
-          "noul": 0.71
+          "noul": 0.11
         },
-        "durable_2": {
+        "knowledge_2": {
           "type": "noul",
-          "noul": 0.79
+          "noul": 0.83
         },
         "title": {
           "type": "choice",
           "choice": "c1",
-          "confidence": 0.51,
+          "confidence": 0.73,
           "probabilities": {
-            "c1": 0.64,
-            "c0": 0.36,
-            "none": 0,
-            "c2": 0
+            "c0": 0.02,
+            "c1": 0.8,
+            "c2": 0.17,
+            "none": 0.01
           }
         }
       },
-      "inputTokens": 1427
+      "inputTokens": 1815
     },
     "en-discovery-prompt-id": {
       "answers": {
         "worth": {
           "type": "noul",
-          "noul": 0.79
+          "noul": 0.93
         },
         "kind": {
           "type": "choice",
           "choice": "discovery",
-          "confidence": 0.95,
+          "confidence": 0.72,
           "probabilities": {
-            "gotcha": 0.04,
             "decision": 0,
-            "change": 0,
-            "fix": 0,
-            "discovery": 0.96,
+            "fix": 0.01,
+            "gotcha": 0.23,
             "convention": 0,
+            "change": 0,
+            "discovery": 0.76,
             "none": 0
           }
         },
         "importance": {
           "type": "score",
-          "score": 2.34,
-          "confidence": 0.65,
+          "score": 2.4,
+          "confidence": 0.5,
           "legend": {
-            "0": "Trivial: nothing is lost",
-            "1": "Minor: saves a few minutes",
-            "2": "Useful: avoids a wrong turn or a repeated investigation",
-            "3": "Important: avoids a bug, a rejected approach, or repeating a user correction",
-            "4": "Critical: avoids data loss, a security problem, or breaking a hard project rule"
+            "0": "Nothing: they would do the same without it",
+            "1": "Minutes: a detail they would find quickly in the code or the docs",
+            "2": "An investigation: a cause, a behaviour or a location that takes real time to find",
+            "3": "A mistake: a rule of the project, an approach already rejected, or a correction the author gave",
+            "4": "Damage: data loss, a security problem, or breaking a hard rule of the project"
           },
           "probabilities": {
             "0": 0,
-            "1": 0.03,
-            "2": 0.59,
-            "3": 0.38,
+            "1": 0.09,
+            "2": 0.42,
+            "3": 0.49,
             "4": 0
           }
         },
-        "durable_0": {
+        "knowledge_0": {
           "type": "noul",
-          "noul": 0.08
+          "noul": 0.07
         },
-        "durable_1": {
+        "knowledge_1": {
           "type": "noul",
-          "noul": 0.78
+          "noul": 0.88
         },
-        "durable_2": {
+        "knowledge_2": {
           "type": "noul",
-          "noul": 0.64
+          "noul": 0.81
         },
         "title": {
           "type": "choice",
           "choice": "c1",
-          "confidence": 0.9,
+          "confidence": 0.96,
           "probabilities": {
-            "c2": 0.01,
-            "c1": 0.93,
-            "c0": 0.06,
+            "c0": 0.01,
+            "c1": 0.97,
+            "c2": 0.02,
             "none": 0
           }
         }
       },
-      "inputTokens": 1393
+      "inputTokens": 1781
     },
     "en-fix-diacritics": {
+      "answers": {
+        "worth": {
+          "type": "noul",
+          "noul": 0.9
+        },
+        "kind": {
+          "type": "choice",
+          "choice": "fix",
+          "confidence": 0.85,
+          "probabilities": {
+            "decision": 0,
+            "fix": 0.87,
+            "gotcha": 0.1,
+            "convention": 0,
+            "change": 0.02,
+            "discovery": 0.01,
+            "none": 0
+          }
+        },
+        "importance": {
+          "type": "score",
+          "score": 1.94,
+          "confidence": 0.83,
+          "legend": {
+            "0": "Nothing: they would do the same without it",
+            "1": "Minutes: a detail they would find quickly in the code or the docs",
+            "2": "An investigation: a cause, a behaviour or a location that takes real time to find",
+            "3": "A mistake: a rule of the project, an approach already rejected, or a correction the author gave",
+            "4": "Damage: data loss, a security problem, or breaking a hard rule of the project"
+          },
+          "probabilities": {
+            "0": 0.01,
+            "1": 0.12,
+            "2": 0.81,
+            "3": 0.06,
+            "4": 0
+          }
+        },
+        "knowledge_0": {
+          "type": "noul",
+          "noul": 0.23
+        },
+        "knowledge_1": {
+          "type": "noul",
+          "noul": 0.75
+        },
+        "knowledge_2": {
+          "type": "noul",
+          "noul": 0.62
+        },
+        "title": {
+          "type": "choice",
+          "choice": "c2",
+          "confidence": 0.93,
+          "probabilities": {
+            "c0": 0.01,
+            "c1": 0.03,
+            "c2": 0.95,
+            "none": 0.01
+          }
+        }
+      },
+      "inputTokens": 1757
+    },
+    "en-convention-commit-style": {
+      "answers": {
+        "worth": {
+          "type": "noul",
+          "noul": 0.88
+        },
+        "kind": {
+          "type": "choice",
+          "choice": "convention",
+          "confidence": 0.98,
+          "probabilities": {
+            "decision": 0,
+            "fix": 0,
+            "gotcha": 0,
+            "convention": 0.98,
+            "change": 0,
+            "discovery": 0,
+            "none": 0.02
+          }
+        },
+        "importance": {
+          "type": "score",
+          "score": 2.59,
+          "confidence": 0.64,
+          "legend": {
+            "0": "Nothing: they would do the same without it",
+            "1": "Minutes: a detail they would find quickly in the code or the docs",
+            "2": "An investigation: a cause, a behaviour or a location that takes real time to find",
+            "3": "A mistake: a rule of the project, an approach already rejected, or a correction the author gave",
+            "4": "Damage: data loss, a security problem, or breaking a hard rule of the project"
+          },
+          "probabilities": {
+            "0": 0.05,
+            "1": 0.12,
+            "2": 0.03,
+            "3": 0.79,
+            "4": 0.01
+          }
+        },
+        "knowledge_0": {
+          "type": "noul",
+          "noul": 0.23
+        },
+        "knowledge_1": {
+          "type": "noul",
+          "noul": 0.62
+        },
+        "title": {
+          "type": "choice",
+          "choice": "c0",
+          "confidence": 0.43,
+          "probabilities": {
+            "c0": 0.62,
+            "c1": 0.35,
+            "none": 0.03
+          }
+        }
+      },
+      "inputTokens": 1471
+    },
+    "pt-decision-gemini": {
+      "answers": {
+        "worth": {
+          "type": "noul",
+          "noul": 0.91
+        },
+        "kind": {
+          "type": "choice",
+          "choice": "decision",
+          "confidence": 0.91,
+          "probabilities": {
+            "decision": 0.92,
+            "fix": 0,
+            "gotcha": 0.01,
+            "convention": 0.01,
+            "change": 0.05,
+            "discovery": 0.01,
+            "none": 0
+          }
+        },
+        "importance": {
+          "type": "score",
+          "score": 2.61,
+          "confidence": 0.68,
+          "legend": {
+            "0": "Nothing: they would do the same without it",
+            "1": "Minutes: a detail they would find quickly in the code or the docs",
+            "2": "An investigation: a cause, a behaviour or a location that takes real time to find",
+            "3": "A mistake: a rule of the project, an approach already rejected, or a correction the author gave",
+            "4": "Damage: data loss, a security problem, or breaking a hard rule of the project"
+          },
+          "probabilities": {
+            "0": 0,
+            "1": 0.03,
+            "2": 0.32,
+            "3": 0.64,
+            "4": 0.01
+          }
+        },
+        "knowledge_0": {
+          "type": "noul",
+          "noul": 0.07
+        },
+        "knowledge_1": {
+          "type": "noul",
+          "noul": 0.7
+        },
+        "knowledge_2": {
+          "type": "noul",
+          "noul": 0.88
+        },
+        "title": {
+          "type": "choice",
+          "choice": "c2",
+          "confidence": 1,
+          "probabilities": {
+            "c0": 0,
+            "c1": 0,
+            "c2": 1,
+            "none": 0
+          }
+        }
+      },
+      "inputTokens": 1764
+    },
+    "en-fix-pending-timer": {
       "answers": {
         "worth": {
           "type": "noul",
@@ -751,63 +941,68 @@
         "kind": {
           "type": "choice",
           "choice": "fix",
-          "confidence": 0.87,
+          "confidence": 0.67,
           "probabilities": {
-            "change": 0.03,
-            "gotcha": 0.07,
-            "convention": 0,
-            "fix": 0.89,
             "decision": 0,
-            "none": 0,
-            "discovery": 0.01
+            "fix": 0.72,
+            "gotcha": 0.28,
+            "convention": 0,
+            "change": 0,
+            "discovery": 0,
+            "none": 0
           }
         },
         "importance": {
           "type": "score",
-          "score": 2.68,
-          "confidence": 0.73,
+          "score": 1.95,
+          "confidence": 0.91,
           "legend": {
-            "0": "Trivial: nothing is lost",
-            "1": "Minor: saves a few minutes",
-            "2": "Useful: avoids a wrong turn or a repeated investigation",
-            "3": "Important: avoids a bug, a rejected approach, or repeating a user correction",
-            "4": "Critical: avoids data loss, a security problem, or breaking a hard project rule"
+            "0": "Nothing: they would do the same without it",
+            "1": "Minutes: a detail they would find quickly in the code or the docs",
+            "2": "An investigation: a cause, a behaviour or a location that takes real time to find",
+            "3": "A mistake: a rule of the project, an approach already rejected, or a correction the author gave",
+            "4": "Damage: data loss, a security problem, or breaking a hard rule of the project"
           },
           "probabilities": {
             "0": 0,
-            "1": 0.01,
-            "2": 0.28,
-            "3": 0.71,
+            "1": 0.08,
+            "2": 0.89,
+            "3": 0.03,
             "4": 0
           }
         },
-        "durable_0": {
+        "knowledge_0": {
+          "type": "noul",
+          "noul": 0.19
+        },
+        "knowledge_1": {
+          "type": "noul",
+          "noul": 0.8
+        },
+        "knowledge_2": {
+          "type": "noul",
+          "noul": 0.59
+        },
+        "knowledge_3": {
           "type": "noul",
           "noul": 0.22
-        },
-        "durable_1": {
-          "type": "noul",
-          "noul": 0.77
-        },
-        "durable_2": {
-          "type": "noul",
-          "noul": 0.82
         },
         "title": {
           "type": "choice",
           "choice": "c1",
-          "confidence": 0.35,
+          "confidence": 0.65,
           "probabilities": {
-            "c0": 0.01,
-            "c2": 0.47,
-            "none": 0.01,
-            "c1": 0.51
+            "c0": 0.02,
+            "c1": 0.72,
+            "c2": 0.04,
+            "c3": 0.19,
+            "none": 0.03
           }
         }
       },
-      "inputTokens": 1369
+      "inputTokens": 1974
     },
-    "en-convention-commit-style": {
+    "pt-decision-baseline": {
       "answers": {
         "worth": {
           "type": "noul",
@@ -815,307 +1010,112 @@
         },
         "kind": {
           "type": "choice",
-          "choice": "convention",
-          "confidence": 1,
-          "probabilities": {
-            "convention": 1,
-            "change": 0,
-            "discovery": 0,
-            "decision": 0,
-            "fix": 0,
-            "none": 0,
-            "gotcha": 0
-          }
-        },
-        "importance": {
-          "type": "score",
-          "score": 2.2,
-          "confidence": 0.32,
-          "legend": {
-            "0": "Trivial: nothing is lost",
-            "1": "Minor: saves a few minutes",
-            "2": "Useful: avoids a wrong turn or a repeated investigation",
-            "3": "Important: avoids a bug, a rejected approach, or repeating a user correction",
-            "4": "Critical: avoids data loss, a security problem, or breaking a hard project rule"
-          },
-          "probabilities": {
-            "0": 0.06,
-            "1": 0.14,
-            "2": 0.35,
-            "3": 0.44,
-            "4": 0.01
-          }
-        },
-        "durable_0": {
-          "type": "noul",
-          "noul": 0.77
-        },
-        "durable_1": {
-          "type": "noul",
-          "noul": 0.62
-        },
-        "title": {
-          "type": "choice",
-          "choice": "c0",
-          "confidence": 0.35,
-          "probabilities": {
-            "c0": 0.57,
-            "none": 0,
-            "c1": 0.43
-          }
-        }
-      },
-      "inputTokens": 1132
-    },
-    "pt-decision-gemini": {
-      "answers": {
-        "worth": {
-          "type": "noul",
-          "noul": 0.88
-        },
-        "kind": {
-          "type": "choice",
-          "choice": "decision",
-          "confidence": 0.97,
-          "probabilities": {
-            "convention": 0,
-            "discovery": 0,
-            "none": 0,
-            "gotcha": 0,
-            "change": 0.02,
-            "decision": 0.98,
-            "fix": 0
-          }
-        },
-        "importance": {
-          "type": "score",
-          "score": 2.71,
-          "confidence": 0.75,
-          "legend": {
-            "0": "Trivial: nothing is lost",
-            "1": "Minor: saves a few minutes",
-            "2": "Useful: avoids a wrong turn or a repeated investigation",
-            "3": "Important: avoids a bug, a rejected approach, or repeating a user correction",
-            "4": "Critical: avoids data loss, a security problem, or breaking a hard project rule"
-          },
-          "probabilities": {
-            "0": 0,
-            "1": 0.01,
-            "2": 0.26,
-            "3": 0.72,
-            "4": 0.01
-          }
-        },
-        "durable_0": {
-          "type": "noul",
-          "noul": 0.08
-        },
-        "durable_1": {
-          "type": "noul",
-          "noul": 0.74
-        },
-        "durable_2": {
-          "type": "noul",
-          "noul": 0.82
-        },
-        "title": {
-          "type": "choice",
-          "choice": "c2",
-          "confidence": 0.83,
-          "probabilities": {
-            "c1": 0.08,
-            "c0": 0.04,
-            "none": 0.01,
-            "c2": 0.87
-          }
-        }
-      },
-      "inputTokens": 1376
-    },
-    "en-fix-pending-timer": {
-      "answers": {
-        "worth": {
-          "type": "noul",
-          "noul": 0.9
-        },
-        "kind": {
-          "type": "choice",
           "choice": "fix",
-          "confidence": 0.49,
+          "confidence": 0.52,
           "probabilities": {
-            "decision": 0,
-            "discovery": 0,
-            "gotcha": 0.43,
-            "change": 0,
-            "none": 0,
+            "decision": 0.05,
+            "fix": 0.59,
+            "gotcha": 0.08,
             "convention": 0,
-            "fix": 0.5700000000000001
+            "change": 0.17,
+            "discovery": 0.02,
+            "none": 0.09
           }
         },
         "importance": {
           "type": "score",
-          "score": 2.67,
-          "confidence": 0.72,
+          "score": 1.7,
+          "confidence": 0.66,
           "legend": {
-            "0": "Trivial: nothing is lost",
-            "1": "Minor: saves a few minutes",
-            "2": "Useful: avoids a wrong turn or a repeated investigation",
-            "3": "Important: avoids a bug, a rejected approach, or repeating a user correction",
-            "4": "Critical: avoids data loss, a security problem, or breaking a hard project rule"
+            "0": "Nothing: they would do the same without it",
+            "1": "Minutes: a detail they would find quickly in the code or the docs",
+            "2": "An investigation: a cause, a behaviour or a location that takes real time to find",
+            "3": "A mistake: a rule of the project, an approach already rejected, or a correction the author gave",
+            "4": "Damage: data loss, a security problem, or breaking a hard rule of the project"
           },
           "probabilities": {
-            "0": 0,
-            "1": 0.01,
-            "2": 0.3,
-            "3": 0.69,
+            "0": 0.01,
+            "1": 0.34,
+            "2": 0.6,
+            "3": 0.05,
             "4": 0
           }
         },
-        "durable_0": {
+        "knowledge_0": {
           "type": "noul",
-          "noul": 0.23
+          "noul": 0.09
         },
-        "durable_1": {
+        "knowledge_1": {
           "type": "noul",
-          "noul": 0.74
-        },
-        "durable_2": {
-          "type": "noul",
-          "noul": 0.74
-        },
-        "durable_3": {
-          "type": "noul",
-          "noul": 0.64
+          "noul": 0.66
         },
         "title": {
           "type": "choice",
           "choice": "c1",
-          "confidence": 0.92,
+          "confidence": 0.98,
           "probabilities": {
-            "c2": 0.05,
-            "c3": 0.01,
-            "none": 0,
-            "c1": 0.9299999999999999,
-            "c0": 0.01
-          }
-        }
-      },
-      "inputTokens": 1537
-    },
-    "pt-decision-baseline": {
-      "answers": {
-        "worth": {
-          "type": "noul",
-          "noul": 0.9
-        },
-        "kind": {
-          "type": "choice",
-          "choice": "change",
-          "confidence": 0.51,
-          "probabilities": {
-            "decision": 0,
-            "fix": 0.4,
-            "none": 0,
-            "convention": 0,
-            "discovery": 0,
-            "change": 0.59,
-            "gotcha": 0.01
-          }
-        },
-        "importance": {
-          "type": "score",
-          "score": 2.77,
-          "confidence": 0.81,
-          "legend": {
-            "0": "Trivial: nothing is lost",
-            "1": "Minor: saves a few minutes",
-            "2": "Useful: avoids a wrong turn or a repeated investigation",
-            "3": "Important: avoids a bug, a rejected approach, or repeating a user correction",
-            "4": "Critical: avoids data loss, a security problem, or breaking a hard project rule"
-          },
-          "probabilities": {
-            "0": 0.01,
-            "1": 0.02,
-            "2": 0.16,
-            "3": 0.81,
-            "4": 0
-          }
-        },
-        "durable_0": {
-          "type": "noul",
-          "noul": 0.11
-        },
-        "durable_1": {
-          "type": "noul",
-          "noul": 0.82
-        },
-        "title": {
-          "type": "choice",
-          "choice": "c0",
-          "confidence": 0.68,
-          "probabilities": {
-            "c1": 0.21,
-            "c0": 0.79,
+            "c0": 0.01,
+            "c1": 0.99,
             "none": 0
           }
         }
       },
-      "inputTokens": 1209
+      "inputTokens": 1548
     },
     "en-none-thanks": {
       "answers": {
         "worth": {
           "type": "noul",
-          "noul": 0.05
+          "noul": 0.04
         },
         "kind": {
           "type": "choice",
           "choice": "none",
           "confidence": 1,
           "probabilities": {
+            "decision": 0,
+            "fix": 0,
             "gotcha": 0,
             "convention": 0,
-            "none": 1,
-            "discovery": 0,
             "change": 0,
-            "fix": 0,
-            "decision": 0
+            "discovery": 0,
+            "none": 1
           }
         },
         "importance": {
           "type": "score",
-          "score": 0.02,
-          "confidence": 0.99,
+          "score": 0.01,
+          "confidence": 1,
           "legend": {
-            "0": "Trivial: nothing is lost",
-            "1": "Minor: saves a few minutes",
-            "2": "Useful: avoids a wrong turn or a repeated investigation",
-            "3": "Important: avoids a bug, a rejected approach, or repeating a user correction",
-            "4": "Critical: avoids data loss, a security problem, or breaking a hard project rule"
+            "0": "Nothing: they would do the same without it",
+            "1": "Minutes: a detail they would find quickly in the code or the docs",
+            "2": "An investigation: a cause, a behaviour or a location that takes real time to find",
+            "3": "A mistake: a rule of the project, an approach already rejected, or a correction the author gave",
+            "4": "Damage: data loss, a security problem, or breaking a hard rule of the project"
           },
           "probabilities": {
-            "0": 0.99,
-            "1": 0.01,
+            "0": 1,
+            "1": 0,
             "2": 0,
             "3": 0,
             "4": 0
           }
         },
-        "durable_0": {
+        "knowledge_0": {
           "type": "noul",
-          "noul": 0.02
+          "noul": 0.05
         },
         "title": {
           "type": "choice",
           "choice": "none",
-          "confidence": 0.72,
+          "confidence": 0.92,
           "probabilities": {
-            "none": 0.86,
-            "c0": 0.14
+            "c0": 0.04,
+            "none": 0.96
           }
         }
       },
-      "inputTokens": 939
+      "inputTokens": 1229
     },
     "pt-none-status": {
       "answers": {
@@ -1126,411 +1126,411 @@
         "kind": {
           "type": "choice",
           "choice": "none",
-          "confidence": 0.99,
+          "confidence": 1,
           "probabilities": {
-            "gotcha": 0,
-            "discovery": 0.01,
-            "convention": 0,
             "decision": 0,
             "fix": 0,
+            "gotcha": 0,
+            "convention": 0,
             "change": 0,
-            "none": 0.99
+            "discovery": 0,
+            "none": 1
           }
         },
         "importance": {
           "type": "score",
-          "score": 0.95,
-          "confidence": 0.56,
+          "score": 0.52,
+          "confidence": 0.58,
           "legend": {
-            "0": "Trivial: nothing is lost",
-            "1": "Minor: saves a few minutes",
-            "2": "Useful: avoids a wrong turn or a repeated investigation",
-            "3": "Important: avoids a bug, a rejected approach, or repeating a user correction",
-            "4": "Critical: avoids data loss, a security problem, or breaking a hard project rule"
+            "0": "Nothing: they would do the same without it",
+            "1": "Minutes: a detail they would find quickly in the code or the docs",
+            "2": "An investigation: a cause, a behaviour or a location that takes real time to find",
+            "3": "A mistake: a rule of the project, an approach already rejected, or a correction the author gave",
+            "4": "Damage: data loss, a security problem, or breaking a hard rule of the project"
           },
           "probabilities": {
-            "0": 0.29,
-            "1": 0.49,
-            "2": 0.2,
-            "3": 0.02,
+            "0": 0.55,
+            "1": 0.4,
+            "2": 0.05,
+            "3": 0,
             "4": 0
           }
         },
-        "durable_0": {
+        "knowledge_0": {
           "type": "noul",
-          "noul": 0.05
+          "noul": 0.08
         },
-        "durable_1": {
+        "knowledge_1": {
           "type": "noul",
-          "noul": 0.06
+          "noul": 0.16
         },
         "title": {
           "type": "choice",
           "choice": "c0",
-          "confidence": 0.99,
+          "confidence": 0.97,
           "probabilities": {
-            "c0": 1,
-            "c1": 0,
-            "none": 0
+            "c0": 0.98,
+            "c1": 0.01,
+            "none": 0.01
           }
         }
       },
-      "inputTokens": 1125
+      "inputTokens": 1464
     },
     "en-none-obvious-from-code": {
       "answers": {
+        "worth": {
+          "type": "noul",
+          "noul": 0.58
+        },
         "kind": {
           "type": "choice",
           "choice": "discovery",
-          "confidence": 0.99,
+          "confidence": 0.95,
           "probabilities": {
-            "gotcha": 0,
             "decision": 0,
-            "convention": 0,
-            "none": 0.01,
             "fix": 0,
-            "change": 0,
-            "discovery": 0.99
+            "gotcha": 0,
+            "convention": 0,
+            "change": 0.03,
+            "discovery": 0.96,
+            "none": 0.01
           }
         },
         "importance": {
           "type": "score",
-          "score": 1.62,
-          "confidence": 0.57,
+          "score": 1.04,
+          "confidence": 0.95,
           "legend": {
-            "0": "Trivial: nothing is lost",
-            "1": "Minor: saves a few minutes",
-            "2": "Useful: avoids a wrong turn or a repeated investigation",
-            "3": "Important: avoids a bug, a rejected approach, or repeating a user correction",
-            "4": "Critical: avoids data loss, a security problem, or breaking a hard project rule"
+            "0": "Nothing: they would do the same without it",
+            "1": "Minutes: a detail they would find quickly in the code or the docs",
+            "2": "An investigation: a cause, a behaviour or a location that takes real time to find",
+            "3": "A mistake: a rule of the project, an approach already rejected, or a correction the author gave",
+            "4": "Damage: data loss, a security problem, or breaking a hard rule of the project"
           },
           "probabilities": {
-            "0": 0.07,
-            "1": 0.3,
-            "2": 0.5700000000000001,
-            "3": 0.06,
+            "0": 0.01,
+            "1": 0.94,
+            "2": 0.05,
+            "3": 0,
             "4": 0
           }
         },
-        "durable_0": {
+        "knowledge_0": {
           "type": "noul",
-          "noul": 0.1
+          "noul": 0.08
         },
-        "durable_1": {
+        "knowledge_1": {
           "type": "noul",
-          "noul": 0.8
+          "noul": 0.7
         },
         "title": {
           "type": "choice",
           "choice": "c1",
-          "confidence": 0.41,
+          "confidence": 1,
           "probabilities": {
-            "c0": 0.38,
-            "c1": 0.61,
-            "none": 0.01
+            "c0": 0,
+            "c1": 1,
+            "none": 0
           }
-        },
-        "worth": {
-          "type": "noul",
-          "noul": 0.39
         }
       },
-      "inputTokens": 1135
+      "inputTokens": 1474
     },
     "en-none-plan-not-done": {
       "answers": {
         "worth": {
           "type": "noul",
-          "noul": 0.2
+          "noul": 0.09
         },
         "kind": {
           "type": "choice",
           "choice": "none",
-          "confidence": 0.65,
+          "confidence": 0.98,
           "probabilities": {
-            "discovery": 0,
-            "none": 0.7,
-            "change": 0.02,
+            "decision": 0.02,
             "fix": 0,
-            "convention": 0.16,
             "gotcha": 0,
-            "decision": 0.12
+            "convention": 0,
+            "change": 0,
+            "discovery": 0,
+            "none": 0.98
           }
         },
         "importance": {
           "type": "score",
-          "score": 0.89,
-          "confidence": 0.51,
+          "score": 0.5,
+          "confidence": 0.59,
           "legend": {
-            "0": "Trivial: nothing is lost",
-            "1": "Minor: saves a few minutes",
-            "2": "Useful: avoids a wrong turn or a repeated investigation",
-            "3": "Important: avoids a bug, a rejected approach, or repeating a user correction",
-            "4": "Critical: avoids data loss, a security problem, or breaking a hard project rule"
+            "0": "Nothing: they would do the same without it",
+            "1": "Minutes: a detail they would find quickly in the code or the docs",
+            "2": "An investigation: a cause, a behaviour or a location that takes real time to find",
+            "3": "A mistake: a rule of the project, an approach already rejected, or a correction the author gave",
+            "4": "Damage: data loss, a security problem, or breaking a hard rule of the project"
           },
           "probabilities": {
-            "0": 0.35,
-            "1": 0.43,
-            "2": 0.2,
-            "3": 0.02,
+            "0": 0.6,
+            "1": 0.32,
+            "2": 0.07,
+            "3": 0.01,
             "4": 0
           }
         },
-        "durable_0": {
+        "knowledge_0": {
           "type": "noul",
           "noul": 0.06
         },
-        "durable_1": {
+        "knowledge_1": {
           "type": "noul",
-          "noul": 0.25
+          "noul": 0.54
         },
-        "durable_2": {
+        "knowledge_2": {
           "type": "noul",
-          "noul": 0.02
+          "noul": 0.09
         },
         "title": {
           "type": "choice",
           "choice": "c1",
-          "confidence": 0.87,
+          "confidence": 0.84,
           "probabilities": {
-            "none": 0.03,
-            "c0": 0.07,
-            "c1": 0.9,
-            "c2": 0
+            "c0": 0.01,
+            "c1": 0.88,
+            "c2": 0.01,
+            "none": 0.1
           }
         }
       },
-      "inputTokens": 1307
+      "inputTokens": 1695
     },
     "pt-none-question-back": {
       "answers": {
         "worth": {
           "type": "noul",
-          "noul": 0.16
+          "noul": 0.09
         },
         "kind": {
           "type": "choice",
           "choice": "none",
-          "confidence": 0.97,
+          "confidence": 0.92,
           "probabilities": {
-            "decision": 0.02,
-            "discovery": 0,
-            "gotcha": 0,
+            "decision": 0.07,
             "fix": 0,
-            "convention": 0,
-            "none": 0.98,
-            "change": 0
-          }
-        },
-        "importance": {
-          "type": "score",
-          "score": 1.75,
-          "confidence": 0.36,
-          "legend": {
-            "0": "Trivial: nothing is lost",
-            "1": "Minor: saves a few minutes",
-            "2": "Useful: avoids a wrong turn or a repeated investigation",
-            "3": "Important: avoids a bug, a rejected approach, or repeating a user correction",
-            "4": "Critical: avoids data loss, a security problem, or breaking a hard project rule"
-          },
-          "probabilities": {
-            "0": 0.17,
-            "1": 0.18,
-            "2": 0.4,
-            "3": 0.25,
-            "4": 0
-          }
-        },
-        "durable_0": {
-          "type": "noul",
-          "noul": 0.03
-        },
-        "durable_1": {
-          "type": "noul",
-          "noul": 0.03
-        },
-        "title": {
-          "type": "choice",
-          "choice": "c0",
-          "confidence": 0.62,
-          "probabilities": {
-            "c0": 0.74,
-            "c1": 0.02,
-            "none": 0.24
-          }
-        }
-      },
-      "inputTokens": 1146
-    },
-    "en-none-typo": {
-      "answers": {
-        "worth": {
-          "type": "noul",
-          "noul": 0.15
-        },
-        "kind": {
-          "type": "choice",
-          "choice": "fix",
-          "confidence": 0.78,
-          "probabilities": {
             "gotcha": 0,
-            "discovery": 0,
             "convention": 0,
-            "none": 0.16,
-            "fix": 0.81,
-            "decision": 0,
-            "change": 0.03
+            "change": 0,
+            "discovery": 0,
+            "none": 0.93
           }
         },
         "importance": {
           "type": "score",
-          "score": 0.47,
-          "confidence": 0.6,
+          "score": 0.41,
+          "confidence": 0.66,
           "legend": {
-            "0": "Trivial: nothing is lost",
-            "1": "Minor: saves a few minutes",
-            "2": "Useful: avoids a wrong turn or a repeated investigation",
-            "3": "Important: avoids a bug, a rejected approach, or repeating a user correction",
-            "4": "Critical: avoids data loss, a security problem, or breaking a hard project rule"
+            "0": "Nothing: they would do the same without it",
+            "1": "Minutes: a detail they would find quickly in the code or the docs",
+            "2": "An investigation: a cause, a behaviour or a location that takes real time to find",
+            "3": "A mistake: a rule of the project, an approach already rejected, or a correction the author gave",
+            "4": "Damage: data loss, a security problem, or breaking a hard rule of the project"
           },
           "probabilities": {
-            "0": 0.63,
-            "1": 0.3,
+            "0": 0.69,
+            "1": 0.23,
             "2": 0.06,
-            "3": 0.01,
+            "3": 0.02,
             "4": 0
           }
         },
-        "durable_0": {
+        "knowledge_0": {
+          "type": "noul",
+          "noul": 0.06
+        },
+        "knowledge_1": {
           "type": "noul",
           "noul": 0.06
         },
         "title": {
           "type": "choice",
-          "choice": "c0",
-          "confidence": 0.94,
+          "choice": "none",
+          "confidence": 0.64,
           "probabilities": {
-            "none": 0.03,
-            "c0": 0.97
+            "c0": 0.22,
+            "c1": 0.02,
+            "none": 0.76
           }
         }
       },
-      "inputTokens": 929
+      "inputTokens": 1485
+    },
+    "en-none-typo": {
+      "answers": {
+        "worth": {
+          "type": "noul",
+          "noul": 0.07
+        },
+        "kind": {
+          "type": "choice",
+          "choice": "none",
+          "confidence": 0.94,
+          "probabilities": {
+            "decision": 0,
+            "fix": 0.02,
+            "gotcha": 0,
+            "convention": 0,
+            "change": 0.03,
+            "discovery": 0,
+            "none": 0.95
+          }
+        },
+        "importance": {
+          "type": "score",
+          "score": 0.73,
+          "confidence": 0.73,
+          "legend": {
+            "0": "Nothing: they would do the same without it",
+            "1": "Minutes: a detail they would find quickly in the code or the docs",
+            "2": "An investigation: a cause, a behaviour or a location that takes real time to find",
+            "3": "A mistake: a rule of the project, an approach already rejected, or a correction the author gave",
+            "4": "Damage: data loss, a security problem, or breaking a hard rule of the project"
+          },
+          "probabilities": {
+            "0": 0.3,
+            "1": 0.69,
+            "2": 0,
+            "3": 0.01,
+            "4": 0
+          }
+        },
+        "knowledge_0": {
+          "type": "noul",
+          "noul": 0.07
+        },
+        "title": {
+          "type": "choice",
+          "choice": "c0",
+          "confidence": 0.24,
+          "probabilities": {
+            "c0": 0.62,
+            "none": 0.38
+          }
+        }
+      },
+      "inputTokens": 1219
     },
     "en-none-formatter": {
       "answers": {
         "worth": {
           "type": "noul",
-          "noul": 0.14
+          "noul": 0.08
         },
         "kind": {
           "type": "choice",
-          "choice": "change",
-          "confidence": 0.47,
+          "choice": "none",
+          "confidence": 0.95,
           "probabilities": {
-            "none": 0.45,
-            "fix": 0,
-            "change": 0.55,
-            "convention": 0,
-            "discovery": 0,
             "decision": 0,
-            "gotcha": 0
+            "fix": 0,
+            "gotcha": 0,
+            "convention": 0,
+            "change": 0.04,
+            "discovery": 0,
+            "none": 0.96
           }
         },
         "importance": {
           "type": "score",
-          "score": 1.17,
-          "confidence": 0.49,
+          "score": 0.69,
+          "confidence": 0.74,
           "legend": {
-            "0": "Trivial: nothing is lost",
-            "1": "Minor: saves a few minutes",
-            "2": "Useful: avoids a wrong turn or a repeated investigation",
-            "3": "Important: avoids a bug, a rejected approach, or repeating a user correction",
-            "4": "Critical: avoids data loss, a security problem, or breaking a hard project rule"
+            "0": "Nothing: they would do the same without it",
+            "1": "Minutes: a detail they would find quickly in the code or the docs",
+            "2": "An investigation: a cause, a behaviour or a location that takes real time to find",
+            "3": "A mistake: a rule of the project, an approach already rejected, or a correction the author gave",
+            "4": "Damage: data loss, a security problem, or breaking a hard rule of the project"
           },
           "probabilities": {
-            "0": 0.22,
-            "1": 0.43,
-            "2": 0.31,
-            "3": 0.04,
+            "0": 0.31,
+            "1": 0.69,
+            "2": 0,
+            "3": 0,
             "4": 0
           }
         },
-        "durable_0": {
+        "knowledge_0": {
           "type": "noul",
-          "noul": 0.08
+          "noul": 0.07
         },
         "title": {
           "type": "choice",
           "choice": "c0",
-          "confidence": 0.99,
+          "confidence": 0.92,
           "probabilities": {
-            "c0": 0.99,
-            "none": 0.01
+            "c0": 0.96,
+            "none": 0.04
           }
         }
       },
-      "inputTokens": 948
+      "inputTokens": 1238
     },
     "pt-none-listing": {
       "answers": {
         "worth": {
           "type": "noul",
-          "noul": 0.16
+          "noul": 0.09
         },
         "kind": {
           "type": "choice",
           "choice": "discovery",
-          "confidence": 0.88,
+          "confidence": 0.87,
           "probabilities": {
-            "discovery": 0.9,
-            "none": 0.1,
+            "decision": 0,
             "fix": 0,
             "gotcha": 0,
             "convention": 0,
-            "decision": 0,
-            "change": 0
+            "change": 0.03,
+            "discovery": 0.89,
+            "none": 0.08
           }
         },
         "importance": {
           "type": "score",
-          "score": 1.17,
-          "confidence": 0.48,
+          "score": 0.93,
+          "confidence": 0.94,
           "legend": {
-            "0": "Trivial: nothing is lost",
-            "1": "Minor: saves a few minutes",
-            "2": "Useful: avoids a wrong turn or a repeated investigation",
-            "3": "Important: avoids a bug, a rejected approach, or repeating a user correction",
-            "4": "Critical: avoids data loss, a security problem, or breaking a hard project rule"
+            "0": "Nothing: they would do the same without it",
+            "1": "Minutes: a detail they would find quickly in the code or the docs",
+            "2": "An investigation: a cause, a behaviour or a location that takes real time to find",
+            "3": "A mistake: a rule of the project, an approach already rejected, or a correction the author gave",
+            "4": "Damage: data loss, a security problem, or breaking a hard rule of the project"
           },
           "probabilities": {
-            "0": 0.23,
-            "1": 0.38,
-            "2": 0.37,
-            "3": 0.02,
+            "0": 0.07,
+            "1": 0.93,
+            "2": 0,
+            "3": 0,
             "4": 0
           }
         },
-        "durable_0": {
+        "knowledge_0": {
           "type": "noul",
           "noul": 0.07
         },
-        "durable_1": {
+        "knowledge_1": {
           "type": "noul",
-          "noul": 0.62
+          "noul": 0.21
         },
         "title": {
           "type": "choice",
           "choice": "c1",
-          "confidence": 0.8,
+          "confidence": 0.97,
           "probabilities": {
-            "c1": 0.87,
-            "none": 0.03,
-            "c0": 0.1
+            "c0": 0.01,
+            "c1": 0.98,
+            "none": 0.01
           }
         }
       },
-      "inputTokens": 1138
+      "inputTokens": 1477
     },
     "en-none-unresolved": {
       "answers": {
@@ -1541,61 +1541,61 @@
         "kind": {
           "type": "choice",
           "choice": "none",
-          "confidence": 0.99,
+          "confidence": 1,
           "probabilities": {
-            "convention": 0,
-            "discovery": 0.01,
+            "decision": 0,
             "fix": 0,
             "gotcha": 0,
+            "convention": 0,
             "change": 0,
-            "decision": 0,
-            "none": 0.99
+            "discovery": 0,
+            "none": 1
           }
         },
         "importance": {
           "type": "score",
-          "score": 0.96,
-          "confidence": 0.2,
+          "score": 0.4,
+          "confidence": 0.66,
           "legend": {
-            "0": "Trivial: nothing is lost",
-            "1": "Minor: saves a few minutes",
-            "2": "Useful: avoids a wrong turn or a repeated investigation",
-            "3": "Important: avoids a bug, a rejected approach, or repeating a user correction",
-            "4": "Critical: avoids data loss, a security problem, or breaking a hard project rule"
+            "0": "Nothing: they would do the same without it",
+            "1": "Minutes: a detail they would find quickly in the code or the docs",
+            "2": "An investigation: a cause, a behaviour or a location that takes real time to find",
+            "3": "A mistake: a rule of the project, an approach already rejected, or a correction the author gave",
+            "4": "Damage: data loss, a security problem, or breaking a hard rule of the project"
           },
           "probabilities": {
-            "0": 0.41,
-            "1": 0.25,
-            "2": 0.31,
-            "3": 0.03,
+            "0": 0.72,
+            "1": 0.16,
+            "2": 0.11,
+            "3": 0.01,
             "4": 0
           }
         },
-        "durable_0": {
+        "knowledge_0": {
           "type": "noul",
-          "noul": 0.03
+          "noul": 0.06
         },
-        "durable_1": {
+        "knowledge_1": {
           "type": "noul",
-          "noul": 0.05
+          "noul": 0.14
         },
-        "durable_2": {
+        "knowledge_2": {
           "type": "noul",
-          "noul": 0.05
+          "noul": 0.12
         },
         "title": {
           "type": "choice",
           "choice": "c1",
-          "confidence": 0.78,
+          "confidence": 0.48,
           "probabilities": {
-            "c2": 0.11,
-            "c1": 0.84,
             "c0": 0.01,
-            "none": 0.04
+            "c1": 0.61,
+            "c2": 0.15,
+            "none": 0.23
           }
         }
       },
-      "inputTokens": 1274
+      "inputTokens": 1662
     },
     "en-none-greeting": {
       "answers": {
@@ -1608,12 +1608,12 @@
           "choice": "none",
           "confidence": 1,
           "probabilities": {
-            "discovery": 0,
-            "gotcha": 0,
             "decision": 0,
-            "change": 0,
-            "convention": 0,
             "fix": 0,
+            "gotcha": 0,
+            "convention": 0,
+            "change": 0,
+            "discovery": 0,
             "none": 1
           }
         },
@@ -1622,11 +1622,11 @@
           "score": 0,
           "confidence": 1,
           "legend": {
-            "0": "Trivial: nothing is lost",
-            "1": "Minor: saves a few minutes",
-            "2": "Useful: avoids a wrong turn or a repeated investigation",
-            "3": "Important: avoids a bug, a rejected approach, or repeating a user correction",
-            "4": "Critical: avoids data loss, a security problem, or breaking a hard project rule"
+            "0": "Nothing: they would do the same without it",
+            "1": "Minutes: a detail they would find quickly in the code or the docs",
+            "2": "An investigation: a cause, a behaviour or a location that takes real time to find",
+            "3": "A mistake: a rule of the project, an approach already rejected, or a correction the author gave",
+            "4": "Damage: data loss, a security problem, or breaking a hard rule of the project"
           },
           "probabilities": {
             "0": 1,
@@ -1636,185 +1636,23 @@
             "4": 0
           }
         },
-        "durable_0": {
+        "knowledge_0": {
           "type": "noul",
-          "noul": 0.01
+          "noul": 0.05
         },
         "title": {
           "type": "choice",
           "choice": "none",
-          "confidence": 0.45,
+          "confidence": 0.86,
           "probabilities": {
-            "c0": 0.27,
-            "none": 0.73
+            "c0": 0.07,
+            "none": 0.93
           }
         }
       },
-      "inputTokens": 927
+      "inputTokens": 1217
     },
     "pt-none-restatement": {
-      "answers": {
-        "worth": {
-          "type": "noul",
-          "noul": 0.06
-        },
-        "kind": {
-          "type": "choice",
-          "choice": "none",
-          "confidence": 0.83,
-          "probabilities": {
-            "fix": 0,
-            "discovery": 0.15,
-            "change": 0,
-            "decision": 0,
-            "none": 0.85,
-            "gotcha": 0,
-            "convention": 0
-          }
-        },
-        "importance": {
-          "type": "score",
-          "score": 0.6,
-          "confidence": 0.5,
-          "legend": {
-            "0": "Trivial: nothing is lost",
-            "1": "Minor: saves a few minutes",
-            "2": "Useful: avoids a wrong turn or a repeated investigation",
-            "3": "Important: avoids a bug, a rejected approach, or repeating a user correction",
-            "4": "Critical: avoids data loss, a security problem, or breaking a hard project rule"
-          },
-          "probabilities": {
-            "0": 0.61,
-            "1": 0.22,
-            "2": 0.15,
-            "3": 0.02,
-            "4": 0
-          }
-        },
-        "durable_0": {
-          "type": "noul",
-          "noul": 0.02
-        },
-        "durable_1": {
-          "type": "noul",
-          "noul": 0.08
-        },
-        "title": {
-          "type": "choice",
-          "choice": "c1",
-          "confidence": 0.65,
-          "probabilities": {
-            "c1": 0.76,
-            "none": 0.07,
-            "c0": 0.17
-          }
-        }
-      },
-      "inputTokens": 1138
-    },
-    "en-none-tests-pass": {
-      "answers": {
-        "worth": {
-          "type": "noul",
-          "noul": 0.15
-        },
-        "kind": {
-          "type": "choice",
-          "choice": "none",
-          "confidence": 0.88,
-          "probabilities": {
-            "change": 0,
-            "none": 0.9,
-            "fix": 0,
-            "convention": 0,
-            "decision": 0,
-            "gotcha": 0,
-            "discovery": 0.1
-          }
-        },
-        "importance": {
-          "type": "score",
-          "score": 0.9,
-          "confidence": 0.25,
-          "legend": {
-            "0": "Trivial: nothing is lost",
-            "1": "Minor: saves a few minutes",
-            "2": "Useful: avoids a wrong turn or a repeated investigation",
-            "3": "Important: avoids a bug, a rejected approach, or repeating a user correction",
-            "4": "Critical: avoids data loss, a security problem, or breaking a hard project rule"
-          },
-          "probabilities": {
-            "0": 0.41,
-            "1": 0.35,
-            "2": 0.18,
-            "3": 0.06,
-            "4": 0
-          }
-        }
-      },
-      "inputTokens": 721
-    },
-    "en-none-general-knowledge": {
-      "answers": {
-        "worth": {
-          "type": "noul",
-          "noul": 0.24
-        },
-        "kind": {
-          "type": "choice",
-          "choice": "discovery",
-          "confidence": 0.96,
-          "probabilities": {
-            "none": 0.03,
-            "decision": 0,
-            "convention": 0,
-            "fix": 0,
-            "discovery": 0.97,
-            "gotcha": 0,
-            "change": 0
-          }
-        },
-        "importance": {
-          "type": "score",
-          "score": 1.78,
-          "confidence": 0.53,
-          "legend": {
-            "0": "Trivial: nothing is lost",
-            "1": "Minor: saves a few minutes",
-            "2": "Useful: avoids a wrong turn or a repeated investigation",
-            "3": "Important: avoids a bug, a rejected approach, or repeating a user correction",
-            "4": "Critical: avoids data loss, a security problem, or breaking a hard project rule"
-          },
-          "probabilities": {
-            "0": 0.1,
-            "1": 0.19,
-            "2": 0.55,
-            "3": 0.16,
-            "4": 0
-          }
-        },
-        "durable_0": {
-          "type": "noul",
-          "noul": 0.76
-        },
-        "durable_1": {
-          "type": "noul",
-          "noul": 0.84
-        },
-        "title": {
-          "type": "choice",
-          "choice": "c0",
-          "confidence": 0.62,
-          "probabilities": {
-            "none": 0,
-            "c0": 0.75,
-            "c1": 0.25
-          }
-        }
-      },
-      "inputTokens": 1146
-    },
-    "pt-none-progress": {
       "answers": {
         "worth": {
           "type": "noul",
@@ -1825,104 +1663,266 @@
           "choice": "none",
           "confidence": 0.99,
           "probabilities": {
+            "decision": 0,
+            "fix": 0,
             "gotcha": 0,
-            "none": 0.99,
-            "discovery": 0,
             "convention": 0,
             "change": 0,
-            "decision": 0.01,
-            "fix": 0
+            "discovery": 0.01,
+            "none": 0.99
           }
         },
         "importance": {
           "type": "score",
-          "score": 0.37,
-          "confidence": 0.69,
+          "score": 0.19,
+          "confidence": 0.85,
           "legend": {
-            "0": "Trivial: nothing is lost",
-            "1": "Minor: saves a few minutes",
-            "2": "Useful: avoids a wrong turn or a repeated investigation",
-            "3": "Important: avoids a bug, a rejected approach, or repeating a user correction",
-            "4": "Critical: avoids data loss, a security problem, or breaking a hard project rule"
+            "0": "Nothing: they would do the same without it",
+            "1": "Minutes: a detail they would find quickly in the code or the docs",
+            "2": "An investigation: a cause, a behaviour or a location that takes real time to find",
+            "3": "A mistake: a rule of the project, an approach already rejected, or a correction the author gave",
+            "4": "Damage: data loss, a security problem, or breaking a hard rule of the project"
           },
           "probabilities": {
-            "0": 0.76,
-            "1": 0.13,
-            "2": 0.08,
-            "3": 0.03,
+            "0": 0.86,
+            "1": 0.11,
+            "2": 0.02,
+            "3": 0.01,
             "4": 0
           }
         },
-        "durable_0": {
+        "knowledge_0": {
           "type": "noul",
-          "noul": 0.04
+          "noul": 0.07
+        },
+        "knowledge_1": {
+          "type": "noul",
+          "noul": 0.09
+        },
+        "title": {
+          "type": "choice",
+          "choice": "c1",
+          "confidence": 0.83,
+          "probabilities": {
+            "c0": 0.02,
+            "c1": 0.89,
+            "none": 0.09
+          }
+        }
+      },
+      "inputTokens": 1477
+    },
+    "en-none-tests-pass": {
+      "answers": {
+        "worth": {
+          "type": "noul",
+          "noul": 0.08
+        },
+        "kind": {
+          "type": "choice",
+          "choice": "none",
+          "confidence": 0.99,
+          "probabilities": {
+            "decision": 0,
+            "fix": 0,
+            "gotcha": 0,
+            "convention": 0,
+            "change": 0,
+            "discovery": 0.01,
+            "none": 0.99
+          }
+        },
+        "importance": {
+          "type": "score",
+          "score": 0.49,
+          "confidence": 0.61,
+          "legend": {
+            "0": "Nothing: they would do the same without it",
+            "1": "Minutes: a detail they would find quickly in the code or the docs",
+            "2": "An investigation: a cause, a behaviour or a location that takes real time to find",
+            "3": "A mistake: a rule of the project, an approach already rejected, or a correction the author gave",
+            "4": "Damage: data loss, a security problem, or breaking a hard rule of the project"
+          },
+          "probabilities": {
+            "0": 0.54,
+            "1": 0.45,
+            "2": 0.01,
+            "3": 0,
+            "4": 0
+          }
+        }
+      },
+      "inputTokens": 939
+    },
+    "en-none-general-knowledge": {
+      "answers": {
+        "worth": {
+          "type": "noul",
+          "noul": 0.67
+        },
+        "kind": {
+          "type": "choice",
+          "choice": "discovery",
+          "confidence": 0.87,
+          "probabilities": {
+            "decision": 0,
+            "fix": 0,
+            "gotcha": 0.01,
+            "convention": 0,
+            "change": 0,
+            "discovery": 0.89,
+            "none": 0.1
+          }
+        },
+        "importance": {
+          "type": "score",
+          "score": 1.04,
+          "confidence": 0.93,
+          "legend": {
+            "0": "Nothing: they would do the same without it",
+            "1": "Minutes: a detail they would find quickly in the code or the docs",
+            "2": "An investigation: a cause, a behaviour or a location that takes real time to find",
+            "3": "A mistake: a rule of the project, an approach already rejected, or a correction the author gave",
+            "4": "Damage: data loss, a security problem, or breaking a hard rule of the project"
+          },
+          "probabilities": {
+            "0": 0.03,
+            "1": 0.92,
+            "2": 0.05,
+            "3": 0,
+            "4": 0
+          }
+        },
+        "knowledge_0": {
+          "type": "noul",
+          "noul": 0.67
+        },
+        "knowledge_1": {
+          "type": "noul",
+          "noul": 0.87
+        },
+        "title": {
+          "type": "choice",
+          "choice": "c1",
+          "confidence": 0.67,
+          "probabilities": {
+            "c0": 0.2,
+            "c1": 0.78,
+            "none": 0.02
+          }
+        }
+      },
+      "inputTokens": 1485
+    },
+    "pt-none-progress": {
+      "answers": {
+        "worth": {
+          "type": "noul",
+          "noul": 0.11
+        },
+        "kind": {
+          "type": "choice",
+          "choice": "none",
+          "confidence": 1,
+          "probabilities": {
+            "decision": 0,
+            "fix": 0,
+            "gotcha": 0,
+            "convention": 0,
+            "change": 0,
+            "discovery": 0,
+            "none": 1
+          }
+        },
+        "importance": {
+          "type": "score",
+          "score": 0.18,
+          "confidence": 0.88,
+          "legend": {
+            "0": "Nothing: they would do the same without it",
+            "1": "Minutes: a detail they would find quickly in the code or the docs",
+            "2": "An investigation: a cause, a behaviour or a location that takes real time to find",
+            "3": "A mistake: a rule of the project, an approach already rejected, or a correction the author gave",
+            "4": "Damage: data loss, a security problem, or breaking a hard rule of the project"
+          },
+          "probabilities": {
+            "0": 0.86,
+            "1": 0.13,
+            "2": 0.01,
+            "3": 0,
+            "4": 0
+          }
+        },
+        "knowledge_0": {
+          "type": "noul",
+          "noul": 0.09
         },
         "title": {
           "type": "choice",
           "choice": "none",
-          "confidence": 0.09,
+          "confidence": 0.06,
           "probabilities": {
-            "none": 0.55,
-            "c0": 0.45
+            "c0": 0.47,
+            "none": 0.53
           }
         }
       },
-      "inputTokens": 945
+      "inputTokens": 1235
     },
     "en-none-version-bump": {
       "answers": {
         "worth": {
           "type": "noul",
-          "noul": 0.38
+          "noul": 0.08
         },
         "kind": {
           "type": "choice",
-          "choice": "change",
-          "confidence": 0.97,
+          "choice": "none",
+          "confidence": 0.87,
           "probabilities": {
             "decision": 0,
-            "discovery": 0,
-            "convention": 0,
+            "fix": 0,
             "gotcha": 0,
-            "none": 0.03,
-            "change": 0.97,
-            "fix": 0
+            "convention": 0,
+            "change": 0.11,
+            "discovery": 0,
+            "none": 0.89
           }
         },
         "importance": {
           "type": "score",
-          "score": 1.44,
-          "confidence": 0.39,
+          "score": 0.95,
+          "confidence": 0.84,
           "legend": {
-            "0": "Trivial: nothing is lost",
-            "1": "Minor: saves a few minutes",
-            "2": "Useful: avoids a wrong turn or a repeated investigation",
-            "3": "Important: avoids a bug, a rejected approach, or repeating a user correction",
-            "4": "Critical: avoids data loss, a security problem, or breaking a hard project rule"
+            "0": "Nothing: they would do the same without it",
+            "1": "Minutes: a detail they would find quickly in the code or the docs",
+            "2": "An investigation: a cause, a behaviour or a location that takes real time to find",
+            "3": "A mistake: a rule of the project, an approach already rejected, or a correction the author gave",
+            "4": "Damage: data loss, a security problem, or breaking a hard rule of the project"
           },
           "probabilities": {
-            "0": 0.14,
-            "1": 0.41000000000000003,
-            "2": 0.32,
-            "3": 0.13,
-            "4": 0
+            "0": 0.11,
+            "1": 0.85,
+            "2": 0.01,
+            "3": 0.02,
+            "4": 0.01
           }
         },
-        "durable_0": {
+        "knowledge_0": {
           "type": "noul",
-          "noul": 0.74
+          "noul": 0.09
         },
         "title": {
           "type": "choice",
           "choice": "c0",
-          "confidence": 0.95,
+          "confidence": 0.96,
           "probabilities": {
-            "c0": 0.97,
-            "none": 0.03
+            "c0": 0.98,
+            "none": 0.02
           }
         }
       },
-      "inputTokens": 962
+      "inputTokens": 1252
     },
     "pt-none-interrupted": {
       "answers": {
@@ -1935,36 +1935,503 @@
           "choice": "none",
           "confidence": 1,
           "probabilities": {
-            "convention": 0,
-            "none": 1,
-            "discovery": 0,
-            "change": 0,
-            "gotcha": 0,
             "decision": 0,
-            "fix": 0
+            "fix": 0,
+            "gotcha": 0,
+            "convention": 0,
+            "change": 0,
+            "discovery": 0,
+            "none": 1
           }
         },
         "importance": {
           "type": "score",
-          "score": 0.27,
-          "confidence": 0.78,
+          "score": 0.11,
+          "confidence": 0.93,
           "legend": {
-            "0": "Trivial: nothing is lost",
-            "1": "Minor: saves a few minutes",
-            "2": "Useful: avoids a wrong turn or a repeated investigation",
-            "3": "Important: avoids a bug, a rejected approach, or repeating a user correction",
-            "4": "Critical: avoids data loss, a security problem, or breaking a hard project rule"
+            "0": "Nothing: they would do the same without it",
+            "1": "Minutes: a detail they would find quickly in the code or the docs",
+            "2": "An investigation: a cause, a behaviour or a location that takes real time to find",
+            "3": "A mistake: a rule of the project, an approach already rejected, or a correction the author gave",
+            "4": "Damage: data loss, a security problem, or breaking a hard rule of the project"
           },
           "probabilities": {
-            "0": 0.88,
-            "1": 0.03,
-            "2": 0.04,
-            "3": 0.04,
-            "4": 0.01
+            "0": 0.94,
+            "1": 0.04,
+            "2": 0.02,
+            "3": 0,
+            "4": 0
           }
         }
       },
-      "inputTokens": 713
+      "inputTokens": 931
+    },
+    "pt-none-gate-verdict": {
+      "answers": {
+        "worth": {
+          "type": "noul",
+          "noul": 0.21
+        },
+        "kind": {
+          "type": "choice",
+          "choice": "none",
+          "confidence": 0.98,
+          "probabilities": {
+            "decision": 0.02,
+            "fix": 0,
+            "gotcha": 0,
+            "convention": 0,
+            "change": 0,
+            "discovery": 0,
+            "none": 0.98
+          }
+        },
+        "importance": {
+          "type": "score",
+          "score": 2.3,
+          "confidence": 0.36,
+          "legend": {
+            "0": "Nothing: they would do the same without it",
+            "1": "Minutes: a detail they would find quickly in the code or the docs",
+            "2": "An investigation: a cause, a behaviour or a location that takes real time to find",
+            "3": "A mistake: a rule of the project, an approach already rejected, or a correction the author gave",
+            "4": "Damage: data loss, a security problem, or breaking a hard rule of the project"
+          },
+          "probabilities": {
+            "0": 0.03,
+            "1": 0.16,
+            "2": 0.33,
+            "3": 0.45,
+            "4": 0.03
+          }
+        },
+        "knowledge_0": {
+          "type": "noul",
+          "noul": 0.11
+        },
+        "knowledge_1": {
+          "type": "noul",
+          "noul": 0.28
+        },
+        "title": {
+          "type": "choice",
+          "choice": "c1",
+          "confidence": 0.34,
+          "probabilities": {
+            "c0": 0.32,
+            "c1": 0.56,
+            "none": 0.12
+          }
+        }
+      },
+      "inputTokens": 1525
+    },
+    "pt-convention-bottom-line": {
+      "answers": {
+        "worth": {
+          "type": "noul",
+          "noul": 0.91
+        },
+        "kind": {
+          "type": "choice",
+          "choice": "convention",
+          "confidence": 0.8,
+          "probabilities": {
+            "decision": 0.02,
+            "fix": 0,
+            "gotcha": 0.02,
+            "convention": 0.83,
+            "change": 0,
+            "discovery": 0,
+            "none": 0.13
+          }
+        },
+        "importance": {
+          "type": "score",
+          "score": 2.84,
+          "confidence": 0.87,
+          "legend": {
+            "0": "Nothing: they would do the same without it",
+            "1": "Minutes: a detail they would find quickly in the code or the docs",
+            "2": "An investigation: a cause, a behaviour or a location that takes real time to find",
+            "3": "A mistake: a rule of the project, an approach already rejected, or a correction the author gave",
+            "4": "Damage: data loss, a security problem, or breaking a hard rule of the project"
+          },
+          "probabilities": {
+            "0": 0.01,
+            "1": 0.03,
+            "2": 0.06,
+            "3": 0.89,
+            "4": 0.01
+          }
+        },
+        "knowledge_0": {
+          "type": "noul",
+          "noul": 0.09
+        },
+        "knowledge_1": {
+          "type": "noul",
+          "noul": 0.94
+        },
+        "knowledge_2": {
+          "type": "noul",
+          "noul": 0.07
+        },
+        "title": {
+          "type": "choice",
+          "choice": "c1",
+          "confidence": 0.97,
+          "probabilities": {
+            "c0": 0.02,
+            "c1": 0.98,
+            "c2": 0,
+            "none": 0
+          }
+        }
+      },
+      "inputTokens": 1792
+    },
+    "en-none-wave-closed": {
+      "answers": {
+        "worth": {
+          "type": "noul",
+          "noul": 0.11
+        },
+        "kind": {
+          "type": "choice",
+          "choice": "none",
+          "confidence": 1,
+          "probabilities": {
+            "decision": 0,
+            "fix": 0,
+            "gotcha": 0,
+            "convention": 0,
+            "change": 0,
+            "discovery": 0,
+            "none": 1
+          }
+        },
+        "importance": {
+          "type": "score",
+          "score": 1.08,
+          "confidence": 0.72,
+          "legend": {
+            "0": "Nothing: they would do the same without it",
+            "1": "Minutes: a detail they would find quickly in the code or the docs",
+            "2": "An investigation: a cause, a behaviour or a location that takes real time to find",
+            "3": "A mistake: a rule of the project, an approach already rejected, or a correction the author gave",
+            "4": "Damage: data loss, a security problem, or breaking a hard rule of the project"
+          },
+          "probabilities": {
+            "0": 0.13,
+            "1": 0.72,
+            "2": 0.11,
+            "3": 0.03,
+            "4": 0.01
+          }
+        },
+        "knowledge_0": {
+          "type": "noul",
+          "noul": 0.07
+        },
+        "knowledge_1": {
+          "type": "noul",
+          "noul": 0.15
+        },
+        "title": {
+          "type": "choice",
+          "choice": "c0",
+          "confidence": 0.97,
+          "probabilities": {
+            "c0": 0.98,
+            "c1": 0.01,
+            "none": 0.01
+          }
+        }
+      },
+      "inputTokens": 1470
+    },
+    "pt-none-your-turn": {
+      "answers": {
+        "worth": {
+          "type": "noul",
+          "noul": 0.64
+        },
+        "kind": {
+          "type": "choice",
+          "choice": "none",
+          "confidence": 0.53,
+          "probabilities": {
+            "decision": 0,
+            "fix": 0.01,
+            "gotcha": 0.32,
+            "convention": 0.01,
+            "change": 0,
+            "discovery": 0.06,
+            "none": 0.6
+          }
+        },
+        "importance": {
+          "type": "score",
+          "score": 1.69,
+          "confidence": 0.63,
+          "legend": {
+            "0": "Nothing: they would do the same without it",
+            "1": "Minutes: a detail they would find quickly in the code or the docs",
+            "2": "An investigation: a cause, a behaviour or a location that takes real time to find",
+            "3": "A mistake: a rule of the project, an approach already rejected, or a correction the author gave",
+            "4": "Damage: data loss, a security problem, or breaking a hard rule of the project"
+          },
+          "probabilities": {
+            "0": 0.06,
+            "1": 0.26,
+            "2": 0.62,
+            "3": 0.06,
+            "4": 0
+          }
+        },
+        "knowledge_0": {
+          "type": "noul",
+          "noul": 0.29
+        },
+        "knowledge_1": {
+          "type": "noul",
+          "noul": 0.13
+        },
+        "title": {
+          "type": "choice",
+          "choice": "c0",
+          "confidence": 0.79,
+          "probabilities": {
+            "c0": 0.86,
+            "c1": 0.1,
+            "none": 0.04
+          }
+        }
+      },
+      "inputTokens": 1474
+    },
+    "en-none-hand-back": {
+      "answers": {
+        "worth": {
+          "type": "noul",
+          "noul": 0.06
+        },
+        "kind": {
+          "type": "choice",
+          "choice": "none",
+          "confidence": 1,
+          "probabilities": {
+            "decision": 0,
+            "fix": 0,
+            "gotcha": 0,
+            "convention": 0,
+            "change": 0,
+            "discovery": 0,
+            "none": 1
+          }
+        },
+        "importance": {
+          "type": "score",
+          "score": 0.6,
+          "confidence": 0.52,
+          "legend": {
+            "0": "Nothing: they would do the same without it",
+            "1": "Minutes: a detail they would find quickly in the code or the docs",
+            "2": "An investigation: a cause, a behaviour or a location that takes real time to find",
+            "3": "A mistake: a rule of the project, an approach already rejected, or a correction the author gave",
+            "4": "Damage: data loss, a security problem, or breaking a hard rule of the project"
+          },
+          "probabilities": {
+            "0": 0.49,
+            "1": 0.45,
+            "2": 0.05,
+            "3": 0.01,
+            "4": 0
+          }
+        },
+        "knowledge_0": {
+          "type": "noul",
+          "noul": 0.06
+        },
+        "knowledge_1": {
+          "type": "noul",
+          "noul": 0.09
+        },
+        "title": {
+          "type": "choice",
+          "choice": "c0",
+          "confidence": 0.68,
+          "probabilities": {
+            "c0": 0.79,
+            "c1": 0.15,
+            "none": 0.06
+          }
+        }
+      },
+      "inputTokens": 1442
+    },
+    "en-fix-short-ack": {
+      "answers": {
+        "worth": {
+          "type": "noul",
+          "noul": 0.88
+        },
+        "kind": {
+          "type": "choice",
+          "choice": "fix",
+          "confidence": 0.92,
+          "probabilities": {
+            "decision": 0,
+            "fix": 0.93,
+            "gotcha": 0.01,
+            "convention": 0,
+            "change": 0.05,
+            "discovery": 0,
+            "none": 0.01
+          }
+        },
+        "importance": {
+          "type": "score",
+          "score": 1.94,
+          "confidence": 0.92,
+          "legend": {
+            "0": "Nothing: they would do the same without it",
+            "1": "Minutes: a detail they would find quickly in the code or the docs",
+            "2": "An investigation: a cause, a behaviour or a location that takes real time to find",
+            "3": "A mistake: a rule of the project, an approach already rejected, or a correction the author gave",
+            "4": "Damage: data loss, a security problem, or breaking a hard rule of the project"
+          },
+          "probabilities": {
+            "0": 0,
+            "1": 0.07,
+            "2": 0.91,
+            "3": 0.02,
+            "4": 0
+          }
+        },
+        "knowledge_0": {
+          "type": "noul",
+          "noul": 0.83
+        },
+        "knowledge_1": {
+          "type": "noul",
+          "noul": 0.64
+        },
+        "title": {
+          "type": "choice",
+          "choice": "c0",
+          "confidence": 0.2,
+          "probabilities": {
+            "c0": 0.47,
+            "c1": 0.4,
+            "none": 0.13
+          }
+        }
+      },
+      "inputTokens": 1519
+    },
+    "pt-none-session-plan": {
+      "answers": {
+        "worth": {
+          "type": "noul",
+          "noul": 0.11
+        },
+        "kind": {
+          "type": "choice",
+          "choice": "none",
+          "confidence": 1,
+          "probabilities": {
+            "decision": 0,
+            "fix": 0,
+            "gotcha": 0,
+            "convention": 0,
+            "change": 0,
+            "discovery": 0,
+            "none": 1
+          }
+        },
+        "importance": {
+          "type": "score",
+          "score": 0.69,
+          "confidence": 0.44,
+          "legend": {
+            "0": "Nothing: they would do the same without it",
+            "1": "Minutes: a detail they would find quickly in the code or the docs",
+            "2": "An investigation: a cause, a behaviour or a location that takes real time to find",
+            "3": "A mistake: a rule of the project, an approach already rejected, or a correction the author gave",
+            "4": "Damage: data loss, a security problem, or breaking a hard rule of the project"
+          },
+          "probabilities": {
+            "0": 0.45,
+            "1": 0.44,
+            "2": 0.1,
+            "3": 0.01,
+            "4": 0
+          }
+        },
+        "knowledge_0": {
+          "type": "noul",
+          "noul": 0.09
+        },
+        "knowledge_1": {
+          "type": "noul",
+          "noul": 0.1
+        },
+        "title": {
+          "type": "choice",
+          "choice": "c0",
+          "confidence": 0.73,
+          "probabilities": {
+            "c0": 0.82,
+            "c1": 0.06,
+            "none": 0.12
+          }
+        }
+      },
+      "inputTokens": 1508
+    },
+    "en-none-template-leak": {
+      "answers": {
+        "worth": {
+          "type": "noul",
+          "noul": 0.06
+        },
+        "kind": {
+          "type": "choice",
+          "choice": "none",
+          "confidence": 1,
+          "probabilities": {
+            "decision": 0,
+            "fix": 0,
+            "gotcha": 0,
+            "convention": 0,
+            "change": 0,
+            "discovery": 0,
+            "none": 1
+          }
+        },
+        "importance": {
+          "type": "score",
+          "score": 0.06,
+          "confidence": 0.98,
+          "legend": {
+            "0": "Nothing: they would do the same without it",
+            "1": "Minutes: a detail they would find quickly in the code or the docs",
+            "2": "An investigation: a cause, a behaviour or a location that takes real time to find",
+            "3": "A mistake: a rule of the project, an approach already rejected, or a correction the author gave",
+            "4": "Damage: data loss, a security problem, or breaking a hard rule of the project"
+          },
+          "probabilities": {
+            "0": 0.98,
+            "1": 0.01,
+            "2": 0.01,
+            "3": 0,
+            "4": 0
+          }
+        }
+      },
+      "inputTokens": 931
     }
   }
 }
