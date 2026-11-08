@@ -10,7 +10,7 @@
   "riskAreas": [
     "data-migration"
   ],
-  "phase": "deliver",
+  "phase": "learn",
   "awaiting": null,
   "criteria": [
     {
@@ -94,7 +94,7 @@
   "skips": [],
   "baseCommit": "1beb43ee46c59a1b701a2d9b2291762034cb1447",
   "createdAt": "2026-10-15T19:16:56.874Z",
-  "updatedAt": "2026-11-08T16:19:10.413Z",
+  "updatedAt": "2026-11-08T16:20:47.385Z",
   "pauses": [
     {
       "at": "2026-10-15T19:19:13.663Z",
@@ -1291,7 +1291,8 @@
   ],
   "phaseAt": {
     "gate": "2026-11-08T16:06:25.002Z",
-    "deliver": "2026-11-08T16:19:10.413Z"
+    "deliver": "2026-11-08T16:19:10.413Z",
+    "learn": "2026-11-08T16:20:47.241Z"
   },
   "validations": [
     {
@@ -1382,5 +1383,12 @@
       "fileHash": "sha256:8a11ef284889b5bbf877dc325d4d93333cb7bb7cd4558132cbfbcf07c75a486c",
       "at": "2026-11-08T16:19:10.306Z"
     }
-  ]
+  ],
+  "learned": {
+    "at": "2026-11-08T16:20:47.385Z",
+    "entries": [
+      "K-316"
+    ],
+    "confirmed": []
+  }
 }

@@ -1,0 +1,11 @@
+CLAUDE.md
+docs/real-use/findings.md
+src/cli/commands/distill.ts
+src/distill/pipeline.ts
+src/distill/queue.ts
+src/distill/skips.ts
+src/status/report.ts
+tests/integration/distill-cli.test.ts
+tests/integration/distill.test.ts
+tests/integration/doctor.test.ts
+tests/integration/status-skips.test.ts

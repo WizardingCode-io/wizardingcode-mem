@@ -1,0 +1,731 @@
+diff --git a/CLAUDE.md b/CLAUDE.md
+index 1bf789a..c040db2 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -25,7 +25,7 @@ Brand conventions: products, plugins and skills are called `wizardingcode-<thing
+ - Adapters in `src/adapters/<agent>/`; installers in `src/install/`. The design per agent, and what was or was not confirmed in real sessions, is in ADR 0006 (Claude Code, Codex, Cursor, OpenCode) and ADR 0016 (Qwen Code, Droid, Copilot, Antigravity).
+ - Installation is native in each agent (plugin, extension, npm package): ADR 0009. The files in `.claude-plugin/`, `hooks/`, `plugin/` and `plugins/` are generated; do not edit them by hand.
+ - `wizardingcode-mem rejudge [--limit n] [--concurrency n]` asks TypeSafe for the kind and importance of imported memories; what is not worth keeping becomes `archived` (never deleted). Resumable; needs a key. It asks the version 1 questions and stamps judge_version 1, whatever the distillation questions' version (ADR 0023).
+-- Distillation quality (ADR 0023): `src/distill/noise.ts` removes the host's own blocks from a turn (`stripHost`) and drops the sentences that are never knowledge, by named pattern (`host-frame`, anchored to the host's fixed lines; `status-label`; `template-label`), before either judge, and takes the dropped sentences out of the texts the judge reads and the `Context:` line quotes; a turn left with no sentence is skipped without a request. The notes a session was shown are removed from a turn only when shown before it ended, and never the turn's own memory. The judges are version 2: one `knowledge_<i>` question per sentence against a named `reader`, contrastive kinds; the title must be a knowledge sentence (`KNOWLEDGE_THRESHOLD`) and the `Context:` line needs `CONTEXT_MIN_WORDS` in the prompt. The heuristic judge penalises report sentences (hashes, "PR #", status verbs, verdicts, test counts); `heuristicJudgeV1` keeps its version 1 for the proof. Proof: `scripts/proof/quality.sh <work dir> sample|measure`, on a read-only copy at `<work dir>/home/mem`; it sends nothing to a model but TypeSafe, labels name candidate ids (`scripts/proof/quality-brief.md`), and the samples, the labels, `verdicts.json` and `full.md` never enter the repository.
++- Distillation quality (ADR 0023): `src/distill/noise.ts` removes the host's own blocks from a turn (`stripHost`) and drops the sentences that are never knowledge, by named pattern (`host-frame`, anchored to the host's fixed lines; `status-label`; `template-label`), before either judge, and takes the dropped sentences out of the texts the judge reads and the `Context:` line quotes; a turn left with no sentence is skipped without a request. A skipped turn keeps its reason in `turns.last_error` (`skip:saved`, `skip:empty`, `skip:not-worth`, `skip:no-title`; `skipMark` in `src/distill/pipeline.ts`, no migration); `distill` and `status` print the counts by reason, and a skipped turn with no reason (skipped before reasons were kept) counts as `unknown`. The notes a session was shown are removed from a turn only when shown before it ended, and never the turn's own memory. The judges are version 2: one `knowledge_<i>` question per sentence against a named `reader`, contrastive kinds; the title must be a knowledge sentence (`KNOWLEDGE_THRESHOLD`) and the `Context:` line needs `CONTEXT_MIN_WORDS` in the prompt. The heuristic judge penalises report sentences (hashes, "PR #", status verbs, verdicts, test counts); `heuristicJudgeV1` keeps its version 1 for the proof. Proof: `scripts/proof/quality.sh <work dir> sample|measure`, on a read-only copy at `<work dir>/home/mem`; it sends nothing to a model but TypeSafe, labels name candidate ids (`scripts/proof/quality-brief.md`), and the samples, the labels, `verdicts.json` and `full.md` never enter the repository.
+ - `wizardingcode-mem history import [--days n] [--agent claude-code|codex] [--max-seconds n]` distils the agents' own transcripts from the last days (`historyDays`, default 180) into memories dated when they happened, live turns first; resumable, never archives. `wizardingcode-mem history replace-imports` then archives the claude-mem imports inside each finished project's history span, sparing those history confirmed; `wizardingcode-mem history restore-imports` undoes it. `wizardingcode-mem history index [--agent] [--max-seconds n]` keeps a separate, redacted, searchable index of every past turn in `history.db` (store dir, rebuildable, not in backups; session end updates it once the file exists); `history search <words> [--project] [--limit]` reads it (also the MCP `history_search`), `history forget` deletes it; never injected. One run at a time (meta lease `history.lease`); `install` offers it once (`--import-history` / `--no-import-history`), the viewer has a banner offer, a Settings History card (progress via `/api/history/progress`) and a History view that searches `history.db`. ADR 0013.
+ - `wizardingcode-mem embed download [--backfill] | status | delete | backfill [--limit n]` manages the optional search model (`<data dir>/models/potion-multilingual-128M.wcpack`; fixed `MODEL_URL`, sha256 and size pinned in `src/embed/download.ts`; the feature's only network access). Vectors: `memory_vectors` in the main database (they travel in backups), `turn_vectors` in `history.db` (filled by `history index`). Used only by on-demand search (`memory_search`, `history_search`, the viewer's palette and History view), never by the hooks or injection (ADR 0014). `WIZARDINGCODE_MEM_SEMANTIC=off` turns it off; `install --semantic` / `--no-semantic` answers its offer; the viewer's Settings → Search card drives it through `/api/semantic` (GET) and `/api/semantic/download|backfill|on|off|delete` (POST); `doctor` has a `semantic search` line. Leases `embed.download.lease` (handed over to) `embed.lease`; both block move, restore and compact. Memories that lack a vector heal by themselves: each background drain and `history import` ends with a bounded backfill (`healVectors`, never on the hook path). Floor 0.32, proof `scripts/proof/semantic.sh`: ADR 0017.
+ - `wizardingcode-mem ui [--port n] [--no-open] [--auto]` opens the viewer (loopback, token in the URL, stops when idle and no tab is open; `--auto` is what the session-start hook runs: show the viewer already running, or become it). `wizardingcode-mem compact [--dry-run]` prunes old records; never deletes memories. `wizardingcode-mem backup [--list | --restore <name>]` copies the database to the configured folder or bucket.
+diff --git a/docs/real-use/findings.md b/docs/real-use/findings.md
+index 01a1736..6f51f73 100644
+--- a/docs/real-use/findings.md
++++ b/docs/real-use/findings.md
+@@ -8,7 +8,7 @@ One row per finding left open: where it was found, what it is, and its outcome.
+ | 2026-11-08 | memory quality, test-quality (rounds 4-5) | The heuristic's 60% report share (`REPORT_SHARE`) is tested only on answers that are all report; a case of 3 report sentences in 5 would pin the boundary. | deferred |
+ | 2026-11-08 | memory quality, test-quality (rounds 2-5) | The golden TypeSafe replay answers by turn id and ignores the request, so a wording change does not force a re-recording; nothing ties the recording to the questions it was made with. | deferred |
+ | 2026-11-08 | memory quality, test-quality (rounds 3-5) | The proof's "Sentences dropped per pattern" line and `prepareTexts().dropped` are not asserted end to end. | deferred |
+-| 2026-11-08 | memory quality, risk (rounds 1-5) | The live drain records no reason for a skipped turn: a filter-emptied turn, a judge rejection and an agent-saved turn all end `skipped` with no count, so a loss of knowledge after release is not visible. | deferred |
++| 2026-11-08 | memory quality, risk (rounds 1-5) | The live drain records no reason for a skipped turn: a filter-emptied turn, a judge rejection and an agent-saved turn all end `skipped` with no count, so a loss of knowledge after release is not visible. | taken: the drain stores the reason (`skip:<reason>` in `last_error`); `distill` and `status` count by reason (item 2026-11-08-001) |
+ | 2026-11-08 | memory quality, risk (rounds 1-5) | Turns version 2 skips are recoverable only until `compact` removes their text (90 days); only the cleanup item (D-1) would distil them again, so D-1 belongs inside that window. | deferred, to D-1 |
+ | 2026-11-08 | memory quality, risk (round 3) | `history replace-imports` will archive more claude-mem imports after version 2, since fewer history memories confirm them; `history restore-imports` undoes it. Not measured. | deferred |
+ | 2026-11-08 | memory quality, code-quality and architecture (rounds 3-5) | `hasDurable` in `src/judge/heuristic.ts` still uses 0.5 while `KNOWLEDGE_THRESHOLD` is 0.45; D-6 and D-8 were measured on this code. | deferred, to D-1 |
+diff --git a/src/cli/commands/distill.ts b/src/cli/commands/distill.ts
+index 3a23129..a9c5726 100644
+--- a/src/cli/commands/distill.ts
++++ b/src/cli/commands/distill.ts
+@@ -1,5 +1,6 @@
+ import { ADAPTERS } from "../../adapters/index.ts";
+ import { drainQueue } from "../../distill/queue.ts";
++import { skippedText } from "../../distill/skips.ts";
+ import { healLine, healVectors } from "../../embed/backfill.ts";
+ import { loadModel } from "../../embed/model.ts";
+ import { makeJudge } from "../../judge/index.ts";
+@@ -34,7 +35,7 @@ export async function run(): Promise<number> {
+       { owner: `${process.pid}-${crypto.randomUUID()}`, maxTurns: MAX_TURNS, maxMs: MAX_MS },
+     );
+     process.stdout.write(
+-      `distill: ${report.claimed} claimed, ${report.done} done, ${report.skipped} skipped, ${report.failed} failed\n`,
++      `distill: ${report.claimed} claimed, ${report.done} done, ${skippedText(report.skipped, report.skippedBy)}, ${report.failed} failed\n`,
+     );
+     // Memories written without the model (imports, edits while it was off, a download that
+     // came later) get their vector here, a bounded pass at a time: nobody has to run a backfill.
+diff --git a/src/distill/pipeline.ts b/src/distill/pipeline.ts
+index 638bcbc..d90aaee 100644
+--- a/src/distill/pipeline.ts
++++ b/src/distill/pipeline.ts
+@@ -2,6 +2,7 @@ import type { AgentAdapter, TurnDetail } from "../adapters/types.ts";
+ import { isFromTheHost } from "../core/host-prompt.ts";
+ import { relativeTo, rootsOf } from "../core/paths.ts";
+ import { type Redacted, redact } from "../core/redact.ts";
++import type { MemoryKind } from "../core/types.ts";
+ import type { Model } from "../embed/model.ts";
+ import type { DistillCandidate, DistillVerdict, Judge } from "../judge/types.ts";
+ import { withoutNotes } from "../retrieve/render.ts";
+@@ -109,6 +110,18 @@ function readDetail(deps: DistillDeps, turn: QueuedTurn): TurnDetail {
+   };
+ }
+ 
++/**
++ * Why the drain skipped a turn. A skipped turn keeps it in its `last_error` column as
++ * `skip:<reason>` (`skipMark`): the column is cleared whenever a turn becomes done or
++ * skipped, and holds an error only for a pending or failed turn, so no migration is needed.
++ */
++export type SkipReason = "saved" | "empty" | "not-worth" | "no-title";
++export const skipMark = (reason: SkipReason): string => `skip:${reason}`;
++
++/** The judge found the turn worth a memory, if a sentence can title it. */
++const worthKeeping = (verdict: DistillVerdict): verdict is DistillVerdict & { kind: MemoryKind } =>
++  verdict.worthSaving >= SAVE_THRESHOLD && verdict.kind !== "none";
++
+ /**
+  * The memory a verdict allows, or null. The title must be knowledge: the judge's choice
+  * when that sentence reaches the threshold, otherwise the surest sentence that does; with
+@@ -120,7 +133,7 @@ export function buildDraft(
+   verdict: DistillVerdict,
+   detail: TurnDetail,
+ ): Draft | null {
+-  if (verdict.worthSaving < SAVE_THRESHOLD || verdict.kind === "none") return null;
++  if (!worthKeeping(verdict)) return null;
+   // `durable` keeps its name in the verdict: it is the per-candidate knowledge probability.
+   const knowledge = (candidate: DistillCandidate) => verdict.durable[candidate.idx] ?? 0;
+   const surestFirst = (a: DistillCandidate, b: DistillCandidate) =>
+@@ -259,15 +272,21 @@ export function prepareTurn(db: Db, turn: TurnTexts, detail: TurnDetail): Prepar
+   return { ...prepareTexts(turn.prompt, turn.finalText, told), detail };
+ }
+ 
++/**
++ * What `draftTurn` found: a draft, or why there is none. A turn the filter emptied has no
++ * verdict, since the judge was not asked; a refused one keeps its verdict for the proof.
++ */
++export type DraftedTurn =
++  | { skipped: "empty"; verdict: null; draft: null }
++  | { skipped: "not-worth" | "no-title"; verdict: DistillVerdict; draft: null }
++  | { skipped: null; verdict: DistillVerdict; draft: Draft };
++
+ /**
+  * The judge's verdict and the draft it allows. With no candidate left there is nothing to
+  * select from: the judge is not asked, and there is no verdict.
+  */
+-export async function draftTurn(
+-  judge: Judge,
+-  prepared: PreparedTurn,
+-): Promise<{ verdict: DistillVerdict | null; draft: Draft | null }> {
+-  if (prepared.candidates.length === 0) return { verdict: null, draft: null };
++export async function draftTurn(judge: Judge, prepared: PreparedTurn): Promise<DraftedTurn> {
++  if (prepared.candidates.length === 0) return { skipped: "empty", verdict: null, draft: null };
+   const verdict = await judge.distill({
+     prompt: prepared.prompt,
+     finalText: prepared.finalText,
+@@ -276,10 +295,10 @@ export async function draftTurn(
+     commands: prepared.detail.commands as Redacted[],
+     hadErrors: prepared.detail.errors.length > 0,
+   });
+-  return {
+-    verdict,
+-    draft: buildDraft(prepared.prompt, prepared.candidates, verdict, prepared.detail),
+-  };
++  const draft = buildDraft(prepared.prompt, prepared.candidates, verdict, prepared.detail);
++  // buildDraft refuses for one of two reasons: the verdict, or no knowledge sentence to title by.
++  if (draft !== null) return { skipped: null, verdict, draft };
++  return { skipped: worthKeeping(verdict) ? "no-title" : "not-worth", verdict, draft };
+ }
+ 
+ /**
+@@ -290,7 +309,7 @@ export async function draftTurn(
+ export async function distillTurn(
+   deps: DistillDeps,
+   turn: QueuedTurn,
+-): Promise<"done" | "skipped"> {
++): Promise<"done" | SkipReason> {
+   const { db } = deps;
+   const detail = readDetail(deps, turn);
+   db.run(
+@@ -304,22 +323,27 @@ export async function distillTurn(
+     ],
+   );
+ 
+-  const finish = (state: "done" | "skipped") =>
++  // One write sets the state and the reason, so a skipped turn never lacks its reason and a
++  // done turn never keeps an earlier error.
++  const finish = (outcome: "done" | SkipReason) => {
++    const [state, mark] = outcome === "done" ? ["done", null] : ["skipped", skipMark(outcome)];
+     db.run(
+-      "UPDATE turns SET state = ?, lease_owner = NULL, lease_until = NULL, last_error = NULL WHERE id = ?",
+-      [state, turn.id],
++      "UPDATE turns SET state = ?, lease_owner = NULL, lease_until = NULL, last_error = ? WHERE id = ?",
++      [state, mark, turn.id],
+     );
++  };
+   // What the agent chose to save, it saved in its own words: nothing to add.
+   if (detail.savedMemory) {
+-    finish("skipped");
+-    return "skipped";
++    finish("saved");
++    return "saved";
+   }
+ 
+-  const { verdict, draft } = await draftTurn(deps.judge, prepareTurn(db, turn, detail));
+-  if (verdict === null || draft === null) {
+-    finish("skipped");
+-    return "skipped";
++  const drafted = await draftTurn(deps.judge, prepareTurn(db, turn, detail));
++  if (drafted.skipped !== null) {
++    finish(drafted.skipped);
++    return drafted.skipped;
+   }
++  const { verdict, draft } = drafted;
+ 
+   const action = await consolidate(deps, turn.projectId, draft, turn.id);
+   // A turn read back from history is remembered as of when it happened, so that
+diff --git a/src/distill/queue.ts b/src/distill/queue.ts
+index dbfeebd..4a22238 100644
+--- a/src/distill/queue.ts
++++ b/src/distill/queue.ts
+@@ -4,6 +4,7 @@ import { type Db, withWrite } from "../store/db.ts";
+ import { claimDrain, releaseDrain } from "../store/meta.ts";
+ import { clip } from "../util/text.ts";
+ import { type DistillDeps, distillTurn, type QueuedTurn } from "./pipeline.ts";
++import { noneSkipped, SKIPPED_KEY, type SkippedBy } from "./skips.ts";
+ 
+ export type { DistillDeps } from "./pipeline.ts";
+ 
+@@ -19,6 +20,8 @@ export interface DrainReport {
+   claimed: number;
+   done: number;
+   skipped: number;
++  /** The skipped turns by why they were skipped (`SkipReason`). */
++  skippedBy: SkippedBy;
+   failed: number;
+ }
+ 
+@@ -105,7 +108,14 @@ export async function drainQueue(
+   options: { owner: string; maxTurns: number; maxMs: number },
+ ): Promise<DrainReport> {
+   const { db } = deps;
+-  const report: DrainReport = { held: false, claimed: 0, done: 0, skipped: 0, failed: 0 };
++  const report: DrainReport = {
++    held: false,
++    claimed: 0,
++    done: 0,
++    skipped: 0,
++    skippedBy: noneSkipped(),
++    failed: 0,
++  };
+   if (!claimDrain(db, options.owner, deps.now(), DRAIN_LEASE_MS)) return { ...report, held: true };
+ 
+   const started = performance.now();
+@@ -118,7 +128,12 @@ export async function drainQueue(
+       projects.add(turn.projectId);
+       claimDrain(db, options.owner, deps.now(), DRAIN_LEASE_MS);
+       try {
+-        report[await distillTurn(deps, turn)]++;
++        const outcome = await distillTurn(deps, turn);
++        if (outcome === "done") report.done++;
++        else {
++          report.skipped++;
++          report.skippedBy[SKIPPED_KEY[outcome]]++;
++        }
+       } catch (error) {
+         if (releaseTurn(db, turn, error) === "failed") report.failed++;
+       }
+diff --git a/src/status/report.ts b/src/status/report.ts
+index 684ccd8..e642c4f 100644
+--- a/src/status/report.ts
++++ b/src/status/report.ts
+@@ -1,5 +1,7 @@
+ import pkg from "../../package.json" with { type: "json" };
+ import type { ProjectRef } from "../core/project.ts";
++import type { SkipReason } from "../distill/pipeline.ts";
++import { noneSkipped, SKIPPED_KEY, type SkippedBy, skippedText } from "../distill/skips.ts";
+ import type { HistoryStatus } from "../history/status.ts";
+ import { USAGE_KEYS } from "../judge/index.ts";
+ import { loadSettings } from "../settings/settings.ts";
+@@ -17,7 +19,14 @@ export interface StatusReport {
+   version: string;
+   project: { name: string; key: string } | null;
+   memories: { active: number; stale: number; superseded: number; archived: number };
+-  turns: { distilled: number; skipped: number; failed: number; queued: number };
++  turns: {
++    distilled: number;
++    skipped: number;
++    /** The skipped turns by reason; `unknown`: skipped with no reason stored (skipped before reasons were kept). */
++    skippedBy: SkippedBy & { unknown: number };
++    failed: number;
++    queued: number;
++  };
+   hooks: { latency: Latency[]; runs: number; errors: number };
+   /** Requests wizardingcode-mem itself made to a model. The heuristic judge makes none. */
+   modelCalls: number;
+@@ -101,6 +110,27 @@ function judgeReport(db: Db | null, project: ProjectRef | null, dataDir: string)
+   };
+ }
+ 
++/**
++ * The project's skipped turns by the reason the drain stored in `last_error` (`skipMark`).
++ * A skipped turn with any other value, NULL included, is `unknown`.
++ */
++function skippedBy(db: Db | null, project: ProjectRef | null): StatusReport["turns"]["skippedBy"] {
++  const by = { ...noneSkipped(), unknown: 0 };
++  if (db === null || project === null) return by;
++  const rows = db
++    .query<{ reason: string | null; n: number }, [number]>(
++      "SELECT last_error AS reason, count(*) AS n FROM turns WHERE project_id = ? AND state = 'skipped' GROUP BY last_error",
++    )
++    .all(project.id);
++  for (const { reason, n } of rows) {
++    const name = reason?.startsWith("skip:") ? reason.slice(5) : "";
++    // Own keys only: a stored `skip:constructor` must not reach the object's prototype.
++    const key = Object.hasOwn(SKIPPED_KEY, name) ? SKIPPED_KEY[name as SkipReason] : undefined;
++    by[key ?? "unknown"] += n;
++  }
++  return by;
++}
++
+ export function statusReport(
+   db: Db | null,
+   project: ProjectRef | null,
+@@ -123,6 +153,7 @@ export function statusReport(
+     turns: {
+       distilled: count("turns WHERE project_id = ? AND state = 'done'"),
+       skipped: count("turns WHERE project_id = ? AND state = 'skipped'"),
++      skippedBy: skippedBy(db, project),
+       failed: count("turns WHERE project_id = ? AND state = 'failed'"),
+       queued: count("turns WHERE project_id = ? AND state IN ('open', 'pending', 'processing')"),
+     },
+@@ -189,7 +220,7 @@ export function formatStatus(report: StatusReport): string {
+     lines.push(
+       `project   ${report.project?.name} (${report.project?.key})`,
+       `memories  ${memories.active} active${stale} · ${memories.superseded} superseded${memories.archived > 0 ? ` · ${memories.archived} archived` : ""}`,
+-      `turns     ${turns.distilled} distilled · ${turns.skipped} skipped · ${turns.failed} failed · ${turns.queued} queued`,
++      `turns     ${turns.distilled} distilled · ${skippedText(turns.skipped, turns.skippedBy)} · ${turns.failed} failed · ${turns.queued} queued`,
+     );
+   }
+   if (hooks.runs > 0) {
+diff --git a/tests/integration/distill-cli.test.ts b/tests/integration/distill-cli.test.ts
+index d6de705..2167f5b 100644
+--- a/tests/integration/distill-cli.test.ts
++++ b/tests/integration/distill-cli.test.ts
+@@ -75,6 +75,31 @@ describe("wizardingcode-mem distill", () => {
+     expect(rows("SELECT state FROM turns")).toEqual([{ state: "done" }]);
+   });
+ 
++  test("says why the turns it skipped were skipped", async () => {
++    const common = { session_id: "s1", cwd: project, prompt_id: "t1" };
++    await runCliWith(
++      { input: JSON.stringify({ ...common, prompt: "thanks!" }), env: env("off") },
++      "hook",
++      "claude-code",
++      "prompt",
++    );
++    await runCliWith(
++      {
++        input: JSON.stringify({
++          ...common,
++          last_assistant_message: "Glad that sorted it out for you.",
++        }),
++        env: env("off"),
++      },
++      "hook",
++      "claude-code",
++      "turn-end",
++    );
++    expect((await runCliWith({ env: env("off") }, "distill")).stdout).toBe(
++      "distill: 1 claimed, 0 done, 1 skipped (not-worth 1), 0 failed\n",
++    );
++  });
++
+   test("with nothing queued it does nothing, successfully", async () => {
+     openDb({ dataDir, busyTimeoutMs: 2000 }).close();
+     expect((await runCliWith({ env: env("off") }, "distill")).stdout).toBe(
+diff --git a/tests/integration/distill.test.ts b/tests/integration/distill.test.ts
+index 64a5e24..2e8b9ef 100644
+--- a/tests/integration/distill.test.ts
++++ b/tests/integration/distill.test.ts
+@@ -95,6 +95,15 @@ const turnStates = () =>
+     .all()
+     .map((row) => row.state);
+ 
++/** A drain report with no skipped turn, by reason. */
++const NONE = { saved: 0, empty: 0, notWorth: 0, noTitle: 0 };
++const reasons = () =>
++  db
++    .query<{ state: string; reason: string | null }, []>(
++      "SELECT state, last_error AS reason FROM turns ORDER BY id",
++    )
++    .all();
++
+ const FIX =
+   "Fixed: the root cause was the busy timeout being set after the first query. Moved the pragma to the top of `openDb` in src/store/db.ts.";
+ 
+@@ -113,7 +122,14 @@ describe("distill: from a queued turn to a memory", () => {
+ 
+   test("a turn worth keeping becomes one memory", async () => {
+     turn("the tests fail with a timeout", FIX);
+-    expect(await drain()).toEqual({ held: false, claimed: 1, done: 1, skipped: 0, failed: 0 });
++    expect(await drain()).toEqual({
++      held: false,
++      claimed: 1,
++      done: 1,
++      skipped: 0,
++      failed: 0,
++      skippedBy: NONE,
++    });
+     expect(memories()).toEqual([
+       {
+         id: 1,
+@@ -170,7 +186,14 @@ describe("distill: from a queued turn to a memory", () => {
+ 
+   test("a turn not worth keeping is skipped", async () => {
+     turn("thanks!", "You're welcome! Let me know if you need anything else.");
+-    expect(await drain()).toEqual({ held: false, claimed: 1, done: 0, skipped: 1, failed: 0 });
++    expect(await drain()).toEqual({
++      held: false,
++      claimed: 1,
++      done: 0,
++      skipped: 1,
++      failed: 0,
++      skippedBy: { ...NONE, notWorth: 1 },
++    });
+     expect(memories()).toEqual([]);
+     expect(turnStates()).toEqual(["skipped"]);
+   });
+@@ -393,7 +416,14 @@ describe("distill: the queue", () => {
+     // One run retries until the attempts run out, so fail exactly once per run.
+     const judge = throwing(1);
+     const first = await drainQueue(deps(judge), { owner: "a", maxTurns: 1, maxMs: 10_000 });
+-    expect(first).toEqual({ held: false, claimed: 1, done: 0, skipped: 0, failed: 0 });
++    expect(first).toEqual({
++      held: false,
++      claimed: 1,
++      done: 0,
++      skipped: 0,
++      failed: 0,
++      skippedBy: NONE,
++    });
+     expect(turnStates()).toEqual(["pending"]);
+     expect(memories()).toEqual([]);
+ 
+@@ -405,7 +435,14 @@ describe("distill: the queue", () => {
+   test("a turn that keeps failing is given up on after three attempts, with the reason kept", async () => {
+     turn("the tests fail with a timeout", FIX);
+     const report = await drain(throwing(99));
+-    expect(report).toEqual({ held: false, claimed: 3, done: 0, skipped: 0, failed: 1 });
++    expect(report).toEqual({
++      held: false,
++      claimed: 3,
++      done: 0,
++      skipped: 0,
++      failed: 1,
++      skippedBy: NONE,
++    });
+     expect(db.query("SELECT state, attempts, last_error FROM turns").all()).toEqual([
+       { state: "failed", attempts: 3, last_error: "Error: judge unavailable" },
+     ]);
+@@ -451,7 +488,14 @@ describe("distill: the queue", () => {
+     db.run("INSERT INTO meta (key, value) VALUES ('drain.lease', ?)", [
+       JSON.stringify({ owner: "someone-else", until: clock + 60_000 }),
+     ]);
+-    expect(await drain()).toEqual({ held: true, claimed: 0, done: 0, skipped: 0, failed: 0 });
++    expect(await drain()).toEqual({
++      held: true,
++      claimed: 0,
++      done: 0,
++      skipped: 0,
++      failed: 0,
++      skippedBy: NONE,
++    });
+     expect(turnStates()).toEqual(["pending"]);
+ 
+     clock += 120_000;
+@@ -519,7 +563,14 @@ describe("distill: what must not become a memory", () => {
+       '<agent-message from="a1">\nNever mock the database in these tests. Always use a real SQLite file.\n</agent-message>',
+       "Understood.",
+     );
+-    expect(await drain()).toEqual({ held: false, claimed: 1, done: 0, skipped: 1, failed: 0 });
++    expect(await drain()).toEqual({
++      held: false,
++      claimed: 1,
++      done: 0,
++      skipped: 1,
++      failed: 0,
++      skippedBy: { ...NONE, empty: 1 },
++    });
+     expect(memories()).toEqual([]);
+   });
+ 
+@@ -647,6 +698,12 @@ describe("distill: what must not become a memory", () => {
+     expect(turnStates()).toEqual(["skipped"]);
+   });
+ 
++  test("a turn the agent saved itself is skipped with the reason saved", async () => {
++    savingTurn({ content: "Saved as #1." });
++    expect((await drain()).skippedBy).toEqual({ ...NONE, saved: 1 });
++    expect(reasons()).toEqual([{ state: "skipped", reason: "skip:saved" }]);
++  });
++
+   test("if that save failed, the turn is distilled after all", async () => {
+     savingTurn({ content: "wizardingcode-mem: database is locked", is_error: true });
+     await drain();
+@@ -879,7 +936,14 @@ That "other Claude session" is an agent working inside this same session.`,
+         throw new Error("the judge must not be asked");
+       },
+     };
+-    expect(await drain(judge)).toEqual({ held: false, claimed: 1, done: 0, skipped: 1, failed: 0 });
++    expect(await drain(judge)).toEqual({
++      held: false,
++      claimed: 1,
++      done: 0,
++      skipped: 1,
++      failed: 0,
++      skippedBy: { ...NONE, empty: 1 },
++    });
+     expect(memories()).toEqual([]);
+     expect(turnStates()).toEqual(["skipped"]);
+   });
+@@ -1024,3 +1088,73 @@ describe("distill: the notes the session had been shown", () => {
+     expect(memories()[0]?.evidence_count).toBe(1);
+   });
+ });
++
++describe("distill: why a turn was skipped", () => {
++  const HAND_BACK = `Another Claude session sent a message:
++<agent-message from="a1">
++[Subagent hand-back] The report follows:
++  Reviewed 4 tasks; all criteria met.
++</agent-message>
++That "other Claude session" is an agent working inside this same session.`;
++  /** Like `judging`, but a turn whose prompt says thanks is not worth keeping. */
++  const byPrompt = (): Judge => {
++    const inner = judging({ [CAUSE]: 0.9 }, CAUSE);
++    return {
++      ...inner,
++      distill: async (input) => {
++        const verdict = await inner.distill(input);
++        return input.prompt.includes("thanks") ? { ...verdict, worthSaving: 0.2 } : verdict;
++      },
++    };
++  };
++
++  test("a turn the filter empties is skipped with the reason empty", async () => {
++    turn("ok", HAND_BACK);
++    await drain();
++    expect(reasons()).toEqual([{ state: "skipped", reason: "skip:empty" }]);
++  });
++
++  test("a turn the judge finds not worth keeping is skipped with the reason not-worth", async () => {
++    turn("thanks for that", CAUSE);
++    await drain(byPrompt());
++    expect(reasons()).toEqual([{ state: "skipped", reason: "skip:not-worth" }]);
++  });
++
++  test("a verdict of kind none is not-worth too", async () => {
++    turn("why does the hook hang?", CAUSE);
++    const inner = judging({ [CAUSE]: 0.9 }, CAUSE);
++    await drain({
++      ...inner,
++      distill: async (input) => ({ ...(await inner.distill(input)), kind: "none" }),
++    });
++    expect(reasons()).toEqual([{ state: "skipped", reason: "skip:not-worth" }]);
++  });
++
++  test("a turn with no knowledge sentence for a title is skipped with the reason no-title", async () => {
++    turn("why is it slow?", "The run took a while, and it is finished now.");
++    await drain(judging({}, null));
++    expect(reasons()).toEqual([{ state: "skipped", reason: "skip:no-title" }]);
++  });
++
++  test("a distilled turn has no reason, even after an earlier failure", async () => {
++    turn("why does the hook hang?", CAUSE);
++    db.run("UPDATE turns SET last_error = 'Error: the judge timed out'");
++    await drain(judging({ [CAUSE]: 0.9 }, CAUSE));
++    expect(reasons()).toEqual([{ state: "done", reason: null }]);
++  });
++
++  test("the drain report counts the skipped turns by reason", async () => {
++    turn("why does the hook hang?", CAUSE);
++    turn("why is it slow?", "The run took a while, and it is finished now.");
++    turn("thanks for that", CAUSE);
++    turn("ok", HAND_BACK);
++    expect(await drain(byPrompt())).toEqual({
++      held: false,
++      claimed: 4,
++      done: 1,
++      skipped: 3,
++      failed: 0,
++      skippedBy: { saved: 0, empty: 1, notWorth: 1, noTitle: 1 },
++    });
++  });
++});
+diff --git a/tests/integration/doctor.test.ts b/tests/integration/doctor.test.ts
+index 31dfbb5..64f27c7 100644
+--- a/tests/integration/doctor.test.ts
++++ b/tests/integration/doctor.test.ts
+@@ -466,7 +466,7 @@ describe("wizardingcode-mem status", () => {
+         `wizardingcode-mem ${pkg.version}`,
+         `project   demo (path:${project})`,
+         "memories  3 active (1 stale) · 1 superseded · 1 archived",
+-        "turns     3 distilled · 1 skipped · 1 failed · 1 queued",
++        "turns     3 distilled · 1 skipped (unknown 1) · 1 failed · 1 queued",
+         "hooks     prompt p50 10 ms, p95 19 ms · turn-end p50 4 ms, p95 4 ms · 21 runs, 1 error",
+         "judge     heuristic only (no TypeSafe key) · model calls made by wizardingcode-mem: 0",
+         `data      ${dataDir}`,
+diff --git a/src/distill/skips.ts b/src/distill/skips.ts
+new file mode 100644
+--- /dev/null
++++ b/src/distill/skips.ts
+@@ -0,0 +1,32 @@
++import type { SkipReason } from "./pipeline.ts";
++
++/** Skipped turns counted by why they were skipped (`SkipReason`). */
++export interface SkippedBy {
++  saved: number;
++  empty: number;
++  notWorth: number;
++  noTitle: number;
++}
++
++/** Each reason's key in `SkippedBy` and its stored value (`skip:<reason>`, see `skipMark`). */
++export const SKIPPED_KEY: Record<SkipReason, keyof SkippedBy> = {
++  saved: "saved",
++  empty: "empty",
++  "not-worth": "notWorth",
++  "no-title": "noTitle",
++};
++
++export const noneSkipped = (): SkippedBy => ({ saved: 0, empty: 0, notWorth: 0, noTitle: 0 });
++
++/**
++ * "3 skipped (empty 1, no-title 2)": the reasons that occurred, in a fixed order; `unknown`
++ * counts skipped turns with no reason stored (skipped before reasons were kept).
++ */
++export function skippedText(skipped: number, by: SkippedBy & { unknown?: number }): string {
++  const parts: [string, number][] = (
++    Object.entries(SKIPPED_KEY) as [SkipReason, keyof SkippedBy][]
++  ).map(([reason, key]) => [reason, by[key]]);
++  if (by.unknown !== undefined) parts.push(["unknown", by.unknown]);
++  const named = parts.filter(([, n]) => n > 0).map(([label, n]) => `${label} ${n}`);
++  return named.length === 0 ? `${skipped} skipped` : `${skipped} skipped (${named.join(", ")})`;
++}
+diff --git a/tests/integration/status-skips.test.ts b/tests/integration/status-skips.test.ts
+new file mode 100644
+--- /dev/null
++++ b/tests/integration/status-skips.test.ts
+@@ -0,0 +1,123 @@
++import { afterEach, beforeEach, expect, test } from "bun:test";
++import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++import { claudeCode } from "../../src/adapters/claude-code/adapter.ts";
++import type { HookInput } from "../../src/adapters/types.ts";
++import type { ProjectRef } from "../../src/core/project.ts";
++import { handleHook } from "../../src/hooks/handle.ts";
++import { formatStatus, statusReport } from "../../src/status/report.ts";
++import { type Db, openDb } from "../../src/store/db.ts";
++
++let base: string;
++let project: string;
++let db: Db;
++let clock: number;
++
++beforeEach(() => {
++  base = realpathSync(mkdtempSync(join(tmpdir(), "wizardingcode-mem-status-skips-")));
++  project = join(base, "project");
++  mkdirSync(project);
++  db = openDb({ dataDir: join(base, "data"), busyTimeoutMs: 2000 });
++  clock = 1_700_000_000_000;
++});
++afterEach(() => {
++  db.close();
++  rmSync(base, { recursive: true, force: true });
++});
++
++function hook(event: "prompt" | "turn-end", extra: Partial<HookInput>): void {
++  clock += 1000;
++  handleHook({ db, now: () => clock, spawnDistill: () => {} }, claudeCode, {
++    agent: "claude-code",
++    event,
++    sessionId: "s1",
++    cwd: project,
++    turnId: null,
++    transcriptPath: null,
++    prompt: null,
++    finalText: null,
++    source: null,
++    toolFile: null,
++    toolError: null,
++    subagent: false,
++    ...extra,
++  });
++}
++
++/** Queues one turn per reason given and marks it skipped with it (null: skipped before reasons). */
++function skippedTurns(reasons: (string | null)[]): ProjectRef {
++  reasons.forEach((_, i) => {
++    hook("prompt", { turnId: `p${i}`, prompt: `question ${i}` });
++    hook("turn-end", { turnId: `p${i}`, finalText: `answer ${i}` });
++  });
++  const ids = db.query<{ id: number }, []>("SELECT id FROM turns ORDER BY id").all();
++  ids.forEach(({ id }, i) => {
++    db.run("UPDATE turns SET state = 'skipped', last_error = ? WHERE id = ?", [
++      reasons[i] ?? null,
++      id,
++    ]);
++  });
++  const row = db
++    .query<{ id: number; key: string; name: string }, []>("SELECT id, key, name FROM projects")
++    .get();
++  if (row === null) throw new Error("no project");
++  return { ...row, root: project, branch: null, commit: null, disabled: false };
++}
++
++test("status counts the project's skipped turns by reason, those with none as unknown", () => {
++  const ref = skippedTurns([
++    "skip:no-title",
++    "skip:no-title",
++    "skip:not-worth",
++    "skip:empty",
++    "skip:saved",
++    null,
++  ]);
++  const report = statusReport(db, ref, "/d");
++  expect(report.turns.skipped).toBe(6);
++  expect(report.turns.skippedBy).toEqual({
++    saved: 1,
++    empty: 1,
++    notWorth: 1,
++    noTitle: 2,
++    unknown: 1,
++  });
++  expect(formatStatus(report)).toContain(
++    "turns     0 distilled · 6 skipped (saved 1, empty 1, not-worth 1, no-title 2, unknown 1) · 0 failed · 0 queued",
++  );
++});
++
++test("the status line names only the reasons that occurred, and nothing when none was skipped", () => {
++  const ref = skippedTurns(["skip:no-title"]);
++  expect(formatStatus(statusReport(db, ref, "/d"))).toContain(
++    "turns     0 distilled · 1 skipped (no-title 1) · 0 failed · 0 queued",
++  );
++  db.run("UPDATE turns SET state = 'done', last_error = NULL");
++  expect(formatStatus(statusReport(db, ref, "/d"))).toContain(
++    "turns     1 distilled · 0 skipped · 0 failed · 0 queued",
++  );
++});
++
++test("only the project's own skipped turns count, and a reason it does not know is unknown", () => {
++  const ref = skippedTurns(["skip:bogus", "skip:constructor"]);
++  const other = join(base, "other");
++  mkdirSync(other);
++  hook("prompt", { cwd: other, sessionId: "s2", turnId: "o1", prompt: "question in other" });
++  hook("turn-end", { cwd: other, sessionId: "s2", turnId: "o1", finalText: "answer in other" });
++  db.run("UPDATE turns SET state = 'skipped', last_error = 'skip:no-title' WHERE project_id <> ?", [
++    ref.id,
++  ]);
++  expect(db.query("SELECT count(*) AS n FROM turns WHERE project_id <> ?").get(ref.id)).toEqual({
++    n: 1,
++  });
++  const report = statusReport(db, ref, "/d");
++  expect(report.turns.skipped).toBe(2);
++  expect(report.turns.skippedBy).toEqual({
++    saved: 0,
++    empty: 0,
++    notWorth: 0,
++    noTitle: 0,
++    unknown: 2,
++  });
++});

@@ -1,0 +1,374 @@
+{
+  "fingerprint": "sha256:75fe6078ed203ac25764899f7e205fd429e06dbec8d69af36df117e53d04e400",
+  "tdd": [
+    {
+      "criterion": "AC-1",
+      "red": {
+        "command": "./node_modules/.bin/bun test tests/integration/distill.test.ts",
+        "exit": 1,
+        "at": "2026-11-08T18:49:20.491Z",
+        "durationMs": 638,
+        "log": "logs/tdd-AC-1-red-1794163759852.txt",
+        "tail": "@@ -2,3 +2,3 @@\n    {\n-     \"reason\": \"skip:no-title\",\n+     \"reason\": null,\n      \"state\": \"skipped\",\n\n- Expected  - 1\n+ Received  + 1\n\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/tests/integration/distill.test.ts:1136:23)\n(fail) distill: why a turn was skipped (findings row 11) > a turn with no knowledge sentence for a title is skipped with the reason no-title [7.55ms]\n1146 |   test(\"the drain report counts the skipped turns by reason\", async () => {\n1147 |     turn(\"why does the hook hang?\", CAUSE);\n1148 |     turn(\"why is it slow?\", \"The run took a while, and it is finished now.\");\n1149 |     turn(\"thanks for that\", CAUSE);\n1150 |     turn(\"ok\", HAND_BACK);\n1151 |     expect(await drain(byPrompt())).toEqual({\n                                           ^\nerror: expect(received).toEqual(expected)\n\n@@ -6,8 +6,2 @@\n    \"skipped\": 3,\n-   \"skippedBy\": {\n-     \"empty\": 1,\n-     \"noTitle\": 1,\n-     \"notWorth\": 1,\n-     \"saved\": 0,\n-   },\n  }\n\n- Expected  - 6\n+ Received  + 0\n\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/tests/integration/distill.test.ts:1151:37)\n(fail) distill: why a turn was skipped (findings row 11) > the drain report counts the skipped turns by reason [8.54ms]\n\n 45 pass\n 13 fail\n 110 expect() calls\nRan 58 tests across 1 file. [630.00ms]",
+        "timedOut": false,
+        "passed": 45,
+        "changedTests": [
+          "tests/integration/distill-cli.test.ts",
+          "tests/integration/distill.test.ts",
+          "tests/integration/status-skips.test.ts"
+        ]
+      },
+      "green": {
+        "command": "./node_modules/.bin/bun test tests/integration/distill.test.ts",
+        "exit": 0,
+        "at": "2026-11-08T18:51:59.877Z",
+        "durationMs": 501,
+        "log": "logs/tdd-AC-1-green-1794163919374.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\n 58 pass\n 0 fail\n 128 expect() calls\nRan 58 tests across 1 file. [492.00ms]",
+        "timedOut": false,
+        "passed": 58
+      }
+    },
+    {
+      "criterion": "AC-2",
+      "red": {
+        "command": "./node_modules/.bin/bun test tests/integration/distill-cli.test.ts",
+        "exit": 1,
+        "at": "2026-11-08T18:49:21.225Z",
+        "durationMs": 654,
+        "log": "logs/tdd-AC-2-red-1794163760571.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\ntests/integration/distill-cli.test.ts:\n93 |       },\n94 |       \"hook\",\n95 |       \"claude-code\",\n96 |       \"turn-end\",\n97 |     );\n98 |     expect((await runCliWith({ env: env(\"off\") }, \"distill\")).stdout).toBe(\n                                                                           ^\nerror: expect(received).toBe(expected)\n\n- \"distill: 1 claimed, 0 done, 1 skipped (not-worth 1), 0 failed\n+ \"distill: 1 claimed, 0 done, 1 skipped, 0 failed\n  \"\n\n- Expected  - 1\n+ Received  + 1\n\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/tests/integration/distill-cli.test.ts:98:71)\n(fail) wizardingcode-mem distill > says why the turns it skipped were skipped [75.88ms]\n\n 5 pass\n 1 fail\n 15 expect() calls\nRan 6 tests across 1 file. [645.00ms]",
+        "timedOut": false,
+        "passed": 5,
+        "changedTests": [
+          "tests/integration/distill-cli.test.ts",
+          "tests/integration/distill.test.ts",
+          "tests/integration/status-skips.test.ts"
+        ]
+      },
+      "green": {
+        "command": "./node_modules/.bin/bun test tests/integration/distill-cli.test.ts",
+        "exit": 0,
+        "at": "2026-11-08T18:54:33.469Z",
+        "durationMs": 655,
+        "log": "logs/tdd-AC-2-green-1794164072813.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\n 6 pass\n 0 fail\n 15 expect() calls\nRan 6 tests across 1 file. [646.00ms]",
+        "timedOut": false,
+        "passed": 6
+      },
+      "greens": [
+        {
+          "command": "./node_modules/.bin/bun test tests/integration/distill-cli.test.ts",
+          "exit": 0,
+          "at": "2026-11-08T18:52:00.611Z",
+          "durationMs": 673,
+          "log": "logs/tdd-AC-2-green-1794163919937.txt",
+          "tail": "bun test v1.4.2 (744846f84)\n\n 6 pass\n 0 fail\n 15 expect() calls\nRan 6 tests across 1 file. [664.00ms]",
+          "timedOut": false,
+          "passed": 6
+        }
+      ]
+    },
+    {
+      "criterion": "AC-3",
+      "red": {
+        "command": "./node_modules/.bin/bun test tests/integration/status-skips.test.ts",
+        "exit": 1,
+        "at": "2026-11-08T18:49:21.351Z",
+        "durationMs": 43,
+        "log": "logs/tdd-AC-3-red-1794163761307.txt",
+        "tail": "76 |   ]);\n77 |   const report = statusReport(db, ref, \"/d\");\n78 |   expect(report.turns.skipped).toBe(6);\n79 |   expect(report.turns.skippedBy).toEqual({\n                                      ^\nerror: expect(received).toEqual(expected)\n\n- {\n-   \"empty\": 1,\n-   \"noTitle\": 2,\n-   \"notWorth\": 1,\n-   \"saved\": 1,\n-   \"unknown\": 1,\n- }\n+ undefined\n\n- Expected  - 7\n+ Received  + 1\n\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/tests/integration/status-skips.test.ts:79:34)\n(fail) status counts the project's skipped turns by reason, those with none as unknown [15.66ms]\n88 |   );\n89 | });\n90 | \n91 | test(\"the status line names only the reasons that occurred, and nothing when none was skipped\", () => {\n92 |   const ref = skippedTurns([\"skip:no-title\"]);\n93 |   expect(formatStatus(statusReport(db, ref, \"/d\"))).toContain(\n                                                         ^\nerror: expect(received).toContain(expected)\n\nExpected to contain: \"turns     0 distilled · 1 skipped (no-title 1) · 0 failed · 0 queued\"\nReceived: \"wizardingcode-mem 0.5.0\\nproject   project (path:/private/var/folders/n3/_83g89qj03g8gdw9f8hzz4s80000gn/T/wizardingcode-mem-status-skips-OF4tHf/project)\\nmemories  0 active · 0 superseded\\nturns     0 distilled · 1 skipped · 0 failed · 0 queued\\njudge     heuristic only (no TypeSafe key) · model calls made by wizardingcode-mem: 0\\ndata      /d\\n\"\n\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/tests/integration/status-skips.test.ts:93:53)\n(fail) the status line names only the reasons that occurred, and nothing when none was skipped [9.83ms]\n\n 0 pass\n 2 fail\n 3 expect() calls\nRan 2 tests across 1 file. [35.00ms]",
+        "timedOut": false,
+        "passed": 0,
+        "changedTests": [
+          "tests/integration/distill-cli.test.ts",
+          "tests/integration/distill.test.ts",
+          "tests/integration/status-skips.test.ts"
+        ]
+      },
+      "green": {
+        "command": "./node_modules/.bin/bun test tests/integration/status-skips.test.ts",
+        "exit": 0,
+        "at": "2026-11-08T18:52:00.719Z",
+        "durationMs": 45,
+        "log": "logs/tdd-AC-3-green-1794163920673.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\n 2 pass\n 0 fail\n 5 expect() calls\nRan 2 tests across 1 file. [35.00ms]",
+        "timedOut": false,
+        "passed": 2
+      }
+    }
+  ],
+  "runs": [
+    {
+      "gate": "secrets",
+      "target": ".",
+      "command": "built-in secret scan",
+      "commandSource": null,
+      "confirmed": true,
+      "exit": 0,
+      "status": "pass",
+      "durationMs": 25,
+      "at": "2026-11-08T18:59:38.621Z",
+      "log": null,
+      "tail": "no secrets found in the change",
+      "fingerprint": "sha256:75fe6078ed203ac25764899f7e205fd429e06dbec8d69af36df117e53d04e400"
+    },
+    {
+      "gate": "prose",
+      "target": ".",
+      "command": "built-in prose scan",
+      "commandSource": null,
+      "confirmed": true,
+      "exit": 0,
+      "status": "pass",
+      "durationMs": 24,
+      "at": "2026-11-08T18:59:38.646Z",
+      "log": null,
+      "tail": "no chatbot artefacts in the change",
+      "fingerprint": "sha256:75fe6078ed203ac25764899f7e205fd429e06dbec8d69af36df117e53d04e400"
+    },
+    {
+      "gate": "build",
+      "target": ".",
+      "command": "bun run build",
+      "commandSource": "detected",
+      "confirmed": true,
+      "exit": 0,
+      "status": "pass",
+      "durationMs": 2095,
+      "at": "2026-11-08T18:59:38.671Z",
+      "log": "logs/build-_-1794164378671.txt",
+      "tail": "$ bun run ui:build && bun scripts/build.ts\n$ vite build --config ui/vite.config.ts\nvite v8.3.3 building client environment for production...\ntransforming...\n\n/assets/unbounded-variable.woff2 referenced in /assets/unbounded-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/instrument-sans-variable.woff2 referenced in /assets/instrument-sans-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/jetbrains-mono-variable.woff2 referenced in /assets/jetbrains-mono-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n✓ 834 modules transformed.\nrendering chunks...\n[plugin vite:singlefile] \n\n[plugin vite:singlefile] Inlining: index-PUhkQFrm.js\n[plugin vite:singlefile] Inlining: style-ODM7JwkH.css\nsrc/ui/dist/index.html  1,109.41 kB\n\n✓ built in 611ms\n✓ wizardingcode-mem-darwin-arm64  66.2 MB\n✓ wizardingcode-mem-darwin-x64  72.9 MB\n✓ wizardingcode-mem-linux-x64  84.4 MB\n✓ wizardingcode-mem-linux-arm64  84.3 MB\n✓ wizardingcode-mem-windows-x64.exe  88.9 MB",
+      "fingerprint": "sha256:75fe6078ed203ac25764899f7e205fd429e06dbec8d69af36df117e53d04e400"
+    },
+    {
+      "gate": "test",
+      "target": ".",
+      "command": "bun run test",
+      "commandSource": "detected",
+      "confirmed": true,
+      "exit": 0,
+      "status": "pass",
+      "durationMs": 54109,
+      "at": "2026-11-08T18:59:40.790Z",
+      "log": "logs/test-_-1794164380790.txt",
+      "tail": "tests/golden/judges.test.ts:\nheuristic precision 100%  recall 100%  kind 83%\ntypesafe  precision 85%  recall 94%  kind 88%  wrongly kept: en-none-obvious-from-code, en-none-general-knowledge, pt-none-your-turn  missed: en-change-json-flag\n\ntests/golden/search.test.ts:\ntop 5: 35/44 → 39/44; Portuguese of English: 1/8 → 4/8\nsemantic-only results for unrelated queries: 29/43\n\ntests/golden/retrieval.test.ts:\nrecall@5: 19/24 — missed: redact-first, pt-lingua, pt-cursor, ts-extension, hook-runs\nprecision: 19/21 notes given were the expected ones\nfalse injections: 0/23\n\ntests/perf/budgets.test.ts:\nprompt: p50 22.1 ms, p95 24.4 ms\nsession-start: p50 16.9 ms, p95 17.8 ms\nturn-end: p50 13.4 ms, p95 14.5 ms\nfile-read: p50 16.3 ms, p95 17.8 ms\ntool-failed: p50 22.3 ms, p95 24.2 ms\nqwen prompt: p50 23.3 ms, p95 24.8 ms\nqwen session-start: p50 18.4 ms, p95 19.1 ms\ndroid prompt: p50 23.0 ms, p95 24.0 ms\ndroid session-start: p50 17.2 ms, p95 18.6 ms\ncopilot session-start: p50 17.0 ms, p95 18.2 ms\ncopilot prompt (capture only): p50 13.6 ms, p95 14.9 ms\nantigravity pre-invocation: p50 17.0 ms, p95 18.2 ms\nlinked prompt: p50 29.4 ms, p95 32.8 ms (30 of 30 with a note from outside)\nlinked session-start: p50 19.8 ms, p95 20.8 ms\n\ntests/perf/large-project.test.ts:\nlarge project prompt: p50 16.9 ms, p95 19.8 ms (40 of 40 given notes)\n\ntests/perf/semantic.test.ts:\nsemantic global median: 15.9 ms\n\n 2026 pass\n 4 skip\n 0 fail\n 24 snapshots, 28395 expect() calls\nRan 2030 tests across 130 files. [52.87s]",
+      "fingerprint": "sha256:75fe6078ed203ac25764899f7e205fd429e06dbec8d69af36df117e53d04e400"
+    },
+    {
+      "gate": "lint",
+      "target": ".",
+      "command": "bun run lint",
+      "commandSource": "detected",
+      "confirmed": true,
+      "exit": 0,
+      "status": "pass",
+      "durationMs": 333,
+      "at": "2026-11-08T19:00:34.899Z",
+      "log": "logs/lint-_-1794164434899.txt",
+      "tail": "  \n\nscripts/embed/spike.ts:229:61 lint/style/noNonNullAssertion ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n  ! Forbidden non-null assertion.\n  \n    227 │       prompt: item.prompt,\n    228 │       expect: item.expect,\n  > 229 │       lexicalFound: item.expect.every((key) => got.includes(ids.get(key)!)),\n        │                                                             ^^^^^^^^^^^^^\n    230 │       hits: item.expect.map((key) => {\n    231 │         const index = order.findIndex((o) => o.key === key);\n  \n\nscripts/embed/spike.ts:232:72 lint/style/noNonNullAssertion  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n  ! Forbidden non-null assertion.\n  \n    230 │       hits: item.expect.map((key) => {\n    231 │         const index = order.findIndex((o) => o.key === key);\n  > 232 │         return { key, rank: index + 1, score: index < 0 ? Number.NaN : order[index]!.score };\n        │                                                                        ^^^^^^^^^^^^^\n    233 │       }),\n    234 │       top: order.slice(0, 3),\n  \n  i Unsafe fix: Replace with optional chain operator ?. This operator includes runtime checks, so it is safer than the compile-only non-null assertion operator\n  \n    230 230 │         hits: item.expect.map((key) => {\n    231 231 │           const index = order.findIndex((o) => o.key === key);\n    232     │ - ········return·{·key,·rank:·index·+·1,·score:·index·<·0·?·Number.NaN·:·order[index]!.score·};\n        232 │ + ········return·{·key,·rank:·index·+·1,·score:·index·<·0·?·Number.NaN·:·order[index]?.score·};\n    233 233 │         }),\n    234 234 │         top: order.slice(0, 3),\n  \n\nThe number of diagnostics exceeds the limit allowed. Use --max-diagnostics to increase it.\nDiagnostics not shown: 75.\nChecked 319 files in 249ms. No fixes applied.\nFound 94 warnings.\nFound 1 info.",
+      "fingerprint": "sha256:75fe6078ed203ac25764899f7e205fd429e06dbec8d69af36df117e53d04e400"
+    },
+    {
+      "gate": "typecheck",
+      "target": ".",
+      "command": "bun run typecheck",
+      "commandSource": "detected",
+      "confirmed": true,
+      "exit": 0,
+      "status": "pass",
+      "durationMs": 228,
+      "at": "2026-11-08T19:00:35.232Z",
+      "log": "logs/typecheck-_-1794164435232.txt",
+      "tail": "$ tsc --noEmit",
+      "fingerprint": "sha256:75fe6078ed203ac25764899f7e205fd429e06dbec8d69af36df117e53d04e400"
+    }
+  ],
+  "verdict": "proven",
+  "unproven": [],
+  "verifications": [
+    {
+      "what": "knowledge",
+      "ref": "K-316",
+      "question": "Does the entry `entries.k1` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.64
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-08T18:45:34.350Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-311",
+      "question": "Does the entry `entries.k2` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.4
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-08T18:45:34.350Z"
+    },
+    {
+      "what": "defect",
+      "ref": "code-quality src/distill/pipeline.ts:335",
+      "question": "Does the finding at `findings.d1`, taken at its word (its `text` about `file` at `line`), describe a defect of the kind `findings.d1.rubric` names?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.98
+      },
+      "confidence": 0.98,
+      "model": "jev-1.14.0",
+      "at": "2026-11-08T18:58:30.667Z"
+    }
+  ],
+  "roles": [
+    {
+      "agent": "tech-lead",
+      "agentId": "a2110c7571690f8d7",
+      "at": "2026-11-08T18:46:59.138Z",
+      "tokens": 16707,
+      "tokensFrom": "transcript",
+      "model": "claude-sonnet-5-5",
+      "file": "conclave/lead-security.md",
+      "team": "security"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "a462a741a045cd594",
+      "at": "2026-11-08T18:47:06.177Z",
+      "tokens": 21671,
+      "tokensFrom": "transcript",
+      "model": "claude-sonnet-5-5",
+      "file": "conclave/lead-qa.md",
+      "team": "qa"
+    },
+    {
+      "agent": "review-code-quality",
+      "agentId": "a7a822caca82567ee",
+      "at": "2026-11-08T18:55:54.925Z",
+      "tokens": 35485,
+      "tokensFrom": "transcript",
+      "model": "claude-sonnet-5-5",
+      "file": "review/code-quality.findings.md",
+      "team": "backend"
+    },
+    {
+      "agent": "review-test-quality",
+      "agentId": "a15306ad88c3510d1",
+      "at": "2026-11-08T18:55:57.467Z",
+      "tokens": 36635,
+      "tokensFrom": "transcript",
+      "model": "claude-sonnet-5-5",
+      "file": "review/test-quality.findings.md",
+      "team": "qa"
+    },
+    {
+      "agent": "judge",
+      "agentId": "ae442d3049a2e057a",
+      "at": "2026-11-08T18:58:24.222Z",
+      "tokens": 59060,
+      "tokensFrom": "transcript",
+      "model": "claude-fable-5-1",
+      "file": "review/ruling.json"
+    },
+    {
+      "agent": "review-code-quality",
+      "agentId": "a3647ee3a0f942a39",
+      "at": "2026-11-08T19:00:59.236Z",
+      "tokens": 23885,
+      "tokensFrom": "transcript",
+      "model": "claude-sonnet-5-5",
+      "file": "review/code-quality.findings.md",
+      "team": "backend"
+    },
+    {
+      "agent": "review-test-quality",
+      "agentId": "a80772f2f8ccfa98a",
+      "at": "2026-11-08T19:01:02.028Z",
+      "tokens": 24937,
+      "tokensFrom": "transcript",
+      "model": "claude-sonnet-5-5",
+      "file": "review/test-quality.findings.md",
+      "team": "qa"
+    },
+    {
+      "agent": "judge",
+      "agentId": "a216c5049e1a27dfd",
+      "at": "2026-11-08T19:03:00.786Z",
+      "tokens": 46630,
+      "tokensFrom": "transcript",
+      "model": "claude-fable-5-1",
+      "file": "review/ruling.json"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "af78c74544231ce21",
+      "at": "2026-11-08T19:03:32.042Z",
+      "tokens": 36533,
+      "tokensFrom": "transcript",
+      "model": "claude-sonnet-5-5",
+      "file": "conclave/lead-security.delivery.md",
+      "team": "security"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "af857eea7cf153209",
+      "at": "2026-11-08T19:03:35.235Z",
+      "tokens": 34052,
+      "tokensFrom": "transcript",
+      "model": "claude-sonnet-5-5",
+      "file": "conclave/lead-qa.delivery.md",
+      "team": "qa"
+    }
+  ],
+  "judgement": [
+    {
+      "gate": "code-quality",
+      "verdict": "proven",
+      "reviewer": "review-code-quality",
+      "judge": "judge",
+      "findings": [
+        {
+          "file": "src/status/report.ts",
+          "line": 126,
+          "text": "The `skip:` prefix that `skipMark` (src/distill/pipeline.ts:119) writes is parsed here with a bare `startsWith(\"skip:\")` and `slice(5)`, so the stored format is known in two modules; a `parseSkipMark` beside `skipMark` would keep it in one. Upheld as advisory, as the reviewer had it: rubric question 2 makes duplication a defect only when logic is written twice, and here the format is defined once and read once, with the comment above naming `skipMark`. The reviewer's 271 is the patch line; the file line is 126.",
+          "severity": "advisory"
+        },
+        {
+          "file": "src/distill/skips.ts",
+          "line": 19,
+          "text": "The four reasons are spelled out in `SkippedBy`, `SKIPPED_KEY` and `noneSkipped`: adding a reason means editing three places. Upheld as advisory (question 2, duplicated boilerplate): the compiler already ties two of the three to `SkipReason` (`Record<SkipReason, …>` and the `SkippedBy` return type), so only the interface is unenforced, and no logic is repeated. The reviewer's 590 is the patch line; the file line is 19.",
+          "severity": "advisory"
+        },
+        {
+          "file": "tests/integration/distill.test.ts",
+          "line": 99,
+          "text": "The test file's `NONE` repeats `noneSkipped()` from skips.ts. Upheld as advisory (question 2, boilerplate), and defensible as written: a test that pinned the drain report against the code's own zero value would pass by construction if `noneSkipped()` lost a key, so the literal in the test is the independent expectation. The reviewer's 344 is the patch line; the file line is 99.",
+          "severity": "advisory"
+        },
+        {
+          "file": "src/status/report.ts",
+          "line": 128,
+          "text": "`SKIPPED_KEY[name as SkipReason]` casts an unchecked string to the union; the `Object.hasOwn` guard on the same line is what makes it safe, and the cast hides that. Upheld as advisory (question 6, a style difference): `Object.hasOwn` does not narrow in TypeScript, so a cast or an explicit lookup is needed either way, the comment above states the own-keys reason, and no behaviour disagrees with the neighbours (report.ts had no cast before; pipeline.ts already casts `commands as Redacted[]`). The reviewer's 273 is the patch line; the file line is 128.",
+          "severity": "advisory"
+        }
+      ],
+      "tokens": 47200,
+      "at": "2026-11-08T19:03:07.635Z",
+      "fingerprint": "sha256:75fe6078ed203ac25764899f7e205fd429e06dbec8d69af36df117e53d04e400"
+    },
+    {
+      "gate": "test-quality",
+      "verdict": "proven",
+      "reviewer": "review-test-quality",
+      "judge": "judge",
+      "findings": [],
+      "tokens": 48252,
+      "at": "2026-11-08T19:03:07.635Z",
+      "fingerprint": "sha256:75fe6078ed203ac25764899f7e205fd429e06dbec8d69af36df117e53d04e400"
+    }
+  ]
+}

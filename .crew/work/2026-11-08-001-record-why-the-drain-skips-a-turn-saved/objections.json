@@ -1,0 +1,11 @@
+{
+  "objections": [
+    {
+      "id": "O-1",
+      "raisedBy": "gap-round",
+      "severity": "advisory",
+      "text": "last_error is a misleading name for a skip reason; documented at the write site and in the status line",
+      "raisedAt": "2026-11-08T18:46:29.691Z"
+    }
+  ]
+}

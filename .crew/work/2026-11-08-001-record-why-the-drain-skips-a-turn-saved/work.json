@@ -1,0 +1,200 @@
+{
+  "id": "2026-11-08-001-record-why-the-drain-skips-a-turn-saved",
+  "title": "Record why the drain skips a turn (saved, empty, not-worth, no-title) in turns.l",
+  "input": "Record why the drain skips a turn (saved, empty, not-worth, no-title) in turns.last_error, count skips per reason in the drain report and in status, so a loss of knowledge after the memory-quality release is visible (docs/real-use/findings.md, row 11)",
+  "type": "feature",
+  "route": "standard",
+  "routeReasons": [
+    "feature, scope level 2, clear request"
+  ],
+  "riskAreas": [],
+  "phase": "learn",
+  "awaiting": "role",
+  "criteria": [
+    {
+      "id": "AC-1",
+      "kind": "behavior",
+      "text": "A turn the drain skips keeps its reason in last_error: skip:saved when the agent saved a memory, skip:empty when no sentence is left after the filter, skip:not-worth when the verdict is below SAVE_THRESHOLD or kind none, skip:no-title when no sentence reaches KNOWLEDGE_THRESHOLD; a done turn has none"
+    },
+    {
+      "id": "AC-2",
+      "kind": "behavior",
+      "text": "drainQueue's report counts skipped turns per reason (skippedBy) and the distill command prints them"
+    },
+    {
+      "id": "AC-3",
+      "kind": "behavior",
+      "text": "status shows the project's skipped turns per reason; a skipped turn with no reason (from before this change) counts as unknown"
+    }
+  ],
+  "approvals": [],
+  "skips": [],
+  "baseCommit": "cb21ee85241c94b48901af197fccb1c6a001d8b7",
+  "createdAt": "2026-11-08T18:45:34.150Z",
+  "updatedAt": "2026-11-08T19:03:47.426Z",
+  "kind": "feature",
+  "kindFrom": "work_type feature",
+  "knowledge": {
+    "readAt": "2026-11-08T18:45:34.163Z",
+    "listed": [
+      "K-316",
+      "K-311"
+    ]
+  },
+  "priority": "normal",
+  "seats": [
+    {
+      "role": "researcher",
+      "team": "researchers",
+      "kind": "debate",
+      "reason": "standard route"
+    },
+    {
+      "role": "review-code-quality",
+      "team": "backend",
+      "kind": "gate",
+      "gate": "code-quality",
+      "reason": "standard route"
+    },
+    {
+      "role": "review-test-quality",
+      "team": "qa",
+      "kind": "gate",
+      "gate": "test-quality",
+      "reason": "standard route"
+    },
+    {
+      "role": "lead-qa",
+      "team": "qa",
+      "kind": "lead",
+      "reason": "standard route"
+    },
+    {
+      "role": "lead-security",
+      "team": "security",
+      "kind": "lead",
+      "reason": "standard route"
+    },
+    {
+      "role": "judge",
+      "team": null,
+      "kind": "debate",
+      "reason": "a gate is planned"
+    }
+  ],
+  "primaryTeam": "backend",
+  "runtimes": [
+    "claude"
+  ],
+  "phaseAt": {
+    "understand": "2026-11-08T18:45:48.211Z",
+    "specify": "2026-11-08T18:45:48.327Z",
+    "conclave": "2026-11-08T18:45:54.023Z",
+    "plan": "2026-11-08T18:47:18.432Z",
+    "build": "2026-11-08T18:47:25.523Z",
+    "gate": "2026-11-08T18:53:20.297Z",
+    "deliver": "2026-11-08T19:03:47.071Z",
+    "learn": "2026-11-08T19:03:47.280Z"
+  },
+  "knowledgeFiles": [],
+  "knowledgeLabels": [],
+  "checklists": [
+    {
+      "kind": "none",
+      "paths": [],
+      "reason": "A per-turn reason code written by the background drain and counted in CLI output: no endpoint, auth, payment, upload, migration, sync, link, deletion, merge or screen",
+      "at": "2026-11-08T18:46:23.877Z"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "D-1",
+      "question": "Where is the skip reason stored?",
+      "default": "In turns.last_error, no migration",
+      "answer": "In turns.last_error (the author chose 'Na coluna last_error'), no migration",
+      "at": "2026-11-08T18:46:29.634Z",
+      "by": "user",
+      "relayed": true
+    }
+  ],
+  "validations": [
+    {
+      "what": "spec",
+      "by": "lead-qa",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-qa.md",
+      "hash": "sha256:15ace898c86dd8df2752d33c5fd43dfba08738fc2d65f67c7f6a2889eff80dc7",
+      "fileHash": "sha256:8ccae87650ae56561bbaaf060d54ceb62fe1548d648656823fe4184d0c80be8a",
+      "at": "2026-11-08T18:47:18.257Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-security",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-security.md",
+      "hash": "sha256:15ace898c86dd8df2752d33c5fd43dfba08738fc2d65f67c7f6a2889eff80dc7",
+      "fileHash": "sha256:785937350d0f20a560a7890e77aa13f23443024212cece6c0945edac28f55c1a",
+      "at": "2026-11-08T18:47:18.312Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-security",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-security.delivery.md",
+      "hash": "sha256:75fe6078ed203ac25764899f7e205fd429e06dbec8d69af36df117e53d04e400",
+      "fileHash": "sha256:734ce3b5ef8c75f477f0a30aa8575f446511d8f1eb2f226a70579382a2601434",
+      "at": "2026-11-08T19:03:38.820Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-qa",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-qa.delivery.md",
+      "hash": "sha256:75fe6078ed203ac25764899f7e205fd429e06dbec8d69af36df117e53d04e400",
+      "fileHash": "sha256:af6ef0dee443790c50e4bc7221e8e703171601f3116c29f4741a28b9cac10ef8",
+      "at": "2026-11-08T19:03:46.965Z"
+    }
+  ],
+  "rounds": {
+    "judgement": 2,
+    "validation": 1,
+    "judgementCode": "sha256:75fe6078ed203ac25764899f7e205fd429e06dbec8d69af36df117e53d04e400"
+  },
+  "pauses": [
+    {
+      "at": "2026-11-08T18:55:59.533Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-08T18:56:31.627Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-08T19:01:02.847Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-08T19:01:21.540Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    }
+  ],
+  "learned": {
+    "at": "2026-11-08T19:03:47.426Z",
+    "entries": [
+      "K-319"
+    ],
+    "confirmed": []
+  }
+}
