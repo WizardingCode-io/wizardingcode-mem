@@ -9,7 +9,7 @@ export const SAVE_THRESHOLD = 0.5;
  * that it is knowledge on its own reaches this. A turn with no such sentence yields no
  * memory, whatever `worthSaving` said: the title must be knowledge.
  */
-export const KNOWLEDGE_THRESHOLD = 0.5;
+export const KNOWLEDGE_THRESHOLD = 0.45;
 
 /** The `Context:` line (the prompt the answer replied to) is added only when the prompt has at least this many words: "aprovo" gives the reader nothing. */
 export const CONTEXT_MIN_WORDS = 5;

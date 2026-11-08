@@ -60,7 +60,7 @@ describe("buildDraft: the title must be knowledge", () => {
       buildDraft(
         "",
         cands,
-        verdict({ worthSaving: 0.95, durable: [0.4, 0.45, 0.1], titleIdx: 0 }),
+        verdict({ worthSaving: 0.95, durable: [0.4, 0.44, 0.1], titleIdx: 0 }),
         detail,
       ),
     ).toBeNull();

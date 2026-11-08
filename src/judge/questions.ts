@@ -94,7 +94,7 @@ const KIND_CRITERIA: Record<MemoryKind | "none", string> = {
   change:
     "What is now true of the code's behaviour, structure or interfaces, stated as the new state. Not that something was done, committed, merged, closed or delivered.",
   discovery: "A fact learned about how the existing system works or is configured.",
-  none: "A record of what happened in the session, a status, a plan, a question, small talk, or nothing lasting.",
+  none: "No sentence holds knowledge: only a record of what happened in the session, a status, a plan, a question or small talk.",
 };
 
 /** The JSON state the questions refer to by path; version 2 adds `reader`. */
@@ -114,7 +114,8 @@ export function distillQuestions(input: DistillInput): Record<string, Question> 
     },
     kind: {
       type: "choice",
-      instructions: "What kind of knowledge does this turn mainly contain, for `reader`?",
+      instructions:
+        "Of the knowledge this turn contains for `reader`, which kind is the most useful? A report of the session that holds one such sentence is classified by that sentence.",
       criteria: KIND_CRITERIA,
     },
     importance: {
