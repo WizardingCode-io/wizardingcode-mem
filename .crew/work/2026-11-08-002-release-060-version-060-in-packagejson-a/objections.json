@@ -1,0 +1,17 @@
+{
+  "objections": [
+    {
+      "id": "O-1",
+      "raisedBy": "gap-round",
+      "severity": "blocking",
+      "text": "The deps gate finds 4 high advisories in plugins/opencode's tree (zod 4.1.8 pinned by @opencode-ai/plugin 1.19.5; toml 4.3.0 via effect ^4.1.1): no fix within the dependents' ranges",
+      "raisedAt": "2026-11-08T20:22:23.028Z",
+      "waived": {
+        "reason": "The author chose option 1 ('força'): accept the 4 advisories for 0.6.0. They come from @opencode-ai/plugin's own pins, nobody can fix them without a new release of that package, the plugin's inputs are local (the agent's tool arguments), the code never calls toml.parse, and the same tree shipped in 0.5.0. Re-audit when OpenCode publishes a new plugin package (docs/real-use/findings.md).",
+        "at": "2026-11-08T20:22:40.681Z",
+        "by": "user",
+        "relayed": true
+      }
+    }
+  ]
+}
