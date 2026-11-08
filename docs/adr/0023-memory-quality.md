@@ -77,23 +77,12 @@ Thresholds: `SAVE_THRESHOLD` 0.50, `KNOWLEDGE_THRESHOLD` 0.45. A real turn of th
 - triples the titles that hold the knowledge (20% → 61%);
 - makes importance discriminate (82% → 19% at 4 or 5).
 
-About a third of the 37 memories counted as records hold a fact the labeller of B marked `record`: 2609 (a stale route cache keeps serving three mounts without auth), 2475, 4067, 8590, 7140 and 1625. B's labels were not corrected after the measure, since B is never used to tune.
+About a third of the 37 memories counted as records hold a pitfall or a cause the labeller of B marked `record` (turns 2609, 2475, 4067, 8590, 7140 and 1625). B's labels were not corrected after the measure, since B is never used to tune.
 
-The eleven turns of B that version 2 lost and version 1 kept, by what they hold:
+The eleven turns of B that version 2 lost and version 1 kept, by what they hold (the turns' content stays in the author's store and the never-committed `full.md`):
 
-- 7270: a dependency advisory that keeps a gate red.
-- 2262: a song's working method.
-- 7335: a rollback breaks the links already sent.
-- 8789: the golden answers must be recorded again.
-- 3742: the dev server's hot reload.
-- 2070: a merged tree green, and a fixed test.
-- 2581: nothing pushed, by a rule.
-- 8534: a route raised to full mid-item.
-- 4384: Codex used only for review.
-- 8438: no dark mode; deploy later.
-- 3995: connectors read-only because a SQL guard rejects writes.
-
-Most are a fact inside a report of a session; 2581, 8438 and 4384 hold a rule or a preference of the author.
+- A fact inside a report of a session (8): turns 7270, 2262, 7335, 8789, 3742, 2070, 8534 and 3995.
+- A rule or a preference of the author (3): turns 2581, 4384 and 8438.
 
 ### The filter
 
