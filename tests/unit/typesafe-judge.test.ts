@@ -178,6 +178,12 @@ function recorded(
 }
 
 describe("TypeSafeJudge", () => {
+  test("is version 2: the stamp distilled memories carry as judge_version (ADR 0023)", () => {
+    const judge = new TypeSafeJudge({ apiKey: KEY });
+    expect(judge.version).toBe("2");
+    expect(judge.versions).toEqual({ typesafe: "2" });
+  });
+
   test("asks one request per turn and maps the answers to a verdict", async () => {
     const { fetchFn, calls } = recorded(distillAnswers);
     const usage: number[] = [];

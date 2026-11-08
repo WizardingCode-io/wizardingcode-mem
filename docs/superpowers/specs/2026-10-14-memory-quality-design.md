@@ -42,7 +42,7 @@ Goals, for memories distilled from now on, measured by the proof on labelled sam
 - A turn that is only a record of the session stores nothing.
 - On the samples, version 2 loses no knowledge that version 1 kept.
 
-Non-goals: cleaning the memories already stored (D-1); the imported memories (D-2); retrieval, the brief (what the mem injects at session start) and the prompt notes; generating text.
+Non-goals: cleaning the memories already stored (D-1); the imported memories (D-2); retrieval, the brief (what the mem injects at session start) and the prompt notes; generating text; `memory_save`, which stays the agent's high-quality route and is not touched.
 
 ## 3. Decisions
 

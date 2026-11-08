@@ -147,10 +147,13 @@ function serveValid(): string {
     fetch: async (request) => {
       const body = (await request.json()) as {
         questions: Record<string, { type: string; criteria?: unknown }>;
+        state?: unknown;
       };
       const answers: Record<string, unknown> = {};
       for (const [id, question] of Object.entries(body.questions)) {
-        if (question.type === "noul") answers[id] = { type: "noul", noul: 0.9 };
+        // The rounding turn is judged not worth saving: version 2 loses it, version 1 kept it.
+        const loses = id === "worth" && JSON.stringify(body.state).includes("rounded");
+        if (question.type === "noul") answers[id] = { type: "noul", noul: loses ? 0.1 : 0.9 };
         else if (question.type === "score")
           answers[id] = { type: "score", score: 3, legend: {}, probabilities: {}, confidence: 1 };
         else {
@@ -240,26 +243,28 @@ describe("the memory quality proof", () => {
     // stored memory), TypeSafe v2, heuristic v1, heuristic v2.
     expect(rowOf(report, "Title is knowledge")).toEqual([
       "0 of 1 (0%)",
-      "1 of 1 (100%)",
+      "n/a",
       "1 of 1 (100%)",
       "1 of 1 (100%)",
     ]);
     expect(rowOf(report, "Lost, of knowledge and mixed turns")).toEqual([
       "0 of 1 (0%)",
-      "0 of 1 (0%)",
+      "1 of 1 (100%)",
       "0 of 1 (0%)",
       "0 of 1 (0%)",
     ]);
     expect(rowOf(report, "Stored from record or fragment")).toEqual([
       "0 of 1 (0%)",
-      "1 of 2 (50%)",
+      "1 of 1 (100%)",
       "0 of 1 (0%)",
       "0 of 1 (0%)",
     ]);
-    expect(rowOf(report, "Memories stored")).toEqual(["2", "3", "2", "2"]);
+    expect(rowOf(report, "Memories stored")).toEqual(["2", "2", "2", "2"]);
+    expect(report).toContain("TypeSafe v2 lost turns that v1 kept (target 0): 1; lost by both: 0.");
+    expect(report).toContain("Heuristic, lost (D-6, v2 ≤ v1): v2 0, v1 0.");
     expect(rowOf(report, "Title-only")).toEqual([
       "0 of 2 (0%)",
-      "0 of 3 (0%)",
+      "0 of 2 (0%)",
       "2 of 2 (100%)",
       "2 of 2 (100%)",
     ]);
