@@ -17,6 +17,14 @@ The question: would a developer who joins this project a month from now, and nev
 
 Events, states and verdicts are not knowledge, however important they were on the day. In doubt between `knowledge` and `record`, ask whether the stranger would act differently.
 
+Three kinds of sentence are never knowledge, even when they name code, a file or a behaviour:
+
+- **What the change did, readable in its diff or commit**: "the old guard was removed", "it now opens read-only", "added a test for X". The stranger reads the code as it is; a sentence that only tells them what this session changed adds nothing. It is knowledge only when it says why, or a pitfall the code does not show ("opened read-only because indexing holds the write lock").
+- **The state, plan or next steps of this session's task**: what is running, saved, waiting, decided for now, still to do ("the four reviews are saved", "decide whether the Klarna wave goes up").
+- **The user's request for this task**: an order for the work at hand ("make it scroll to the bottom"). A request is knowledge only when it states a standing rule or preference ("always…", "never…", "from now on…").
+
+A turn is `mixed` only when at least one of its candidates is knowledge by this test; a report of a session with no such candidate is `record`, however long or technical it is.
+
 For every `knowledge` and every `mixed` turn, list in `quotes` the `id` of every candidate that holds knowledge on its own. Use the candidates' ids, never your own wording: a `knowledge` or `mixed` label without an id of that turn's candidates is refused.
 
 Write a JSON array to the labels file: `[{"turn": 123, "label": "knowledge|mixed|record|fragment", "why": "at most twelve words", "quotes": [4, 7]}]`, one entry per turn, in the sample's order. Then reply with the counts per label, and six examples per label (the first candidate of the turn's answer, cut at 90 characters).
