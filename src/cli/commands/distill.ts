@@ -1,5 +1,6 @@
 import { ADAPTERS } from "../../adapters/index.ts";
 import { drainQueue } from "../../distill/queue.ts";
+import { skippedText } from "../../distill/skips.ts";
 import { healLine, healVectors } from "../../embed/backfill.ts";
 import { loadModel } from "../../embed/model.ts";
 import { makeJudge } from "../../judge/index.ts";
@@ -34,7 +35,7 @@ export async function run(): Promise<number> {
       { owner: `${process.pid}-${crypto.randomUUID()}`, maxTurns: MAX_TURNS, maxMs: MAX_MS },
     );
     process.stdout.write(
-      `distill: ${report.claimed} claimed, ${report.done} done, ${report.skipped} skipped, ${report.failed} failed\n`,
+      `distill: ${report.claimed} claimed, ${report.done} done, ${skippedText(report.skipped, report.skippedBy)}, ${report.failed} failed\n`,
     );
     // Memories written without the model (imports, edits while it was off, a download that
     // came later) get their vector here, a bounded pass at a time: nobody has to run a backfill.

@@ -75,6 +75,31 @@ describe("wizardingcode-mem distill", () => {
     expect(rows("SELECT state FROM turns")).toEqual([{ state: "done" }]);
   });
 
+  test("says why the turns it skipped were skipped", async () => {
+    const common = { session_id: "s1", cwd: project, prompt_id: "t1" };
+    await runCliWith(
+      { input: JSON.stringify({ ...common, prompt: "thanks!" }), env: env("off") },
+      "hook",
+      "claude-code",
+      "prompt",
+    );
+    await runCliWith(
+      {
+        input: JSON.stringify({
+          ...common,
+          last_assistant_message: "Glad that sorted it out for you.",
+        }),
+        env: env("off"),
+      },
+      "hook",
+      "claude-code",
+      "turn-end",
+    );
+    expect((await runCliWith({ env: env("off") }, "distill")).stdout).toBe(
+      "distill: 1 claimed, 0 done, 1 skipped (not-worth 1), 0 failed\n",
+    );
+  });
+
   test("with nothing queued it does nothing, successfully", async () => {
     openDb({ dataDir, busyTimeoutMs: 2000 }).close();
     expect((await runCliWith({ env: env("off") }, "distill")).stdout).toBe(

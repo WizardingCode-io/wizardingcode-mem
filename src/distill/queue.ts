@@ -4,6 +4,7 @@ import { type Db, withWrite } from "../store/db.ts";
 import { claimDrain, releaseDrain } from "../store/meta.ts";
 import { clip } from "../util/text.ts";
 import { type DistillDeps, distillTurn, type QueuedTurn } from "./pipeline.ts";
+import { noneSkipped, SKIPPED_KEY, type SkippedBy } from "./skips.ts";
 
 export type { DistillDeps } from "./pipeline.ts";
 
@@ -19,6 +20,8 @@ export interface DrainReport {
   claimed: number;
   done: number;
   skipped: number;
+  /** The skipped turns by why they were skipped (`SkipReason`). */
+  skippedBy: SkippedBy;
   failed: number;
 }
 
@@ -105,7 +108,14 @@ export async function drainQueue(
   options: { owner: string; maxTurns: number; maxMs: number },
 ): Promise<DrainReport> {
   const { db } = deps;
-  const report: DrainReport = { held: false, claimed: 0, done: 0, skipped: 0, failed: 0 };
+  const report: DrainReport = {
+    held: false,
+    claimed: 0,
+    done: 0,
+    skipped: 0,
+    skippedBy: noneSkipped(),
+    failed: 0,
+  };
   if (!claimDrain(db, options.owner, deps.now(), DRAIN_LEASE_MS)) return { ...report, held: true };
 
   const started = performance.now();
@@ -118,7 +128,12 @@ export async function drainQueue(
       projects.add(turn.projectId);
       claimDrain(db, options.owner, deps.now(), DRAIN_LEASE_MS);
       try {
-        report[await distillTurn(deps, turn)]++;
+        const outcome = await distillTurn(deps, turn);
+        if (outcome === "done") report.done++;
+        else {
+          report.skipped++;
+          report.skippedBy[SKIPPED_KEY[outcome]]++;
+        }
       } catch (error) {
         if (releaseTurn(db, turn, error) === "failed") report.failed++;
       }

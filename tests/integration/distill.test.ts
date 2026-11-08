@@ -95,6 +95,15 @@ const turnStates = () =>
     .all()
     .map((row) => row.state);
 
+/** A drain report with no skipped turn, by reason. */
+const NONE = { saved: 0, empty: 0, notWorth: 0, noTitle: 0 };
+const reasons = () =>
+  db
+    .query<{ state: string; reason: string | null }, []>(
+      "SELECT state, last_error AS reason FROM turns ORDER BY id",
+    )
+    .all();
+
 const FIX =
   "Fixed: the root cause was the busy timeout being set after the first query. Moved the pragma to the top of `openDb` in src/store/db.ts.";
 
@@ -113,7 +122,14 @@ describe("distill: from a queued turn to a memory", () => {
 
   test("a turn worth keeping becomes one memory", async () => {
     turn("the tests fail with a timeout", FIX);
-    expect(await drain()).toEqual({ held: false, claimed: 1, done: 1, skipped: 0, failed: 0 });
+    expect(await drain()).toEqual({
+      held: false,
+      claimed: 1,
+      done: 1,
+      skipped: 0,
+      failed: 0,
+      skippedBy: NONE,
+    });
     expect(memories()).toEqual([
       {
         id: 1,
@@ -170,7 +186,14 @@ describe("distill: from a queued turn to a memory", () => {
 
   test("a turn not worth keeping is skipped", async () => {
     turn("thanks!", "You're welcome! Let me know if you need anything else.");
-    expect(await drain()).toEqual({ held: false, claimed: 1, done: 0, skipped: 1, failed: 0 });
+    expect(await drain()).toEqual({
+      held: false,
+      claimed: 1,
+      done: 0,
+      skipped: 1,
+      failed: 0,
+      skippedBy: { ...NONE, notWorth: 1 },
+    });
     expect(memories()).toEqual([]);
     expect(turnStates()).toEqual(["skipped"]);
   });
@@ -393,7 +416,14 @@ describe("distill: the queue", () => {
     // One run retries until the attempts run out, so fail exactly once per run.
     const judge = throwing(1);
     const first = await drainQueue(deps(judge), { owner: "a", maxTurns: 1, maxMs: 10_000 });
-    expect(first).toEqual({ held: false, claimed: 1, done: 0, skipped: 0, failed: 0 });
+    expect(first).toEqual({
+      held: false,
+      claimed: 1,
+      done: 0,
+      skipped: 0,
+      failed: 0,
+      skippedBy: NONE,
+    });
     expect(turnStates()).toEqual(["pending"]);
     expect(memories()).toEqual([]);
 
@@ -405,7 +435,14 @@ describe("distill: the queue", () => {
   test("a turn that keeps failing is given up on after three attempts, with the reason kept", async () => {
     turn("the tests fail with a timeout", FIX);
     const report = await drain(throwing(99));
-    expect(report).toEqual({ held: false, claimed: 3, done: 0, skipped: 0, failed: 1 });
+    expect(report).toEqual({
+      held: false,
+      claimed: 3,
+      done: 0,
+      skipped: 0,
+      failed: 1,
+      skippedBy: NONE,
+    });
     expect(db.query("SELECT state, attempts, last_error FROM turns").all()).toEqual([
       { state: "failed", attempts: 3, last_error: "Error: judge unavailable" },
     ]);
@@ -451,7 +488,14 @@ describe("distill: the queue", () => {
     db.run("INSERT INTO meta (key, value) VALUES ('drain.lease', ?)", [
       JSON.stringify({ owner: "someone-else", until: clock + 60_000 }),
     ]);
-    expect(await drain()).toEqual({ held: true, claimed: 0, done: 0, skipped: 0, failed: 0 });
+    expect(await drain()).toEqual({
+      held: true,
+      claimed: 0,
+      done: 0,
+      skipped: 0,
+      failed: 0,
+      skippedBy: NONE,
+    });
     expect(turnStates()).toEqual(["pending"]);
 
     clock += 120_000;
@@ -519,7 +563,14 @@ describe("distill: what must not become a memory", () => {
       '<agent-message from="a1">\nNever mock the database in these tests. Always use a real SQLite file.\n</agent-message>',
       "Understood.",
     );
-    expect(await drain()).toEqual({ held: false, claimed: 1, done: 0, skipped: 1, failed: 0 });
+    expect(await drain()).toEqual({
+      held: false,
+      claimed: 1,
+      done: 0,
+      skipped: 1,
+      failed: 0,
+      skippedBy: { ...NONE, empty: 1 },
+    });
     expect(memories()).toEqual([]);
   });
 
@@ -645,6 +696,12 @@ describe("distill: what must not become a memory", () => {
     await drain();
     expect(memories()).toEqual([]);
     expect(turnStates()).toEqual(["skipped"]);
+  });
+
+  test("a turn the agent saved itself is skipped with the reason saved", async () => {
+    savingTurn({ content: "Saved as #1." });
+    expect((await drain()).skippedBy).toEqual({ ...NONE, saved: 1 });
+    expect(reasons()).toEqual([{ state: "skipped", reason: "skip:saved" }]);
   });
 
   test("if that save failed, the turn is distilled after all", async () => {
@@ -879,7 +936,14 @@ That "other Claude session" is an agent working inside this same session.`,
         throw new Error("the judge must not be asked");
       },
     };
-    expect(await drain(judge)).toEqual({ held: false, claimed: 1, done: 0, skipped: 1, failed: 0 });
+    expect(await drain(judge)).toEqual({
+      held: false,
+      claimed: 1,
+      done: 0,
+      skipped: 1,
+      failed: 0,
+      skippedBy: { ...NONE, empty: 1 },
+    });
     expect(memories()).toEqual([]);
     expect(turnStates()).toEqual(["skipped"]);
   });
@@ -1022,5 +1086,75 @@ describe("distill: the notes the session had been shown", () => {
     await drain();
     expect(memories()).toHaveLength(1);
     expect(memories()[0]?.evidence_count).toBe(1);
+  });
+});
+
+describe("distill: why a turn was skipped", () => {
+  const HAND_BACK = `Another Claude session sent a message:
+<agent-message from="a1">
+[Subagent hand-back] The report follows:
+  Reviewed 4 tasks; all criteria met.
+</agent-message>
+That "other Claude session" is an agent working inside this same session.`;
+  /** Like `judging`, but a turn whose prompt says thanks is not worth keeping. */
+  const byPrompt = (): Judge => {
+    const inner = judging({ [CAUSE]: 0.9 }, CAUSE);
+    return {
+      ...inner,
+      distill: async (input) => {
+        const verdict = await inner.distill(input);
+        return input.prompt.includes("thanks") ? { ...verdict, worthSaving: 0.2 } : verdict;
+      },
+    };
+  };
+
+  test("a turn the filter empties is skipped with the reason empty", async () => {
+    turn("ok", HAND_BACK);
+    await drain();
+    expect(reasons()).toEqual([{ state: "skipped", reason: "skip:empty" }]);
+  });
+
+  test("a turn the judge finds not worth keeping is skipped with the reason not-worth", async () => {
+    turn("thanks for that", CAUSE);
+    await drain(byPrompt());
+    expect(reasons()).toEqual([{ state: "skipped", reason: "skip:not-worth" }]);
+  });
+
+  test("a verdict of kind none is not-worth too", async () => {
+    turn("why does the hook hang?", CAUSE);
+    const inner = judging({ [CAUSE]: 0.9 }, CAUSE);
+    await drain({
+      ...inner,
+      distill: async (input) => ({ ...(await inner.distill(input)), kind: "none" }),
+    });
+    expect(reasons()).toEqual([{ state: "skipped", reason: "skip:not-worth" }]);
+  });
+
+  test("a turn with no knowledge sentence for a title is skipped with the reason no-title", async () => {
+    turn("why is it slow?", "The run took a while, and it is finished now.");
+    await drain(judging({}, null));
+    expect(reasons()).toEqual([{ state: "skipped", reason: "skip:no-title" }]);
+  });
+
+  test("a distilled turn has no reason, even after an earlier failure", async () => {
+    turn("why does the hook hang?", CAUSE);
+    db.run("UPDATE turns SET last_error = 'Error: the judge timed out'");
+    await drain(judging({ [CAUSE]: 0.9 }, CAUSE));
+    expect(reasons()).toEqual([{ state: "done", reason: null }]);
+  });
+
+  test("the drain report counts the skipped turns by reason", async () => {
+    turn("why does the hook hang?", CAUSE);
+    turn("why is it slow?", "The run took a while, and it is finished now.");
+    turn("thanks for that", CAUSE);
+    turn("ok", HAND_BACK);
+    expect(await drain(byPrompt())).toEqual({
+      held: false,
+      claimed: 4,
+      done: 1,
+      skipped: 3,
+      failed: 0,
+      skippedBy: { saved: 0, empty: 1, notWorth: 1, noTitle: 1 },
+    });
   });
 });
