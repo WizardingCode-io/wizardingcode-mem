@@ -24,6 +24,8 @@
 # the browser are off. The semantic model is not used: nothing is consolidated or written.
 
 set -euo pipefail
+# The copy, the samples, the labels and the reports hold the author's own text: owner only.
+umask 077
 
 usage() {
   echo "usage: scripts/proof/quality.sh <work dir> sample [--size n] [--skipped n] [--seed n] [--projects a,b] [--exclude-projects c,d] | measure --a <labels> [--b <labels>] [--s <labels>]" >&2

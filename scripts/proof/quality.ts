@@ -25,7 +25,6 @@
 import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { isFromTheHost } from "../../src/core/host-prompt.ts";
 import type { Redacted } from "../../src/core/redact.ts";
 import { stripHost } from "../../src/distill/noise.ts";
 import {
@@ -34,6 +33,7 @@ import {
   prepareTurn,
   storedDetail,
   toldInSession,
+  unfilteredTexts,
 } from "../../src/distill/pipeline.ts";
 import { TITLE_MAX_CHARS } from "../../src/distill/policy.ts";
 import { candidates } from "../../src/distill/segment.ts";
@@ -42,7 +42,6 @@ import { readTypeSafeKey } from "../../src/judge/key.ts";
 import { distillQuestions, distillState } from "../../src/judge/questions.ts";
 import type { DistillVerdict, Judge } from "../../src/judge/types.ts";
 import { TypeSafeJudge } from "../../src/judge/typesafe.ts";
-import { withoutNotes } from "../../src/retrieve/render.ts";
 import { DB_FILE, type Db, openDb } from "../../src/store/db.ts";
 import { resolvePaths } from "../../src/util/paths.ts";
 import { clip } from "../../src/util/text.ts";
@@ -196,10 +195,8 @@ function prepared(row: Row): PreparedTurn {
  */
 function unfiltered(row: Row): { prompt: string; final: string } {
   const told = toldInSession(db, row.turn, row.sessionId, row.endedAt);
-  return {
-    prompt: isFromTheHost(row.prompt) ? "" : withoutNotes(row.prompt, told),
-    final: withoutNotes(row.final, told),
-  };
+  const texts = unfilteredTexts(row.prompt, row.final, told);
+  return { prompt: texts.prompt, final: texts.finalText };
 }
 
 function itemOf(row: Row): Item {

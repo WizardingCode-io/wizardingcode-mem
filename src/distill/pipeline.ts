@@ -198,6 +198,23 @@ export interface PreparedTexts {
 }
 
 /**
+ * The first step of `prepareTexts`: the notes the session had been shown removed, the
+ * host's blocks still in. A host notification is not the user speaking: no rule comes
+ * from it, and it gives the answer no context, so its prompt is empty. Exported so that
+ * the quality proof shows the labeller exactly the texts the filter starts from.
+ */
+export function unfilteredTexts(
+  prompt: string,
+  finalText: string | null,
+  told: string[],
+): { prompt: string; finalText: string } {
+  return {
+    prompt: isFromTheHost(prompt) ? "" : withoutNotes(prompt, told),
+    finalText: withoutNotes(finalText ?? "", told),
+  };
+}
+
+/**
  * A turn's texts as a judge sees them, and the sentences it rates: the notes the session
  * had been shown (`told`) and the host's blocks are removed, the texts are segmented, the
  * noise filter runs, and the sentences it dropped are taken out of the texts too, so that
@@ -209,10 +226,9 @@ export function prepareTexts(
   finalText: Redacted | null,
   told: string[],
 ): PreparedTexts {
-  // A host notification is not the user speaking: no rule comes from it, and it gives
-  // the answer no context.
-  const asked = isFromTheHost(prompt) ? "" : stripHost(withoutNotes(prompt, told));
-  const answer = stripHost(withoutNotes(finalText ?? "", told));
+  const before = unfilteredTexts(prompt, finalText, told);
+  const asked = stripHost(before.prompt);
+  const answer = stripHost(before.finalText);
   const segmented = candidates(asked, answer).map((candidate) => ({
     ...candidate,
     text: candidate.text as Redacted,

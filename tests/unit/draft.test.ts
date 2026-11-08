@@ -66,6 +66,14 @@ describe("buildDraft: the title must be knowledge", () => {
     ).toBeNull();
   });
 
+  test("a sentence rated exactly at the calibrated threshold, 0.45, is knowledge; just under it is not", () => {
+    const at = buildDraft("", cands, verdict({ durable: [0.1, 0.45, 0.1], titleIdx: 1 }), detail);
+    expect(at?.title).toBe(cands[1]?.text);
+    expect(
+      buildDraft("", cands, verdict({ durable: [0.1, 0.449, 0.1], titleIdx: 1 }), detail),
+    ).toBeNull();
+  });
+
   test("facts are the knowledge sentences, at most five, in writing order, without the title", () => {
     const many = Array.from({ length: 8 }, (_, i) =>
       cand(i, `Fact number ${i} about src/f${i}.ts.`),

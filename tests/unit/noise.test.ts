@@ -104,8 +104,8 @@ describe("dropNoise: sentences that are never knowledge", () => {
 
   test("bracketed protocol tags reach the judge (D-3)", () => {
     for (const text of [
-      "[arka:gate:4] W3b selada 41585f989 · memória fechada",
-      "[arka:routing] next wave goes to the backend crew",
+      "[crm:gate:4] W3b selada 1a2b3c4d5 · memória fechada",
+      "[crm:routing] next wave goes to the backend crew",
       "[x] the migration must run before the seed",
       "[en] strings live in locales/en.json",
       "[2024] was the year the API moved to v2",

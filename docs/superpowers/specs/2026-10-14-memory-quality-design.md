@@ -163,7 +163,7 @@ Instructions: "Which candidate, read by `reader` on its own, best states the kno
 
 ### `kind` (choice)
 
-Instructions: "What kind of knowledge does this turn mainly contain, for `reader`?" Each criterion says what it is and what it is not:
+Instructions: "Of the knowledge this turn contains for `reader`, which kind is the most useful? A report of the session that holds one such sentence is classified by that sentence." (the first wording, "What kind of knowledge does this turn mainly contain", answered `none` for reports that held a knowledge sentence; changed in the calibration on A, ADR 0023). Each criterion says what it is and what it is not:
 
 | Option | Criterion |
 |---|---|
@@ -173,7 +173,7 @@ Instructions: "What kind of knowledge does this turn mainly contain, for `reader
 | convention | A standing rule or preference for how work is done in this project, from the author or the team. Not a step or a plan for this session. |
 | change | What is now true of the code's behaviour, structure or interfaces, stated as the new state. Not that something was done, committed, merged, closed or delivered. |
 | discovery | A fact learned about how the existing system works or is configured. |
-| none | A record of what happened in the session, a status, a plan, a question, small talk, or nothing lasting. |
+| none | No sentence holds knowledge: only a record of what happened in the session, a status, a plan, a question or small talk. |
 
 A turn whose `kind` is `none` stores nothing, as today.
 
@@ -200,7 +200,7 @@ The import rejudge (D-2) asks for the version 1 wording through one new optional
 Starting values, chosen on sample A and checked on sample B (section 11):
 
 - `SAVE_THRESHOLD = 0.5` on `worth`, as today.
-- `KNOWLEDGE_THRESHOLD = 0.5` replaces `DURABLE_THRESHOLD`: a sentence is knowledge when its `knowledge` reaches it.
+- `KNOWLEDGE_THRESHOLD` replaces `DURABLE_THRESHOLD`: a sentence is knowledge when its `knowledge` reaches it. It starts at 0.5; the calibration on A set it to 0.45 (ADR 0023).
 - **The title must be knowledge.** The title is the judge's choice when that candidate's `knowledge` reaches the threshold; otherwise the candidate with the highest `knowledge` that reaches it (the lowest index on a tie); if none does, the turn stores nothing, even when `worth` passed. Today a `worth` pass with one durable sentence is enough, which is how a status line became a memory with nothing under it.
 - The body: the five strongest knowledge sentences (`MAX_FACTS = 5`), in the order written, without the title; then the `Context:` line when it applies.
 - `CONTEXT_MIN_WORDS = 5`.
