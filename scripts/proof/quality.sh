@@ -20,7 +20,9 @@
 #    author chooses (ADR 0023, D-4; see scripts/proof/quality-brief.md).
 #
 # <work dir>/report.md is anonymous. <work dir>/full.md, the samples and the labels hold the
-# author's text: never commit them. Distillation, the viewer's auto-open, the legacy migration and
+# author's text: never commit them. The work dir also holds a full copy of the store, which the
+# mem's forget and compact never reach: once the report is taken, delete it (`rm -rf <work dir>`).
+# The labeller the author chose reads the samples. Distillation, the viewer's auto-open, the legacy migration and
 # the browser are off. The semantic model is not used: nothing is consolidated or written.
 
 set -euo pipefail

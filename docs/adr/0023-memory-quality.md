@@ -18,7 +18,8 @@ A random sample of 200 memories the mem had distilled on the author's store (202
 - **The notes a session was shown are bounded** by the turn's end, and never include the memory made from the same turn, so a turn distilled late keeps its own sentences.
 - **The import rejudge keeps version 1 (D-2)**: one constant gives its wording and its `judge_version = '1'`.
 - **The existing base is not cleaned here (D-1)**: that is a separate item, designed with these numbers in hand.
-- **The proof's labeller is the author's choice (D-4)**; the proof sends nothing to a model but TypeSafe.
+- **The proof's labeller is the author's choice (D-4)**; the proof's scripts send nothing to a model but TypeSafe, and the labeller reads the samples (here, Claude Code subagents). The work dir holds a full copy of the store and is deleted by hand once the report is taken.
+- **The skipped turns are recoverable for 90 days**: a turn version 2 skips keeps its text until `compact` removes it, and only the cleanup item (D-1) would distil it again, so D-1 belongs inside that window.
 - **A token ceiling (D-5)** and **no regression without a key (D-6)**: measured below.
 - **Two targets missed on B are accepted, with the losses named (D-12).**
 - **Nothing else moves**: retrieval, hooks, the brief and the pinned snapshots are byte for byte as before.
