@@ -128,6 +128,8 @@ async function sampleAndLabel(): Promise<string[]> {
         .filter((c) => /cause|because|keyed by/.test(c.text))
         .map((c) => c.id);
       expect(quotes.length).toBeGreaterThan(0);
+      // The skipped turn is labelled a record, so a memory version 2 makes from it is noise.
+      if (name === "s") return { turn: item.turn, label: "record", why: "a status", quotes: [] };
       return { turn: item.turn, label: "mixed", why: "the cause, wrapped in the session", quotes };
     });
     const file = join(base, `labels-${name}.json`);
@@ -152,8 +154,14 @@ function serveValid(): string {
         else if (question.type === "score")
           answers[id] = { type: "score", score: 3, legend: {}, probabilities: {}, confidence: 1 };
         else {
-          const keys = Object.keys(question.criteria as Record<string, string>);
-          const choice = id === "kind" ? "fix" : (keys.find((k) => k !== "none") ?? "none");
+          const criteria = question.criteria as Record<string, string>;
+          const keys = Object.keys(criteria);
+          // The title is the candidate that states the cause, as a judge that reads would pick.
+          const cause = keys.find(
+            (k) => k !== "none" && /cause|because|keyed by/.test(criteria[k] ?? ""),
+          );
+          const choice =
+            id === "kind" ? "fix" : (cause ?? keys.find((k) => k !== "none") ?? "none");
           answers[id] = { type: "choice", choice, probabilities: {}, confidence: 1 };
         }
       }
@@ -228,7 +236,33 @@ describe("the memory quality proof", () => {
     );
     expect(verdicts.length).toBe(3);
     for (const entry of verdicts) expect(entry.verdict.source).toBe("typesafe");
-    expect(rowOf(report, "Memories stored")[1]).toBe("3");
+    // The metrics themselves, computed from the labels and the readings: TypeSafe v1 (the
+    // stored memory), TypeSafe v2, heuristic v1, heuristic v2.
+    expect(rowOf(report, "Title is knowledge")).toEqual([
+      "0 of 1 (0%)",
+      "1 of 1 (100%)",
+      "1 of 1 (100%)",
+      "1 of 1 (100%)",
+    ]);
+    expect(rowOf(report, "Lost, of knowledge and mixed turns")).toEqual([
+      "0 of 1 (0%)",
+      "0 of 1 (0%)",
+      "0 of 1 (0%)",
+      "0 of 1 (0%)",
+    ]);
+    expect(rowOf(report, "Stored from record or fragment")).toEqual([
+      "0 of 1 (0%)",
+      "1 of 2 (50%)",
+      "0 of 1 (0%)",
+      "0 of 1 (0%)",
+    ]);
+    expect(rowOf(report, "Memories stored")).toEqual(["2", "3", "2", "2"]);
+    expect(rowOf(report, "Title-only")).toEqual([
+      "0 of 2 (0%)",
+      "0 of 3 (0%)",
+      "2 of 2 (100%)",
+      "2 of 2 (100%)",
+    ]);
   }, 30_000);
 
   test("when TypeSafe fails, the heuristic never stands in: every turn failed, no v2 memory counted", async () => {
