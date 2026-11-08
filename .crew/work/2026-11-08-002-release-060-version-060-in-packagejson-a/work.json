@@ -1,0 +1,84 @@
+{
+  "id": "2026-11-08-002-release-060-version-060-in-packagejson-a",
+  "title": "Release 0.6.0: version 0.6.0 in package.json and npm/package.json, the generated",
+  "input": "Release 0.6.0: version 0.6.0 in package.json and npm/package.json, the generated plugin files from bun run plugins",
+  "type": "chore",
+  "route": "fast",
+  "routeReasons": [
+    "chore in one spot, clear request, no risk area"
+  ],
+  "riskAreas": [],
+  "phase": "gate",
+  "awaiting": null,
+  "criteria": [
+    {
+      "id": "AC-1",
+      "kind": "preserve",
+      "text": "The suite keeps passing with the version at 0.6.0 (the plugin packaging tests read the version from package.json)"
+    }
+  ],
+  "approvals": [],
+  "skips": [],
+  "baseCommit": "cb21ee85241c94b48901af197fccb1c6a001d8b7",
+  "createdAt": "2026-11-08T19:06:35.290Z",
+  "updatedAt": "2026-11-08T20:23:44.561Z",
+  "sharedCheckout": {
+    "with": [
+      "2026-11-07-001-t-6-of-2026-10-15-001-memory-quality-kno"
+    ],
+    "paths": [
+      ".claude-plugin/plugin.json",
+      "npm/package.json",
+      "package.json",
+      "plugin/wizardingcode-mem.sh",
+      "plugins/codex/.codex-plugin/plugin.json",
+      "plugins/codex/wizardingcode-mem.sh",
+      "plugins/cursor/.cursor-plugin/plugin.json",
+      "plugins/cursor/wizardingcode-mem.sh",
+      "plugins/opencode/binary.js",
+      "plugins/opencode/package.json"
+    ],
+    "at": "2026-11-08T19:06:35.290Z"
+  },
+  "kind": "feature",
+  "kindFrom": "work_type chore",
+  "knowledge": {
+    "readAt": "2026-11-08T19:06:35.301Z",
+    "listed": [
+      "K-319",
+      "K-316",
+      "K-311",
+      "K-201",
+      "K-203",
+      "K-200",
+      "K-199",
+      "K-189",
+      "K-186",
+      "K-176"
+    ]
+  },
+  "priority": "normal",
+  "phaseAt": {
+    "build": "2026-11-08T19:06:35.572Z",
+    "gate": "2026-11-08T19:07:53.541Z"
+  },
+  "runtimes": [
+    "claude"
+  ],
+  "seats": [],
+  "knowledgeFiles": [],
+  "knowledgeLabels": [],
+  "primaryTeam": "backend",
+  "pauses": [
+    {
+      "at": "2026-11-08T19:08:17.489Z",
+      "reason": "gate deps (npm) unavailable: no lockfile",
+      "kind": "user"
+    },
+    {
+      "at": "2026-11-08T19:52:25.714Z",
+      "reason": "gate deps (plugins/opencode) failing",
+      "kind": "user"
+    }
+  ]
+}

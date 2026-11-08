@@ -1,0 +1,335 @@
+{
+  "fingerprint": "sha256:84872700490bf625907013434593d5fd08423df7de6bdd489098ccb808f99b0d",
+  "tdd": [
+    {
+      "criterion": "AC-1",
+      "before": {
+        "command": "./node_modules/.bin/bun test tests/integration/plugins-packaging.test.ts tests/integration/npm-shim.test.ts tests/unit/opencode-plugin.test.ts",
+        "exit": 0,
+        "at": "2026-11-08T19:06:53.737Z",
+        "durationMs": 2133,
+        "log": "logs/tdd-AC-1-before-1794164811603.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\n 16 pass\n 0 fail\n 55 expect() calls\nRan 16 tests across 3 files. [2.12s]",
+        "timedOut": false,
+        "passed": 16
+      },
+      "after": {
+        "command": "./node_modules/.bin/bun test tests/integration/plugins-packaging.test.ts tests/integration/npm-shim.test.ts tests/unit/opencode-plugin.test.ts",
+        "exit": 0,
+        "at": "2026-11-08T19:06:55.125Z",
+        "durationMs": 1315,
+        "log": "logs/tdd-AC-1-after-1794164813809.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\n 16 pass\n 0 fail\n 55 expect() calls\nRan 16 tests across 3 files. [1306.00ms]",
+        "timedOut": false,
+        "passed": 16
+      }
+    }
+  ],
+  "runs": [
+    {
+      "gate": "secrets",
+      "target": ".",
+      "command": "built-in secret scan",
+      "commandSource": null,
+      "confirmed": true,
+      "exit": 0,
+      "status": "pass",
+      "durationMs": 24,
+      "at": "2026-11-08T20:22:40.851Z",
+      "log": null,
+      "tail": "no secrets found in the change",
+      "fingerprint": "sha256:84872700490bf625907013434593d5fd08423df7de6bdd489098ccb808f99b0d"
+    },
+    {
+      "gate": "prose",
+      "target": ".",
+      "command": "built-in prose scan",
+      "commandSource": null,
+      "confirmed": true,
+      "exit": 0,
+      "status": "pass",
+      "durationMs": 25,
+      "at": "2026-11-08T20:22:40.875Z",
+      "log": null,
+      "tail": "no chatbot artefacts in the change",
+      "fingerprint": "sha256:84872700490bf625907013434593d5fd08423df7de6bdd489098ccb808f99b0d"
+    },
+    {
+      "gate": "build",
+      "target": ".",
+      "command": "bun run build",
+      "commandSource": "detected",
+      "confirmed": true,
+      "exit": 0,
+      "status": "pass",
+      "durationMs": 2977,
+      "at": "2026-11-08T20:22:40.900Z",
+      "log": "logs/build-_-1794169360900.txt",
+      "tail": "$ bun run ui:build && bun scripts/build.ts\n$ vite build --config ui/vite.config.ts\nvite v8.3.3 building client environment for production...\ntransforming...\n\n/assets/unbounded-variable.woff2 referenced in /assets/unbounded-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/instrument-sans-variable.woff2 referenced in /assets/instrument-sans-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/jetbrains-mono-variable.woff2 referenced in /assets/jetbrains-mono-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n✓ 834 modules transformed.\nrendering chunks...\n[plugin vite:singlefile] \n\n[plugin vite:singlefile] Inlining: index-PUhkQFrm.js\n[plugin vite:singlefile] Inlining: style-ODM7JwkH.css\nsrc/ui/dist/index.html  1,109.41 kB\n\n✓ built in 697ms\n✓ wizardingcode-mem-darwin-arm64  66.2 MB\n✓ wizardingcode-mem-darwin-x64  72.9 MB\n✓ wizardingcode-mem-linux-x64  84.3 MB\n✓ wizardingcode-mem-linux-arm64  84.3 MB\n✓ wizardingcode-mem-windows-x64.exe  88.9 MB",
+      "fingerprint": "sha256:84872700490bf625907013434593d5fd08423df7de6bdd489098ccb808f99b0d"
+    },
+    {
+      "gate": "test",
+      "target": ".",
+      "command": "bun run test",
+      "commandSource": "detected",
+      "confirmed": true,
+      "exit": 0,
+      "status": "pass",
+      "durationMs": 58280,
+      "at": "2026-11-08T20:22:43.900Z",
+      "log": "logs/test-_-1794169363900.txt",
+      "tail": "tests/golden/judges.test.ts:\nheuristic precision 100%  recall 100%  kind 83%\ntypesafe  precision 85%  recall 94%  kind 88%  wrongly kept: en-none-obvious-from-code, en-none-general-knowledge, pt-none-your-turn  missed: en-change-json-flag\n\ntests/golden/search.test.ts:\ntop 5: 35/44 → 39/44; Portuguese of English: 1/8 → 4/8\nsemantic-only results for unrelated queries: 29/43\n\ntests/golden/retrieval.test.ts:\nrecall@5: 19/24 — missed: redact-first, pt-lingua, pt-cursor, ts-extension, hook-runs\nprecision: 19/21 notes given were the expected ones\nfalse injections: 0/23\n\ntests/perf/budgets.test.ts:\nprompt: p50 24.7 ms, p95 26.4 ms\nsession-start: p50 18.7 ms, p95 20.1 ms\nturn-end: p50 15.2 ms, p95 16.6 ms\nfile-read: p50 17.5 ms, p95 18.4 ms\ntool-failed: p50 23.4 ms, p95 25.2 ms\nqwen prompt: p50 24.9 ms, p95 28.3 ms\nqwen session-start: p50 19.5 ms, p95 20.9 ms\ndroid prompt: p50 25.8 ms, p95 27.8 ms\ndroid session-start: p50 19.0 ms, p95 20.1 ms\ncopilot session-start: p50 19.4 ms, p95 23.3 ms\ncopilot prompt (capture only): p50 14.8 ms, p95 16.6 ms\nantigravity pre-invocation: p50 18.7 ms, p95 19.4 ms\nlinked prompt: p50 30.2 ms, p95 35.0 ms (30 of 30 with a note from outside)\nlinked session-start: p50 20.0 ms, p95 23.2 ms\n\ntests/perf/large-project.test.ts:\nlarge project prompt: p50 18.0 ms, p95 20.1 ms (40 of 40 given notes)\n\ntests/perf/semantic.test.ts:\nsemantic global median: 16.3 ms\n\n 2015 pass\n 4 skip\n 0 fail\n 24 snapshots, 28379 expect() calls\nRan 2019 tests across 129 files. [57.03s]",
+      "fingerprint": "sha256:84872700490bf625907013434593d5fd08423df7de6bdd489098ccb808f99b0d"
+    },
+    {
+      "gate": "lint",
+      "target": ".",
+      "command": "bun run lint",
+      "commandSource": "detected",
+      "confirmed": true,
+      "exit": 0,
+      "status": "pass",
+      "durationMs": 207,
+      "at": "2026-11-08T20:23:42.181Z",
+      "log": "logs/lint-_-1794169422181.txt",
+      "tail": "  \n\nscripts/embed/spike.ts:229:61 lint/style/noNonNullAssertion ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n  ! Forbidden non-null assertion.\n  \n    227 │       prompt: item.prompt,\n    228 │       expect: item.expect,\n  > 229 │       lexicalFound: item.expect.every((key) => got.includes(ids.get(key)!)),\n        │                                                             ^^^^^^^^^^^^^\n    230 │       hits: item.expect.map((key) => {\n    231 │         const index = order.findIndex((o) => o.key === key);\n  \n\nscripts/embed/spike.ts:232:72 lint/style/noNonNullAssertion  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n  ! Forbidden non-null assertion.\n  \n    230 │       hits: item.expect.map((key) => {\n    231 │         const index = order.findIndex((o) => o.key === key);\n  > 232 │         return { key, rank: index + 1, score: index < 0 ? Number.NaN : order[index]!.score };\n        │                                                                        ^^^^^^^^^^^^^\n    233 │       }),\n    234 │       top: order.slice(0, 3),\n  \n  i Unsafe fix: Replace with optional chain operator ?. This operator includes runtime checks, so it is safer than the compile-only non-null assertion operator\n  \n    230 230 │         hits: item.expect.map((key) => {\n    231 231 │           const index = order.findIndex((o) => o.key === key);\n    232     │ - ········return·{·key,·rank:·index·+·1,·score:·index·<·0·?·Number.NaN·:·order[index]!.score·};\n        232 │ + ········return·{·key,·rank:·index·+·1,·score:·index·<·0·?·Number.NaN·:·order[index]?.score·};\n    233 233 │         }),\n    234 234 │         top: order.slice(0, 3),\n  \n\nThe number of diagnostics exceeds the limit allowed. Use --max-diagnostics to increase it.\nDiagnostics not shown: 75.\nChecked 317 files in 101ms. No fixes applied.\nFound 94 warnings.\nFound 1 info.",
+      "fingerprint": "sha256:84872700490bf625907013434593d5fd08423df7de6bdd489098ccb808f99b0d"
+    },
+    {
+      "gate": "typecheck",
+      "target": ".",
+      "command": "bun run typecheck",
+      "commandSource": "detected",
+      "confirmed": true,
+      "exit": 0,
+      "status": "pass",
+      "durationMs": 281,
+      "at": "2026-11-08T20:23:42.388Z",
+      "log": "logs/typecheck-_-1794169422388.txt",
+      "tail": "$ tsc --noEmit",
+      "fingerprint": "sha256:84872700490bf625907013434593d5fd08423df7de6bdd489098ccb808f99b0d"
+    },
+    {
+      "gate": "deps",
+      "target": ".",
+      "command": "bun audit --json",
+      "commandSource": "detected",
+      "confirmed": true,
+      "exit": 1,
+      "status": "pass",
+      "durationMs": 590,
+      "at": "2026-11-08T20:23:42.670Z",
+      "log": "logs/deps-_-1794169422670.txt",
+      "tail": "{\"esbuild\":[{\"id\":1120680,\"url\":\"https://github.com/advisories/GHSA-g7r4-m6w7-qqqr\",\"title\":\"esbuild allows arbitrary file read when running the development server on Windows\",\"severity\":\"low\",\"vulnerable_versions\":\">=0.27.3 <0.28.1\",\"cwe\":[\"CWE-22\"],\"cvss\":{\"score\":2.5,\"vectorString\":\"CVSS:3.1/AV:L/AC:H/PR:L/UI:N/S:U/C:N/I:L/A:N\"}}],\"markdown-it\":[{\"id\":1242645,\"url\":\"https://github.com/advisories/GHSA-vfgh-jcmw-g37q\",\"title\":\"markdown-it: Quadratic-time denial of service in inline HTML parsing with html enabled\",\"severity\":\"low\",\"vulnerable_versions\":\">=15.0.0 <15.0.3\",\"cwe\":[\"CWE-400\",\"CWE-407\"],\"cvss\":{\"score\":3.7,\"vectorString\":\"CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:L\"}},{\"id\":1242671,\"url\":\"https://github.com/advisories/GHSA-gfr2-rv44-r23c\",\"title\":\"markdown-it: Quadratic-time rendering of a single multi-line link reference definition with default options (regression since 14.0)\",\"severity\":\"high\",\"vulnerable_versions\":\">=15.0.0 <15.0.3\",\"cwe\":[\"CWE-400\",\"CWE-407\"],\"cvss\":{\"score\":7.5,\"vectorString\":\"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H\"}}],\"undici\":[{\"id\":1243077,\"url\":\"https://github.com/advisories/GHSA-4qv8-2p9j-2685\",\"title\":\"undici vulnerable to Denial of Service via unbounded memory in the EventSource parser\",\"severity\":\"moderate\",\"vulnerable_versions\":\">=8.0.0 <8.12.2\",\"cwe\":[\"CWE-770\"],\"cvss\":{\"score\":5.9,\"vectorString\":\"CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:H\"}},{\"id\":1243080,\"url\":\"https://github.com/advisories/GHSA-f72v-6w45-q472\",\"title\":\"undici vulnerable to Subresource Integrity bypass via non-lowercase algorithm tokens\",\"severity\":\"moderate\",\"vulnerable_versions\":\">=8.0.0 <8.12.2\",\"cwe\":[\"CWE-178\"],\"cvss\":{\"score\":5.9,\"vectorString\":\"CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:H/A:N\"}},{\"id\":1243112,\"url\":\"https://github.com/advisories/GHSA-xjj6-f33q-929c\",\"title\":\"undici vulnerable to Denial of Service via unhandled error on excessive content-encodings\",\"severity\":\"high\",\"vulnerable_versions\":\">=8.0.0 <8.12.2\",\"cwe\":[\"CWE-248\",\"CWE-459\"],\"cvss\":{\"score\":7.5,\"vectorString\":\"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H\"}},{\"id\":1243472,\"url\":\"https://github.com/advisories/GHSA-4w7w-5xrc-9h26\",\"title\":\"undici vulnerable to cache poisoning and cross-user disclosure via cross-origin redirects\",\"severity\":\"high\",\"vulnerable_versions\":\">=8.0.0 <8.12.2\",\"cwe\":[\"CWE-346\",\"CWE-524\"],\"cvss\":{\"score\":7.4,\"vectorString\":\"CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:N\"}},{\"id\":1243474,\"url\":\"https://github.com/advisories/GHSA-2m5v-pch6-74hx\",\"title\":\"undici vulnerable to TLS certificate validation bypass via dropped tls options in Agent\",\"severity\":\"high\",\"vulnerable_versions\":\">=8.0.0 <8.12.2\",\"cwe\":[\"CWE-295\"],\"cvss\":{\"score\":7.4,\"vectorString\":\"CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:N\"}},{\"id\":1243477,\"url\":\"https://github.com/advisories/GHSA-qrxm-fqhp-jwvm\",\"title\":\"undici vulnerable to Denial of Service via TLS 1.2 certificate-changing renegotiation\",\"severity\":\"high\",\"vulnerable_versions\":\">=8.0.0 <8.12.2\",\"cwe\":[\"CWE-248\",\"CWE-617\"],\"cvss\":{\"score\":7.5,\"vectorString\":\"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H\"}},{\"id\":1243480,\"url\":\"https://github.com/advisories/GHSA-9fm3-97px-rjf6\",\"title\":\"undici WebSocket client vulnerable to Denial of Service via unbounded automatic PONG buffering\",\"severity\":\"moderate\",\"vulnerable_versions\":\">=8.0.0 <8.12.2\",\"cwe\":[\"CWE-400\",\"CWE-405\",\"CWE-770\"],\"cvss\":{\"score\":5.9,\"vectorString\":\"CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:H\"}},{\"id\":1243483,\"url\":\"https://github.com/advisories/GHSA-55wc-3pg8-jfw6\",\"title\":\"undici vulnerable to Denial of Service via unhandled exception in the decompress interceptor\",\"severity\":\"moderate\",\"vulnerable_versions\":\">=8.0.0 <8.12.2\",\"cwe\":[\"CWE-248\"],\"cvss\":{\"score\":5.9,\"vectorString\":\"CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:H\"}}],\"zod\":[{\"id\":1243066,\"url\":\"https://github.com/advisories/GHSA-mrhx-c7xc-m3w5\",\"title\":\"Zod can exhaust memory while validating oversized constrained collections\",\"severity\":\"high\",\"vulnerable_versions\":\"<4.6.6\",\"cwe\":[\"CWE-770\"],\"cvss\":{\"score\":7.5,\"vectorString\":\"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H\"}}]}",
+      "fingerprint": "sha256:84872700490bf625907013434593d5fd08423df7de6bdd489098ccb808f99b0d",
+      "reason": "12 known before this item, none introduced",
+      "advisories": {
+        "current": 12,
+        "known": 12,
+        "fresh": [],
+        "baselined": true
+      }
+    },
+    {
+      "gate": "test",
+      "target": "npm",
+      "command": "../node_modules/.bin/bun test ../tests/integration/npm-shim.test.ts",
+      "commandSource": "confirmed",
+      "confirmed": true,
+      "exit": 0,
+      "status": "pass",
+      "durationMs": 356,
+      "at": "2026-11-08T20:23:43.262Z",
+      "log": "logs/test-npm-1794169423262.txt",
+      "tail": "bun test v1.4.2 (744846f84)\n\n 4 pass\n 0 fail\n 17 expect() calls\nRan 4 tests across 1 file. [349.00ms]",
+      "fingerprint": "sha256:84872700490bf625907013434593d5fd08423df7de6bdd489098ccb808f99b0d"
+    },
+    {
+      "gate": "deps",
+      "target": "npm",
+      "command": "npm audit --audit-level=high --json",
+      "commandSource": "detected",
+      "confirmed": true,
+      "exit": 0,
+      "status": "pass",
+      "durationMs": 290,
+      "at": "2026-11-08T20:23:43.618Z",
+      "log": "logs/deps-npm-1794169423618.txt",
+      "tail": "{\n  \"auditReportVersion\": 2,\n  \"vulnerabilities\": {},\n  \"metadata\": {\n    \"vulnerabilities\": {\n      \"info\": 0,\n      \"low\": 0,\n      \"moderate\": 0,\n      \"high\": 0,\n      \"critical\": 0,\n      \"total\": 0\n    },\n    \"dependencies\": {\n      \"prod\": 1,\n      \"dev\": 0,\n      \"optional\": 0,\n      \"peer\": 0,\n      \"peerOptional\": 0,\n      \"total\": 0\n    }\n  }\n}",
+      "fingerprint": "sha256:84872700490bf625907013434593d5fd08423df7de6bdd489098ccb808f99b0d",
+      "advisories": {
+        "current": 0,
+        "known": 0,
+        "fresh": [],
+        "baselined": true
+      }
+    },
+    {
+      "gate": "test",
+      "target": "plugins/opencode",
+      "command": "../../node_modules/.bin/bun test ../../tests/unit/opencode-plugin.test.ts ../../tests/integration/plugins-packaging.test.ts",
+      "commandSource": "confirmed",
+      "confirmed": true,
+      "exit": 0,
+      "status": "pass",
+      "durationMs": 163,
+      "at": "2026-11-08T20:23:43.908Z",
+      "log": "logs/test-plugins_opencode-1794169423908.txt",
+      "tail": "bun test v1.4.2 (744846f84)\n\n 12 pass\n 0 fail\n 38 expect() calls\nRan 12 tests across 2 files. [154.00ms]",
+      "fingerprint": "sha256:84872700490bf625907013434593d5fd08423df7de6bdd489098ccb808f99b0d"
+    },
+    {
+      "gate": "deps",
+      "target": "plugins/opencode",
+      "command": "bun audit --json",
+      "commandSource": "detected",
+      "confirmed": true,
+      "exit": 1,
+      "status": "fail",
+      "durationMs": 380,
+      "at": "2026-11-08T20:23:44.071Z",
+      "log": "logs/deps-plugins_opencode-1794169424071.txt",
+      "tail": "{\"toml\":[{\"id\":1242862,\"url\":\"https://github.com/advisories/GHSA-4qx8-w7c3-pj3p\",\"title\":\"toml-node: Quadratic-complexity DoS via many array-of-tables headers in toml.parse()\",\"severity\":\"high\",\"vulnerable_versions\":\"<=5.0.0\",\"cwe\":[\"CWE-407\"],\"cvss\":{\"score\":0,\"vectorString\":null}},{\"id\":1242863,\"url\":\"https://github.com/advisories/GHSA-9j65-hcg3-gc64\",\"title\":\"toml-node: Quadratic-complexity DoS via long dotted keys or table paths in toml.parse()\",\"severity\":\"high\",\"vulnerable_versions\":\"<=5.0.0\",\"cwe\":[\"CWE-407\"],\"cvss\":{\"score\":0,\"vectorString\":null}},{\"id\":1242864,\"url\":\"https://github.com/advisories/GHSA-9qmh-m7c6-f92p\",\"title\":\"toml-node: Uncontrolled resource consumption (CPU DoS) via unbounded-length integer literals in toml.parse()\",\"severity\":\"high\",\"vulnerable_versions\":\"<=5.0.0\",\"cwe\":[\"CWE-400\",\"CWE-770\"],\"cvss\":{\"score\":7.5,\"vectorString\":\"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H\"}}],\"zod\":[{\"id\":1243066,\"url\":\"https://github.com/advisories/GHSA-mrhx-c7xc-m3w5\",\"title\":\"Zod can exhaust memory while validating oversized constrained collections\",\"severity\":\"high\",\"vulnerable_versions\":\"<4.6.6\",\"cwe\":[\"CWE-770\"],\"cvss\":{\"score\":7.5,\"vectorString\":\"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H\"}}]}",
+      "fingerprint": "sha256:84872700490bf625907013434593d5fd08423df7de6bdd489098ccb808f99b0d",
+      "reason": "4 new: GHSA-4qx8-w7c3-pj3p, GHSA-9j65-hcg3-gc64, GHSA-9qmh-m7c6-f92p, GHSA-mrhx-c7xc-m3w5",
+      "advisories": {
+        "current": 4,
+        "known": 0,
+        "fresh": [
+          "GHSA-4qx8-w7c3-pj3p",
+          "GHSA-9j65-hcg3-gc64",
+          "GHSA-9qmh-m7c6-f92p",
+          "GHSA-mrhx-c7xc-m3w5"
+        ],
+        "baselined": true
+      }
+    }
+  ],
+  "verdict": "unproven",
+  "unproven": [
+    "gate deps (plugins/opencode) failing"
+  ],
+  "verifications": [
+    {
+      "what": "knowledge",
+      "ref": "K-319",
+      "question": "Does the entry `entries.k1` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.03
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-08T19:06:35.507Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-316",
+      "question": "Does the entry `entries.k2` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.04
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-08T19:06:35.507Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-311",
+      "question": "Does the entry `entries.k3` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.04
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-08T19:06:35.507Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-201",
+      "question": "Does the entry `entries.k4` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.05
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-08T19:06:35.507Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-203",
+      "question": "Does the entry `entries.k5` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.05
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-08T19:06:35.507Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-200",
+      "question": "Does the entry `entries.k6` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.05
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-08T19:06:35.507Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-199",
+      "question": "Does the entry `entries.k7` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.05
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-08T19:06:35.507Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-189",
+      "question": "Does the entry `entries.k8` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.03
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-08T19:06:35.507Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-186",
+      "question": "Does the entry `entries.k9` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.07
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-08T19:06:35.507Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-176",
+      "question": "Does the entry `entries.k10` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.04
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-08T19:06:35.507Z"
+    }
+  ]
+}
