@@ -1,0 +1,27 @@
+# style findings for 2026-10-14-memory-quality-design
+reviewer: goldfish-style
+read: /Users/andreagroferreira/AIProjects/ai-mem/docs/superpowers/specs/2026-10-14-memory-quality-design.md (lines 1-271, whole file); /Users/andreagroferreira/.claude/plugins/cache/wizardingcode-plugins/wizardingcode-developer-crew/0.20.1/skills/crew/references/writing.md; /Users/andreagroferreira/.claude/plugins/cache/wizardingcode-plugins/wizardingcode-developer-crew/0.20.1/skills/crew/rubrics/spec-feature.md; /Users/andreagroferreira/.claude/plugins/cache/wizardingcode-plugins/wizardingcode-developer-crew/0.20.1/skills/crew/rubrics/spec-heilmeier.md
+
+## Findings
+- F-1 · Major · Goals and non-goals, line 41 · "No knowledge the version 1 pipeline kept is lost" is written as an absolute goal, but section 6 can only measure it on 400 sampled turns, and Risks (line 244) admits daily use may differ. A reader takes this as a guarantee for every memory and skips the risk. The goal should be scoped to what the proof measures.
+- F-2 · Major · §1 stripHost table, `<agent-message …>` row, line 81 · "the assistant restates what matters in its own sentences, which stay" is stated as fact and justifies removing the whole subagent report. Risks (line 246) names the opposite case: a report the assistant did not restate. A reader building `stripHost` from line 81 reads the removal as safe and misses that this is an unmeasured assumption.
+- F-3 · Major · §1 dropNoise table, `host-frame` row, line 96 · The Evidence column says "The host's fixed text, never a user's or an assistant's words". That cannot be proven for the "contains" clauses ("NOT a message from the user", "carries no user authority", "This tool result is internal metadata"). A user or assistant working on this project, the store the proof samples, writes those phrases when discussing the host frame, and this spec quotes them itself. A reader would miss that this pattern can drop real knowledge, and no sample count backs it the way the other two rows have one.
+- F-4 · Major · §5 Critical journeys, "A mixed turn", line 204 · The given does not say the first sentence's `knowledge` falls below the threshold. Under the §3 rule, if the judge rated the first sentence above 0.5 it would stay the title. A test written from this journey is underspecified and can assert the wrong outcome.
+- F-5 · Nit · §7 Risks, first row, line 244 · "The `keep lost` metric" names no metric in §6. The table row there is "`knowledge` or `mixed` turns lost". The reader has to guess the reference.
+- F-6 · Nit · Header, line 3 · "round 1: zoom out, comprehension, design, structure, style, readiness, codebase" is review-process jargon that tells the reader nothing about the design. The paragraph also packs date, status, decisions and three ADR references into two sentences.
+- F-7 · Nit · Why, line 31 · "On 2026-11-06 there are 3,941." does not say 3,941 of what. Line 28 gives 3,733 for the same date, so the reader cannot tell how the two numbers relate.
+- F-8 · Nit · Decisions D-3, line 49 · "whole-memory precision" is not defined, and §1 (line 100) measures precision "at the sentence level". The reader cannot tell whether 0.88 and 0.80 are comparable to the new measure.
+- F-9 · Nit · Decisions, lines 50-51 · "Four labels, one test." and "Choose, never generate." are slogans used as bold labels. The fact comes after them, so the label could name it directly.
+- F-10 · Nit · Alternatives, line 62 · "most in free prose no pattern names" gives no measure. The sample labels were lost (line 33), so this cannot be checked.
+- F-11 · Nit · §1 dropNoise, line 97 · "case as written" is unclear. "case-sensitive" says it directly.
+- F-12 · Nit · §1, line 100 · "Signals that looked good but hit knowledge" is subjective. "looked good" stands for something like "had high precision on most hits". "hit" is used throughout (lines 29, 52, 97, 98, 245) as unexplained shorthand for "matched".
+- F-13 · Nit · §1 Context line (112), §4 (196), §8 (253) · The Portuguese examples ("aprovo", "força W4", "Decisão aplicada (commit 5808e41)", "não era X, é Y", "Registado:") have no translation. An English reader cannot see why "Decisão aplicada…" counts as knowledge (line 196) or why "aprovo" carries nothing.
+- F-14 · Nit · §2 importance, level 3, line 164 · "takes real time to find": "real" is vague in a criterion the judge must apply. Levels 2 and 4 name a measure (minutes, a mistake). This one does not.
+- F-15 · Nit · Alternatives line 60 and Open questions line 268 · "too often too short" has no threshold. The open question says the title-only share answers it, but title-only and too short are different measures.
+- F-16 · Nit · §5, "A short acknowledgement with a fix", line 205 · There is no "when" step. The spec-feature rubric asks for given, when and then, and the other journeys have all three.
+- F-17 · Nit · §6, line 210 · "the moved store" is undefined. "refused inside the repository" is passive and does not say what refuses them or when.
+- F-18 · Nit · Pipeline order, line 69 · Seven steps are run together in one sentence. A numbered list would make the order checkable against `src/distill/pipeline.ts`.
+
+## Not answerable
+- The counts and shares in Why (lines 16-31) and the 2026-10-13 sample · the labels were lost (line 33) and I have no access to the author's store, so I cannot check them.
+- Whether the named files, functions, commits (`cb944a4`, `626ed2c`) and ADRs exist and match the text · reviewing the code is outside this pass. I read only the spec and the standards.
