@@ -1,5 +1,7 @@
 import pkg from "../../package.json" with { type: "json" };
 import type { ProjectRef } from "../core/project.ts";
+import type { SkipReason } from "../distill/pipeline.ts";
+import { noneSkipped, SKIPPED_KEY, type SkippedBy, skippedText } from "../distill/skips.ts";
 import type { HistoryStatus } from "../history/status.ts";
 import { USAGE_KEYS } from "../judge/index.ts";
 import { loadSettings } from "../settings/settings.ts";
@@ -17,7 +19,14 @@ export interface StatusReport {
   version: string;
   project: { name: string; key: string } | null;
   memories: { active: number; stale: number; superseded: number; archived: number };
-  turns: { distilled: number; skipped: number; failed: number; queued: number };
+  turns: {
+    distilled: number;
+    skipped: number;
+    /** The skipped turns by reason; `unknown`: skipped with no reason stored (skipped before reasons were kept). */
+    skippedBy: SkippedBy & { unknown: number };
+    failed: number;
+    queued: number;
+  };
   hooks: { latency: Latency[]; runs: number; errors: number };
   /** Requests wizardingcode-mem itself made to a model. The heuristic judge makes none. */
   modelCalls: number;
@@ -101,6 +110,27 @@ function judgeReport(db: Db | null, project: ProjectRef | null, dataDir: string)
   };
 }
 
+/**
+ * The project's skipped turns by the reason the drain stored in `last_error` (`skipMark`).
+ * A skipped turn with any other value, NULL included, is `unknown`.
+ */
+function skippedBy(db: Db | null, project: ProjectRef | null): StatusReport["turns"]["skippedBy"] {
+  const by = { ...noneSkipped(), unknown: 0 };
+  if (db === null || project === null) return by;
+  const rows = db
+    .query<{ reason: string | null; n: number }, [number]>(
+      "SELECT last_error AS reason, count(*) AS n FROM turns WHERE project_id = ? AND state = 'skipped' GROUP BY last_error",
+    )
+    .all(project.id);
+  for (const { reason, n } of rows) {
+    const name = reason?.startsWith("skip:") ? reason.slice(5) : "";
+    // Own keys only: a stored `skip:constructor` must not reach the object's prototype.
+    const key = Object.hasOwn(SKIPPED_KEY, name) ? SKIPPED_KEY[name as SkipReason] : undefined;
+    by[key ?? "unknown"] += n;
+  }
+  return by;
+}
+
 export function statusReport(
   db: Db | null,
   project: ProjectRef | null,
@@ -123,6 +153,7 @@ export function statusReport(
     turns: {
       distilled: count("turns WHERE project_id = ? AND state = 'done'"),
       skipped: count("turns WHERE project_id = ? AND state = 'skipped'"),
+      skippedBy: skippedBy(db, project),
       failed: count("turns WHERE project_id = ? AND state = 'failed'"),
       queued: count("turns WHERE project_id = ? AND state IN ('open', 'pending', 'processing')"),
     },
@@ -189,7 +220,7 @@ export function formatStatus(report: StatusReport): string {
     lines.push(
       `project   ${report.project?.name} (${report.project?.key})`,
       `memories  ${memories.active} active${stale} · ${memories.superseded} superseded${memories.archived > 0 ? ` · ${memories.archived} archived` : ""}`,
-      `turns     ${turns.distilled} distilled · ${turns.skipped} skipped · ${turns.failed} failed · ${turns.queued} queued`,
+      `turns     ${turns.distilled} distilled · ${skippedText(turns.skipped, turns.skippedBy)} · ${turns.failed} failed · ${turns.queued} queued`,
     );
   }
   if (hooks.runs > 0) {

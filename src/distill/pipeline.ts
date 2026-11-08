@@ -2,6 +2,7 @@ import type { AgentAdapter, TurnDetail } from "../adapters/types.ts";
 import { isFromTheHost } from "../core/host-prompt.ts";
 import { relativeTo, rootsOf } from "../core/paths.ts";
 import { type Redacted, redact } from "../core/redact.ts";
+import type { MemoryKind } from "../core/types.ts";
 import type { Model } from "../embed/model.ts";
 import type { DistillCandidate, DistillVerdict, Judge } from "../judge/types.ts";
 import { withoutNotes } from "../retrieve/render.ts";
@@ -110,6 +111,18 @@ function readDetail(deps: DistillDeps, turn: QueuedTurn): TurnDetail {
 }
 
 /**
+ * Why the drain skipped a turn. A skipped turn keeps it in its `last_error` column as
+ * `skip:<reason>` (`skipMark`): the column is cleared whenever a turn becomes done or
+ * skipped, and holds an error only for a pending or failed turn, so no migration is needed.
+ */
+export type SkipReason = "saved" | "empty" | "not-worth" | "no-title";
+export const skipMark = (reason: SkipReason): string => `skip:${reason}`;
+
+/** The judge found the turn worth a memory, if a sentence can title it. */
+const worthKeeping = (verdict: DistillVerdict): verdict is DistillVerdict & { kind: MemoryKind } =>
+  verdict.worthSaving >= SAVE_THRESHOLD && verdict.kind !== "none";
+
+/**
  * The memory a verdict allows, or null. The title must be knowledge: the judge's choice
  * when that sentence reaches the threshold, otherwise the surest sentence that does; with
  * none, no memory, whatever `worthSaving` said.
@@ -120,7 +133,7 @@ export function buildDraft(
   verdict: DistillVerdict,
   detail: TurnDetail,
 ): Draft | null {
-  if (verdict.worthSaving < SAVE_THRESHOLD || verdict.kind === "none") return null;
+  if (!worthKeeping(verdict)) return null;
   // `durable` keeps its name in the verdict: it is the per-candidate knowledge probability.
   const knowledge = (candidate: DistillCandidate) => verdict.durable[candidate.idx] ?? 0;
   const surestFirst = (a: DistillCandidate, b: DistillCandidate) =>
@@ -260,14 +273,20 @@ export function prepareTurn(db: Db, turn: TurnTexts, detail: TurnDetail): Prepar
 }
 
 /**
+ * What `draftTurn` found: a draft, or why there is none. A turn the filter emptied has no
+ * verdict, since the judge was not asked; a refused one keeps its verdict for the proof.
+ */
+export type DraftedTurn =
+  | { skipped: "empty"; verdict: null; draft: null }
+  | { skipped: "not-worth" | "no-title"; verdict: DistillVerdict; draft: null }
+  | { skipped: null; verdict: DistillVerdict; draft: Draft };
+
+/**
  * The judge's verdict and the draft it allows. With no candidate left there is nothing to
  * select from: the judge is not asked, and there is no verdict.
  */
-export async function draftTurn(
-  judge: Judge,
-  prepared: PreparedTurn,
-): Promise<{ verdict: DistillVerdict | null; draft: Draft | null }> {
-  if (prepared.candidates.length === 0) return { verdict: null, draft: null };
+export async function draftTurn(judge: Judge, prepared: PreparedTurn): Promise<DraftedTurn> {
+  if (prepared.candidates.length === 0) return { skipped: "empty", verdict: null, draft: null };
   const verdict = await judge.distill({
     prompt: prepared.prompt,
     finalText: prepared.finalText,
@@ -276,10 +295,10 @@ export async function draftTurn(
     commands: prepared.detail.commands as Redacted[],
     hadErrors: prepared.detail.errors.length > 0,
   });
-  return {
-    verdict,
-    draft: buildDraft(prepared.prompt, prepared.candidates, verdict, prepared.detail),
-  };
+  const draft = buildDraft(prepared.prompt, prepared.candidates, verdict, prepared.detail);
+  // buildDraft refuses for one of two reasons: the verdict, or no knowledge sentence to title by.
+  if (draft !== null) return { skipped: null, verdict, draft };
+  return { skipped: worthKeeping(verdict) ? "no-title" : "not-worth", verdict, draft };
 }
 
 /**
@@ -290,7 +309,7 @@ export async function draftTurn(
 export async function distillTurn(
   deps: DistillDeps,
   turn: QueuedTurn,
-): Promise<"done" | "skipped"> {
+): Promise<"done" | SkipReason> {
   const { db } = deps;
   const detail = readDetail(deps, turn);
   db.run(
@@ -304,22 +323,27 @@ export async function distillTurn(
     ],
   );
 
-  const finish = (state: "done" | "skipped") =>
+  // One write sets the state and the reason, so a skipped turn never lacks its reason and a
+  // done turn never keeps an earlier error.
+  const finish = (outcome: "done" | SkipReason) => {
+    const [state, mark] = outcome === "done" ? ["done", null] : ["skipped", skipMark(outcome)];
     db.run(
-      "UPDATE turns SET state = ?, lease_owner = NULL, lease_until = NULL, last_error = NULL WHERE id = ?",
-      [state, turn.id],
+      "UPDATE turns SET state = ?, lease_owner = NULL, lease_until = NULL, last_error = ? WHERE id = ?",
+      [state, mark, turn.id],
     );
+  };
   // What the agent chose to save, it saved in its own words: nothing to add.
   if (detail.savedMemory) {
-    finish("skipped");
-    return "skipped";
+    finish("saved");
+    return "saved";
   }
 
-  const { verdict, draft } = await draftTurn(deps.judge, prepareTurn(db, turn, detail));
-  if (verdict === null || draft === null) {
-    finish("skipped");
-    return "skipped";
+  const drafted = await draftTurn(deps.judge, prepareTurn(db, turn, detail));
+  if (drafted.skipped !== null) {
+    finish(drafted.skipped);
+    return drafted.skipped;
   }
+  const { verdict, draft } = drafted;
 
   const action = await consolidate(deps, turn.projectId, draft, turn.id);
   // A turn read back from history is remembered as of when it happened, so that
