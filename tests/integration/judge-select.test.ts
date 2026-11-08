@@ -24,7 +24,7 @@ const okResponse = {
     worth: { type: "noul", noul: 0.9 },
     kind: { type: "choice", choice: "fix", probabilities: {}, confidence: 1 },
     importance: { type: "score", score: 3, legend: {}, probabilities: {}, confidence: 1 },
-    durable_0: { type: "noul", noul: 0.8 },
+    knowledge_0: { type: "noul", noul: 0.8 },
     title: { type: "choice", choice: "c0", probabilities: {}, confidence: 1 },
   },
   usage: { input_tokens: 500, output_tokens: 20 },

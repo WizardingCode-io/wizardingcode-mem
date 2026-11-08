@@ -3,8 +3,10 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { importClaudeMem } from "../../src/import/claude-mem.ts";
+import type { SystemOneRequest } from "../../src/judge/client.ts";
 import { rejudge } from "../../src/judge/rejudge.ts";
 import type { Judge } from "../../src/judge/types.ts";
+import { TypeSafeJudge } from "../../src/judge/typesafe.ts";
 import { type Db, openDb } from "../../src/store/db.ts";
 import { makeClaudeMemDb } from "../helpers/claude-mem-db.ts";
 
@@ -47,8 +49,8 @@ function scripted(
 ): Judge {
   return {
     name: "typesafe",
-    version: "1",
-    versions: { typesafe: "1" },
+    version: "2",
+    versions: { typesafe: "2" },
     distill: async (input) => {
       const title = input.finalText.split("\n")[0] ?? "";
       seen.push(title);
@@ -246,5 +248,50 @@ describe("rejudge", () => {
     expect(db.query("SELECT count(*) AS n FROM memories WHERE status = 'active'").get()).toEqual({
       n: 2,
     });
+  });
+});
+
+/** The real TypeSafe judge, its service a stand-in that records each request and answers yes. */
+function recordingTypeSafe(requests: SystemOneRequest[]): TypeSafeJudge {
+  const fetchFn = (async (_url: unknown, init?: RequestInit) => {
+    requests.push(JSON.parse(String(init?.body)) as SystemOneRequest);
+    return new Response(
+      JSON.stringify({
+        model: "jev",
+        answers: {
+          worth: { type: "noul", noul: 0.9 },
+          kind: { type: "choice", choice: "decision", probabilities: {}, confidence: 0.9 },
+          importance: { type: "score", score: 3, legend: {}, probabilities: {}, confidence: 0.9 },
+        },
+        usage: { input_tokens: 10, output_tokens: 1 },
+      }),
+      { status: 200 },
+    );
+  }) as unknown as typeof fetch;
+  return new TypeSafeJudge({ apiKey: "recorded", fetch: fetchFn });
+}
+
+describe("rejudge keeps the version 1 questions (ADR 0023, D-2)", () => {
+  test("asks worth, kind and importance in their version 1 wording, and stamps judge_version '1'", async () => {
+    const requests: SystemOneRequest[] = [];
+    const report = await rejudge(db, { judge: recordingTypeSafe(requests), now: NOW });
+    expect(report).toMatchObject({ judged: 4, failed: 0 });
+    expect(requests).toHaveLength(4);
+    for (const request of requests) {
+      expect(Object.keys(request.questions).sort()).toEqual(["importance", "kind", "worth"]);
+      expect(request.questions.worth?.instructions).toBe(
+        "Would a developer starting a new coding session on this repository weeks from now work better by knowing something stated in `user_prompt` or `assistant_final_message`?",
+      );
+      expect(request.questions.kind?.instructions).toBe(
+        "What kind of lasting knowledge does this turn mainly contain?",
+      );
+      expect(request.questions.importance?.instructions).toBe(
+        "How costly would it be for a future session not to know this?",
+      );
+      expect(request.state).not.toHaveProperty("reader");
+    }
+    expect(
+      db.query("SELECT DISTINCT judge_version FROM memories WHERE judge = 'typesafe'").all(),
+    ).toEqual([{ judge_version: "1" }]);
   });
 });

@@ -36,6 +36,7 @@ import { DB_FILE, type Db, openDb } from "../../src/store/db.ts";
 import { advanceEpoch, touchSession } from "../../src/store/sessions.ts";
 import { defaultDataDir, resolvePaths } from "../../src/util/paths.ts";
 import { assertNotLive } from "./live-guard.ts";
+import { generator, sample } from "./random.ts";
 
 // ---- arguments ---------------------------------------------------------------------
 
@@ -519,21 +520,6 @@ function summary(kind: Hit["kind"], looked: number) {
     max: Math.max(0, ...sizes),
     distinctNotes: new Set(own.flatMap((h) => h.noteIds)).size,
   };
-}
-
-/** Deterministic pseudo-random numbers, so the same examples come back on a rerun. */
-function generator(seed: number) {
-  let state = seed;
-  return (max: number) => {
-    state = (state * 1103515245 + 12345) & 0x7fffffff;
-    return state % max;
-  };
-}
-function sample<T>(items: T[], n: number, next: (max: number) => number): T[] {
-  const pool = [...items];
-  const out: T[] = [];
-  while (out.length < n && pool.length > 0) out.push(pool.splice(next(pool.length), 1)[0] as T);
-  return out;
 }
 
 const reads = summary("read", readsLooked.n);

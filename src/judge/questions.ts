@@ -14,7 +14,8 @@ import type {
 // Pure: no network, no database. Thresholds stay in distill/policy.ts.
 
 const TITLE_MAX_CHARS = 160;
-const KIND_CRITERIA: Record<MemoryKind | "none", string> = {
+// --- Version 1: kept for the import rejudge (ADR 0023, D-2) ---------------------------
+const KIND_CRITERIA_V1: Record<MemoryKind | "none", string> = {
   decision: "A choice between alternatives, with its rationale",
   fix: "A bug or error and what resolved it",
   gotcha: "A non-obvious pitfall, limitation or surprising behaviour",
@@ -24,7 +25,7 @@ const KIND_CRITERIA: Record<MemoryKind | "none", string> = {
   none: "No lasting knowledge",
 };
 
-export function distillState(input: DistillInput) {
+function distillStateV1(input: DistillInput) {
   return {
     user_prompt: input.prompt,
     assistant_final_message: input.finalText,
@@ -39,8 +40,8 @@ export function distillState(input: DistillInput) {
   };
 }
 
-export function distillQuestions(input: DistillInput): Record<string, Question> {
-  const questions: Record<string, Question> = {
+function distillQuestionsV1(): Record<string, Question> {
+  return {
     worth: {
       type: "noul",
       instructions:
@@ -54,7 +55,7 @@ export function distillQuestions(input: DistillInput): Record<string, Question> 
     kind: {
       type: "choice",
       instructions: "What kind of lasting knowledge does this turn mainly contain?",
-      criteria: KIND_CRITERIA,
+      criteria: KIND_CRITERIA_V1,
     },
     importance: {
       type: "score",
@@ -68,14 +69,76 @@ export function distillQuestions(input: DistillInput): Record<string, Question> 
       ],
     },
   };
-  for (const candidate of input.candidates) {
-    questions[`durable_${candidate.idx}`] = {
+}
+
+// --- Version 2 (ADR 0023) -------------------------------------------------------------
+// Every question names the same reader, defined once in the state, and says what is not
+// knowledge: a labelled sample showed that "stays true after the conversation" let records
+// of a session through ("PR merged" stays true). The thresholds are in distill/policy.ts.
+
+const READER =
+  "a developer who joins this repository a month from now and never saw this conversation";
+const KNOWLEDGE =
+  "A standing rule or preference of the project or its author; a decision and the reason for it; the cause of a bug and what fixed it; a non-obvious pitfall, limitation or surprising behaviour; how a part of the system works or is configured.";
+const RECORD =
+  "What was done, delivered, committed, merged, opened, closed, approved or rejected in this session; the state of a task, a review, a gate or a plan; a question, an offer or small talk; a restatement of the request; detail obvious from reading the code.";
+
+const KIND_CRITERIA: Record<MemoryKind | "none", string> = {
+  decision:
+    "A choice between alternatives and the reason for it. Not a verdict of a review, a gate or a test run, and not the approval of a plan.",
+  fix: "A bug or error, its cause, and what resolved it. Not that a fix was delivered, committed or merged.",
+  gotcha:
+    "A non-obvious pitfall, limitation or surprising behaviour of the code, a tool or a service.",
+  convention:
+    "A standing rule or preference for how work is done in this project, from the author or the team. Not a step or a plan for this session.",
+  change:
+    "What is now true of the code's behaviour, structure or interfaces, stated as the new state. Not that something was done, committed, merged, closed or delivered.",
+  discovery: "A fact learned about how the existing system works or is configured.",
+  none: "No sentence holds knowledge: only a record of what happened in the session, a status, a plan, a question or small talk.",
+};
+
+/** The JSON state the questions refer to by path; version 2 adds `reader`. */
+export function distillState(input: DistillInput) {
+  if (input.wording === 1) return distillStateV1(input);
+  return { reader: READER, ...distillStateV1(input) };
+}
+
+export function distillQuestions(input: DistillInput): Record<string, Question> {
+  if (input.wording === 1) return distillQuestionsV1();
+  const questions: Record<string, Question> = {
+    worth: {
       type: "noul",
-      instructions: `Is \`candidates[${candidate.idx}].text\` a fact about this project that stays true and useful after this conversation ends, and can be understood without the rest of the conversation?`,
+      instructions:
+        "Does `user_prompt` or `assistant_final_message` state something that `reader` would work differently for knowing?",
+      criteria: { true: KNOWLEDGE, false: RECORD },
+    },
+    kind: {
+      type: "choice",
+      instructions:
+        "Of the knowledge this turn contains for `reader`, which kind is the most useful? A report of the session that holds one such sentence is classified by that sentence.",
+      criteria: KIND_CRITERIA,
+    },
+    importance: {
+      type: "score",
+      instructions:
+        "How costly would it be for `reader` not to know this? Rate the knowledge in the sentences, not the amount of work the message reports.",
+      criteria: [
+        "Nothing: they would do the same without it",
+        "Minutes: a detail they would find quickly in the code or the docs",
+        "An investigation: a cause, a behaviour or a location that takes real time to find",
+        "A mistake: a rule of the project, an approach already rejected, or a correction the author gave",
+        "Damage: data loss, a security problem, or breaking a hard rule of the project",
+      ],
+    },
+  };
+  for (const candidate of input.candidates) {
+    questions[`knowledge_${candidate.idx}`] = {
+      type: "noul",
+      instructions: `Would \`reader\` work differently for reading \`candidates[${candidate.idx}].text\` on its own, with nothing else from this conversation?`,
       criteria: {
-        true: "A self-contained statement of a decision, cause, fix, rule, constraint, or how something works.",
+        true: "On its own it states a standing rule or preference, a decision with its reason, a cause and its fix, a pitfall or surprising behaviour, or how something works or is configured.",
         false:
-          "Progress narration, an offer or question to the user, a statement that needs the conversation to be understood, or a transient state.",
+          "It reports what was done, delivered, committed, merged, opened, closed, approved or rejected; the state of a task, review, gate or plan; it is a question, an offer or an instruction to the person in the conversation; it is a heading, or it needs the rest of the conversation to be understood.",
       },
     };
   }
@@ -83,13 +146,13 @@ export function distillQuestions(input: DistillInput): Record<string, Question> 
     questions.title = {
       type: "choice",
       instructions:
-        "Which candidate works best alone as a one-line title for what was learned in this turn?",
+        "Which candidate, read by `reader` on its own, best states the knowledge of this turn: the rule, the decision and its reason, the cause and its fix, or the fact?",
       criteria: Object.fromEntries([
         ...input.candidates.map((candidate) => [
           `c${candidate.idx}`,
           candidate.text.slice(0, TITLE_MAX_CHARS),
         ]),
-        ["none", "No candidate works as a title"],
+        ["none", "No candidate states knowledge on its own."],
       ]),
     };
   }
@@ -128,9 +191,15 @@ export function distillVerdict(
     ? (kind.choice as MemoryKind)
     : "none";
   const importance = Math.min(5, Math.max(1, Math.round(score(answers, "importance").score) + 1));
-  const durable = input.candidates.map((candidate) => noul(answers, `durable_${candidate.idx}`));
+  // `durable` keeps its name in the verdict: in version 2 it is the probability that the
+  // sentence is knowledge on its own. Version 1 asks nothing per sentence (the import
+  // rejudge sends no candidate), so no sentence counts as knowledge and there is no title.
+  const perSentence = input.wording !== 1;
+  const durable = input.candidates.map((candidate) =>
+    perSentence ? noul(answers, `knowledge_${candidate.idx}`) : 0,
+  );
   let titleIdx: number | null = null;
-  if (input.candidates.length > 0) {
+  if (perSentence && input.candidates.length > 0) {
     const title = choice(answers, "title").choice;
     const match = /^c(\d+)$/.exec(title);
     const idx = match ? Number(match[1]) : null;

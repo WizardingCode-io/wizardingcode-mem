@@ -10,7 +10,7 @@ import { type DistillDeps, drainQueue } from "../../src/distill/queue.ts";
 import { loadModel, modelPath } from "../../src/embed/model.ts";
 import { handleHook } from "../../src/hooks/handle.ts";
 import { heuristicJudge } from "../../src/judge/heuristic.ts";
-import type { Judge } from "../../src/judge/types.ts";
+import type { DistillInput, Judge } from "../../src/judge/types.ts";
 import { getMemories, searchMemories } from "../../src/mcp/tools.ts";
 import { type Db, openDb } from "../../src/store/db.ts";
 
@@ -780,5 +780,247 @@ describe("distill: consolidation", () => {
       ["superseded", 1],
       ["active", 2],
     ]);
+  });
+});
+
+/** A judge that records what it is asked, rates every answer sentence as knowledge (the prompt not), and titles with the candidate at `titleAt`. */
+function recording(seen: DistillInput[], titleAt = 0): Judge {
+  return {
+    name: "typesafe",
+    version: "2",
+    versions: { typesafe: "2" },
+    distill: async (input) => {
+      seen.push(input);
+      return {
+        worthSaving: 0.9,
+        kind: "fix",
+        kindConfidence: 0.9,
+        importance: 3,
+        durable: input.candidates.map((c) => (c.source === "prompt" ? 0.1 : 0.9)),
+        titleIdx: input.candidates[titleAt]?.idx ?? null,
+        source: "typesafe",
+      };
+    },
+    consolidate: async () => ({ source: "typesafe", perNeighbour: [] }),
+  };
+}
+
+const NOISY_ANSWER = `Status: looked into it.
+The import treated a held drain lease like an empty queue, so it distilled none of the 3,299 queued turns.
+<details><summary>Agent "Probe the lease" finished</summary>
+agentId: abc123def456 (internal ID)
+</details>
+It now waits and retries within its time budget.`;
+
+describe("distill: the noise filter runs before the judge", () => {
+  test("host blocks and noise sentences never reach the judge, and the kept candidates are dense", async () => {
+    turn("why did the import stop at 3299 turns?", NOISY_ANSWER);
+    const seen: DistillInput[] = [];
+    await drain(recording(seen));
+    expect(seen).toHaveLength(1);
+    expect(seen[0]?.candidates.map((c) => [c.idx, c.source, c.text as string])).toEqual([
+      [0, "prompt", "why did the import stop at 3299 turns?"],
+      [
+        1,
+        "final",
+        "The import treated a held drain lease like an empty queue, so it distilled none of the 3,299 queued turns.",
+      ],
+      [2, "final", "It now waits and retries within its time budget."],
+    ]);
+    // Nor in the texts the judge reads.
+    expect(seen[0]?.finalText).not.toContain("<summary");
+    expect(seen[0]?.finalText).not.toContain("Status:");
+    expect(seen[0]?.finalText).not.toContain("agentId");
+    expect(seen[0]?.finalText).toContain("It now waits and retries within its time budget.");
+  });
+
+  test("a host frame inside the prompt reaches neither the judge nor the Context line", async () => {
+    turn(
+      `please check why the import stopped early
+Another Claude session sent a message:
+<agent-message from="a1">
+The report.
+</agent-message>
+That "other Claude session" is an agent working inside this same session.`,
+      "The import treated a held drain lease like an empty queue, so it distilled nothing.",
+    );
+    const seen: DistillInput[] = [];
+    await drain(recording(seen));
+    expect(seen[0]?.prompt.trim()).toBe("please check why the import stopped early");
+    expect(memories().map((m) => m.body)).toEqual([
+      "Context: please check why the import stopped early",
+    ]);
+  });
+
+  test("the judge's title index refers to the kept list, so a dropped sentence shifts nothing", async () => {
+    turn("why did the import stop at 3299 turns?", NOISY_ANSWER);
+    await drain(recording([], 1));
+    expect(memories().map((m) => [m.title, m.body])).toEqual([
+      [
+        "The import treated a held drain lease like an empty queue, so it distilled none of the 3,299 queued turns.",
+        "It now waits and retries within its time budget.\nContext: why did the import stop at 3299 turns?",
+      ],
+    ]);
+  });
+
+  test("a turn the filter empties is skipped without asking the judge", async () => {
+    turn(
+      "ok",
+      `Another Claude session sent a message:
+<agent-message from="a1">
+[Subagent hand-back] The report follows:
+  Reviewed 4 tasks; all criteria met.
+</agent-message>
+That "other Claude session" is an agent working inside this same session.`,
+    );
+    const judge: Judge = {
+      ...heuristicJudge,
+      distill: async () => {
+        throw new Error("the judge must not be asked");
+      },
+    };
+    expect(await drain(judge)).toEqual({ held: false, claimed: 1, done: 0, skipped: 1, failed: 0 });
+    expect(memories()).toEqual([]);
+    expect(turnStates()).toEqual(["skipped"]);
+  });
+});
+
+/**
+ * A judge that rates each sentence from a table (0.1 when absent), titles with the sentence
+ * given (or answers `none`), and finds every turn worth keeping: the policy decides.
+ */
+function judging(
+  rates: Record<string, number>,
+  title: string | null,
+  seen: DistillInput[] = [],
+): Judge {
+  return {
+    name: "typesafe",
+    version: "2",
+    versions: { typesafe: "2" },
+    distill: async (input) => {
+      seen.push(input);
+      return {
+        worthSaving: 0.9,
+        kind: "fix",
+        kindConfidence: 0.9,
+        importance: 3,
+        durable: input.candidates.map((c) => rates[c.text] ?? 0.1),
+        titleIdx: input.candidates.find((c) => c.text === title)?.idx ?? null,
+        source: "typesafe",
+      };
+    },
+    consolidate: async () => ({ source: "typesafe", perNeighbour: [] }),
+  };
+}
+
+const BOTTOM_LINE = "Bottom line: the wave is closed and the gate is next.";
+const E2E = "The e2e never fires the real POST: sending is paid, everything is intercepted.";
+const CAUSE = "The cause was a pending timer in src/hooks/stop.ts that kept the process alive.";
+
+describe("distill: the journeys of the spec (section 10)", () => {
+  test("a turn that is only a status report stores nothing", async () => {
+    turn(
+      "ok",
+      "Status: the wave is closed and pushed to origin. Next I will open the pull request for review.",
+    );
+    const seen: DistillInput[] = [];
+    expect(await drain(judging({}, null, seen))).toMatchObject({ done: 0, skipped: 1 });
+    expect(seen[0]?.candidates.map((c) => c.text as string)).toEqual([
+      "Next I will open the pull request for review.",
+    ]);
+    expect(memories()).toEqual([]);
+  });
+
+  test("a mixed turn: the judge's title is not knowledge, the knowledge sentence is the title", async () => {
+    turn("ok", `${BOTTOM_LINE} ${E2E}`);
+    await drain(judging({ [BOTTOM_LINE]: 0.2, [E2E]: 0.9 }, BOTTOM_LINE));
+    expect(memories().map((m) => [m.title, m.body])).toEqual([[E2E, ""]]);
+  });
+
+  test("a none title: the sentence above the threshold is the title", async () => {
+    turn("ok", `${BOTTOM_LINE} ${E2E}`);
+    await drain(judging({ [E2E]: 0.8 }, null));
+    expect(memories().map((m) => m.title)).toEqual([E2E]);
+  });
+
+  test("a short acknowledgement with a fix: stored, with no Context line", async () => {
+    turn("aprovo", `${CAUSE} I removed it and the hook now exits at once.`);
+    await drain(judging({ [CAUSE]: 0.9 }, CAUSE));
+    expect(memories().map((m) => [m.title, m.body])).toEqual([[CAUSE, ""]]);
+  });
+});
+
+describe("distill: the notes the session had been shown", () => {
+  /** Learns the busy-timeout fix in turn 1, then has turn 2 of the same session repeat it. */
+  async function repeatedInASecondTurn(): Promise<number> {
+    turn("the tests fail with a timeout", FIX);
+    await drain();
+    turn(
+      "is openDb still slow?",
+      "As noted before: Fixed: the root cause was the busy timeout being set after the first query. Moved the pragma to the top of `openDb` in src/store/db.ts. So nothing new here.",
+    );
+    // Only the injection each test writes: what retrieval chose to show is not the point.
+    db.run("DELETE FROM injections");
+    return clock;
+  }
+  const inject = (at: number) =>
+    db.run(
+      "INSERT INTO injections (session_id, context_epoch, memory_id, event, tokens, at) VALUES (1, 0, 1, 'prompt', 40, ?)",
+      [at],
+    );
+
+  test("a note from another turn, shown after this turn ended, does not take this turn's sentences", async () => {
+    const ended = await repeatedInASecondTurn();
+    inject(ended + 60_000);
+    const seen: DistillInput[] = [];
+    await drain(recording(seen));
+    expect(seen[0]?.candidates.map((c) => c.text as string)).toContain(
+      "Moved the pragma to the top of `openDb` in src/store/db.ts.",
+    );
+  });
+
+  test("a note from another turn, shown before this turn ended, is removed from it", async () => {
+    const ended = await repeatedInASecondTurn();
+    inject(ended - 500);
+    const seen: DistillInput[] = [];
+    await drain(recording(seen));
+    expect(seen[0]?.candidates.map((c) => c.text as string)).not.toContain(
+      "Moved the pragma to the top of `openDb` in src/store/db.ts.",
+    );
+  });
+
+  test("a turn ended again later keeps its sentences from its own memory, shown before that end", async () => {
+    const turnId = turn("the tests fail with a timeout", FIX);
+    await drain();
+    db.run(
+      "INSERT INTO injections (session_id, context_epoch, memory_id, event, tokens, at) VALUES (1, 0, 1, 'prompt', 40, ?)",
+      [clock + 500],
+    );
+    // A late turn-end with more text queues the turn again, with a later ended_at.
+    hook("turn-end", { turnId, finalText: `${FIX} The WAL mode is set in the same place.` });
+    const seen: DistillInput[] = [];
+    await drain(recording(seen));
+    expect(seen[0]?.candidates.map((c) => c.text as string)).toContain(
+      "Moved the pragma to the top of `openDb` in src/store/db.ts.",
+    );
+  });
+
+  test("with no end recorded, every note the session was shown is removed", async () => {
+    turn("the tests fail with a timeout", FIX);
+    await drain();
+    db.run("DELETE FROM turns");
+    hook("prompt", { sessionId: "s2", turnId: "q1", prompt: "why is openDb slow here?" });
+    hook("turn-end", {
+      sessionId: "s2",
+      turnId: "q1",
+      finalText:
+        "As noted before: Fixed: the root cause was the busy timeout being set after the first query. Moved the pragma to the top of `openDb` in src/store/db.ts. So nothing new here.",
+    });
+    db.run("UPDATE turns SET ended_at = NULL");
+    db.run("UPDATE injections SET at = at + 3600000");
+    await drain();
+    expect(memories()).toHaveLength(1);
+    expect(memories()[0]?.evidence_count).toBe(1);
   });
 });

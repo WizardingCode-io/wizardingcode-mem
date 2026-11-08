@@ -1,0 +1,1418 @@
+{
+  "fingerprint": "sha256:e66ddfb48ae4308c657a1dd3a3e7f0ff4e19483c99814dd9d5a719a1eb5b7925",
+  "tdd": [
+    {
+      "criterion": "AC-1",
+      "red": {
+        "command": "./node_modules/.bin/bun test tests/unit/noise.test.ts",
+        "exit": 1,
+        "at": "2026-10-15T19:32:16.710Z",
+        "durationMs": 77,
+        "log": "logs/tdd-AC-1-red-1792092736633.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\ntests/unit/noise.test.ts:\n\n# Unhandled error between tests\n-------------------------------\nerror: Cannot find module '../../src/distill/noise.ts' from '/Users/andreagroferreira/AIProjects/ai-mem/tests/unit/noise.test.ts'\n-------------------------------\n\n\n 0 pass\n 1 fail\n 1 error\nRan 1 test across 1 file. [48.00ms]",
+        "timedOut": false,
+        "changedTests": [
+          "tests/unit/noise.test.ts"
+        ]
+      },
+      "green": {
+        "command": "./node_modules/.bin/bun test tests/unit/noise.test.ts",
+        "exit": 0,
+        "at": "2026-11-06T13:32:23.902Z",
+        "durationMs": 88,
+        "log": "logs/tdd-AC-1-green-1793971943812.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\n 14 pass\n 0 fail\n 45 expect() calls\nRan 14 tests across 1 file. [58.00ms]",
+        "timedOut": false,
+        "passed": 14
+      }
+    },
+    {
+      "criterion": "AC-2",
+      "red": {
+        "command": "./node_modules/.bin/bun test tests/integration/distill.test.ts -t 'noise filter'",
+        "exit": 1,
+        "at": "2026-11-06T15:33:25.955Z",
+        "durationMs": 75,
+        "log": "logs/tdd-AC-2-red-1793979205878.txt",
+        "tail": "+ agentId: abc123def456 (internal ID)\n+ It now waits and retries within its time budget.\n  Context: why did the import stop at 3299 turns?\"\n\n- Expected  - 2\n+ Received  + 5\n\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/tests/integration/distill.test.ts:858:54)\n(fail) distill: the noise filter runs before the judge > the judge's title index refers to the kept list, so a dropped sentence shifts nothing [9.82ms]\n877 |       ...heuristicJudge,\n878 |       distill: async () => {\n879 |         throw new Error(\"the judge must not be asked\");\n880 |       },\n881 |     };\n882 |     expect(await drain(judge)).toEqual({ held: false, claimed: 1, done: 0, skipped: 1, failed: 0 });\n                                     ^\nerror: expect(received).toEqual(expected)\n\n  {\n-   \"claimed\": 1,\n+   \"claimed\": 3,\n    \"done\": 0,\n-   \"failed\": 0,\n+   \"failed\": 1,\n    \"held\": false,\n-   \"skipped\": 1,\n+   \"skipped\": 0,\n  }\n\n- Expected  - 3\n+ Received  + 3\n\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/tests/integration/distill.test.ts:882:32)\n(fail) distill: the noise filter runs before the judge > a turn the filter empties is skipped without asking the judge [10.19ms]\n\n 0 pass\n 47 filtered out\n 4 fail\n 5 expect() calls\nRan 4 tests across 1 file. [65.00ms]",
+        "timedOut": false,
+        "passed": 0,
+        "changedTests": [
+          "tests/integration/distill.test.ts",
+          "tests/unit/draft.test.ts",
+          "tests/unit/noise.test.ts"
+        ]
+      },
+      "reds": [
+        {
+          "command": "./node_modules/.bin/bun test tests/unit/draft.test.ts tests/integration/distill.test.ts",
+          "exit": 1,
+          "at": "2026-11-06T13:32:24.634Z",
+          "durationMs": 666,
+          "log": "logs/tdd-AC-2-red-1793971943967.txt",
+          "tail": "+ agentId: abc123def456 (internal ID)\n+ It now waits and retries within its time budget.\n  Context: why did the import stop at 3299 turns?\"\n\n- Expected  - 2\n+ Received  + 5\n\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/tests/integration/distill.test.ts:836:54)\n(fail) distill: the noise filter runs before the judge > the judge's title index refers to the kept list, so a dropped sentence shifts nothing [9.16ms]\n847 |       ...heuristicJudge,\n848 |       distill: async () => {\n849 |         throw new Error(\"the judge must not be asked\");\n850 |       },\n851 |     };\n852 |     expect(await drain(judge)).toEqual({ held: false, claimed: 1, done: 0, skipped: 1, failed: 0 });\n                                     ^\nerror: expect(received).toEqual(expected)\n\n  {\n-   \"claimed\": 1,\n+   \"claimed\": 3,\n    \"done\": 0,\n-   \"failed\": 0,\n+   \"failed\": 1,\n    \"held\": false,\n-   \"skipped\": 1,\n+   \"skipped\": 0,\n  }\n\n- Expected  - 3\n+ Received  + 3\n\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/tests/integration/distill.test.ts:852:32)\n(fail) distill: the noise filter runs before the judge > a turn the filter empties is skipped without asking the judge [9.90ms]\n\n 39 pass\n 4 fail\n 1 error\n 101 expect() calls\nRan 43 tests across 2 files. [655.00ms]",
+          "timedOut": false,
+          "passed": 39,
+          "changedTests": [
+            "tests/integration/distill.test.ts",
+            "tests/unit/draft.test.ts",
+            "tests/unit/noise.test.ts"
+          ]
+        }
+      ],
+      "green": {
+        "command": "./node_modules/.bin/bun test tests/integration/distill.test.ts -t 'noise filter'",
+        "exit": 0,
+        "at": "2026-11-06T15:33:57.635Z",
+        "durationMs": 70,
+        "log": "logs/tdd-AC-2-green-1793979237565.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\n 4 pass\n 47 filtered out\n 0 fail\n 12 expect() calls\nRan 4 tests across 1 file. [60.00ms]",
+        "timedOut": false,
+        "passed": 4
+      }
+    },
+    {
+      "criterion": "AC-3",
+      "red": {
+        "command": "./node_modules/.bin/bun test tests/unit/draft.test.ts tests/integration/distill.test.ts -t 'Context line|title must be knowledge|journeys'",
+        "exit": 1,
+        "at": "2026-11-06T15:33:25.785Z",
+        "durationMs": 76,
+        "log": "logs/tdd-AC-3-red-1793979205709.txt",
+        "tail": "-     \"\",\n+     \"Bottom line: the wave is closed and the gate is next.\",\n+     \n+ \"The e2e never fires the real POST: sending is paid, everything is intercepted.\n+ Context: ok\"\n+ ,\n    ],\n\n- Expected  - 2\n+ Received  + 5\n\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/tests/integration/distill.test.ts:938:54)\n(fail) distill: the journeys of the spec (section 10) > a mixed turn: the judge's title is not knowledge, the knowledge sentence is the title [9.60ms]\n945 |   });\n946 | \n947 |   test(\"a short acknowledgement with a fix: stored, with no Context line\", async () => {\n948 |     turn(\"aprovo\", `${CAUSE} I removed it and the hook now exits at once.`);\n949 |     await drain(judging({ [CAUSE]: 0.9 }, CAUSE));\n950 |     expect(memories().map((m) => [m.title, m.body])).toEqual([[CAUSE, \"\"]]);\n                                                           ^\nerror: expect(received).toEqual(expected)\n\n@@ -3,3 +3,3 @@\n      \"The cause was a pending timer in src/hooks/stop.ts that kept the process alive.\",\n-     \"\",\n+     \"Context: aprovo\",\n    ],\n\n- Expected  - 1\n+ Received  + 1\n\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/tests/integration/distill.test.ts:950:54)\n(fail) distill: the journeys of the spec (section 10) > a short acknowledgement with a fix: stored, with no Context line [10.20ms]\n\n 1 pass\n 46 filtered out\n 5 fail\n 1 error\n 6 expect() calls\nRan 6 tests across 2 files. [66.00ms]",
+        "timedOut": false,
+        "passed": 1,
+        "changedTests": [
+          "tests/integration/distill.test.ts",
+          "tests/unit/draft.test.ts",
+          "tests/unit/noise.test.ts"
+        ]
+      },
+      "reds": [
+        {
+          "command": "./node_modules/.bin/bun test tests/unit/draft.test.ts tests/integration/distill.test.ts",
+          "exit": 1,
+          "at": "2026-11-06T13:32:25.206Z",
+          "durationMs": 476,
+          "log": "logs/tdd-AC-3-red-1793971944729.txt",
+          "tail": "+ agentId: abc123def456 (internal ID)\n+ It now waits and retries within its time budget.\n  Context: why did the import stop at 3299 turns?\"\n\n- Expected  - 2\n+ Received  + 5\n\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/tests/integration/distill.test.ts:836:54)\n(fail) distill: the noise filter runs before the judge > the judge's title index refers to the kept list, so a dropped sentence shifts nothing [10.50ms]\n847 |       ...heuristicJudge,\n848 |       distill: async () => {\n849 |         throw new Error(\"the judge must not be asked\");\n850 |       },\n851 |     };\n852 |     expect(await drain(judge)).toEqual({ held: false, claimed: 1, done: 0, skipped: 1, failed: 0 });\n                                     ^\nerror: expect(received).toEqual(expected)\n\n  {\n-   \"claimed\": 1,\n+   \"claimed\": 3,\n    \"done\": 0,\n-   \"failed\": 0,\n+   \"failed\": 1,\n    \"held\": false,\n-   \"skipped\": 1,\n+   \"skipped\": 0,\n  }\n\n- Expected  - 3\n+ Received  + 3\n\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/tests/integration/distill.test.ts:852:32)\n(fail) distill: the noise filter runs before the judge > a turn the filter empties is skipped without asking the judge [10.17ms]\n\n 39 pass\n 4 fail\n 1 error\n 101 expect() calls\nRan 43 tests across 2 files. [465.00ms]",
+          "timedOut": false,
+          "passed": 39,
+          "changedTests": [
+            "tests/integration/distill.test.ts",
+            "tests/unit/draft.test.ts",
+            "tests/unit/noise.test.ts"
+          ]
+        }
+      ],
+      "green": {
+        "command": "./node_modules/.bin/bun test tests/unit/draft.test.ts tests/integration/distill.test.ts -t 'Context line|title must be knowledge|journeys'",
+        "exit": 0,
+        "at": "2026-11-06T15:33:57.500Z",
+        "durationMs": 85,
+        "log": "logs/tdd-AC-3-green-1793979237414.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\n 11 pass\n 46 filtered out\n 0 fail\n 18 expect() calls\nRan 11 tests across 2 files. [75.00ms]",
+        "timedOut": false,
+        "passed": 11
+      }
+    },
+    {
+      "criterion": "AC-9",
+      "red": {
+        "command": "./node_modules/.bin/bun test tests/unit/noise.test.ts",
+        "exit": 1,
+        "at": "2026-11-06T15:30:14.397Z",
+        "durationMs": 16,
+        "log": "logs/tdd-AC-9-red-1793979014380.txt",
+        "tail": "137 |       expect([text, dropped(text)]).toEqual([text, null]);\n                                          ^\nerror: expect(received).toEqual(expected)\n\n@@ -2,3 +2,3 @@\n    \"The hook treats a line saying \"NOT a message from the user\" as the host's own frame.\",\n-   null,\n+   \"host-frame\",\n  ]\n\n- Expected  - 1\n+ Received  + 1\n\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/tests/unit/noise.test.ts:137:37)\n(fail) dropNoise: sentences that are never knowledge > a sentence that quotes the host's phrases while discussing them passes [0.04ms]\n167 |       [\"template-label\", \"Title: the wave closed today.\"],\n168 |     ]);\n169 |   });\n170 | \n171 |   test(\"every pattern has a name the report can print\", () => {\n172 |     expect(NOISE_PATTERNS.map((p) => p.name)).toEqual([\n                                                    ^\nerror: expect(received).toEqual(expected)\n\n@@ -4,2 +4,4 @@\n    \"template-label\",\n+   \"protocol-tag\",\n+   \"verdict\",\n  ]\n\n- Expected  - 0\n+ Received  + 2\n\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/tests/unit/noise.test.ts:172:47)\n(fail) dropNoise: sentences that are never knowledge > every pattern has a name the report can print [0.04ms]\n\n 11 pass\n 6 fail\n 39 expect() calls\nRan 17 tests across 1 file. [8.00ms]",
+        "timedOut": false,
+        "passed": 11,
+        "changedTests": [
+          "tests/unit/noise.test.ts"
+        ]
+      },
+      "green": {
+        "command": "./node_modules/.bin/bun test tests/unit/noise.test.ts",
+        "exit": 0,
+        "at": "2026-11-06T15:30:30.120Z",
+        "durationMs": 17,
+        "log": "logs/tdd-AC-9-green-1793979030103.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\n 17 pass\n 0 fail\n 54 expect() calls\nRan 17 tests across 1 file. [8.00ms]",
+        "timedOut": false,
+        "passed": 17
+      }
+    },
+    {
+      "criterion": "AC-12",
+      "red": {
+        "command": "./node_modules/.bin/bun test tests/unit/noise.test.ts",
+        "exit": 1,
+        "at": "2026-11-06T15:30:14.497Z",
+        "durationMs": 19,
+        "log": "logs/tdd-AC-12-red-1793979014478.txt",
+        "tail": "137 |       expect([text, dropped(text)]).toEqual([text, null]);\n                                          ^\nerror: expect(received).toEqual(expected)\n\n@@ -2,3 +2,3 @@\n    \"The hook treats a line saying \"NOT a message from the user\" as the host's own frame.\",\n-   null,\n+   \"host-frame\",\n  ]\n\n- Expected  - 1\n+ Received  + 1\n\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/tests/unit/noise.test.ts:137:37)\n(fail) dropNoise: sentences that are never knowledge > a sentence that quotes the host's phrases while discussing them passes [0.04ms]\n167 |       [\"template-label\", \"Title: the wave closed today.\"],\n168 |     ]);\n169 |   });\n170 | \n171 |   test(\"every pattern has a name the report can print\", () => {\n172 |     expect(NOISE_PATTERNS.map((p) => p.name)).toEqual([\n                                                    ^\nerror: expect(received).toEqual(expected)\n\n@@ -4,2 +4,4 @@\n    \"template-label\",\n+   \"protocol-tag\",\n+   \"verdict\",\n  ]\n\n- Expected  - 0\n+ Received  + 2\n\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/tests/unit/noise.test.ts:172:47)\n(fail) dropNoise: sentences that are never knowledge > every pattern has a name the report can print [0.04ms]\n\n 11 pass\n 6 fail\n 39 expect() calls\nRan 17 tests across 1 file. [8.00ms]",
+        "timedOut": false,
+        "passed": 11,
+        "changedTests": [
+          "tests/unit/noise.test.ts"
+        ]
+      },
+      "green": {
+        "command": "./node_modules/.bin/bun test tests/unit/noise.test.ts",
+        "exit": 0,
+        "at": "2026-11-06T15:30:30.202Z",
+        "durationMs": 17,
+        "log": "logs/tdd-AC-12-green-1793979030184.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\n 17 pass\n 0 fail\n 54 expect() calls\nRan 17 tests across 1 file. [8.00ms]",
+        "timedOut": false,
+        "passed": 17
+      }
+    },
+    {
+      "criterion": "AC-13",
+      "red": {
+        "command": "./node_modules/.bin/bun test tests/unit/noise.test.ts",
+        "exit": 1,
+        "at": "2026-11-06T15:30:14.597Z",
+        "durationMs": 16,
+        "log": "logs/tdd-AC-13-red-1793979014579.txt",
+        "tail": "137 |       expect([text, dropped(text)]).toEqual([text, null]);\n                                          ^\nerror: expect(received).toEqual(expected)\n\n@@ -2,3 +2,3 @@\n    \"The hook treats a line saying \"NOT a message from the user\" as the host's own frame.\",\n-   null,\n+   \"host-frame\",\n  ]\n\n- Expected  - 1\n+ Received  + 1\n\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/tests/unit/noise.test.ts:137:37)\n(fail) dropNoise: sentences that are never knowledge > a sentence that quotes the host's phrases while discussing them passes [0.04ms]\n167 |       [\"template-label\", \"Title: the wave closed today.\"],\n168 |     ]);\n169 |   });\n170 | \n171 |   test(\"every pattern has a name the report can print\", () => {\n172 |     expect(NOISE_PATTERNS.map((p) => p.name)).toEqual([\n                                                    ^\nerror: expect(received).toEqual(expected)\n\n@@ -4,2 +4,4 @@\n    \"template-label\",\n+   \"protocol-tag\",\n+   \"verdict\",\n  ]\n\n- Expected  - 0\n+ Received  + 2\n\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/tests/unit/noise.test.ts:172:47)\n(fail) dropNoise: sentences that are never knowledge > every pattern has a name the report can print [0.04ms]\n\n 11 pass\n 6 fail\n 39 expect() calls\nRan 17 tests across 1 file. [8.00ms]",
+        "timedOut": false,
+        "passed": 11,
+        "changedTests": [
+          "tests/unit/noise.test.ts"
+        ]
+      },
+      "green": {
+        "command": "./node_modules/.bin/bun test tests/unit/noise.test.ts",
+        "exit": 0,
+        "at": "2026-11-06T15:30:30.282Z",
+        "durationMs": 17,
+        "log": "logs/tdd-AC-13-green-1793979030263.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\n 17 pass\n 0 fail\n 54 expect() calls\nRan 17 tests across 1 file. [7.00ms]",
+        "timedOut": false,
+        "passed": 17
+      }
+    },
+    {
+      "criterion": "AC-14",
+      "red": {
+        "command": "./node_modules/.bin/bun test tests/unit/noise.test.ts tests/integration/distill.test.ts -t 'withoutSentences|never reach the judge|host frame inside the prompt'",
+        "exit": 1,
+        "at": "2026-11-06T15:33:17.493Z",
+        "durationMs": 48,
+        "log": "logs/tdd-AC-14-red-1793979197444.txt",
+        "tail": "+     \"agentId: abc123def456 (internal ID)\",\n+   ],\n+   [\n+     5,\n      \"final\",\n\n- Expected  - 1\n+ Received  + 16\n\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/tests/integration/distill.test.ts:821:81)\n(fail) distill: the noise filter runs before the judge > host blocks and noise sentences never reach the judge, and the kept candidates are dense [14.80ms]\n844 | That \"other Claude session\" is an agent working inside this same session.`,\n845 |       \"The import treated a held drain lease like an empty queue, so it distilled nothing.\",\n846 |     );\n847 |     const seen: DistillInput[] = [];\n848 |     await drain(recording(seen));\n849 |     expect(seen[0]?.prompt.trim()).toBe(\"please check why the import stopped early\");\n                                         ^\nerror: expect(received).toBe(expected)\n\n- \"please check why the import stopped early\"\n+ \"please check why the import stopped early\n+ Another Claude session sent a message:\n+ <agent-message from=\"a1\">\n+ The report.\n+ </agent-message>\n+ That \"other Claude session\" is an agent working inside this same session.\"\n\n- Expected  - 1\n+ Received  + 6\n\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/tests/integration/distill.test.ts:849:36)\n(fail) distill: the noise filter runs before the judge > a host frame inside the prompt reaches neither the judge nor the Context line [8.72ms]\n\n 0 pass\n 49 filtered out\n 3 fail\n 1 error\n 3 expect() calls\nRan 3 tests across 2 files. [39.00ms]",
+        "timedOut": false,
+        "passed": 0,
+        "changedTests": [
+          "tests/integration/distill.test.ts",
+          "tests/unit/draft.test.ts",
+          "tests/unit/noise.test.ts"
+        ]
+      },
+      "green": {
+        "command": "./node_modules/.bin/bun test tests/unit/noise.test.ts tests/integration/distill.test.ts -t 'withoutSentences|never reach the judge|host frame inside the prompt'",
+        "exit": 0,
+        "at": "2026-11-06T15:33:57.348Z",
+        "durationMs": 53,
+        "log": "logs/tdd-AC-14-green-1793979237294.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\n 4 pass\n 66 filtered out\n 0 fail\n 11 expect() calls\nRan 4 tests across 2 files. [43.00ms]",
+        "timedOut": false,
+        "passed": 4
+      }
+    },
+    {
+      "criterion": "AC-11",
+      "red": {
+        "command": "./node_modules/.bin/bun test tests/integration/distill.test.ts -t 'notes the session had been shown'",
+        "exit": 1,
+        "at": "2026-11-06T15:33:26.138Z",
+        "durationMs": 88,
+        "log": "logs/tdd-AC-11-red-1793979206050.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\ntests/integration/distill.test.ts:\n973 |   test(\"a note from another turn, shown after this turn ended, does not take this turn's sentences\", async () => {\n974 |     const ended = await repeatedInASecondTurn();\n975 |     inject(ended + 60_000);\n976 |     const seen: DistillInput[] = [];\n977 |     await drain(recording(seen));\n978 |     expect(seen[0]?.candidates.map((c) => c.text as string)).toContain(\n                                                                   ^\nerror: expect(received).toContain(expected)\n\nExpected to contain: \"Moved the pragma to the top of `openDb` in src/store/db.ts.\"\nReceived: [ \"is openDb still slow?\", \"As noted before: So nothing new here.\" ]\n\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/tests/integration/distill.test.ts:978:62)\n(fail) distill: the notes the session had been shown > a note from another turn, shown after this turn ended, does not take this turn's sentences [24.62ms]\n 999 |     );\n1000 |     // A late turn-end with more text queues the turn again, with a later ended_at.\n1001 |     hook(\"turn-end\", { turnId, finalText: `${FIX} The WAL mode is set in the same place.` });\n1002 |     const seen: DistillInput[] = [];\n1003 |     await drain(recording(seen));\n1004 |     expect(seen[0]?.candidates.map((c) => c.text as string)).toContain(\n                                                                    ^\nerror: expect(received).toContain(expected)\n\nExpected to contain: \"Moved the pragma to the top of `openDb` in src/store/db.ts.\"\nReceived: [ \"the tests fail with a timeout\", \"The WAL mode is set in the same place.\" ]\n\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/tests/integration/distill.test.ts:1004:62)\n(fail) distill: the notes the session had been shown > a turn ended again later keeps its sentences from its own memory, shown before that end [11.68ms]\n\n 2 pass\n 47 filtered out\n 2 fail\n 5 expect() calls\nRan 4 tests across 1 file. [77.00ms]",
+        "timedOut": false,
+        "passed": 2,
+        "changedTests": [
+          "tests/integration/distill.test.ts",
+          "tests/unit/draft.test.ts",
+          "tests/unit/noise.test.ts"
+        ]
+      },
+      "green": {
+        "command": "./node_modules/.bin/bun test tests/integration/distill.test.ts -t 'notes the session had been shown'",
+        "exit": 0,
+        "at": "2026-11-06T15:33:57.774Z",
+        "durationMs": 76,
+        "log": "logs/tdd-AC-11-green-1793979237697.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\n 4 pass\n 47 filtered out\n 0 fail\n 5 expect() calls\nRan 4 tests across 1 file. [66.00ms]",
+        "timedOut": false,
+        "passed": 4
+      }
+    },
+    {
+      "criterion": "AC-10",
+      "merged": {
+        "task": "T-5",
+        "child": "2026-11-06-001-t-5-of-2026-10-15-001-memory-quality-kno",
+        "commit": "f2a82b207d03a0f8fe71dd03158f177070b08e8f",
+        "at": "2026-11-06T15:36:47.660Z"
+      }
+    },
+    {
+      "criterion": "AC-5",
+      "merged": {
+        "task": "T-4",
+        "child": "2026-11-06-001-t-4-of-2026-10-15-001-memory-quality-kno",
+        "commit": "ef17a98584f56a7f46898386c2852f6330728dbf",
+        "at": "2026-11-07T10:50:58.964Z"
+      }
+    },
+    {
+      "criterion": "AC-4",
+      "red": {
+        "command": "./node_modules/.bin/bun test tests/unit/questions.test.ts tests/unit/typesafe-judge.test.ts tests/golden/judges.test.ts tests/golden/filter.test.ts",
+        "exit": 1,
+        "at": "2026-11-08T16:08:52.813Z",
+        "durationMs": 261,
+        "log": "logs/tdd-AC-4-red-1794154132551.txt",
+        "tail": "      at async <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/tests/unit/typesafe-judge.test.ts:228:78)\n(fail) TypeSafeJudge > a title of 'none' and a kind of 'none' are passed through as such [0.10ms]\n103 |   }\n104 | }\n105 | \n106 | const noul = (answers: Record<string, Answer>, id: string): number => {\n107 |   const answer = answers[id];\n108 |   if (answer?.type !== \"noul\" || typeof answer.noul !== \"number\") throw new MissingAnswer(id);\n                                                                              ^\nMissingAnswer: no usable answer for \"durable_0\"\n      at noul (/Users/andreagroferreira/AIProjects/ai-mem/src/judge/questions.ts:108:73)\n      at map (1:11)\n      at distillVerdict (/Users/andreagroferreira/AIProjects/ai-mem/src/judge/questions.ts:131:36)\n      at async <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/tests/unit/typesafe-judge.test.ts:295:25)\n(fail) TypeSafeJudge > retries rate limits and overload, but not an invalid request [2.54ms]\n\ntests/golden/judges.test.ts:\n\n# Unhandled error between tests\n-------------------------------\n103 |   }\n104 | }\n105 | \n106 | const noul = (answers: Record<string, Answer>, id: string): number => {\n107 |   const answer = answers[id];\n108 |   if (answer?.type !== \"noul\" || typeof answer.noul !== \"number\") throw new MissingAnswer(id);\n                                                                              ^\nMissingAnswer: no usable answer for \"durable_0\"\n      at noul (/Users/andreagroferreira/AIProjects/ai-mem/src/judge/questions.ts:108:73)\n      at map (1:11)\n      at distillVerdict (/Users/andreagroferreira/AIProjects/ai-mem/src/judge/questions.ts:131:36)\n      at async score (/Users/andreagroferreira/AIProjects/ai-mem/tests/golden/judges.test.ts:48:33)\n-------------------------------\n\n\n 39 pass\n 9 fail\n 1 error\n 134 expect() calls\nRan 48 tests across 4 files. [238.00ms]",
+        "timedOut": false,
+        "passed": 39,
+        "changedTests": [
+          "tests/golden/judges.test.ts",
+          "tests/golden/turns.json",
+          "tests/golden/typesafe-answers.json",
+          "tests/helpers/judge-input.ts",
+          "tests/integration/distill.test.ts",
+          "tests/integration/judge-select.test.ts",
+          "tests/integration/quality-proof.test.ts",
+          "tests/integration/rejudge.test.ts",
+          "tests/unit/draft.test.ts",
+          "tests/unit/heuristic-judge.test.ts",
+          "tests/unit/noise.test.ts",
+          "tests/unit/questions.test.ts",
+          "tests/unit/typesafe-judge.test.ts"
+        ]
+      },
+      "reds": [
+        {
+          "command": "./node_modules/.bin/bun test 'tests/unit/questions.test.ts tests/unit/typesafe-judge.test.ts tests/golden/judges.test.ts tests/golden/filter.test.ts'",
+          "exit": 1,
+          "at": "2026-11-08T16:04:52.967Z",
+          "durationMs": 50,
+          "log": "logs/tdd-AC-4-red-1794153892916.txt",
+          "tail": "bun test v1.4.2 (744846f84)\nThe following filters did not match any test files in --cwd=\"/Users/andreagroferreira/AIProjects/ai-mem\":\n tests/unit/questions.test.ts tests/unit/typesafe-judge.test.ts tests/golden/judges.test.ts tests/golden/filter.test.ts\n641 files were searched [24.00ms]\n\nnote: Tests need \".test\", \"_test_\", \".spec\" or \"_spec_\" in the filename (ex: \"MyApp.test.ts\")\nnote: To treat the \"tests/unit/questions.test.ts tests/unit/typesafe-judge.test.ts tests/golden/judges.test.ts tests/golden/filter.test.ts\" filter as a path, run \"bun test ./tests/unit/questions.test.ts tests/unit/typesafe-judge.test.ts tests/golden/judges.test.ts tests/golden/filter.test.ts\"\n",
+          "timedOut": false,
+          "changedTests": [
+            "tests/golden/judges.test.ts",
+            "tests/golden/turns.json",
+            "tests/golden/typesafe-answers.json",
+            "tests/helpers/judge-input.ts",
+            "tests/integration/distill.test.ts",
+            "tests/integration/judge-select.test.ts",
+            "tests/integration/quality-proof.test.ts",
+            "tests/integration/rejudge.test.ts",
+            "tests/unit/draft.test.ts",
+            "tests/unit/heuristic-judge.test.ts",
+            "tests/unit/noise.test.ts",
+            "tests/unit/questions.test.ts",
+            "tests/unit/typesafe-judge.test.ts"
+          ]
+        },
+        {
+          "command": "./node_modules/.bin/bun test tests/unit/questions.test.ts tests/unit/typesafe-judge.test.ts tests/golden/judges.test.ts tests/golden/filter.test.ts",
+          "exit": 1,
+          "at": "2026-11-08T16:05:12.809Z",
+          "durationMs": 265,
+          "log": "logs/tdd-AC-4-red-1794153912543.txt",
+          "tail": "      at async <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/tests/unit/typesafe-judge.test.ts:228:78)\n(fail) TypeSafeJudge > a title of 'none' and a kind of 'none' are passed through as such [0.14ms]\n103 |   }\n104 | }\n105 | \n106 | const noul = (answers: Record<string, Answer>, id: string): number => {\n107 |   const answer = answers[id];\n108 |   if (answer?.type !== \"noul\" || typeof answer.noul !== \"number\") throw new MissingAnswer(id);\n                                                                              ^\nMissingAnswer: no usable answer for \"durable_0\"\n      at noul (/Users/andreagroferreira/AIProjects/ai-mem/src/judge/questions.ts:108:73)\n      at map (1:11)\n      at distillVerdict (/Users/andreagroferreira/AIProjects/ai-mem/src/judge/questions.ts:131:36)\n      at async <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/tests/unit/typesafe-judge.test.ts:295:25)\n(fail) TypeSafeJudge > retries rate limits and overload, but not an invalid request [2.56ms]\n\ntests/golden/judges.test.ts:\n\n# Unhandled error between tests\n-------------------------------\n103 |   }\n104 | }\n105 | \n106 | const noul = (answers: Record<string, Answer>, id: string): number => {\n107 |   const answer = answers[id];\n108 |   if (answer?.type !== \"noul\" || typeof answer.noul !== \"number\") throw new MissingAnswer(id);\n                                                                              ^\nMissingAnswer: no usable answer for \"durable_0\"\n      at noul (/Users/andreagroferreira/AIProjects/ai-mem/src/judge/questions.ts:108:73)\n      at map (1:11)\n      at distillVerdict (/Users/andreagroferreira/AIProjects/ai-mem/src/judge/questions.ts:131:36)\n      at async score (/Users/andreagroferreira/AIProjects/ai-mem/tests/golden/judges.test.ts:48:33)\n-------------------------------\n\n\n 39 pass\n 9 fail\n 1 error\n 134 expect() calls\nRan 48 tests across 4 files. [254.00ms]",
+          "timedOut": false,
+          "passed": 39,
+          "changedTests": [
+            "tests/golden/judges.test.ts",
+            "tests/golden/turns.json",
+            "tests/golden/typesafe-answers.json",
+            "tests/helpers/judge-input.ts",
+            "tests/integration/distill.test.ts",
+            "tests/integration/judge-select.test.ts",
+            "tests/integration/quality-proof.test.ts",
+            "tests/integration/rejudge.test.ts",
+            "tests/unit/draft.test.ts",
+            "tests/unit/heuristic-judge.test.ts",
+            "tests/unit/noise.test.ts",
+            "tests/unit/questions.test.ts",
+            "tests/unit/typesafe-judge.test.ts"
+          ]
+        }
+      ],
+      "green": {
+        "command": "./node_modules/.bin/bun test tests/unit/questions.test.ts tests/unit/typesafe-judge.test.ts tests/golden/judges.test.ts tests/golden/filter.test.ts",
+        "exit": 0,
+        "at": "2026-11-08T16:08:53.111Z",
+        "durationMs": 166,
+        "log": "logs/tdd-AC-4-green-1794154132943.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\ntests/golden/judges.test.ts:\nheuristic precision 100%  recall 100%  kind 83%\ntypesafe  precision 85%  recall 94%  kind 88%  wrongly kept: en-none-obvious-from-code, en-none-general-knowledge, pt-none-your-turn  missed: en-change-json-flag\n\n 51 pass\n 0 fail\n 178 expect() calls\nRan 51 tests across 4 files. [157.00ms]",
+        "timedOut": false,
+        "passed": 51
+      },
+      "greens": [
+        {
+          "command": "./node_modules/.bin/bun test tests/unit/questions.test.ts tests/unit/typesafe-judge.test.ts tests/golden/judges.test.ts tests/golden/filter.test.ts",
+          "exit": 0,
+          "at": "2026-11-08T16:05:20.980Z",
+          "durationMs": 178,
+          "log": "logs/tdd-AC-4-green-1794153920802.txt",
+          "tail": "bun test v1.4.2 (744846f84)\n\ntests/golden/judges.test.ts:\nheuristic precision 100%  recall 100%  kind 83%\ntypesafe  precision 85%  recall 94%  kind 88%  wrongly kept: en-none-obvious-from-code, en-none-general-knowledge, pt-none-your-turn  missed: en-change-json-flag\n\n 51 pass\n 0 fail\n 178 expect() calls\nRan 51 tests across 4 files. [169.00ms]",
+          "timedOut": false,
+          "passed": 51
+        }
+      ]
+    }
+  ],
+  "runs": [
+    {
+      "gate": "secrets",
+      "target": ".",
+      "command": "built-in secret scan",
+      "commandSource": null,
+      "confirmed": true,
+      "exit": 0,
+      "status": "pass",
+      "durationMs": 37,
+      "at": "2026-11-08T16:10:34.889Z",
+      "log": null,
+      "tail": "no secrets found in the change",
+      "fingerprint": "sha256:e66ddfb48ae4308c657a1dd3a3e7f0ff4e19483c99814dd9d5a719a1eb5b7925"
+    },
+    {
+      "gate": "prose",
+      "target": ".",
+      "command": "built-in prose scan",
+      "commandSource": null,
+      "confirmed": true,
+      "exit": 0,
+      "status": "pass",
+      "durationMs": 48,
+      "at": "2026-11-08T16:10:34.926Z",
+      "log": null,
+      "tail": "no chatbot artefacts in the change",
+      "fingerprint": "sha256:e66ddfb48ae4308c657a1dd3a3e7f0ff4e19483c99814dd9d5a719a1eb5b7925"
+    },
+    {
+      "gate": "build",
+      "target": ".",
+      "command": "bun run build",
+      "commandSource": "detected",
+      "confirmed": true,
+      "exit": 0,
+      "status": "pass",
+      "durationMs": 2158,
+      "at": "2026-11-08T16:10:34.974Z",
+      "log": "logs/build-_-1794154234974.txt",
+      "tail": "$ bun run ui:build && bun scripts/build.ts\n$ vite build --config ui/vite.config.ts\nvite v8.3.3 building client environment for production...\ntransforming...\n\n/assets/unbounded-variable.woff2 referenced in /assets/unbounded-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/instrument-sans-variable.woff2 referenced in /assets/instrument-sans-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/jetbrains-mono-variable.woff2 referenced in /assets/jetbrains-mono-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n✓ 834 modules transformed.\nrendering chunks...\n[plugin vite:singlefile] \n\n[plugin vite:singlefile] Inlining: index-PUhkQFrm.js\n[plugin vite:singlefile] Inlining: style-ODM7JwkH.css\nsrc/ui/dist/index.html  1,109.41 kB\n\n✓ built in 657ms\n✓ wizardingcode-mem-darwin-arm64  66.2 MB\n✓ wizardingcode-mem-darwin-x64  72.9 MB\n✓ wizardingcode-mem-linux-x64  84.3 MB\n✓ wizardingcode-mem-linux-arm64  84.3 MB\n✓ wizardingcode-mem-windows-x64.exe  88.9 MB",
+      "fingerprint": "sha256:e66ddfb48ae4308c657a1dd3a3e7f0ff4e19483c99814dd9d5a719a1eb5b7925"
+    },
+    {
+      "gate": "test",
+      "target": ".",
+      "command": "bun run test",
+      "commandSource": "detected",
+      "confirmed": true,
+      "exit": 0,
+      "status": "pass",
+      "durationMs": 56580,
+      "at": "2026-11-08T16:10:37.161Z",
+      "log": "logs/test-_-1794154237161.txt",
+      "tail": "tests/golden/judges.test.ts:\nheuristic precision 100%  recall 100%  kind 83%\ntypesafe  precision 85%  recall 94%  kind 88%  wrongly kept: en-none-obvious-from-code, en-none-general-knowledge, pt-none-your-turn  missed: en-change-json-flag\n\ntests/golden/search.test.ts:\ntop 5: 35/44 → 39/44; Portuguese of English: 1/8 → 4/8\nsemantic-only results for unrelated queries: 29/43\n\ntests/golden/retrieval.test.ts:\nrecall@5: 19/24 — missed: redact-first, pt-lingua, pt-cursor, ts-extension, hook-runs\nprecision: 19/21 notes given were the expected ones\nfalse injections: 0/23\n\ntests/perf/budgets.test.ts:\nprompt: p50 25.5 ms, p95 27.6 ms\nsession-start: p50 20.2 ms, p95 21.4 ms\nturn-end: p50 15.1 ms, p95 18.6 ms\nfile-read: p50 18.6 ms, p95 19.8 ms\ntool-failed: p50 24.2 ms, p95 25.3 ms\nqwen prompt: p50 24.9 ms, p95 26.4 ms\nqwen session-start: p50 19.6 ms, p95 24.0 ms\ndroid prompt: p50 24.8 ms, p95 26.3 ms\ndroid session-start: p50 19.1 ms, p95 20.8 ms\ncopilot session-start: p50 19.7 ms, p95 20.9 ms\ncopilot prompt (capture only): p50 15.5 ms, p95 16.0 ms\nantigravity pre-invocation: p50 18.8 ms, p95 20.2 ms\nlinked prompt: p50 30.9 ms, p95 37.5 ms (30 of 30 with a note from outside)\nlinked session-start: p50 20.8 ms, p95 22.5 ms\n\ntests/perf/large-project.test.ts:\nlarge project prompt: p50 18.2 ms, p95 20.7 ms (40 of 40 given notes)\n\ntests/perf/semantic.test.ts:\nsemantic global median: 16.5 ms\n\n 2015 pass\n 4 skip\n 0 fail\n 24 snapshots, 28379 expect() calls\nRan 2019 tests across 129 files. [55.26s]",
+      "fingerprint": "sha256:e66ddfb48ae4308c657a1dd3a3e7f0ff4e19483c99814dd9d5a719a1eb5b7925"
+    },
+    {
+      "gate": "lint",
+      "target": ".",
+      "command": "bun run lint",
+      "commandSource": "detected",
+      "confirmed": true,
+      "exit": 0,
+      "status": "pass",
+      "durationMs": 235,
+      "at": "2026-11-08T16:11:33.741Z",
+      "log": "logs/lint-_-1794154293741.txt",
+      "tail": "  \n\nscripts/embed/spike.ts:229:61 lint/style/noNonNullAssertion ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n  ! Forbidden non-null assertion.\n  \n    227 │       prompt: item.prompt,\n    228 │       expect: item.expect,\n  > 229 │       lexicalFound: item.expect.every((key) => got.includes(ids.get(key)!)),\n        │                                                             ^^^^^^^^^^^^^\n    230 │       hits: item.expect.map((key) => {\n    231 │         const index = order.findIndex((o) => o.key === key);\n  \n\nscripts/embed/spike.ts:232:72 lint/style/noNonNullAssertion  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n  ! Forbidden non-null assertion.\n  \n    230 │       hits: item.expect.map((key) => {\n    231 │         const index = order.findIndex((o) => o.key === key);\n  > 232 │         return { key, rank: index + 1, score: index < 0 ? Number.NaN : order[index]!.score };\n        │                                                                        ^^^^^^^^^^^^^\n    233 │       }),\n    234 │       top: order.slice(0, 3),\n  \n  i Unsafe fix: Replace with optional chain operator ?. This operator includes runtime checks, so it is safer than the compile-only non-null assertion operator\n  \n    230 230 │         hits: item.expect.map((key) => {\n    231 231 │           const index = order.findIndex((o) => o.key === key);\n    232     │ - ········return·{·key,·rank:·index·+·1,·score:·index·<·0·?·Number.NaN·:·order[index]!.score·};\n        232 │ + ········return·{·key,·rank:·index·+·1,·score:·index·<·0·?·Number.NaN·:·order[index]?.score·};\n    233 233 │         }),\n    234 234 │         top: order.slice(0, 3),\n  \n\nThe number of diagnostics exceeds the limit allowed. Use --max-diagnostics to increase it.\nDiagnostics not shown: 75.\nChecked 317 files in 124ms. No fixes applied.\nFound 94 warnings.\nFound 1 info.",
+      "fingerprint": "sha256:e66ddfb48ae4308c657a1dd3a3e7f0ff4e19483c99814dd9d5a719a1eb5b7925"
+    },
+    {
+      "gate": "typecheck",
+      "target": ".",
+      "command": "bun run typecheck",
+      "commandSource": "detected",
+      "confirmed": true,
+      "exit": 0,
+      "status": "pass",
+      "durationMs": 293,
+      "at": "2026-11-08T16:11:33.976Z",
+      "log": "logs/typecheck-_-1794154293976.txt",
+      "tail": "$ tsc --noEmit",
+      "fingerprint": "sha256:e66ddfb48ae4308c657a1dd3a3e7f0ff4e19483c99814dd9d5a719a1eb5b7925"
+    }
+  ],
+  "verdict": "proven",
+  "unproven": [],
+  "roles": [
+    {
+      "agent": "goldfish-zoom-out",
+      "agentId": "ad1a51ce3dfab3923",
+      "at": "2026-11-06T13:34:53.848Z",
+      "tokens": 126286,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-zoom-out.round2.md"
+    },
+    {
+      "agent": "goldfish-comprehension",
+      "agentId": "a365854272201a487",
+      "at": "2026-11-06T13:37:42.629Z",
+      "tokens": 115706,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-comprehension.round2.md"
+    },
+    {
+      "agent": "goldfish-structural",
+      "agentId": "a2f4817e6210a400a",
+      "at": "2026-11-06T13:38:54.161Z",
+      "tokens": 21762,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-structural.round2.md"
+    },
+    {
+      "agent": "goldfish-style",
+      "agentId": "add7594e9097fe45d",
+      "at": "2026-11-06T13:38:57.148Z",
+      "tokens": 24059,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-style.round2.md"
+    },
+    {
+      "agent": "goldfish-design",
+      "agentId": "a4f2faf837ef13c2d",
+      "at": "2026-11-06T13:40:13.103Z",
+      "tokens": 52572,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-design.round2.md"
+    },
+    {
+      "agent": "goldfish-zoom-out",
+      "agentId": "a0dffbdc28ec7832b",
+      "at": "2026-11-06T13:42:28.086Z",
+      "tokens": 122171,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-zoom-out.round3.md"
+    },
+    {
+      "agent": "goldfish-readiness",
+      "agentId": "a8dbac5172397fe47",
+      "at": "2026-11-06T13:47:22.837Z",
+      "tokens": 205631,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-readiness.round2.md"
+    },
+    {
+      "agent": "goldfish-codebase",
+      "agentId": "a7a2ba7371fcd3327",
+      "at": "2026-11-06T13:49:42.111Z",
+      "tokens": 250657,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-codebase.round2.md"
+    },
+    {
+      "agent": "goldfish-zoom-out",
+      "agentId": "a23eaab142caeea15",
+      "at": "2026-11-06T14:17:59.462Z",
+      "tokens": 95918,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-zoom-out.round4.md"
+    },
+    {
+      "agent": "goldfish-comprehension",
+      "agentId": "aaa50f5e0e8b96b7a",
+      "at": "2026-11-06T14:19:48.556Z",
+      "tokens": 85711,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-comprehension.round3.md"
+    },
+    {
+      "agent": "goldfish-structural",
+      "agentId": "adb80ea0d192f2c26",
+      "at": "2026-11-06T14:20:45.744Z",
+      "tokens": 23912,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-structural.round3.md"
+    },
+    {
+      "agent": "goldfish-style",
+      "agentId": "a75e57be4127045fc",
+      "at": "2026-11-06T14:20:50.583Z",
+      "tokens": 23748,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-style.round3.md"
+    },
+    {
+      "agent": "goldfish-design",
+      "agentId": "aa627267ab7704b67",
+      "at": "2026-11-06T14:21:57.701Z",
+      "tokens": 46599,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-design.round3.md"
+    },
+    {
+      "agent": "goldfish-zoom-out",
+      "agentId": "a4dbb9261b7f4a163",
+      "at": "2026-11-06T14:23:17.585Z",
+      "tokens": 81531,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-zoom-out.round5.md"
+    },
+    {
+      "agent": "goldfish-readiness",
+      "agentId": "a6da7edf992610f35",
+      "at": "2026-11-06T14:28:09.507Z",
+      "tokens": 183802,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-readiness.round3.md"
+    },
+    {
+      "agent": "goldfish-codebase",
+      "agentId": "a25ceba94fcb34fef",
+      "at": "2026-11-06T14:31:16.193Z",
+      "tokens": 247609,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-codebase.round3.md"
+    },
+    {
+      "agent": "goldfish-zoom-out",
+      "agentId": "ac103d5bb6094976e",
+      "at": "2026-11-06T14:49:48.324Z",
+      "tokens": 101204,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-zoom-out.round6.md"
+    },
+    {
+      "agent": "goldfish-comprehension",
+      "agentId": "a942cec2f71644a96",
+      "at": "2026-11-06T14:52:34.768Z",
+      "tokens": 113256,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-comprehension.md"
+    },
+    {
+      "agent": "goldfish-structural",
+      "agentId": "a0459ffde93084583",
+      "at": "2026-11-06T14:53:27.829Z",
+      "tokens": 25229,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-structural.md"
+    },
+    {
+      "agent": "goldfish-style",
+      "agentId": "ac8c6fed0de3d54c5",
+      "at": "2026-11-06T14:53:49.021Z",
+      "tokens": 26683,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-style.md"
+    },
+    {
+      "agent": "goldfish-design",
+      "agentId": "af785eda9e9104c07",
+      "at": "2026-11-06T14:54:20.844Z",
+      "tokens": 35029,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-design.md"
+    },
+    {
+      "agent": "goldfish-zoom-out",
+      "agentId": "a13238f2ef99ae5dd",
+      "at": "2026-11-06T14:56:37.682Z",
+      "tokens": 91743,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-zoom-out.md"
+    },
+    {
+      "agent": "goldfish-readiness",
+      "agentId": "a18ebc03aeff5051e",
+      "at": "2026-11-06T15:00:14.139Z",
+      "tokens": 129190,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-readiness.md"
+    },
+    {
+      "agent": "goldfish-codebase",
+      "agentId": "a67ac5bad89f07193",
+      "at": "2026-11-06T15:04:45.577Z",
+      "tokens": 271900,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-codebase.md"
+    },
+    {
+      "agent": "review-code-quality",
+      "agentId": "aabbf6a54c57c8c72",
+      "at": "2026-11-07T13:42:31.388Z",
+      "tokens": 52008,
+      "tokensFrom": "transcript",
+      "model": "claude-sonnet-5-5",
+      "file": "review/code-quality.findings.md",
+      "team": "backend"
+    },
+    {
+      "agent": "review-test-quality",
+      "agentId": "a162c2e3329355cbb",
+      "at": "2026-11-07T13:42:53.462Z",
+      "tokens": 59918,
+      "tokensFrom": "transcript",
+      "model": "claude-sonnet-5-5",
+      "file": "review/test-quality.findings.md",
+      "team": "qa"
+    },
+    {
+      "agent": "review-security",
+      "agentId": "afa5a70f68c360313",
+      "at": "2026-11-08T15:12:24.168Z",
+      "tokens": 57207,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/security.findings.md",
+      "team": "security"
+    },
+    {
+      "agent": "review-data",
+      "agentId": "a0039d314d91ca440",
+      "at": "2026-11-08T15:12:27.740Z",
+      "tokens": 69708,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/data.findings.md",
+      "team": "etl"
+    },
+    {
+      "agent": "review-architecture",
+      "agentId": "a09e7355d2ee7f40f",
+      "at": "2026-11-08T15:12:30.243Z",
+      "tokens": 69828,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/architecture.findings.md",
+      "team": "architects"
+    },
+    {
+      "agent": "review-test-quality",
+      "agentId": "a3c6585b454064800",
+      "at": "2026-11-08T15:12:50.263Z",
+      "tokens": 82245,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/test-quality.findings.md",
+      "team": "qa"
+    },
+    {
+      "agent": "review-risk",
+      "agentId": "a2d39b8c5f1b78bfe",
+      "at": "2026-11-08T15:13:02.499Z",
+      "tokens": 69962,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/risk.findings.md"
+    },
+    {
+      "agent": "review-code-quality",
+      "agentId": "abc4da0438fabf50e",
+      "at": "2026-11-08T15:13:11.193Z",
+      "tokens": 99848,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/code-quality.findings.md",
+      "team": "backend"
+    },
+    {
+      "agent": "judge",
+      "agentId": "a78df3cb5480ee848",
+      "at": "2026-11-08T15:14:32.516Z",
+      "tokens": 37660,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/ruling.json"
+    },
+    {
+      "agent": "review-security",
+      "agentId": "a100e3a3b3b8bcaaf",
+      "at": "2026-11-08T15:25:15.321Z",
+      "tokens": 34688,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/security.findings.md",
+      "team": "security"
+    },
+    {
+      "agent": "review-test-quality",
+      "agentId": "aeae97de68e6fb01c",
+      "at": "2026-11-08T15:25:38.783Z",
+      "tokens": 93854,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/test-quality.findings.md",
+      "team": "qa"
+    },
+    {
+      "agent": "review-data",
+      "agentId": "a603aff4da3ab94c7",
+      "at": "2026-11-08T15:25:47.492Z",
+      "tokens": 70256,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/data.findings.md",
+      "team": "etl"
+    },
+    {
+      "agent": "review-architecture",
+      "agentId": "a431a6b90d09e7303",
+      "at": "2026-11-08T15:26:01.800Z",
+      "tokens": 95470,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/architecture.findings.md",
+      "team": "architects"
+    },
+    {
+      "agent": "review-risk",
+      "agentId": "af8fd5a56a331d32b",
+      "at": "2026-11-08T15:26:12.102Z",
+      "tokens": 68108,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/risk.findings.md"
+    },
+    {
+      "agent": "review-code-quality",
+      "agentId": "a9fa7daade0bdb627",
+      "at": "2026-11-08T15:26:16.245Z",
+      "tokens": 81727,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/code-quality.findings.md",
+      "team": "backend"
+    },
+    {
+      "agent": "judge",
+      "agentId": "a443d5d648faad226",
+      "at": "2026-11-08T15:27:57.543Z",
+      "tokens": 38979,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/ruling.json"
+    },
+    {
+      "agent": "review-security",
+      "agentId": "a8063b339676ace12",
+      "at": "2026-11-08T15:33:17.780Z",
+      "tokens": 57656,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/security.findings.md",
+      "team": "security"
+    },
+    {
+      "agent": "review-risk",
+      "agentId": "a1c50c616be5fb4dc",
+      "at": "2026-11-08T15:33:19.278Z",
+      "tokens": 65026,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/risk.findings.md"
+    },
+    {
+      "agent": "review-architecture",
+      "agentId": "aa2bb791aa1a9c0ba",
+      "at": "2026-11-08T15:33:53.206Z",
+      "tokens": 83157,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/architecture.findings.md",
+      "team": "architects"
+    },
+    {
+      "agent": "review-data",
+      "agentId": "a6e14357d5738bb80",
+      "at": "2026-11-08T15:33:56.262Z",
+      "tokens": 72449,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/data.findings.md",
+      "team": "etl"
+    },
+    {
+      "agent": "review-test-quality",
+      "agentId": "a6ce2fff2177e82b6",
+      "at": "2026-11-08T15:34:27.193Z",
+      "tokens": 103922,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/test-quality.findings.md",
+      "team": "qa"
+    },
+    {
+      "agent": "review-code-quality",
+      "agentId": "a4f5096e9333ebf97",
+      "at": "2026-11-08T15:34:57.705Z",
+      "tokens": 98829,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/code-quality.findings.md",
+      "team": "backend"
+    },
+    {
+      "agent": "judge",
+      "agentId": "a7434024e2a61e572",
+      "at": "2026-11-08T15:36:26.144Z",
+      "tokens": 47454,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/ruling.json"
+    },
+    {
+      "agent": "review-security",
+      "agentId": "aded6c53bd9a9f746",
+      "at": "2026-11-08T15:56:33.343Z",
+      "tokens": 55131,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/security.findings.md",
+      "team": "security"
+    },
+    {
+      "agent": "review-code-quality",
+      "agentId": "ac46b0f458faa1ccb",
+      "at": "2026-11-08T15:56:39.064Z",
+      "tokens": 83132,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/code-quality.findings.md",
+      "team": "backend"
+    },
+    {
+      "agent": "review-data",
+      "agentId": "ae75ca790c260daa7",
+      "at": "2026-11-08T15:56:41.022Z",
+      "tokens": 57314,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/data.findings.md",
+      "team": "etl"
+    },
+    {
+      "agent": "review-architecture",
+      "agentId": "aa32fb33c14d9a4b4",
+      "at": "2026-11-08T15:57:02.291Z",
+      "tokens": 79533,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/architecture.findings.md",
+      "team": "architects"
+    },
+    {
+      "agent": "review-risk",
+      "agentId": "afac98b044ecea630",
+      "at": "2026-11-08T15:57:27.123Z",
+      "tokens": 76283,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/risk.findings.md"
+    },
+    {
+      "agent": "review-test-quality",
+      "agentId": "a7f7ef3a6f6897d66",
+      "at": "2026-11-08T15:57:54.304Z",
+      "tokens": 99415,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/test-quality.findings.md",
+      "team": "qa"
+    },
+    {
+      "agent": "judge",
+      "agentId": "ae8e288569d412d9d",
+      "at": "2026-11-08T15:58:41.796Z",
+      "tokens": 26943,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/ruling.json"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "a20148e3a9a80a352",
+      "at": "2026-11-08T16:07:47.522Z",
+      "tokens": 43792,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "conclave/lead-etl.delivery.md",
+      "team": "etl"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "add42cbccb395c41f",
+      "at": "2026-11-08T16:07:55.318Z",
+      "tokens": 63160,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "conclave/lead-architects.delivery.md",
+      "team": "architects"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "ac0cb3f55c7297860",
+      "at": "2026-11-08T16:07:59.137Z",
+      "tokens": 53683,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "conclave/lead-qa.delivery.md",
+      "team": "qa"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "aacfe90c47631b076",
+      "at": "2026-11-08T16:08:13.739Z",
+      "tokens": 54956,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "conclave/lead-security.delivery.md",
+      "team": "security"
+    },
+    {
+      "agent": "review-security",
+      "agentId": "a3bb42e01448f5802",
+      "at": "2026-11-08T16:14:38.423Z",
+      "tokens": 49222,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/security.findings.md",
+      "team": "security"
+    },
+    {
+      "agent": "review-code-quality",
+      "agentId": "a057d07f8fd7f8222",
+      "at": "2026-11-08T16:15:04.562Z",
+      "tokens": 66808,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/code-quality.findings.md",
+      "team": "backend"
+    },
+    {
+      "agent": "review-data",
+      "agentId": "afa3d4bf6b79d065d",
+      "at": "2026-11-08T16:15:07.400Z",
+      "tokens": 53997,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/data.findings.md",
+      "team": "etl"
+    },
+    {
+      "agent": "review-risk",
+      "agentId": "a7a2f2240d906d21f",
+      "at": "2026-11-08T16:15:21.326Z",
+      "tokens": 59319,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/risk.findings.md"
+    },
+    {
+      "agent": "review-architecture",
+      "agentId": "aa63ce16fd552c082",
+      "at": "2026-11-08T16:16:02.052Z",
+      "tokens": 80552,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/architecture.findings.md",
+      "team": "architects"
+    },
+    {
+      "agent": "review-test-quality",
+      "agentId": "a53945d16c1d0f50a",
+      "at": "2026-11-08T16:16:13.711Z",
+      "tokens": 84555,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/test-quality.findings.md",
+      "team": "qa"
+    },
+    {
+      "agent": "judge",
+      "agentId": "a2d92994783c5aece",
+      "at": "2026-11-08T16:17:34.744Z",
+      "tokens": 36599,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/ruling.json"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "aacfe90c47631b076",
+      "at": "2026-11-08T16:18:19.485Z",
+      "tokens": 111938,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "conclave/lead-security.delivery-reply.md",
+      "team": "security"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "ac0cb3f55c7297860",
+      "at": "2026-11-08T16:18:29.880Z",
+      "tokens": 112642,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "conclave/lead-qa.delivery-reply.md",
+      "team": "qa"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "a20148e3a9a80a352",
+      "at": "2026-11-08T16:18:35.375Z",
+      "tokens": 98847,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "conclave/tech-lead-1-reply.md"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "a20148e3a9a80a352",
+      "at": "2026-11-08T16:18:54.352Z",
+      "tokens": 101969,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "conclave/lead-etl.delivery-reply.md",
+      "team": "etl"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "add42cbccb395c41f",
+      "at": "2026-11-08T16:18:55.359Z",
+      "tokens": 144295,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "conclave/lead-architects.delivery-reply.md",
+      "team": "architects"
+    }
+  ],
+  "judgement": [
+    {
+      "gate": "code-quality",
+      "verdict": "proven",
+      "reviewer": "review-code-quality",
+      "judge": "judge",
+      "findings": [
+        {
+          "file": "src/judge/questions.ts",
+          "line": 197,
+          "text": "Upheld as advisory (question 4/9). The perSentence guard's ': 0' arm is reached only by a unit test, because rejudge's asInput always sends candidates: []. It keeps the DistillInput.wording contract consistent, so it is not a dead path.",
+          "severity": "advisory"
+        },
+        {
+          "file": "scripts/proof/quality.ts",
+          "line": 286,
+          "text": "Upheld as advisory (question 9). The check result.verdict?.source !== judge.name cannot be true once readingOf has returned 'emptied' for a turn with no candidates. It is kept as an AC-11 safeguard (TypeSafe verdicts only).",
+          "severity": "advisory"
+        },
+        {
+          "file": "src/distill/pipeline.ts",
+          "line": 133,
+          "text": "Upheld as advisory (question 2). buildDraft sorts known with surestFirst twice, at lines 133 and 138. One sorted array would serve both. This is boilerplate-sized.",
+          "severity": "advisory"
+        },
+        {
+          "file": "src/distill/pipeline.ts",
+          "line": 189,
+          "text": "Upheld as advisory (question 8). PreparedTexts and TurnTexts (line 254) are exported, but nothing imports them by name.",
+          "severity": "advisory"
+        },
+        {
+          "file": "scripts/proof/quality.sh",
+          "line": 27,
+          "text": "Upheld as advisory (question 6). One header comment line runs past the wrapping of the lines around it. Style only.",
+          "severity": "advisory"
+        },
+        {
+          "file": "src/judge/heuristic.ts",
+          "line": 148,
+          "text": "Lowered to advisory as debt: the diff did not write this line. hasDurable still uses a hard-coded 0.5 while KNOWLEDGE_THRESHOLD is 0.45, so a sentence scoring 0.45 to 0.5 can count as knowledge in buildDraft while the turn's worth stays capped.",
+          "severity": "advisory"
+        }
+      ],
+      "tokens": 72908,
+      "at": "2026-11-08T16:17:40.189Z",
+      "fingerprint": "sha256:e66ddfb48ae4308c657a1dd3a3e7f0ff4e19483c99814dd9d5a719a1eb5b7925"
+    },
+    {
+      "gate": "test-quality",
+      "verdict": "proven",
+      "reviewer": "review-test-quality",
+      "judge": "judge",
+      "findings": [
+        {
+          "file": "tests/unit/heuristic-judge.test.ts",
+          "line": 398,
+          "text": "Upheld as advisory (AC-5, question 1; mutant reasoned about, not run). The mostly-report discount is proven only on answers that are all report. Raising REPORT_SHARE from 0.6 to 1.0 would survive. One 3-of-5 case would pin the 'mostly' boundary.",
+          "severity": "advisory"
+        },
+        {
+          "file": "tests/unit/heuristic-judge.test.ts",
+          "line": 406,
+          "text": "Upheld as advisory (AC-5, question 6). probes/report-discount-removed.txt shows this test still passing with REPORT_DISCOUNT removed: its result comes from the !hasDurable cap, not from the discount its name claims. The criterion stays proven by line 398.",
+          "severity": "advisory"
+        },
+        {
+          "file": "tests/integration/quality-proof.test.ts",
+          "line": 231,
+          "text": "Upheld as advisory (AC-1/AC-11, question 1). The report's per-pattern drop line and its 'Quoted candidates the filter dropped' section are never asserted. Each drop is proven at the filter level in tests/unit/noise.test.ts, so only the report's wording is unpinned.",
+          "severity": "advisory"
+        },
+        {
+          "file": "tests/golden/judges.test.ts",
+          "line": 21,
+          "text": "Upheld as advisory (AC-4, question 2, partial). The replaying judge looks answers up by turn id, so changing the version 2 instructions would not force a re-recording. The wording is pinned separately in tests/unit/questions.test.ts:32-40. This is about how fresh the recording is, not about the criterion.",
+          "severity": "advisory"
+        },
+        {
+          "file": "tests/unit/typesafe-judge.test.ts",
+          "line": 390,
+          "text": "Lowered to advisory as debt, outside the change: the withFallback stubs still declare typesafe version '1'. Harmless to this item.",
+          "severity": "advisory"
+        }
+      ],
+      "tokens": 90655,
+      "at": "2026-11-08T16:17:40.189Z",
+      "fingerprint": "sha256:e66ddfb48ae4308c657a1dd3a3e7f0ff4e19483c99814dd9d5a719a1eb5b7925"
+    },
+    {
+      "gate": "security",
+      "verdict": "proven",
+      "reviewer": "review-security",
+      "judge": "judge",
+      "findings": [
+        {
+          "file": "scripts/proof/quality-brief.md",
+          "line": 5,
+          "text": "Upheld as advisory (question 4, personal-data). The default labeller is the runtime's own agent, so the sampled turn text reaches that model's provider. The brief states this, and --projects/--exclude-projects narrow the draw. The header claim in quality.ts:10-11 covers only the script. This is a choice the author makes, not a send by the code to a broader audience.",
+          "severity": "advisory",
+          "outside": true
+        },
+        {
+          "file": "scripts/proof/quality.sh",
+          "line": 72,
+          "text": "Upheld as advisory (question 4, retention/erasure). The work-dir copy of the whole store is outside forget/compact. Deletion by hand is stated (quality.sh:22-25, ADR 0023:21) and umask 077 applies. A reminder at the end of the run would be hardening.",
+          "severity": "advisory"
+        },
+        {
+          "file": "scripts/proof/quality.sh",
+          "line": 77,
+          "text": "Upheld as advisory (question 1, hardening). A work dir containing a single quote breaks sqlite3's .backup dot-command. Only the author passes this argument, and the live database is opened -readonly, so no caller path crosses a boundary.",
+          "severity": "advisory"
+        }
+      ],
+      "tokens": 55322,
+      "at": "2026-11-08T16:17:40.189Z",
+      "fingerprint": "sha256:e66ddfb48ae4308c657a1dd3a3e7f0ff4e19483c99814dd9d5a719a1eb5b7925"
+    },
+    {
+      "gate": "risk",
+      "verdict": "proven",
+      "reviewer": "review-risk",
+      "judge": "judge",
+      "findings": [
+        {
+          "file": "src/distill/pipeline.ts",
+          "line": 319,
+          "text": "Upheld as advisory (question 1). The three skip reasons write the same 'skipped' state with no counter. The spec states this risk (spec:299), the proof measures the filter's and the judge's losses on the real store before release, and fewer memories show in the viewer. That is a way to see it, so this is not the rubric's 'failure nobody would see'. A drain-side counter would make the first hour safer, which is advisory.",
+          "severity": "advisory"
+        },
+        {
+          "file": "docs/superpowers/specs/2026-10-14-memory-quality-design.md",
+          "line": 292,
+          "text": "Upheld as advisory (question 2/5). Rolling back does not re-distil turns that v2 skipped, and recovery rests on the undesigned D-1 inside compact's 90-day window. The spec and ADR 0023:22 state the dependency and its window, so it is a stated, manual rollback, not an unstated dependency.",
+          "severity": "advisory",
+          "outside": true
+        },
+        {
+          "file": "src/distill/noise.ts",
+          "line": 52,
+          "text": "Upheld as advisory (question 1). stripHost can cut the rest of a final answer at an unclosed host tag that opens a line outside a fence, and the live drain records nothing. The proof counts it (1 turn on B). Nothing is deleted from the store: the turn text stays.",
+          "severity": "advisory"
+        },
+        {
+          "file": "scripts/proof/quality.sh",
+          "line": 24,
+          "text": "Upheld as advisory (question 6). Deleting the work-dir store copy is a manual step that is named but has no owner and no reminder at the end of a measure run.",
+          "severity": "advisory"
+        },
+        {
+          "file": "src/distill/pipeline.ts",
+          "line": 307,
+          "text": "Lowered to advisory as debt, outside the change: turns has never recorded why a turn was skipped.",
+          "severity": "advisory"
+        },
+        {
+          "file": "src/store/compact.ts",
+          "line": 12,
+          "text": "Lowered to advisory as debt, outside the change: compact's 90-day text window existed before this item.",
+          "severity": "advisory",
+          "outside": true
+        }
+      ],
+      "tokens": 65419,
+      "at": "2026-11-08T16:17:40.189Z",
+      "fingerprint": "sha256:e66ddfb48ae4308c657a1dd3a3e7f0ff4e19483c99814dd9d5a719a1eb5b7925"
+    },
+    {
+      "gate": "architecture",
+      "verdict": "proven",
+      "reviewer": "review-architecture",
+      "judge": "judge",
+      "findings": [
+        {
+          "file": "src/judge/types.ts",
+          "line": 40,
+          "text": "Upheld as advisory (question 3). The doc comments on durable and titleIdx still give the version 1 meanings. Spec section 7 and ADR 0023 declare that the field names are kept, so this is not undeclared drift. Reword the comments.",
+          "severity": "advisory"
+        },
+        {
+          "file": "src/distill/pipeline.ts",
+          "line": 117,
+          "text": "Upheld as advisory (question 5). Spec section 8 places the decision rules in policy.ts, but buildDraft in pipeline.ts applies them. buildDraft already lived there, so no boundary is crossed. Move the rules, or reword section 8.",
+          "severity": "advisory"
+        },
+        {
+          "file": "src/distill/pipeline.ts",
+          "line": 68,
+          "text": "Upheld as advisory (question 6). Exports used only by the proof (storedDetail, toldInSession, unfilteredTexts, and heuristicJudgeV1, which the reviewer placed at heuristic.ts:869 but which is at src/judge/heuristic.ts:256) widen src/'s surface. This matches the precedent of scripts/proof/moments.ts.",
+          "severity": "advisory"
+        },
+        {
+          "file": "src/distill/pipeline.ts",
+          "line": 173,
+          "text": "Lowered to advisory as debt: the SQL inside toldInSession in the distill layer predates the change; the diff only added bounds to it.",
+          "severity": "advisory"
+        }
+      ],
+      "tokens": 86652,
+      "at": "2026-11-08T16:17:40.189Z",
+      "fingerprint": "sha256:e66ddfb48ae4308c657a1dd3a3e7f0ff4e19483c99814dd9d5a719a1eb5b7925"
+    },
+    {
+      "gate": "data",
+      "verdict": "proven",
+      "reviewer": "review-data",
+      "judge": "judge",
+      "findings": [
+        {
+          "file": "scripts/proof/quality.ts",
+          "line": 158,
+          "text": "Upheld as advisory (question 2). The correlated NOT EXISTS over memories has no covering index. It is an offline query on a copy, never on a hook or drain path, so the cost is time only.",
+          "severity": "advisory"
+        },
+        {
+          "file": "scripts/proof/quality.ts",
+          "line": 114,
+          "text": "Upheld as advisory (question 1). openDb migrates the work-dir copy. The live store is only read (sqlite3 -readonly .backup), so 'read-only' in AC-11 describes the live store, not the copy.",
+          "severity": "advisory"
+        },
+        {
+          "file": "scripts/proof/quality.sh",
+          "line": 22,
+          "text": "Upheld as advisory (question 5). Retention of the work dir's copy and samples is stated as deletion by hand, behind umask 077 and a location guard. Erasure depends on the author remembering.",
+          "severity": "advisory"
+        },
+        {
+          "file": "src/store/migrations/0001_init.sql",
+          "line": 137,
+          "text": "Lowered to advisory as debt, outside the change: injections_once is partial, so toldInSession's filter on session_id alone scans injections. That predates this item.",
+          "severity": "advisory",
+          "outside": true
+        }
+      ],
+      "tokens": 60097,
+      "at": "2026-11-08T16:17:40.189Z",
+      "fingerprint": "sha256:e66ddfb48ae4308c657a1dd3a3e7f0ff4e19483c99814dd9d5a719a1eb5b7925"
+    }
+  ],
+  "verifications": [
+    {
+      "what": "defect",
+      "ref": "code-quality scripts/proof/quality.ts:197",
+      "question": "Does the finding at `findings.d1`, taken at its word (its `text` about `file` at `line`), describe a defect of the kind `findings.d1.rubric` names?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.97
+      },
+      "confidence": 0.97,
+      "model": "jev-1.14.0",
+      "at": "2026-11-08T15:14:39.388Z"
+    },
+    {
+      "what": "defect",
+      "ref": "test-quality scripts/proof/quality.sh:73",
+      "question": "Does the finding at `findings.d2`, taken at its word (its `text` about `file` at `line`), describe a defect of the kind `findings.d2.rubric` names?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.96
+      },
+      "confidence": 0.96,
+      "model": "jev-1.14.0",
+      "at": "2026-11-08T15:14:39.388Z"
+    },
+    {
+      "what": "defect",
+      "ref": "test-quality tests/unit/noise.test.ts:107",
+      "question": "Does the finding at `findings.d3`, taken at its word (its `text` about `file` at `line`), describe a defect of the kind `findings.d3.rubric` names?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.33
+      },
+      "confidence": 0.33,
+      "model": "jev-1.14.0",
+      "at": "2026-11-08T15:14:39.388Z"
+    },
+    {
+      "what": "defect",
+      "ref": "test-quality tests/integration/quality-proof.test.ts:231",
+      "question": "Does the finding at `findings.d1`, taken at its word (its `text` about `file` at `line`), describe a defect of the kind `findings.d1.rubric` names?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.98
+      },
+      "confidence": 0.98,
+      "model": "jev-1.14.0",
+      "at": "2026-11-08T15:28:05.814Z"
+    }
+  ]
+}

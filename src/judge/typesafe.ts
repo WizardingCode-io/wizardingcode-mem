@@ -42,8 +42,8 @@ const RETRIABLE = new Set(["rate", "overloaded", "network", "timeout", "server"]
  */
 export class TypeSafeJudge implements Judge {
   readonly name = "typesafe";
-  readonly version = "1";
-  readonly versions = { typesafe: "1" };
+  readonly version = "2";
+  readonly versions = { typesafe: "2" };
   private readonly timeoutMs: number;
   private readonly retryDelaysMs: number[];
 

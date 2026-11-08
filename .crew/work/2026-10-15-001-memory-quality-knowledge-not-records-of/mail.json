@@ -1,0 +1,292 @@
+{
+  "version": 1,
+  "messages": [
+    {
+      "at": "2026-11-06T15:29:54.126Z",
+      "from": {
+        "workspace": "_alone",
+        "project": "ai-mem",
+        "item": "2026-10-15-001-memory-quality-knowledge-not-records-of",
+        "agent": "session"
+      },
+      "hops": 0,
+      "opened": {
+        "mode": "branch",
+        "cwd": "/Users/andreagroferreira/AIProjects/ai-mem-2026-10-15-001-T-4",
+        "branch": "crew/2026-10-15-001/T-4",
+        "pid": 91692,
+        "name": "crew-M-2026-11-06-001-ai-mem",
+        "processStart": "Fri Nov  6 15:29:54 2026",
+        "maxTurns": 40,
+        "maxMinutes": 30,
+        "startedAt": "2026-11-06T15:29:54.223Z",
+        "log": "/Users/andreagroferreira/.wizardingcode/crew/mail/_alone/ai-mem/opened/M-2026-11-06-001-ai-mem.log",
+        "endedAt": "2026-11-06T16:32:52.174Z",
+        "outcome": "ended",
+        "turns": 4,
+        "costUsd": 4.413647599999999
+      },
+      "id": "M-2026-11-06-001-ai-mem",
+      "to": {
+        "workspace": "_alone",
+        "project": "ai-mem",
+        "item": null,
+        "agent": "T-4"
+      },
+      "type": "change-request",
+      "priority": "normal",
+      "subject": "T-4 of 2026-10-15-001-memory-quality-knowledge-not-records-of",
+      "body": "AC-5: heuristic judge version 2 (report penalties, worth discount) and heuristicJudgeV1; src/judge/heuristic.ts, tests/unit/heuristic-judge.test.ts, tests/unit/typesafe-judge.test.ts line 412 (Task 4 of docs/superpowers/plans/2026-10-15-memory-quality.md; full code and tests there).\n\nCriteria: AC-5 AC-5 Heuristic version 2 penalises report sentences and discounts a mostly-report answer",
+      "replyTo": null,
+      "status": "done",
+      "readAt": "2026-11-06T15:30:29.059Z",
+      "answeredAt": "2026-11-06T15:39:20.997Z",
+      "branch": "crew/2026-10-15-001/T-4",
+      "item": "2026-11-06-001-t-4-of-2026-10-15-001-memory-quality-kno",
+      "verdict": "proven"
+    },
+    {
+      "at": "2026-11-06T15:29:54.325Z",
+      "from": {
+        "workspace": "_alone",
+        "project": "ai-mem",
+        "item": "2026-10-15-001-memory-quality-knowledge-not-records-of",
+        "agent": "session"
+      },
+      "hops": 0,
+      "opened": {
+        "mode": "branch",
+        "cwd": "/Users/andreagroferreira/AIProjects/ai-mem-2026-10-15-001-T-5",
+        "branch": "crew/2026-10-15-001/T-5",
+        "pid": 91791,
+        "name": "crew-M-2026-11-06-002-ai-mem",
+        "processStart": "Fri Nov  6 15:29:54 2026",
+        "maxTurns": 40,
+        "maxMinutes": 30,
+        "startedAt": "2026-11-06T15:29:54.420Z",
+        "log": "/Users/andreagroferreira/.wizardingcode/crew/mail/_alone/ai-mem/opened/M-2026-11-06-002-ai-mem.log",
+        "endedAt": "2026-11-06T15:36:44.245Z",
+        "outcome": "ended",
+        "turns": 54,
+        "costUsd": 2.7400119
+      },
+      "id": "M-2026-11-06-002-ai-mem",
+      "to": {
+        "workspace": "_alone",
+        "project": "ai-mem",
+        "item": null,
+        "agent": "T-5"
+      },
+      "type": "change-request",
+      "priority": "normal",
+      "subject": "T-5 of 2026-10-15-001-memory-quality-knowledge-not-records-of",
+      "body": "AC-10 (preserve): the import rejudge keeps version 1: DistillInput.wording, IMPORT_WORDING and IMPORT_JUDGE_VERSION in src/judge/rejudge.ts, tests/integration/rejudge.test.ts; crew tdd before/after (Task 5 of docs/superpowers/plans/2026-10-15-memory-quality.md; full code and tests there).\n\nCriteria: AC-10 AC-10 The import rejudge keeps the version 1 questions and stamps judge_version 1",
+      "replyTo": null,
+      "status": "done",
+      "readAt": "2026-11-06T15:30:10.795Z",
+      "answeredAt": "2026-11-06T15:36:32.924Z",
+      "branch": "crew/2026-10-15-001/T-5",
+      "item": "2026-11-06-001-t-5-of-2026-10-15-001-memory-quality-kno",
+      "verdict": "proven"
+    },
+    {
+      "at": "2026-11-06T15:36:32.924Z",
+      "from": {
+        "workspace": "_alone",
+        "project": "ai-mem",
+        "item": null,
+        "agent": "T-5"
+      },
+      "hops": 1,
+      "opened": null,
+      "id": "M-2026-11-06-003-ai-mem",
+      "to": {
+        "workspace": "_alone",
+        "project": "ai-mem",
+        "item": "2026-10-15-001-memory-quality-knowledge-not-records-of",
+        "agent": "session"
+      },
+      "type": "change-request",
+      "subject": "Re: T-5 of 2026-10-15-001-memory-quality-knowledge-not-records-of",
+      "body": "T-5 (AC-10, preserve): Proven on branch crew/2026-10-15-001/T-5, commit 2aae5b5.\n\nProven:\n- The new describe in tests/integration/rejudge.test.ts drives the real TypeSafeJudge through a stand-in fetch. It checks four things: the three question keys, their exact version 1 instructions, no reader in the state, and judge_version '1' on every judged row.\n- crew tdd before passed (10 pass). crew tdd after passed (10 pass).\n- What changed: DistillInput.wording?: 1 | 2 in src/judge/types.ts. In src/judge/rejudge.ts: IMPORT_WORDING = 1 and IMPORT_JUDGE_VERSION = String(IMPORT_WORDING), asInput typed DistillInput and sending wording: IMPORT_WORDING, and the stamp taken from IMPORT_JUDGE_VERSION. The TypeSafe capability check stays.\n- Gates: secrets, prose, build, test (bun run test), lint and typecheck pass. The code-quality and test-quality judgement gates are proven with 5 advisory findings: unused exports; wording written but not read until Task 6; the check that no longer uses its value; a mutant that removes wording survives until Task 6; question literals copied from questions.ts.\n\nNot proven:\n- That the test protects anything once the questions move. Nothing reads wording yet, so this criterion only guards something after Task 6. Task 6 must record crew tdd after AC-10 again.\n- The criterion is AC-1 on this child item (AC-10 on the parent).\n\nTouched only src/judge/types.ts, src/judge/rejudge.ts and tests/integration/rejudge.test.ts. The worktree had no node_modules, so I ran bun install --frozen-lockfile. Nothing was merged or pushed.",
+      "replyTo": "M-2026-11-06-002-ai-mem",
+      "status": "read",
+      "branch": "crew/2026-10-15-001/T-5",
+      "item": "2026-11-06-001-t-5-of-2026-10-15-001-memory-quality-kno",
+      "verdict": "proven",
+      "thread": "M-2026-11-06-002-ai-mem",
+      "evidence": {
+        "report": ".crew/work/2026-11-06-001-t-5-of-2026-10-15-001-memory-quality-kno/report.md",
+        "fingerprint": "sha256:fa7a8b7ea27fabea319acfa490efc2e89e230131b2f3a37362b2f65f5bd9a34e",
+        "gatesPassed": [
+          "secrets",
+          "prose",
+          "build",
+          "test",
+          "lint",
+          "typecheck"
+        ]
+      },
+      "readAt": "2026-11-06T15:36:44.192Z"
+    },
+    {
+      "at": "2026-11-06T15:39:20.997Z",
+      "from": {
+        "workspace": "_alone",
+        "project": "ai-mem",
+        "item": null,
+        "agent": "T-4"
+      },
+      "hops": 1,
+      "opened": null,
+      "id": "M-2026-11-06-005-ai-mem",
+      "to": {
+        "workspace": "_alone",
+        "project": "ai-mem",
+        "item": "2026-10-15-001-memory-quality-knowledge-not-records-of",
+        "agent": "session"
+      },
+      "type": "change-request",
+      "subject": "Re: T-4 of 2026-10-15-001-memory-quality-knowledge-not-records-of",
+      "body": "T-4 (AC-5) proven on branch crew/2026-10-15-001/T-4, commit 1f0a40a. The commit changes src/judge/heuristic.ts, tests/unit/heuristic-judge.test.ts and tests/unit/typesafe-judge.test.ts:412, as Task 4 of the plan says.\n\nWhat the code does: a sentence with a report signal (commit hash, PR/MR reference, status verb in English or Portuguese, verdict word, test count) loses REPORT_PENALTY 0.25, with the 0.05 floor kept. An answer where at least REPORT_SHARE 0.6 of the final sentences carry a signal loses REPORT_DISCOUNT 0.2 of its worth. heuristicJudge is version 2. heuristicJudgeV1 (version 1, signals off) is exported and nothing in the drain uses it. The fallback test now expects { typesafe: \"1\", heuristic: \"2\" }.\n\nWhat is proven:\n- The test-first run is recorded: red (heuristicJudgeV1 missing), then green, 62/62 in heuristic-judge.test.ts.\n- These gates pass: secrets, prose, build, test, lint and typecheck. The test gate is the full suite: 1978 pass, 0 fail, including tests/golden/judges.test.ts and filter.test.ts.\n- The code-quality and test-quality judgement gates are proven by the judge.\n- lead-qa and lead-security validated the spec and the delivery.\n- tests/golden/typesafe-answers.json is untouched.\n\nWhat is not proven:\n- No mutation run was done.\n- The advisory findings are left open:\n  1. Two missing tests: an under/over-60% contrast for the worth discount (the existing test at line 398 does fail without the discount, per the judge), and the REPORT_SHARE boundary and its finals.length>0 guard.\n  2. No test of its own for the /pull/<n> URL form or for STATUS_VERB alone.\n  3. heuristicJudgeV1 has no caller outside the tests until the proof script (Task 7) lands.\n  4. The report-share computation could become a named helper.\n- This worktree needed bun install (no node_modules).",
+      "replyTo": "M-2026-11-06-001-ai-mem",
+      "status": "read",
+      "branch": "crew/2026-10-15-001/T-4",
+      "item": "2026-11-06-001-t-4-of-2026-10-15-001-memory-quality-kno",
+      "verdict": "proven",
+      "thread": "M-2026-11-06-001-ai-mem",
+      "evidence": {
+        "report": ".crew/work/2026-11-06-001-t-4-of-2026-10-15-001-memory-quality-kno/report.md",
+        "fingerprint": "sha256:83ccf02225ecef157794b113f178e641949d0916893c023bd204e6dc6c33cb47",
+        "gatesPassed": [
+          "secrets",
+          "prose",
+          "build",
+          "test",
+          "lint",
+          "typecheck"
+        ]
+      },
+      "readAt": "2026-11-07T10:50:54.821Z"
+    },
+    {
+      "at": "2026-11-07T10:52:28.234Z",
+      "from": {
+        "workspace": "_alone",
+        "project": "ai-mem",
+        "item": "2026-10-15-001-memory-quality-knowledge-not-records-of",
+        "agent": "session"
+      },
+      "hops": 0,
+      "opened": {
+        "mode": "branch",
+        "cwd": "/Users/andreagroferreira/AIProjects/ai-mem-2026-10-15-001-T-6",
+        "branch": "crew/2026-10-15-001/T-6",
+        "pid": 96171,
+        "name": "crew-M-2026-11-07-001-ai-mem",
+        "processStart": "Sat Nov  7 10:52:28 2026",
+        "maxTurns": 40,
+        "maxMinutes": 30,
+        "startedAt": "2026-11-07T10:52:28.335Z",
+        "log": "/Users/andreagroferreira/.wizardingcode/crew/mail/_alone/ai-mem/opened/M-2026-11-07-001-ai-mem.log",
+        "endedAt": "2026-11-07T13:42:30.154Z",
+        "outcome": "ended",
+        "turns": 43,
+        "costUsd": 3.041075900000001
+      },
+      "id": "M-2026-11-07-001-ai-mem",
+      "to": {
+        "workspace": "_alone",
+        "project": "ai-mem",
+        "item": null,
+        "agent": "T-6"
+      },
+      "type": "change-request",
+      "priority": "normal",
+      "subject": "T-6 of 2026-10-15-001-memory-quality-knowledge-not-records-of",
+      "body": "AC-4: questions version 2, version 1 reduced to three questions, golden input through the filter, eight golden turns, answers re-recorded (Task 6 of the full plan).\n\nCriteria: AC-4 AC-4 Judge version 2: knowledge_<i> questions, reader in the state, contrastive criteria; golden floors hold for both judges with re-recorded answers",
+      "replyTo": null,
+      "status": "blocked",
+      "readAt": "2026-11-07T10:52:38.393Z",
+      "answeredAt": "2026-11-07T10:58:25.496Z",
+      "branch": "crew/2026-10-15-001/T-6",
+      "item": "2026-11-07-001-t-6-of-2026-10-15-001-memory-quality-kno",
+      "verdict": "unproven",
+      "reason": "unproven: gates have not run"
+    },
+    {
+      "at": "2026-11-07T10:58:25.496Z",
+      "from": {
+        "workspace": "_alone",
+        "project": "ai-mem",
+        "item": null,
+        "agent": "T-6"
+      },
+      "hops": 1,
+      "opened": null,
+      "id": "M-2026-11-07-002-ai-mem",
+      "to": {
+        "workspace": "_alone",
+        "project": "ai-mem",
+        "item": "2026-10-15-001-memory-quality-knowledge-not-records-of",
+        "agent": "session"
+      },
+      "type": "change-request",
+      "subject": "Re: T-6 of 2026-10-15-001-memory-quality-knowledge-not-records-of",
+      "body": "T-6 is not proven. Commit 6160331 on crew/2026-10-15-001/T-6. Proven: AC-2 of the child item (the golden input goes through prepareTexts; host blocks and dropped sentences never reach the judge), with red and green recorded. That green run also covers tests/unit/questions.test.ts (version 2 questions; version 1 reduced to worth, kind and importance), typesafe-judge, judge-select, rejudge (the AC-10 test still passes with the TypeSafe version at 2) and tests/golden/filter.test.ts (the heuristic's floors over the 40 turns). Not proven: AC-1 (the lead's AC-4). TypeSafe's answers were not re-recorded: this session runs in dontAsk mode and refused 'bun scripts/record-typesafe.ts', a paid call with the author's key. tests/golden/typesafe-answers.json therefore still holds the version 1 answers for 32 turns, so tests/golden/judges.test.ts fails: the coverage test misses the 8 new turns, and the knowledge_<i> answers are absent. D-5 (the token ratio) is not measured; the version 1 file stays at HEAD~1. Still to do: the author runs the recording with the key, then crew tdd green AC-1 on questions, judges and filter, the D-5 script, bun run format, crew tdd after AC-10 on the parent, and the gates. The gates have not run on this item.",
+      "replyTo": "M-2026-11-07-001-ai-mem",
+      "status": "read",
+      "branch": "crew/2026-10-15-001/T-6",
+      "item": "2026-11-07-001-t-6-of-2026-10-15-001-memory-quality-kno",
+      "verdict": "unproven",
+      "thread": "M-2026-11-07-001-ai-mem",
+      "evidence": {
+        "report": null,
+        "fingerprint": null,
+        "gatesPassed": []
+      },
+      "readAt": "2026-11-07T13:39:40.510Z"
+    },
+    {
+      "at": "2026-11-07T21:16:02.521Z",
+      "from": {
+        "workspace": "_alone",
+        "project": "ai-mem",
+        "item": "2026-10-15-001-memory-quality-knowledge-not-records-of",
+        "agent": "session"
+      },
+      "hops": 0,
+      "opened": {
+        "mode": "branch",
+        "cwd": "/Users/andreagroferreira/AIProjects/ai-mem-2026-10-15-001-T-7",
+        "branch": "crew/2026-10-15-001/T-7",
+        "pid": 33417,
+        "name": "crew-M-2026-11-07-003-ai-mem",
+        "processStart": "Sat Nov  7 21:16:02 2026",
+        "maxTurns": 40,
+        "maxMinutes": 30,
+        "startedAt": "2026-11-07T21:16:02.623Z",
+        "log": "/Users/andreagroferreira/.wizardingcode/crew/mail/_alone/ai-mem/opened/M-2026-11-07-003-ai-mem.log",
+        "endedAt": "2026-11-08T12:34:56.708Z",
+        "outcome": "failed",
+        "turns": 41,
+        "costUsd": 2.5460284
+      },
+      "id": "M-2026-11-07-003-ai-mem",
+      "to": {
+        "workspace": "_alone",
+        "project": "ai-mem",
+        "item": null,
+        "agent": "T-7"
+      },
+      "type": "change-request",
+      "priority": "normal",
+      "subject": "T-7 of 2026-10-15-001-memory-quality-knowledge-not-records-of",
+      "body": "AC-11: proof scripts quality.sh, quality.ts, quality-brief.md, random.ts (Task 7 of the full plan).\n\nCriteria: AC-11 AC-11 The proof script measures the metrics of the spec on a read-only copy, with TypeSafe verdicts only and injections bounded to the turn's end",
+      "replyTo": null,
+      "status": "refused",
+      "readAt": "2026-11-07T21:16:12.129Z",
+      "reason": "dropped by the user"
+    }
+  ]
+}

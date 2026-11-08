@@ -1,0 +1,1386 @@
+{
+  "id": "2026-10-15-001-memory-quality-knowledge-not-records-of",
+  "title": "Memory quality: knowledge, not records of a session (spec docs/superpowers/specs",
+  "input": "Memory quality: knowledge, not records of a session (spec docs/superpowers/specs/2026-10-14-memory-quality-design.md)",
+  "type": "feature",
+  "route": "full",
+  "routeReasons": [
+    "risk areas: data-migration"
+  ],
+  "riskAreas": [
+    "data-migration"
+  ],
+  "phase": "deliver",
+  "awaiting": null,
+  "criteria": [
+    {
+      "id": "AC-1",
+      "kind": "behavior",
+      "text": "AC-1 Host framing text and the sentences named in the noise filter never reach the judge; each drop is named"
+    },
+    {
+      "id": "AC-2",
+      "kind": "behavior",
+      "text": "AC-2 A turn whose candidates the filter empties is skipped without a judge request"
+    },
+    {
+      "id": "AC-3",
+      "kind": "behavior",
+      "text": "AC-3 A memory is stored only when its title sentence is knowledge (KNOWLEDGE_THRESHOLD); the Context line needs 5 prompt words"
+    },
+    {
+      "id": "AC-4",
+      "kind": "behavior",
+      "text": "AC-4 Judge version 2: knowledge_<i> questions, reader in the state, contrastive criteria; golden floors hold for both judges with re-recorded answers"
+    },
+    {
+      "id": "AC-5",
+      "kind": "behavior",
+      "text": "AC-5 Heuristic version 2 penalises report sentences and discounts a mostly-report answer"
+    },
+    {
+      "id": "AC-8",
+      "kind": "behavior",
+      "text": "AC-8 The proof script measures the metrics of spec section 6 on a read-only copy and rehearses the cleanup with undo",
+      "supersededBy": {
+        "id": "AC-11",
+        "at": "2026-11-06T13:51:09.969Z"
+      }
+    },
+    {
+      "id": "AC-9",
+      "kind": "behavior",
+      "text": "AC-9 The noise filter has no protocol-tag or verdict pattern: such sentences reach the judge"
+    },
+    {
+      "id": "AC-10",
+      "kind": "preserve",
+      "text": "AC-10 The import rejudge keeps the version 1 questions and stamps judge_version 1"
+    },
+    {
+      "id": "AC-11",
+      "kind": "behavior",
+      "text": "AC-11 The proof script measures the metrics of the spec on a read-only copy, with TypeSafe verdicts only and injections bounded to the turn's end"
+    },
+    {
+      "id": "AC-12",
+      "kind": "behavior",
+      "text": "AC-12 host-frame matches only the host's fixed lines at the start of a sentence: a sentence quoting one mid-sentence reaches the judge"
+    },
+    {
+      "id": "AC-13",
+      "kind": "behavior",
+      "text": "AC-13 stripHost removes an unclosed block tag to the end of the text only when it opens a line outside code; a tag named in prose or backticks removes nothing"
+    },
+    {
+      "id": "AC-14",
+      "kind": "behavior",
+      "text": "AC-14 The judge's user_prompt and assistant_final_message, and the Context line, hold no host block and no dropped sentence"
+    }
+  ],
+  "approvals": [
+    {
+      "what": "spec",
+      "at": "2026-10-15T19:18:20.811Z",
+      "by": "agent",
+      "mode": "auto"
+    },
+    {
+      "what": "spec",
+      "at": "2026-10-15T19:31:11.833Z",
+      "by": "user"
+    }
+  ],
+  "skips": [],
+  "baseCommit": "1beb43ee46c59a1b701a2d9b2291762034cb1447",
+  "createdAt": "2026-10-15T19:16:56.874Z",
+  "updatedAt": "2026-11-08T16:19:10.413Z",
+  "pauses": [
+    {
+      "at": "2026-10-15T19:19:13.663Z",
+      "reason": "gates have not run"
+    },
+    {
+      "at": "2026-11-06T13:33:05.193Z",
+      "reason": "gates have not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-06T13:35:09.298Z",
+      "reason": "gates have not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-06T13:38:04.198Z",
+      "reason": "gates have not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-06T13:39:04.008Z",
+      "reason": "gates have not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-06T13:40:43.140Z",
+      "reason": "gates have not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-06T13:42:47.099Z",
+      "reason": "gates have not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-06T13:47:41.401Z",
+      "reason": "gates have not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-06T13:54:23.448Z",
+      "reason": "gates have not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-06T14:17:08.433Z",
+      "reason": "gates have not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-06T14:18:11.822Z",
+      "reason": "gates have not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-06T14:20:08.031Z",
+      "reason": "gates have not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-06T14:20:55.139Z",
+      "reason": "gates have not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-06T14:22:20.635Z",
+      "reason": "gates have not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-06T14:23:33.981Z",
+      "reason": "gates have not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-06T14:28:21.933Z",
+      "reason": "gates have not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-06T14:36:15.727Z",
+      "reason": "gates have not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-06T14:48:34.738Z",
+      "reason": "gates have not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-06T14:50:02.722Z",
+      "reason": "gates have not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-06T14:52:33.555Z",
+      "reason": "gates have not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-06T14:52:59.063Z",
+      "reason": "gates have not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-06T14:53:37.831Z",
+      "reason": "gates have not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-06T14:53:59.057Z",
+      "reason": "gates have not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-06T14:55:47.427Z",
+      "reason": "gates have not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-06T14:56:52.113Z",
+      "reason": "gates have not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-06T15:00:24.146Z",
+      "reason": "gates have not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-06T15:16:18.896Z",
+      "reason": "gates have not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-06T15:32:48.523Z",
+      "reason": "gates have not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-06T15:38:01.837Z",
+      "reason": "gates have not run",
+      "kind": "mail"
+    },
+    {
+      "at": "2026-11-07T10:52:42.771Z",
+      "reason": "gates have not run",
+      "kind": "mail"
+    },
+    {
+      "at": "2026-11-07T13:42:30.265Z",
+      "reason": "gates have not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-07T13:42:49.499Z",
+      "reason": "gates have not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-07T21:16:16.107Z",
+      "reason": "gates have not run",
+      "kind": "mail"
+    },
+    {
+      "at": "2026-11-08T12:36:39.275Z",
+      "reason": "gates have not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-08T12:49:44.583Z",
+      "reason": "gates have not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-08T12:50:54.568Z",
+      "reason": "gates have not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-08T12:51:48.458Z",
+      "reason": "gates have not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-08T13:25:21.001Z",
+      "reason": "gates have not run",
+      "kind": "user"
+    },
+    {
+      "at": "2026-11-08T14:30:30.055Z",
+      "reason": "gates have not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-08T14:32:04.391Z",
+      "reason": "gates have not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-08T14:33:01.161Z",
+      "reason": "gates have not run",
+      "kind": "user"
+    },
+    {
+      "at": "2026-11-08T14:50:03.123Z",
+      "reason": "gates have not run",
+      "kind": "user"
+    },
+    {
+      "at": "2026-11-08T14:53:24.208Z",
+      "reason": "gates have not run",
+      "kind": "user"
+    },
+    {
+      "at": "2026-11-08T14:55:35.647Z",
+      "reason": "gates have not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-08T14:56:47.032Z",
+      "reason": "gates have not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-08T14:57:12.014Z",
+      "reason": "gates have not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-08T14:58:42.591Z",
+      "reason": "gates have not run",
+      "kind": "user"
+    },
+    {
+      "at": "2026-11-08T15:11:15.218Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-08T15:12:42.055Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-08T15:13:01.733Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-08T15:13:14.505Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-08T15:13:38.388Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-08T15:16:34.599Z",
+      "reason": "code changed since the last gate run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-08T15:24:32.675Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-08T15:25:26.138Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-08T15:26:44.702Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-08T15:32:32.070Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-08T15:33:33.723Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-08T15:34:08.286Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-08T15:34:37.929Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-08T15:35:15.718Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-08T15:55:45.010Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-08T15:56:51.261Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-08T15:57:10.851Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-08T15:57:37.617Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-08T15:58:13.558Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-08T16:13:49.696Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-08T16:14:47.128Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-08T16:15:18.661Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-08T16:15:30.279Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-08T16:16:11.699Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-08T16:16:35.128Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    }
+  ],
+  "runtimes": [
+    "claude"
+  ],
+  "decisions": [
+    {
+      "id": "D-1",
+      "question": "What happens to the rejudge distilled cleanup (AC-6, AC-7) after spec review round 1?",
+      "answer": "Separar num item novo: este item entrega AC-1 a AC-5 e a prova sem o ensaio da limpeza; a limpeza volta a ser desenhada noutro item",
+      "at": "2026-11-06T13:51:04.894Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-2",
+      "question": "Does the import rejudge move to the version 2 questions?",
+      "answer": "Fixar o rejudge em v1: as importadas não mudam nesta entrega",
+      "at": "2026-11-06T13:51:04.964Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-3",
+      "question": "Do protocol-tag (0.88) and verdict (0.80) stay in the noise filter below the 97% entry rule?",
+      "answer": "Tirá-los já: só ficam os padrões medidos",
+      "at": "2026-11-06T13:51:05.026Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-4",
+      "question": "Who labels the proof's samples, and from which projects?",
+      "answer": "Deveria ser configurável; o default depende do runtime que o cliente está a utilizar",
+      "at": "2026-11-06T14:33:22.981Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-5",
+      "question": "Is there a ceiling on version 2 input tokens per turn?",
+      "answer": "Teto: no máximo 2× os tokens de entrada da v1 medida",
+      "at": "2026-11-06T14:33:23.036Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-6",
+      "question": "What gate protects keyless users (heuristic version 2) before the merge?",
+      "answer": "Sem regressão face à heurística v1",
+      "at": "2026-11-06T14:33:23.093Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-7",
+      "question": "After round 2 fixes: a third review round or accept?",
+      "answer": "Corrigir e fazer a 3.ª ronda",
+      "at": "2026-11-06T14:33:23.148Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-8",
+      "question": "Heuristic version 2 has no gain target: keep the report penalties or drop them?",
+      "answer": "Manter as penalizações, com meta: a heurística v2 tem de guardar menos registos do que a v1 nas amostras B e S",
+      "at": "2026-11-06T14:55:24.573Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-9",
+      "question": "TypeSafe price and duration in the spec?",
+      "answer": "Só o medido: custo e duração medidos pela prova e registados no ADR",
+      "at": "2026-11-06T14:55:24.627Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-10",
+      "question": "Round 3 at 23 Majors after stages 5-7: stop or finish the round?",
+      "answer": "Acabar a 3.ª ronda e decidir depois",
+      "at": "2026-11-06T14:55:24.683Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-11",
+      "question": "Round 3 stopped on no progress (31 vs 29 Blockers and Majors): accept, go on, or redraft?",
+      "answer": "Corrigir tudo isto e aceitar, sem 4.ª ronda",
+      "at": "2026-11-06T15:15:02.531Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-12",
+      "question": "Sample B missed two targets (records 24% vs ≤15%; version 2 loses 11 turns version 1 kept): accept with the losses named, recalibrate on a fresh sample, or not merge?",
+      "answer": "1 — aceitar as perdas e os records que ficam, com nome; ADR accepted com as duas metas falhadas registadas",
+      "at": "2026-11-08T15:07:03.234Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-13",
+      "question": "AC-4 has no test-first record after the forced merge of T-6: reproduce the red against the pre-T-6 questions now, or leave the item not proven?",
+      "answer": "Reproduzir o red: as perguntas de antes da T-6 (ef17a98) postas temporariamente, red gravado agora, depois o código atual e o green; o relatório diz que o red foi reproduzido depois do código",
+      "at": "2026-11-08T16:04:41.996Z",
+      "by": "user",
+      "relayed": true
+    }
+  ],
+  "removedCriteria": [
+    {
+      "id": "AC-6",
+      "kind": "behavior",
+      "text": "AC-6 Migration 8 adds memory_reviews; NewMemory accepts sourceOrdinal",
+      "at": "2026-11-06T13:51:09.646Z"
+    },
+    {
+      "id": "AC-7",
+      "kind": "behavior",
+      "text": "AC-7 rejudge distilled supersedes, archives or keeps each version-1 distilled memory from its source turn, resumes, dry-runs without writing, and --undo restores the counts",
+      "at": "2026-11-06T13:51:09.722Z"
+    }
+  ],
+  "tasks": [
+    {
+      "task": "T-4",
+      "message": "M-2026-11-06-001-ai-mem",
+      "criteria": [
+        "AC-5"
+      ],
+      "text": "AC-5: heuristic judge version 2 (report penalties, worth discount) and heuristicJudgeV1; src/judge/heuristic.ts, tests/unit/heuristic-judge.test.ts, tests/unit/typesafe-judge.test.ts line 412 (Task 4 of docs/superpowers/plans/2026-10-15-memory-quality.md; full code and tests there).",
+      "branch": "crew/2026-10-15-001/T-4",
+      "worktree": "/Users/andreagroferreira/AIProjects/ai-mem-2026-10-15-001-T-4",
+      "openedAt": "2026-11-06T15:29:54.126Z",
+      "state": "briefed",
+      "child": "2026-11-06-001-t-4-of-2026-10-15-001-memory-quality-kno",
+      "verdict": "proven",
+      "repliedAt": "2026-11-06T15:39:20.997Z",
+      "mergedAt": "2026-11-07T10:50:58.964Z",
+      "mergeCommit": "ef17a98584f56a7f46898386c2852f6330728dbf",
+      "gate": {
+        "round": 1,
+        "at": "2026-11-07T10:51:58.112Z",
+        "status": "pass",
+        "runs": [
+          {
+            "gate": "build",
+            "target": ".",
+            "command": "bun run build",
+            "commandSource": "detected",
+            "confirmed": true,
+            "exit": 0,
+            "status": "pass",
+            "durationMs": 2960,
+            "at": "2026-11-07T10:51:00.463Z",
+            "log": "logs/build-_-1794048660464.txt",
+            "tail": "$ bun run ui:build && bun scripts/build.ts\n$ vite build --config ui/vite.config.ts\nvite v8.3.3 building client environment for production...\ntransforming...\n\n/assets/unbounded-variable.woff2 referenced in /assets/unbounded-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/instrument-sans-variable.woff2 referenced in /assets/instrument-sans-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/jetbrains-mono-variable.woff2 referenced in /assets/jetbrains-mono-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n✓ 834 modules transformed.\nrendering chunks...\n[plugin vite:singlefile] \n\n[plugin vite:singlefile] Inlining: index-PUhkQFrm.js\n[plugin vite:singlefile] Inlining: style-ODM7JwkH.css\nsrc/ui/dist/index.html  1,109.41 kB\n\n✓ built in 717ms\n✓ wizardingcode-mem-darwin-arm64  66.2 MB\n✓ wizardingcode-mem-darwin-x64  72.9 MB\n✓ wizardingcode-mem-linux-x64  84.3 MB\n✓ wizardingcode-mem-linux-arm64  84.3 MB\n✓ wizardingcode-mem-windows-x64.exe  88.9 MB",
+            "fingerprint": "ef17a98584f56a7f46898386c2852f6330728dbf"
+          },
+          {
+            "gate": "test",
+            "target": ".",
+            "command": "bun run test",
+            "commandSource": "detected",
+            "confirmed": true,
+            "exit": 0,
+            "status": "pass",
+            "durationMs": 54108,
+            "at": "2026-11-07T10:51:03.425Z",
+            "log": "logs/test-_-1794048663425.txt",
+            "tail": "tests/golden/judges.test.ts:\nheuristic precision 100%  recall 100%  kind 88%\ntypesafe  precision 100%  recall 100%  kind 88%\n\ntests/golden/search.test.ts:\ntop 5: 35/44 → 39/44; Portuguese of English: 1/8 → 4/8\nsemantic-only results for unrelated queries: 29/43\n\ntests/golden/retrieval.test.ts:\nrecall@5: 19/24 — missed: redact-first, pt-lingua, pt-cursor, ts-extension, hook-runs\nprecision: 19/21 notes given were the expected ones\nfalse injections: 0/23\n\ntests/perf/budgets.test.ts:\nprompt: p50 25.0 ms, p95 29.5 ms\nsession-start: p50 18.7 ms, p95 21.7 ms\nturn-end: p50 17.2 ms, p95 18.6 ms\nfile-read: p50 19.7 ms, p95 21.1 ms\ntool-failed: p50 25.7 ms, p95 29.4 ms\nqwen prompt: p50 28.0 ms, p95 30.7 ms\nqwen session-start: p50 20.0 ms, p95 22.3 ms\ndroid prompt: p50 24.6 ms, p95 28.1 ms\ndroid session-start: p50 18.3 ms, p95 19.6 ms\ncopilot session-start: p50 18.9 ms, p95 20.3 ms\ncopilot prompt (capture only): p50 14.9 ms, p95 15.7 ms\nantigravity pre-invocation: p50 20.0 ms, p95 46.0 ms\nlinked prompt: p50 31.2 ms, p95 39.2 ms (30 of 30 with a note from outside)\nlinked session-start: p50 20.9 ms, p95 24.1 ms\n\ntests/perf/large-project.test.ts:\nlarge project prompt: p50 17.3 ms, p95 19.5 ms (40 of 40 given notes)\n\ntests/perf/semantic.test.ts:\nsemantic global median: 16.1 ms\n\n 2002 pass\n 4 skip\n 0 fail\n 24 snapshots, 28269 expect() calls\nRan 2006 tests across 127 files. [52.77s]",
+            "fingerprint": "ef17a98584f56a7f46898386c2852f6330728dbf"
+          },
+          {
+            "gate": "lint",
+            "target": ".",
+            "command": "bun run lint",
+            "commandSource": "detected",
+            "confirmed": true,
+            "exit": 0,
+            "status": "pass",
+            "durationMs": 211,
+            "at": "2026-11-07T10:51:57.533Z",
+            "log": "logs/lint-_-1794048717533.txt",
+            "tail": "  \n\nscripts/embed/spike.ts:229:61 lint/style/noNonNullAssertion ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n  ! Forbidden non-null assertion.\n  \n    227 │       prompt: item.prompt,\n    228 │       expect: item.expect,\n  > 229 │       lexicalFound: item.expect.every((key) => got.includes(ids.get(key)!)),\n        │                                                             ^^^^^^^^^^^^^\n    230 │       hits: item.expect.map((key) => {\n    231 │         const index = order.findIndex((o) => o.key === key);\n  \n\nscripts/embed/spike.ts:232:72 lint/style/noNonNullAssertion  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n  ! Forbidden non-null assertion.\n  \n    230 │       hits: item.expect.map((key) => {\n    231 │         const index = order.findIndex((o) => o.key === key);\n  > 232 │         return { key, rank: index + 1, score: index < 0 ? Number.NaN : order[index]!.score };\n        │                                                                        ^^^^^^^^^^^^^\n    233 │       }),\n    234 │       top: order.slice(0, 3),\n  \n  i Unsafe fix: Replace with optional chain operator ?. This operator includes runtime checks, so it is safer than the compile-only non-null assertion operator\n  \n    230 230 │         hits: item.expect.map((key) => {\n    231 231 │           const index = order.findIndex((o) => o.key === key);\n    232     │ - ········return·{·key,·rank:·index·+·1,·score:·index·<·0·?·Number.NaN·:·order[index]!.score·};\n        232 │ + ········return·{·key,·rank:·index·+·1,·score:·index·<·0·?·Number.NaN·:·order[index]?.score·};\n    233 233 │         }),\n    234 234 │         top: order.slice(0, 3),\n  \n\nThe number of diagnostics exceeds the limit allowed. Use --max-diagnostics to increase it.\nDiagnostics not shown: 75.\nChecked 313 files in 102ms. No fixes applied.\nFound 94 warnings.\nFound 1 info.",
+            "fingerprint": "ef17a98584f56a7f46898386c2852f6330728dbf"
+          },
+          {
+            "gate": "typecheck",
+            "target": ".",
+            "command": "bun run typecheck",
+            "commandSource": "detected",
+            "confirmed": true,
+            "exit": 0,
+            "status": "pass",
+            "durationMs": 299,
+            "at": "2026-11-07T10:51:57.744Z",
+            "log": "logs/typecheck-_-1794048717744.txt",
+            "tail": "$ tsc --noEmit",
+            "fingerprint": "ef17a98584f56a7f46898386c2852f6330728dbf"
+          }
+        ],
+        "scope": [
+          "src/judge/heuristic.ts",
+          "tests/unit/heuristic-judge.test.ts",
+          "tests/unit/typesafe-judge.test.ts"
+        ],
+        "planned": [],
+        "cut": [
+          "src/judge/heuristic.ts",
+          "tests/unit/heuristic-judge.test.ts",
+          "tests/unit/typesafe-judge.test.ts"
+        ],
+        "judgement": []
+      },
+      "brief": "tasks/T-4.brief.md"
+    },
+    {
+      "task": "T-5",
+      "message": "M-2026-11-06-002-ai-mem",
+      "criteria": [
+        "AC-10"
+      ],
+      "text": "AC-10 (preserve): the import rejudge keeps version 1: DistillInput.wording, IMPORT_WORDING and IMPORT_JUDGE_VERSION in src/judge/rejudge.ts, tests/integration/rejudge.test.ts; crew tdd before/after (Task 5 of docs/superpowers/plans/2026-10-15-memory-quality.md; full code and tests there).",
+      "branch": "crew/2026-10-15-001/T-5",
+      "worktree": "/Users/andreagroferreira/AIProjects/ai-mem-2026-10-15-001-T-5",
+      "openedAt": "2026-11-06T15:29:54.324Z",
+      "state": "briefed",
+      "child": "2026-11-06-001-t-5-of-2026-10-15-001-memory-quality-kno",
+      "verdict": "proven",
+      "repliedAt": "2026-11-06T15:36:32.924Z",
+      "mergedAt": "2026-11-06T15:36:47.660Z",
+      "mergeCommit": "f2a82b207d03a0f8fe71dd03158f177070b08e8f",
+      "gate": {
+        "round": 1,
+        "at": "2026-11-06T15:37:44.234Z",
+        "status": "pass",
+        "runs": [
+          {
+            "gate": "build",
+            "target": ".",
+            "command": "bun run build",
+            "commandSource": "detected",
+            "confirmed": true,
+            "exit": 0,
+            "status": "pass",
+            "durationMs": 2325,
+            "at": "2026-11-06T15:36:48.833Z",
+            "log": "logs/build-_-1793979408834.txt",
+            "tail": "$ bun run ui:build && bun scripts/build.ts\n$ vite build --config ui/vite.config.ts\nvite v8.3.3 building client environment for production...\ntransforming...\n\n/assets/unbounded-variable.woff2 referenced in /assets/unbounded-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/instrument-sans-variable.woff2 referenced in /assets/instrument-sans-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/jetbrains-mono-variable.woff2 referenced in /assets/jetbrains-mono-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n✓ 834 modules transformed.\nrendering chunks...\n[plugin vite:singlefile] \n\n[plugin vite:singlefile] Inlining: index-PUhkQFrm.js\n[plugin vite:singlefile] Inlining: style-ODM7JwkH.css\nsrc/ui/dist/index.html  1,109.41 kB\n\n✓ built in 678ms\n✓ wizardingcode-mem-darwin-arm64  66.2 MB\n✓ wizardingcode-mem-darwin-x64  72.9 MB\n✓ wizardingcode-mem-linux-x64  84.3 MB\n✓ wizardingcode-mem-linux-arm64  84.3 MB\n✓ wizardingcode-mem-windows-x64.exe  88.9 MB",
+            "fingerprint": "f2a82b207d03a0f8fe71dd03158f177070b08e8f"
+          },
+          {
+            "gate": "test",
+            "target": ".",
+            "command": "bun run test",
+            "commandSource": "detected",
+            "confirmed": true,
+            "exit": 0,
+            "status": "pass",
+            "durationMs": 52649,
+            "at": "2026-11-06T15:36:51.159Z",
+            "log": "logs/test-_-1793979411159.txt",
+            "tail": "tests/golden/judges.test.ts:\nheuristic precision 100%  recall 100%  kind 88%\ntypesafe  precision 100%  recall 100%  kind 88%\n\ntests/golden/search.test.ts:\ntop 5: 35/44 → 39/44; Portuguese of English: 1/8 → 4/8\nsemantic-only results for unrelated queries: 29/43\n\ntests/golden/retrieval.test.ts:\nrecall@5: 19/24 — missed: redact-first, pt-lingua, pt-cursor, ts-extension, hook-runs\nprecision: 19/21 notes given were the expected ones\nfalse injections: 0/23\n\ntests/perf/budgets.test.ts:\nprompt: p50 24.8 ms, p95 28.9 ms\nsession-start: p50 18.8 ms, p95 20.8 ms\nturn-end: p50 15.2 ms, p95 16.4 ms\nfile-read: p50 16.9 ms, p95 19.5 ms\ntool-failed: p50 22.1 ms, p95 24.1 ms\nqwen prompt: p50 26.3 ms, p95 31.2 ms\nqwen session-start: p50 19.9 ms, p95 21.1 ms\ndroid prompt: p50 24.2 ms, p95 26.7 ms\ndroid session-start: p50 18.6 ms, p95 20.1 ms\ncopilot session-start: p50 19.1 ms, p95 20.9 ms\ncopilot prompt (capture only): p50 13.4 ms, p95 15.3 ms\nantigravity pre-invocation: p50 18.5 ms, p95 20.1 ms\nlinked prompt: p50 30.7 ms, p95 34.1 ms (30 of 30 with a note from outside)\nlinked session-start: p50 21.0 ms, p95 21.9 ms\n\ntests/perf/large-project.test.ts:\nlarge project prompt: p50 17.7 ms, p95 23.0 ms (40 of 40 given notes)\n\ntests/perf/semantic.test.ts:\nsemantic global median: 16.5 ms\n\n 1993 pass\n 4 skip\n 0 fail\n 24 snapshots, 28257 expect() calls\nRan 1997 tests across 127 files. [51.35s]",
+            "fingerprint": "f2a82b207d03a0f8fe71dd03158f177070b08e8f"
+          },
+          {
+            "gate": "lint",
+            "target": ".",
+            "command": "bun run lint",
+            "commandSource": "detected",
+            "confirmed": true,
+            "exit": 0,
+            "status": "pass",
+            "durationMs": 137,
+            "at": "2026-11-06T15:37:43.808Z",
+            "log": "logs/lint-_-1793979463808.txt",
+            "tail": "  \n\nscripts/embed/spike.ts:229:61 lint/style/noNonNullAssertion ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n  ! Forbidden non-null assertion.\n  \n    227 │       prompt: item.prompt,\n    228 │       expect: item.expect,\n  > 229 │       lexicalFound: item.expect.every((key) => got.includes(ids.get(key)!)),\n        │                                                             ^^^^^^^^^^^^^\n    230 │       hits: item.expect.map((key) => {\n    231 │         const index = order.findIndex((o) => o.key === key);\n  \n\nscripts/embed/spike.ts:232:72 lint/style/noNonNullAssertion  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n  ! Forbidden non-null assertion.\n  \n    230 │       hits: item.expect.map((key) => {\n    231 │         const index = order.findIndex((o) => o.key === key);\n  > 232 │         return { key, rank: index + 1, score: index < 0 ? Number.NaN : order[index]!.score };\n        │                                                                        ^^^^^^^^^^^^^\n    233 │       }),\n    234 │       top: order.slice(0, 3),\n  \n  i Unsafe fix: Replace with optional chain operator ?. This operator includes runtime checks, so it is safer than the compile-only non-null assertion operator\n  \n    230 230 │         hits: item.expect.map((key) => {\n    231 231 │           const index = order.findIndex((o) => o.key === key);\n    232     │ - ········return·{·key,·rank:·index·+·1,·score:·index·<·0·?·Number.NaN·:·order[index]!.score·};\n        232 │ + ········return·{·key,·rank:·index·+·1,·score:·index·<·0·?·Number.NaN·:·order[index]?.score·};\n    233 233 │         }),\n    234 234 │         top: order.slice(0, 3),\n  \n\nThe number of diagnostics exceeds the limit allowed. Use --max-diagnostics to increase it.\nDiagnostics not shown: 75.\nChecked 313 files in 78ms. No fixes applied.\nFound 94 warnings.\nFound 1 info.",
+            "fingerprint": "f2a82b207d03a0f8fe71dd03158f177070b08e8f"
+          },
+          {
+            "gate": "typecheck",
+            "target": ".",
+            "command": "bun run typecheck",
+            "commandSource": "detected",
+            "confirmed": true,
+            "exit": 0,
+            "status": "pass",
+            "durationMs": 222,
+            "at": "2026-11-06T15:37:43.945Z",
+            "log": "logs/typecheck-_-1793979463945.txt",
+            "tail": "$ tsc --noEmit",
+            "fingerprint": "f2a82b207d03a0f8fe71dd03158f177070b08e8f"
+          }
+        ],
+        "scope": [
+          "src/judge/rejudge.ts",
+          "src/judge/types.ts",
+          "tests/integration/rejudge.test.ts"
+        ],
+        "planned": [],
+        "cut": [
+          "src/judge/rejudge.ts",
+          "src/judge/types.ts",
+          "tests/integration/rejudge.test.ts"
+        ],
+        "judgement": []
+      },
+      "brief": "tasks/T-5.brief.md"
+    },
+    {
+      "task": "T-2",
+      "message": "",
+      "criteria": [
+        "AC-9",
+        "AC-12",
+        "AC-13"
+      ],
+      "text": "AC-9, AC-12, AC-13: noise filter: remove protocol-tag and verdict, anchor host-frame, unclosed block tags only at a line start outside a fence (Task 2 of the full plan).",
+      "branch": "",
+      "worktree": "",
+      "openedAt": "2026-11-06T15:31:27.287Z",
+      "inline": true,
+      "scope": [
+        "src/distill/noise.ts",
+        "tests/unit/noise.test.ts"
+      ],
+      "state": "briefed",
+      "gate": {
+        "round": 1,
+        "at": "2026-11-06T15:32:26.750Z",
+        "status": "pass",
+        "runs": [
+          {
+            "gate": "build",
+            "target": ".",
+            "command": "bun run build",
+            "commandSource": "detected",
+            "confirmed": true,
+            "exit": 0,
+            "status": "pass",
+            "durationMs": 2559,
+            "at": "2026-11-06T15:31:30.689Z",
+            "log": "logs/build-_-1793979090690.txt",
+            "tail": "$ bun run ui:build && bun scripts/build.ts\n$ vite build --config ui/vite.config.ts\nvite v8.3.3 building client environment for production...\ntransforming...\n\n/assets/unbounded-variable.woff2 referenced in /assets/unbounded-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/instrument-sans-variable.woff2 referenced in /assets/instrument-sans-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/jetbrains-mono-variable.woff2 referenced in /assets/jetbrains-mono-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n✓ 834 modules transformed.\nrendering chunks...\n[plugin vite:singlefile] \n\n[plugin vite:singlefile] Inlining: index-PUhkQFrm.js\n[plugin vite:singlefile] Inlining: style-ODM7JwkH.css\nsrc/ui/dist/index.html  1,109.41 kB\n\n✓ built in 641ms\n✓ wizardingcode-mem-darwin-arm64  66.2 MB\n✓ wizardingcode-mem-darwin-x64  72.9 MB\n✓ wizardingcode-mem-linux-x64  84.3 MB\n✓ wizardingcode-mem-linux-arm64  84.3 MB\n✓ wizardingcode-mem-windows-x64.exe  88.9 MB",
+            "fingerprint": "a3f42155c89203384f6983f1795fe542d6fd470d"
+          },
+          {
+            "gate": "test",
+            "target": ".",
+            "command": "bun run test",
+            "commandSource": "detected",
+            "confirmed": true,
+            "exit": 0,
+            "status": "pass",
+            "durationMs": 52988,
+            "at": "2026-11-06T15:31:33.249Z",
+            "log": "logs/test-_-1793979093249.txt",
+            "tail": "tests/golden/judges.test.ts:\nheuristic precision 100%  recall 100%  kind 88%\ntypesafe  precision 100%  recall 100%  kind 88%\n\ntests/golden/search.test.ts:\ntop 5: 35/44 → 39/44; Portuguese of English: 1/8 → 4/8\nsemantic-only results for unrelated queries: 29/43\n\ntests/golden/retrieval.test.ts:\nrecall@5: 19/24 — missed: redact-first, pt-lingua, pt-cursor, ts-extension, hook-runs\nprecision: 19/21 notes given were the expected ones\nfalse injections: 0/23\n\ntests/perf/budgets.test.ts:\nprompt: p50 25.0 ms, p95 31.4 ms\nsession-start: p50 18.3 ms, p95 20.5 ms\nturn-end: p50 14.7 ms, p95 15.4 ms\nfile-read: p50 18.2 ms, p95 19.9 ms\ntool-failed: p50 24.5 ms, p95 25.9 ms\nqwen prompt: p50 24.8 ms, p95 26.8 ms\nqwen session-start: p50 21.1 ms, p95 23.5 ms\ndroid prompt: p50 26.8 ms, p95 36.0 ms\ndroid session-start: p50 22.7 ms, p95 36.0 ms\ncopilot session-start: p50 21.2 ms, p95 30.2 ms\ncopilot prompt (capture only): p50 16.6 ms, p95 18.6 ms\nantigravity pre-invocation: p50 21.1 ms, p95 23.5 ms\nlinked prompt: p50 32.8 ms, p95 50.8 ms (30 of 30 with a note from outside)\nlinked session-start: p50 22.9 ms, p95 25.6 ms\n\ntests/perf/large-project.test.ts:\nlarge project prompt: p50 17.9 ms, p95 19.9 ms (40 of 40 given notes)\n\ntests/perf/semantic.test.ts:\nsemantic global median: 16.2 ms\n\n 1972 pass\n 4 skip\n 0 fail\n 24 snapshots, 28198 expect() calls\nRan 1976 tests across 126 files. [51.66s]",
+            "fingerprint": "a3f42155c89203384f6983f1795fe542d6fd470d"
+          },
+          {
+            "gate": "lint",
+            "target": ".",
+            "command": "bun run lint",
+            "commandSource": "detected",
+            "confirmed": true,
+            "exit": 0,
+            "status": "pass",
+            "durationMs": 138,
+            "at": "2026-11-06T15:32:26.238Z",
+            "log": "logs/lint-_-1793979146238.txt",
+            "tail": "\n  ! Forbidden non-null assertion.\n  \n    75 │     dot += a[i]! * b[i]!;\n    76 │     na += a[i]! * a[i]!;\n  > 77 │     nb += b[i]! * b[i]!;\n       │           ^^^^^\n    78 │   }\n    79 │   const denom = Math.sqrt(na) * Math.sqrt(nb);\n  \n\nsrc/embed/embed.ts:77:19 lint/style/noNonNullAssertion ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n  ! Forbidden non-null assertion.\n  \n    75 │     dot += a[i]! * b[i]!;\n    76 │     na += a[i]! * a[i]!;\n  > 77 │     nb += b[i]! * b[i]!;\n       │                   ^^^^^\n    78 │   }\n    79 │   const denom = Math.sqrt(na) * Math.sqrt(nb);\n  \n\nsrc/embed/embed.ts:87:67 lint/style/noNonNullAssertion ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n  ! Forbidden non-null assertion.\n  \n    85 │   const q = new Int8Array(v.length);\n    86 │   let max = 0;\n  > 87 │   for (let i = 0; i < v.length; i++) max = Math.max(max, Math.abs(v[i]!));\n       │                                                                   ^^^^^\n    88 │   // A NaN or infinity would poison the scale: store nothing rather than garbage.\n    89 │   if (!Number.isFinite(max) || v.some((x) => Number.isNaN(x))) return { scale: 0, q };\n  \n\nThe number of diagnostics exceeds the limit allowed. Use --max-diagnostics to increase it.\nDiagnostics not shown: 75.\nChecked 312 files in 80ms. No fixes applied.\nFound 94 warnings.\nFound 1 info.",
+            "fingerprint": "a3f42155c89203384f6983f1795fe542d6fd470d"
+          },
+          {
+            "gate": "typecheck",
+            "target": ".",
+            "command": "bun run typecheck",
+            "commandSource": "detected",
+            "confirmed": true,
+            "exit": 0,
+            "status": "pass",
+            "durationMs": 302,
+            "at": "2026-11-06T15:32:26.376Z",
+            "log": "logs/typecheck-_-1793979146376.txt",
+            "tail": "$ tsc --noEmit",
+            "fingerprint": "a3f42155c89203384f6983f1795fe542d6fd470d"
+          }
+        ],
+        "scope": [
+          "src/distill/noise.ts",
+          "tests/unit/noise.test.ts"
+        ],
+        "planned": [],
+        "cut": [
+          "src/distill/noise.ts",
+          "tests/unit/noise.test.ts"
+        ],
+        "judgement": []
+      },
+      "brief": "tasks/T-2.brief.md"
+    },
+    {
+      "task": "T-3",
+      "message": "",
+      "criteria": [
+        "AC-2",
+        "AC-3",
+        "AC-11",
+        "AC-14"
+      ],
+      "text": "AC-2, AC-3, AC-11, AC-14: pipeline: withoutSentences, prepareTexts/prepareTurn/draftTurn/buildDraft, toldInSession bounds, KNOWLEDGE_THRESHOLD, CONTEXT_MIN_WORDS, wordCount (Task 3 of the full plan).",
+      "branch": "",
+      "worktree": "",
+      "openedAt": "2026-11-06T15:35:26.468Z",
+      "inline": true,
+      "scope": [
+        "src/distill/noise.ts",
+        "src/distill/segment.ts",
+        "src/distill/policy.ts",
+        "src/distill/pipeline.ts",
+        "tests/unit/noise.test.ts",
+        "tests/unit/draft.test.ts",
+        "tests/integration/distill.test.ts"
+      ],
+      "state": "briefed",
+      "gate": {
+        "round": 1,
+        "at": "2026-11-06T15:36:21.125Z",
+        "status": "pass",
+        "runs": [
+          {
+            "gate": "build",
+            "target": ".",
+            "command": "bun run build",
+            "commandSource": "detected",
+            "confirmed": true,
+            "exit": 0,
+            "status": "pass",
+            "durationMs": 2375,
+            "at": "2026-11-06T15:35:26.534Z",
+            "log": "logs/build-_-1793979326535.txt",
+            "tail": "$ bun run ui:build && bun scripts/build.ts\n$ vite build --config ui/vite.config.ts\nvite v8.3.3 building client environment for production...\ntransforming...\n\n/assets/unbounded-variable.woff2 referenced in /assets/unbounded-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/instrument-sans-variable.woff2 referenced in /assets/instrument-sans-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/jetbrains-mono-variable.woff2 referenced in /assets/jetbrains-mono-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n✓ 834 modules transformed.\nrendering chunks...\n[plugin vite:singlefile] \n\n[plugin vite:singlefile] Inlining: index-PUhkQFrm.js\n[plugin vite:singlefile] Inlining: style-ODM7JwkH.css\nsrc/ui/dist/index.html  1,109.41 kB\n\n✓ built in 652ms\n✓ wizardingcode-mem-darwin-arm64  66.2 MB\n✓ wizardingcode-mem-darwin-x64  72.9 MB\n✓ wizardingcode-mem-linux-x64  84.3 MB\n✓ wizardingcode-mem-linux-arm64  84.3 MB\n✓ wizardingcode-mem-windows-x64.exe  88.9 MB",
+            "fingerprint": "1dc92d7e53869bee42e70f87b726446d67df4842"
+          },
+          {
+            "gate": "test",
+            "target": ".",
+            "command": "bun run test",
+            "commandSource": "detected",
+            "confirmed": true,
+            "exit": 0,
+            "status": "pass",
+            "durationMs": 51787,
+            "at": "2026-11-06T15:35:28.910Z",
+            "log": "logs/test-_-1793979328910.txt",
+            "tail": "tests/golden/judges.test.ts:\nheuristic precision 100%  recall 100%  kind 88%\ntypesafe  precision 100%  recall 100%  kind 88%\n\ntests/golden/search.test.ts:\ntop 5: 35/44 → 39/44; Portuguese of English: 1/8 → 4/8\nsemantic-only results for unrelated queries: 29/43\n\ntests/golden/retrieval.test.ts:\nrecall@5: 19/24 — missed: redact-first, pt-lingua, pt-cursor, ts-extension, hook-runs\nprecision: 19/21 notes given were the expected ones\nfalse injections: 0/23\n\ntests/perf/budgets.test.ts:\nprompt: p50 24.2 ms, p95 25.2 ms\nsession-start: p50 19.5 ms, p95 20.6 ms\nturn-end: p50 15.3 ms, p95 16.8 ms\nfile-read: p50 18.3 ms, p95 19.4 ms\ntool-failed: p50 24.2 ms, p95 26.2 ms\nqwen prompt: p50 24.7 ms, p95 27.4 ms\nqwen session-start: p50 18.6 ms, p95 19.4 ms\ndroid prompt: p50 25.4 ms, p95 27.4 ms\ndroid session-start: p50 18.8 ms, p95 20.0 ms\ncopilot session-start: p50 19.4 ms, p95 20.8 ms\ncopilot prompt (capture only): p50 14.9 ms, p95 16.0 ms\nantigravity pre-invocation: p50 19.6 ms, p95 20.8 ms\nlinked prompt: p50 30.4 ms, p95 34.2 ms (30 of 30 with a note from outside)\nlinked session-start: p50 20.1 ms, p95 23.0 ms\n\ntests/perf/large-project.test.ts:\nlarge project prompt: p50 17.0 ms, p95 19.6 ms (40 of 40 given notes)\n\ntests/perf/semantic.test.ts:\nsemantic global median: 16.4 ms\n\n 1992 pass\n 4 skip\n 0 fail\n 24 snapshots, 28234 expect() calls\nRan 1996 tests across 127 files. [50.45s]",
+            "fingerprint": "1dc92d7e53869bee42e70f87b726446d67df4842"
+          },
+          {
+            "gate": "lint",
+            "target": ".",
+            "command": "bun run lint",
+            "commandSource": "detected",
+            "confirmed": true,
+            "exit": 0,
+            "status": "pass",
+            "durationMs": 140,
+            "at": "2026-11-06T15:36:20.697Z",
+            "log": "logs/lint-_-1793979380697.txt",
+            "tail": "\n  ! Forbidden non-null assertion.\n  \n    75 │     dot += a[i]! * b[i]!;\n    76 │     na += a[i]! * a[i]!;\n  > 77 │     nb += b[i]! * b[i]!;\n       │           ^^^^^\n    78 │   }\n    79 │   const denom = Math.sqrt(na) * Math.sqrt(nb);\n  \n\nsrc/embed/embed.ts:77:19 lint/style/noNonNullAssertion ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n  ! Forbidden non-null assertion.\n  \n    75 │     dot += a[i]! * b[i]!;\n    76 │     na += a[i]! * a[i]!;\n  > 77 │     nb += b[i]! * b[i]!;\n       │                   ^^^^^\n    78 │   }\n    79 │   const denom = Math.sqrt(na) * Math.sqrt(nb);\n  \n\nsrc/embed/embed.ts:87:67 lint/style/noNonNullAssertion ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n  ! Forbidden non-null assertion.\n  \n    85 │   const q = new Int8Array(v.length);\n    86 │   let max = 0;\n  > 87 │   for (let i = 0; i < v.length; i++) max = Math.max(max, Math.abs(v[i]!));\n       │                                                                   ^^^^^\n    88 │   // A NaN or infinity would poison the scale: store nothing rather than garbage.\n    89 │   if (!Number.isFinite(max) || v.some((x) => Number.isNaN(x))) return { scale: 0, q };\n  \n\nThe number of diagnostics exceeds the limit allowed. Use --max-diagnostics to increase it.\nDiagnostics not shown: 75.\nChecked 313 files in 82ms. No fixes applied.\nFound 94 warnings.\nFound 1 info.",
+            "fingerprint": "1dc92d7e53869bee42e70f87b726446d67df4842"
+          },
+          {
+            "gate": "typecheck",
+            "target": ".",
+            "command": "bun run typecheck",
+            "commandSource": "detected",
+            "confirmed": true,
+            "exit": 0,
+            "status": "pass",
+            "durationMs": 225,
+            "at": "2026-11-06T15:36:20.837Z",
+            "log": "logs/typecheck-_-1793979380837.txt",
+            "tail": "$ tsc --noEmit",
+            "fingerprint": "1dc92d7e53869bee42e70f87b726446d67df4842"
+          }
+        ],
+        "scope": [
+          "src/distill/noise.ts",
+          "src/distill/segment.ts",
+          "src/distill/policy.ts",
+          "src/distill/pipeline.ts",
+          "tests/unit/noise.test.ts",
+          "tests/unit/draft.test.ts",
+          "tests/integration/distill.test.ts"
+        ],
+        "planned": [],
+        "cut": [
+          "src/distill/noise.ts",
+          "src/distill/segment.ts",
+          "src/distill/policy.ts",
+          "src/distill/pipeline.ts",
+          "tests/unit/noise.test.ts",
+          "tests/unit/draft.test.ts",
+          "tests/integration/distill.test.ts"
+        ],
+        "judgement": []
+      },
+      "brief": "tasks/T-3.brief.md"
+    },
+    {
+      "task": "T-6",
+      "message": "M-2026-11-07-001-ai-mem",
+      "criteria": [
+        "AC-4"
+      ],
+      "text": "AC-4: questions version 2, version 1 reduced to three questions, golden input through the filter, eight golden turns, answers re-recorded (Task 6 of the full plan).",
+      "branch": "crew/2026-10-15-001/T-6",
+      "worktree": "/Users/andreagroferreira/AIProjects/ai-mem-2026-10-15-001-T-6",
+      "openedAt": "2026-11-07T10:52:28.234Z",
+      "state": "briefed",
+      "child": "2026-11-07-001-t-6-of-2026-10-15-001-memory-quality-kno",
+      "verdict": "unproven",
+      "repliedAt": "2026-11-07T10:58:25.496Z",
+      "mergedAt": "2026-11-07T21:14:46.310Z",
+      "mergeCommit": "b2f483fdd018eb205eccaa6417268d2354d39de9",
+      "forcedBy": {
+        "by": "user",
+        "relayed": true
+      },
+      "gate": {
+        "round": 1,
+        "at": "2026-11-07T21:15:49.051Z",
+        "status": "pass",
+        "runs": [
+          {
+            "gate": "build",
+            "target": ".",
+            "command": "bun run build",
+            "commandSource": "detected",
+            "confirmed": true,
+            "exit": 0,
+            "status": "pass",
+            "durationMs": 2764,
+            "at": "2026-11-07T21:14:53.545Z",
+            "log": "logs/build-_-1794086093546.txt",
+            "tail": "$ bun run ui:build && bun scripts/build.ts\n$ vite build --config ui/vite.config.ts\nvite v8.3.3 building client environment for production...\ntransforming...\n\n/assets/unbounded-variable.woff2 referenced in /assets/unbounded-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/instrument-sans-variable.woff2 referenced in /assets/instrument-sans-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/jetbrains-mono-variable.woff2 referenced in /assets/jetbrains-mono-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n✓ 834 modules transformed.\nrendering chunks...\n[plugin vite:singlefile] \n\n[plugin vite:singlefile] Inlining: index-PUhkQFrm.js\n[plugin vite:singlefile] Inlining: style-ODM7JwkH.css\nsrc/ui/dist/index.html  1,109.41 kB\n\n✓ built in 718ms\n✓ wizardingcode-mem-darwin-arm64  66.2 MB\n✓ wizardingcode-mem-darwin-x64  72.9 MB\n✓ wizardingcode-mem-linux-x64  84.3 MB\n✓ wizardingcode-mem-linux-arm64  84.3 MB\n✓ wizardingcode-mem-windows-x64.exe  88.9 MB",
+            "fingerprint": "b2f483fdd018eb205eccaa6417268d2354d39de9"
+          },
+          {
+            "gate": "test",
+            "target": ".",
+            "command": "bun run test",
+            "commandSource": "detected",
+            "confirmed": true,
+            "exit": 0,
+            "status": "pass",
+            "durationMs": 52168,
+            "at": "2026-11-07T21:14:56.312Z",
+            "log": "logs/test-_-1794086096312.txt",
+            "tail": "tests/golden/judges.test.ts:\nheuristic precision 100%  recall 100%  kind 83%\ntypesafe  precision 85%  recall 94%  kind 88%  wrongly kept: en-none-obvious-from-code, en-none-general-knowledge, pt-none-your-turn  missed: en-change-json-flag\n\ntests/golden/search.test.ts:\ntop 5: 35/44 → 39/44; Portuguese of English: 1/8 → 4/8\nsemantic-only results for unrelated queries: 29/43\n\ntests/golden/retrieval.test.ts:\nrecall@5: 19/24 — missed: redact-first, pt-lingua, pt-cursor, ts-extension, hook-runs\nprecision: 19/21 notes given were the expected ones\nfalse injections: 0/23\n\ntests/perf/budgets.test.ts:\nprompt: p50 23.1 ms, p95 24.4 ms\nsession-start: p50 17.9 ms, p95 21.9 ms\nturn-end: p50 14.3 ms, p95 16.7 ms\nfile-read: p50 16.7 ms, p95 17.1 ms\ntool-failed: p50 23.1 ms, p95 25.0 ms\nqwen prompt: p50 25.2 ms, p95 26.3 ms\nqwen session-start: p50 19.4 ms, p95 22.3 ms\ndroid prompt: p50 25.3 ms, p95 27.3 ms\ndroid session-start: p50 18.8 ms, p95 20.2 ms\ncopilot session-start: p50 17.8 ms, p95 18.9 ms\ncopilot prompt (capture only): p50 14.0 ms, p95 14.7 ms\nantigravity pre-invocation: p50 17.9 ms, p95 19.6 ms\nlinked prompt: p50 28.7 ms, p95 32.3 ms (30 of 30 with a note from outside)\nlinked session-start: p50 19.2 ms, p95 19.5 ms\n\ntests/perf/large-project.test.ts:\nlarge project prompt: p50 18.0 ms, p95 37.8 ms (40 of 40 given notes)\n\ntests/perf/semantic.test.ts:\nsemantic global median: 16.0 ms\n\n 2010 pass\n 4 skip\n 0 fail\n 24 snapshots, 28311 expect() calls\nRan 2014 tests across 128 files. [50.87s]",
+            "fingerprint": "b2f483fdd018eb205eccaa6417268d2354d39de9"
+          },
+          {
+            "gate": "lint",
+            "target": ".",
+            "command": "bun run lint",
+            "commandSource": "detected",
+            "confirmed": true,
+            "exit": 0,
+            "status": "pass",
+            "durationMs": 209,
+            "at": "2026-11-07T21:15:48.480Z",
+            "log": "logs/lint-_-1794086148480.txt",
+            "tail": "  \n\nscripts/embed/spike.ts:229:61 lint/style/noNonNullAssertion ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n  ! Forbidden non-null assertion.\n  \n    227 │       prompt: item.prompt,\n    228 │       expect: item.expect,\n  > 229 │       lexicalFound: item.expect.every((key) => got.includes(ids.get(key)!)),\n        │                                                             ^^^^^^^^^^^^^\n    230 │       hits: item.expect.map((key) => {\n    231 │         const index = order.findIndex((o) => o.key === key);\n  \n\nscripts/embed/spike.ts:232:72 lint/style/noNonNullAssertion  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n  ! Forbidden non-null assertion.\n  \n    230 │       hits: item.expect.map((key) => {\n    231 │         const index = order.findIndex((o) => o.key === key);\n  > 232 │         return { key, rank: index + 1, score: index < 0 ? Number.NaN : order[index]!.score };\n        │                                                                        ^^^^^^^^^^^^^\n    233 │       }),\n    234 │       top: order.slice(0, 3),\n  \n  i Unsafe fix: Replace with optional chain operator ?. This operator includes runtime checks, so it is safer than the compile-only non-null assertion operator\n  \n    230 230 │         hits: item.expect.map((key) => {\n    231 231 │           const index = order.findIndex((o) => o.key === key);\n    232     │ - ········return·{·key,·rank:·index·+·1,·score:·index·<·0·?·Number.NaN·:·order[index]!.score·};\n        232 │ + ········return·{·key,·rank:·index·+·1,·score:·index·<·0·?·Number.NaN·:·order[index]?.score·};\n    233 233 │         }),\n    234 234 │         top: order.slice(0, 3),\n  \n\nThe number of diagnostics exceeds the limit allowed. Use --max-diagnostics to increase it.\nDiagnostics not shown: 75.\nChecked 314 files in 102ms. No fixes applied.\nFound 94 warnings.\nFound 1 info.",
+            "fingerprint": "b2f483fdd018eb205eccaa6417268d2354d39de9"
+          },
+          {
+            "gate": "typecheck",
+            "target": ".",
+            "command": "bun run typecheck",
+            "commandSource": "detected",
+            "confirmed": true,
+            "exit": 0,
+            "status": "pass",
+            "durationMs": 295,
+            "at": "2026-11-07T21:15:48.689Z",
+            "log": "logs/typecheck-_-1794086148689.txt",
+            "tail": "$ tsc --noEmit",
+            "fingerprint": "b2f483fdd018eb205eccaa6417268d2354d39de9"
+          }
+        ],
+        "scope": [
+          "src/judge/questions.ts",
+          "src/judge/typesafe.ts",
+          "tests/golden/judges.test.ts",
+          "tests/golden/turns.json",
+          "tests/golden/typesafe-answers.json",
+          "tests/helpers/judge-input.ts",
+          "tests/integration/judge-select.test.ts",
+          "tests/integration/rejudge.test.ts",
+          "tests/unit/questions.test.ts",
+          "tests/unit/typesafe-judge.test.ts"
+        ],
+        "planned": [],
+        "cut": [
+          "src/judge/questions.ts",
+          "src/judge/typesafe.ts",
+          "tests/golden/judges.test.ts",
+          "tests/golden/turns.json",
+          "tests/golden/typesafe-answers.json",
+          "tests/helpers/judge-input.ts",
+          "tests/integration/judge-select.test.ts",
+          "tests/integration/rejudge.test.ts",
+          "tests/unit/questions.test.ts",
+          "tests/unit/typesafe-judge.test.ts"
+        ],
+        "judgement": []
+      },
+      "brief": "tasks/T-6.brief.md"
+    },
+    {
+      "task": "T-7",
+      "message": "",
+      "criteria": [
+        "AC-11"
+      ],
+      "text": "The proof scripts (plan step 7), built inline after the T-7 lane failed to start. Proven: tests/integration/quality-proof.test.ts (live store bytes and mtime unchanged; TypeSafe's own verdicts only; the metric rows cell by cell; mutants killed, probes/proof-metric-mutations*.txt). Left to the operator: delete the work dir (store copy, samples, full.md, verdicts.json) once the report is taken (quality.sh header).",
+      "branch": "",
+      "worktree": "",
+      "openedAt": "2026-11-08T16:09:21.002Z",
+      "inline": true,
+      "scope": [
+        "scripts/proof/quality.sh",
+        "scripts/proof/quality.ts",
+        "scripts/proof/quality-brief.md",
+        "scripts/proof/random.ts",
+        "scripts/proof/moments.ts",
+        "tests/integration/quality-proof.test.ts"
+      ],
+      "state": "briefed",
+      "gate": {
+        "round": 1,
+        "at": "2026-11-08T16:10:27.761Z",
+        "status": "pass",
+        "runs": [
+          {
+            "gate": "build",
+            "target": ".",
+            "command": "bun run build",
+            "commandSource": "detected",
+            "confirmed": true,
+            "exit": 0,
+            "status": "pass",
+            "durationMs": 2534,
+            "at": "2026-11-08T16:09:26.999Z",
+            "log": "logs/build-_-1794154167000.txt",
+            "tail": "$ bun run ui:build && bun scripts/build.ts\n$ vite build --config ui/vite.config.ts\nvite v8.3.3 building client environment for production...\ntransforming...\n\n/assets/unbounded-variable.woff2 referenced in /assets/unbounded-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/instrument-sans-variable.woff2 referenced in /assets/instrument-sans-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/jetbrains-mono-variable.woff2 referenced in /assets/jetbrains-mono-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n✓ 834 modules transformed.\nrendering chunks...\n[plugin vite:singlefile] \n\n[plugin vite:singlefile] Inlining: index-PUhkQFrm.js\n[plugin vite:singlefile] Inlining: style-ODM7JwkH.css\nsrc/ui/dist/index.html  1,109.41 kB\n\n✓ built in 670ms\n✓ wizardingcode-mem-darwin-arm64  66.2 MB\n✓ wizardingcode-mem-darwin-x64  72.9 MB\n✓ wizardingcode-mem-linux-x64  84.3 MB\n✓ wizardingcode-mem-linux-arm64  84.3 MB\n✓ wizardingcode-mem-windows-x64.exe  88.9 MB",
+            "fingerprint": "8a1c2f7c33a3e1f5cd4777f89535b717c2b5e62f"
+          },
+          {
+            "gate": "test",
+            "target": ".",
+            "command": "bun run test",
+            "commandSource": "detected",
+            "confirmed": true,
+            "exit": 0,
+            "status": "pass",
+            "durationMs": 57723,
+            "at": "2026-11-08T16:09:29.534Z",
+            "log": "logs/test-_-1794154169534.txt",
+            "tail": "tests/golden/judges.test.ts:\nheuristic precision 100%  recall 100%  kind 83%\ntypesafe  precision 85%  recall 94%  kind 88%  wrongly kept: en-none-obvious-from-code, en-none-general-knowledge, pt-none-your-turn  missed: en-change-json-flag\n\ntests/golden/search.test.ts:\ntop 5: 35/44 → 39/44; Portuguese of English: 1/8 → 4/8\nsemantic-only results for unrelated queries: 29/43\n\ntests/golden/retrieval.test.ts:\nrecall@5: 19/24 — missed: redact-first, pt-lingua, pt-cursor, ts-extension, hook-runs\nprecision: 19/21 notes given were the expected ones\nfalse injections: 0/23\n\ntests/perf/budgets.test.ts:\nprompt: p50 24.4 ms, p95 29.7 ms\nsession-start: p50 18.3 ms, p95 19.6 ms\nturn-end: p50 13.8 ms, p95 15.0 ms\nfile-read: p50 17.2 ms, p95 18.8 ms\ntool-failed: p50 22.8 ms, p95 24.0 ms\nqwen prompt: p50 22.7 ms, p95 24.7 ms\nqwen session-start: p50 16.8 ms, p95 18.5 ms\ndroid prompt: p50 24.1 ms, p95 26.1 ms\ndroid session-start: p50 17.5 ms, p95 18.8 ms\ncopilot session-start: p50 18.1 ms, p95 19.8 ms\ncopilot prompt (capture only): p50 15.0 ms, p95 15.7 ms\nantigravity pre-invocation: p50 18.5 ms, p95 19.5 ms\nlinked prompt: p50 29.9 ms, p95 35.3 ms (30 of 30 with a note from outside)\nlinked session-start: p50 19.0 ms, p95 20.5 ms\n\ntests/perf/large-project.test.ts:\nlarge project prompt: p50 17.6 ms, p95 20.0 ms (40 of 40 given notes)\n\ntests/perf/semantic.test.ts:\nsemantic global median: 16.3 ms\n\n 2015 pass\n 4 skip\n 0 fail\n 24 snapshots, 28379 expect() calls\nRan 2019 tests across 129 files. [56.40s]",
+            "fingerprint": "8a1c2f7c33a3e1f5cd4777f89535b717c2b5e62f"
+          },
+          {
+            "gate": "lint",
+            "target": ".",
+            "command": "bun run lint",
+            "commandSource": "detected",
+            "confirmed": true,
+            "exit": 0,
+            "status": "pass",
+            "durationMs": 142,
+            "at": "2026-11-08T16:10:27.258Z",
+            "log": "logs/lint-_-1794154227258.txt",
+            "tail": "\n  ! Forbidden non-null assertion.\n  \n    75 │     dot += a[i]! * b[i]!;\n    76 │     na += a[i]! * a[i]!;\n  > 77 │     nb += b[i]! * b[i]!;\n       │           ^^^^^\n    78 │   }\n    79 │   const denom = Math.sqrt(na) * Math.sqrt(nb);\n  \n\nsrc/embed/embed.ts:77:19 lint/style/noNonNullAssertion ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n  ! Forbidden non-null assertion.\n  \n    75 │     dot += a[i]! * b[i]!;\n    76 │     na += a[i]! * a[i]!;\n  > 77 │     nb += b[i]! * b[i]!;\n       │                   ^^^^^\n    78 │   }\n    79 │   const denom = Math.sqrt(na) * Math.sqrt(nb);\n  \n\nsrc/embed/embed.ts:87:67 lint/style/noNonNullAssertion ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n  ! Forbidden non-null assertion.\n  \n    85 │   const q = new Int8Array(v.length);\n    86 │   let max = 0;\n  > 87 │   for (let i = 0; i < v.length; i++) max = Math.max(max, Math.abs(v[i]!));\n       │                                                                   ^^^^^\n    88 │   // A NaN or infinity would poison the scale: store nothing rather than garbage.\n    89 │   if (!Number.isFinite(max) || v.some((x) => Number.isNaN(x))) return { scale: 0, q };\n  \n\nThe number of diagnostics exceeds the limit allowed. Use --max-diagnostics to increase it.\nDiagnostics not shown: 75.\nChecked 317 files in 83ms. No fixes applied.\nFound 94 warnings.\nFound 1 info.",
+            "fingerprint": "8a1c2f7c33a3e1f5cd4777f89535b717c2b5e62f"
+          },
+          {
+            "gate": "typecheck",
+            "target": ".",
+            "command": "bun run typecheck",
+            "commandSource": "detected",
+            "confirmed": true,
+            "exit": 0,
+            "status": "pass",
+            "durationMs": 290,
+            "at": "2026-11-08T16:10:27.400Z",
+            "log": "logs/typecheck-_-1794154227400.txt",
+            "tail": "$ tsc --noEmit",
+            "fingerprint": "8a1c2f7c33a3e1f5cd4777f89535b717c2b5e62f"
+          }
+        ],
+        "scope": [
+          "scripts/proof/quality.sh",
+          "scripts/proof/quality.ts",
+          "scripts/proof/quality-brief.md",
+          "scripts/proof/random.ts",
+          "scripts/proof/moments.ts",
+          "tests/integration/quality-proof.test.ts"
+        ],
+        "planned": [],
+        "cut": [
+          "scripts/proof/quality.sh",
+          "scripts/proof/quality.ts",
+          "scripts/proof/quality-brief.md",
+          "scripts/proof/random.ts",
+          "scripts/proof/moments.ts",
+          "tests/integration/quality-proof.test.ts"
+        ],
+        "judgement": []
+      },
+      "brief": "tasks/T-7.brief.md"
+    }
+  ],
+  "seats": [
+    {
+      "role": "researcher",
+      "team": "researchers",
+      "kind": "debate",
+      "reason": "full route"
+    },
+    {
+      "role": "review-code-quality",
+      "team": "backend",
+      "kind": "gate",
+      "gate": "code-quality",
+      "reason": "full route"
+    },
+    {
+      "role": "review-test-quality",
+      "team": "qa",
+      "kind": "gate",
+      "gate": "test-quality",
+      "reason": "full route"
+    },
+    {
+      "role": "review-security",
+      "team": "security",
+      "kind": "gate",
+      "gate": "security",
+      "reason": "full route"
+    },
+    {
+      "role": "review-risk",
+      "team": "architects",
+      "kind": "gate",
+      "gate": "risk",
+      "reason": "full route"
+    },
+    {
+      "role": "review-architecture",
+      "team": "architects",
+      "kind": "gate",
+      "gate": "architecture",
+      "reason": "full route"
+    },
+    {
+      "role": "review-data",
+      "team": "etl",
+      "kind": "gate",
+      "gate": "data",
+      "reason": "risk area data-migration"
+    },
+    {
+      "role": "lead-qa",
+      "team": "qa",
+      "kind": "lead",
+      "reason": "full route"
+    },
+    {
+      "role": "lead-security",
+      "team": "security",
+      "kind": "lead",
+      "reason": "full route"
+    },
+    {
+      "role": "lead-architects",
+      "team": "architects",
+      "kind": "lead",
+      "reason": "full route"
+    },
+    {
+      "role": "lead-etl",
+      "team": "etl",
+      "kind": "lead",
+      "reason": "risk area data-migration"
+    },
+    {
+      "role": "judge",
+      "team": null,
+      "kind": "debate",
+      "reason": "a gate is planned"
+    }
+  ],
+  "knowledgeFiles": [],
+  "knowledgeLabels": [],
+  "primaryTeam": "backend",
+  "rounds": {
+    "judgement": 4,
+    "validation": 0,
+    "judgementCode": "sha256:e66ddfb48ae4308c657a1dd3a3e7f0ff4e19483c99814dd9d5a719a1eb5b7925"
+  },
+  "continued": [
+    {
+      "what": "judgement",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-08T15:58:49.290Z",
+      "standing": true
+    },
+    {
+      "what": "judgement",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-08T16:17:40.187Z",
+      "standing": true
+    }
+  ],
+  "phaseAt": {
+    "gate": "2026-11-08T16:06:25.002Z",
+    "deliver": "2026-11-08T16:19:10.413Z"
+  },
+  "validations": [
+    {
+      "what": "delivery",
+      "by": "lead-etl",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-etl.delivery.md",
+      "hash": "sha256:439276c7d066040431b53398d5e306c7665e88ca931e834d08b3165293d1d8a9",
+      "fileHash": "sha256:22446deb018230411301da6ddf9fa68939798240cdffc83f482a257d0c0ae06a",
+      "at": "2026-11-08T16:07:56.009Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-architects",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-architects.delivery.md",
+      "hash": "sha256:439276c7d066040431b53398d5e306c7665e88ca931e834d08b3165293d1d8a9",
+      "fileHash": "sha256:eca001bb8b705fcc420c8e71c4164af8fead49a603ee299543a5faa5cfcfdbfb",
+      "at": "2026-11-08T16:08:04.320Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-qa",
+      "verdict": "returned",
+      "returns": 2,
+      "round": 1,
+      "file": "conclave/lead-qa.delivery.md",
+      "hash": "sha256:439276c7d066040431b53398d5e306c7665e88ca931e834d08b3165293d1d8a9",
+      "fileHash": "sha256:9d8dc2a52cb0b0f8ef356e1c467ac56cd0c59151dd64fc9f130486ab51ffb75e",
+      "at": "2026-11-08T16:08:14.566Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-security",
+      "verdict": "returned",
+      "returns": 2,
+      "round": 1,
+      "file": "conclave/lead-security.delivery.md",
+      "hash": "sha256:439276c7d066040431b53398d5e306c7665e88ca931e834d08b3165293d1d8a9",
+      "fileHash": "sha256:0c9571c49080c754657a54d68bc335790b8a408bf3c59d44159a94c2f9aa5f4f",
+      "at": "2026-11-08T16:08:26.370Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-security",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 2,
+      "file": "conclave/lead-security.delivery-reply.md",
+      "hash": "sha256:e66ddfb48ae4308c657a1dd3a3e7f0ff4e19483c99814dd9d5a719a1eb5b7925",
+      "fileHash": "sha256:bc7007ecc45bd8c593d50e6834fc7ae2b56560e8c028d05c62aaccdb56b0b606",
+      "at": "2026-11-08T16:18:30.137Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-qa",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 2,
+      "file": "conclave/lead-qa.delivery-reply.md",
+      "hash": "sha256:e66ddfb48ae4308c657a1dd3a3e7f0ff4e19483c99814dd9d5a719a1eb5b7925",
+      "fileHash": "sha256:c5479652a80e1ef86a3b2d226c2ba766c700aa9fd862142a239d9aa90d155caa",
+      "at": "2026-11-08T16:18:36.902Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-etl",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 2,
+      "file": "conclave/lead-etl.delivery-reply.md",
+      "hash": "sha256:e66ddfb48ae4308c657a1dd3a3e7f0ff4e19483c99814dd9d5a719a1eb5b7925",
+      "fileHash": "sha256:4cb0b8ae00b9b31b5903334c707ef5712584b28948334642caf62828f2931fc1",
+      "at": "2026-11-08T16:19:03.226Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-architects",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 2,
+      "file": "conclave/lead-architects.delivery-reply.md",
+      "hash": "sha256:e66ddfb48ae4308c657a1dd3a3e7f0ff4e19483c99814dd9d5a719a1eb5b7925",
+      "fileHash": "sha256:8a11ef284889b5bbf877dc325d4d93333cb7bb7cd4558132cbfbcf07c75a486c",
+      "at": "2026-11-08T16:19:10.306Z"
+    }
+  ]
+}

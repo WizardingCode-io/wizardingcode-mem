@@ -10,8 +10,15 @@ import { insertMemory, reinforce, supersede } from "../store/memories.ts";
 import { clip } from "../util/text.ts";
 import { searchTerms } from "../util/words.ts";
 import { consolidate, type Draft } from "./consolidate.ts";
-import { DURABLE_THRESHOLD, MAX_FACTS, SAVE_THRESHOLD, TITLE_MAX_CHARS } from "./policy.ts";
-import { candidates } from "./segment.ts";
+import { dropNoise, stripHost, withoutSentences } from "./noise.ts";
+import {
+  CONTEXT_MIN_WORDS,
+  KNOWLEDGE_THRESHOLD,
+  MAX_FACTS,
+  SAVE_THRESHOLD,
+  TITLE_MAX_CHARS,
+} from "./policy.ts";
+import { candidates, wordCount } from "./segment.ts";
 
 export interface DistillDeps {
   db: Db;
@@ -54,8 +61,11 @@ const EMPTY: TurnDetail = {
   savedMemory: false,
 };
 
-/** What a history turn was queued with: its transcript's tail no longer holds an old turn. */
-function storedDetail(db: Db, turnId: number): TurnDetail {
+/**
+ * What a turn was stored with: a history turn's transcript tail no longer holds an old
+ * turn, and the quality proof reads turns whose transcripts may be gone.
+ */
+export function storedDetail(db: Db, turnId: number): TurnDetail {
   const row = db
     .query<{ filesRead: string; filesChanged: string; commands: string; errors: string }, [number]>(
       `SELECT files_read AS filesRead, files_changed AS filesChanged, commands, errors
@@ -99,30 +109,42 @@ function readDetail(deps: DistillDeps, turn: QueuedTurn): TurnDetail {
   };
 }
 
-function buildDraft(
+/**
+ * The memory a verdict allows, or null. The title must be knowledge: the judge's choice
+ * when that sentence reaches the threshold, otherwise the surest sentence that does; with
+ * none, no memory, whatever `worthSaving` said.
+ */
+export function buildDraft(
   prompt: string,
   cands: DistillCandidate[],
   verdict: DistillVerdict,
   detail: TurnDetail,
 ): Draft | null {
   if (verdict.worthSaving < SAVE_THRESHOLD || verdict.kind === "none") return null;
-  const durability = (candidate: DistillCandidate) => verdict.durable[candidate.idx] ?? 0;
-  const durable = cands.filter((candidate) => durability(candidate) >= DURABLE_THRESHOLD);
-  const title = cands.find((candidate) => candidate.idx === verdict.titleIdx) ?? durable[0];
+  // `durable` keeps its name in the verdict: it is the per-candidate knowledge probability.
+  const knowledge = (candidate: DistillCandidate) => verdict.durable[candidate.idx] ?? 0;
+  const surestFirst = (a: DistillCandidate, b: DistillCandidate) =>
+    knowledge(b) - knowledge(a) || a.idx - b.idx;
+  const known = cands.filter((candidate) => knowledge(candidate) >= KNOWLEDGE_THRESHOLD);
+  const chosen = cands.find((candidate) => candidate.idx === verdict.titleIdx);
+  const title =
+    chosen !== undefined && knowledge(chosen) >= KNOWLEDGE_THRESHOLD
+      ? chosen
+      : [...known].sort(surestFirst)[0];
   if (title === undefined) return null;
 
   // The strongest facts, shown in the order they were written.
-  const facts = [...durable]
-    .sort((a, b) => durability(b) - durability(a) || a.idx - b.idx)
+  const facts = [...known]
+    .sort(surestFirst)
     .slice(0, MAX_FACTS)
     .sort((a, b) => a.idx - b.idx)
     .filter((candidate) => candidate.idx !== title.idx)
     .map((candidate) => candidate.text as string);
 
-  // What the user had asked gives the assistant's sentences their referent. A rule
-  // taken from the prompt itself needs none.
+  // What the user had asked gives the answer's sentences their referent. A bare "ok"
+  // gives none, and a rule taken from the prompt itself needs none.
   const asked = prompt.replace(/\s+/g, " ").trim();
-  if (title.source === "final" && asked !== "") {
+  if (title.source === "final" && wordCount(asked) >= CONTEXT_MIN_WORDS) {
     facts.push(`Context: ${clip(asked, CONTEXT_MAX_CHARS, "…")}`);
   }
 
@@ -140,15 +162,124 @@ function buildDraft(
   };
 }
 
-/** The titles and facts of every note this session was shown. */
-function toldInSession(db: Db, sessionId: number): string[] {
+/**
+ * The titles and facts of every note this session had been shown when the turn ended. A
+ * note shown later cannot have been repeated in the turn. With no end recorded, every note
+ * of the session counts. A memory made from this same turn never counts: a late turn-end
+ * moves `ended_at` later (`completeTurn`, `src/store/turns.ts`), past the moment the
+ * memory of its first ending was shown, and it would take the turn's own sentences away.
+ * Exported for the quality proof, which shows the labeller the turn as the pipeline reads it.
+ */
+export function toldInSession(
+  db: Db,
+  turnId: number,
+  sessionId: number,
+  endedAt: number | null,
+): string[] {
   return db
-    .query<{ title: string; body: string }, [number]>(
+    .query<{ title: string; body: string }, [number, number | null, number | null, number]>(
       `SELECT DISTINCT m.title, m.body FROM injections i JOIN memories m ON m.id = i.memory_id
-        WHERE i.session_id = ?`,
+        WHERE i.session_id = ? AND (? IS NULL OR i.at <= ?)
+          AND (m.source_turn_id IS NULL OR m.source_turn_id <> ?)`,
     )
-    .all(sessionId)
+    .all(sessionId, endedAt, endedAt, turnId)
     .flatMap((note) => [note.title, ...note.body.split("\n")]);
+}
+
+export interface PreparedTexts {
+  /** What the judge reads as `user_prompt`, and what the `Context:` line quotes. */
+  prompt: Redacted;
+  /** What the judge reads as `assistant_final_message`. */
+  finalText: Redacted;
+  /** What the judge rates: the sentences the noise filter kept, re-indexed from 0. */
+  candidates: DistillCandidate[];
+  /** The sentences the noise filter dropped, each with the name of its pattern. */
+  dropped: { text: string; pattern: string }[];
+}
+
+/**
+ * The first step of `prepareTexts`: the notes the session had been shown removed, the
+ * host's blocks still in. A host notification is not the user speaking: no rule comes
+ * from it, and it gives the answer no context, so its prompt is empty. Exported so that
+ * the quality proof shows the labeller exactly the texts the filter starts from.
+ */
+export function unfilteredTexts(
+  prompt: string,
+  finalText: string | null,
+  told: string[],
+): { prompt: string; finalText: string } {
+  return {
+    prompt: isFromTheHost(prompt) ? "" : withoutNotes(prompt, told),
+    finalText: withoutNotes(finalText ?? "", told),
+  };
+}
+
+/**
+ * A turn's texts as a judge sees them, and the sentences it rates: the notes the session
+ * had been shown (`told`) and the host's blocks are removed, the texts are segmented, the
+ * noise filter runs, and the sentences it dropped are taken out of the texts too, so that
+ * neither the host's frame nor a noise sentence reaches the judge or the `Context:` line.
+ * Pure. Text cut from redacted text is itself redacted.
+ */
+export function prepareTexts(
+  prompt: Redacted,
+  finalText: Redacted | null,
+  told: string[],
+): PreparedTexts {
+  const before = unfilteredTexts(prompt, finalText, told);
+  const asked = stripHost(before.prompt);
+  const answer = stripHost(before.finalText);
+  const segmented = candidates(asked, answer).map((candidate) => ({
+    ...candidate,
+    text: candidate.text as Redacted,
+  }));
+  const { kept, dropped } = dropNoise(segmented);
+  const droppedFrom = (source: "prompt" | "final") =>
+    dropped
+      .filter(({ candidate }) => candidate.source === source)
+      .map(({ candidate }) => candidate.text);
+  return {
+    prompt: withoutSentences(asked, droppedFrom("prompt")) as Redacted,
+    finalText: withoutSentences(answer, droppedFrom("final")) as Redacted,
+    candidates: kept,
+    dropped: dropped.map(({ candidate, pattern }) => ({ text: candidate.text, pattern })),
+  };
+}
+
+export interface PreparedTurn extends PreparedTexts {
+  detail: TurnDetail;
+}
+
+/** What `prepareTurn` reads of a turn. */
+export type TurnTexts = Pick<QueuedTurn, "id" | "sessionId" | "endedAt" | "prompt" | "finalText">;
+
+/** The turn as a judge will see it. The live drain and the quality proof both start here. */
+export function prepareTurn(db: Db, turn: TurnTexts, detail: TurnDetail): PreparedTurn {
+  const told = toldInSession(db, turn.id, turn.sessionId, turn.endedAt);
+  return { ...prepareTexts(turn.prompt, turn.finalText, told), detail };
+}
+
+/**
+ * The judge's verdict and the draft it allows. With no candidate left there is nothing to
+ * select from: the judge is not asked, and there is no verdict.
+ */
+export async function draftTurn(
+  judge: Judge,
+  prepared: PreparedTurn,
+): Promise<{ verdict: DistillVerdict | null; draft: Draft | null }> {
+  if (prepared.candidates.length === 0) return { verdict: null, draft: null };
+  const verdict = await judge.distill({
+    prompt: prepared.prompt,
+    finalText: prepared.finalText,
+    candidates: prepared.candidates,
+    filesChanged: prepared.detail.filesChanged,
+    commands: prepared.detail.commands as Redacted[],
+    hadErrors: prepared.detail.errors.length > 0,
+  });
+  return {
+    verdict,
+    draft: buildDraft(prepared.prompt, prepared.candidates, verdict, prepared.detail),
+  };
 }
 
 /**
@@ -184,27 +315,8 @@ export async function distillTurn(
     return "skipped";
   }
 
-  // Text cut from redacted text is itself redacted.
-  const told = toldInSession(db, turn.sessionId);
-  // A host notification is not the user speaking: no rule comes from it, and it gives
-  // the answer no context.
-  const prompt = (isFromTheHost(turn.prompt) ? "" : withoutNotes(turn.prompt, told)) as Redacted;
-  const finalText = withoutNotes(turn.finalText ?? "", told) as Redacted;
-  const cands = candidates(prompt, finalText).map((candidate) => ({
-    ...candidate,
-    text: candidate.text as Redacted,
-  }));
-  const verdict = await deps.judge.distill({
-    prompt,
-    finalText,
-    candidates: cands,
-    filesChanged: detail.filesChanged,
-    commands: detail.commands as Redacted[],
-    hadErrors: detail.errors.length > 0,
-  });
-
-  const draft = buildDraft(prompt, cands, verdict, detail);
-  if (draft === null) {
+  const { verdict, draft } = await draftTurn(deps.judge, prepareTurn(db, turn, detail));
+  if (verdict === null || draft === null) {
     finish("skipped");
     return "skipped";
   }

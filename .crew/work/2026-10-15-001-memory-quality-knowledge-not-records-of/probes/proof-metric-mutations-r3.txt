@@ -1,0 +1,7 @@
+== lost: leading ! before isKnowledge (round 2 survivor)
+(fail) the memory quality proof > TypeSafe's own verdicts are counted: every verdict kept is TypeSafe's, none failed [78.70ms]
+ 2 pass
+ 1 fail
+(fail) TypeSafeJudge > is version 2: the stamp distilled memories carry as judge_version (ADR 0023) [0.23ms]
+ 33 pass
+ 1 fail

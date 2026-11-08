@@ -1,0 +1,15 @@
+== titleIsKnowledge inverted
+(fail) the memory quality proof > TypeSafe's own verdicts are counted: every verdict kept is TypeSafe's, none failed [84.12ms]
+ 2 pass
+ 1 fail
+== lost inverted
+ 3 pass
+ 0 fail
+== records inverted
+(fail) the memory quality proof > TypeSafe's own verdicts are counted: every verdict kept is TypeSafe's, none failed [88.06ms]
+ 2 pass
+ 1 fail
+== lost: the kept-check negation removed (a kept turn counts as lost)
+(fail) the memory quality proof > TypeSafe's own verdicts are counted: every verdict kept is TypeSafe's, none failed [133.04ms]
+ 2 pass
+ 1 fail

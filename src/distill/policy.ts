@@ -4,8 +4,15 @@
 /** A turn is distilled into a memory when its `worthSaving` reaches this. */
 export const SAVE_THRESHOLD = 0.5;
 
-/** A sentence becomes one of a memory's facts when its durability reaches this. */
-export const DURABLE_THRESHOLD = 0.5;
+/**
+ * A sentence becomes one of a memory's facts, and may be its title, when the probability
+ * that it is knowledge on its own reaches this. A turn with no such sentence yields no
+ * memory, whatever `worthSaving` said: the title must be knowledge.
+ */
+export const KNOWLEDGE_THRESHOLD = 0.45;
+
+/** The `Context:` line (the prompt the answer replied to) is added only when the prompt has at least this many words: "aprovo" gives the reader nothing. */
+export const CONTEXT_MIN_WORDS = 5;
 
 export const MAX_FACTS = 5;
 export const TITLE_MAX_CHARS = 120;

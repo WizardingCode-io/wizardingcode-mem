@@ -23,6 +23,12 @@ export interface DistillInput {
   filesChanged: string[];
   commands: Redacted[];
   hadErrors: boolean;
+  /**
+   * The wording of the questions: 2 (the default) for distillation, 1 for the import
+   * rejudge, which keeps the version 1 questions (ADR 0023, D-2). A judge without
+   * questions ignores it.
+   */
+  wording?: 1 | 2;
 }
 
 export interface DistillVerdict {
