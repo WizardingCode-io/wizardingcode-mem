@@ -15,10 +15,11 @@ export function runCliWithInput(input: string | undefined, ...args: string[]): P
 }
 
 export async function runCliWith(
-  options: { input?: string; env?: Record<string, string> },
+  options: { input?: string; env?: Record<string, string>; cwd?: string },
   ...args: string[]
 ): Promise<CliResult> {
   const proc = Bun.spawn([process.execPath, MAIN, ...args], {
+    ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
     env: { ...process.env, ...options.env },
     stdin: options.input === undefined ? "ignore" : new TextEncoder().encode(options.input),
     stdout: "pipe",

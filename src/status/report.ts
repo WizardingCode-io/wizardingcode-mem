@@ -7,6 +7,7 @@ import { USAGE_KEYS } from "../judge/index.ts";
 import { loadSettings } from "../settings/settings.ts";
 import type { Db } from "../store/db.ts";
 import { getMeta } from "../store/meta.ts";
+import { plural } from "../util/text.ts";
 
 export interface Latency {
   event: string;
@@ -163,8 +164,6 @@ export function statusReport(
     dataDir,
   };
 }
-
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 const megabytes = (bytes: number) => `${(bytes / 1_048_576).toFixed(1)} MB`;
 

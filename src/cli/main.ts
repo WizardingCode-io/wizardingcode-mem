@@ -22,6 +22,7 @@ const COMMANDS: Record<string, () => Promise<CommandModule>> = {
   rejudge: () => import("./commands/rejudge.ts"),
   compact: () => import("./commands/compact.ts"),
   backup: () => import("./commands/backup.ts"),
+  knowledge: () => import("./commands/knowledge.ts"),
   status: () => import("./commands/status.ts"),
   doctor: () => import("./commands/doctor.ts"),
   __spike: () => import("./commands/spike.ts"),

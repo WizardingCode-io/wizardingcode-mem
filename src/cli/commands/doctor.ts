@@ -1,6 +1,7 @@
 import { type Check, runChecks } from "../../doctor/checks.ts";
 import { doctorContext } from "../../doctor/context.ts";
 import { defaultDataDir } from "../../util/paths.ts";
+import { plural } from "../../util/text.ts";
 
 const LABEL: Record<Check["status"], string> = {
   ok: "ok  ",
@@ -8,7 +9,6 @@ const LABEL: Record<Check["status"], string> = {
   fail: "FAIL",
   skip: "skip",
 };
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 /** `wizardingcode-mem doctor`: checks the installation and says what to do about anything wrong. */
 export function run(): number {
