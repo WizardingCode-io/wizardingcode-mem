@@ -1,7 +1,7 @@
 import { findProject, remoteAliasOf } from "../../core/project.ts";
 import { type SharingKey, validatePatch } from "../../settings/settings.ts";
 import { levelKey, levelOf } from "../../sharing/levels.ts";
-import { decide, loadPolicy } from "../../sharing/policy.ts";
+import { decide, INERT_PROBLEM, loadPolicy } from "../../sharing/policy.ts";
 import {
   findEntry,
   findMemory,
@@ -200,9 +200,6 @@ const list =
   };
 
 // --- status -------------------------------------------------------------------------------
-
-/** How the loader's sentence about inert area ids opens: `status` says them on its `areas` line. */
-const INERT_PROBLEM = "areas not in the taxonomy, ignored:";
 
 /** The levels in the order `status` counts the projects: what is shared first. */
 const COUNTED: readonly Level[] = ["knowledge", "all", "local"];

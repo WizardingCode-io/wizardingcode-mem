@@ -25,7 +25,15 @@ import {
   historyProgress,
   historyStatus,
 } from "../history/status.ts";
-import { loadSettings, publicSettings, saveSettings, validatePatch } from "../settings/settings.ts";
+import {
+  loadSettings,
+  publicSettings,
+  SHARING_KEYS,
+  saveSettings,
+  validatePatch,
+} from "../settings/settings.ts";
+import { loadPolicy } from "../sharing/policy.ts";
+import { applySettingsPatch, NeedsConfirm } from "../sharing/store.ts";
 import { statusReport } from "../status/report.ts";
 import { CompactBusyError, compact } from "../store/compact.ts";
 import { DB_FILE, type Db, openDb } from "../store/db.ts";
@@ -59,6 +67,10 @@ import {
   recentTurns,
   searchAll,
   setMemoryStatus,
+  setProjectSharing,
+  sharingPreview,
+  sharingRefusal,
+  sharingView,
   updateMemory,
 } from "./api.ts";
 import instrumentSans from "./assets/instrument-sans-variable.woff2" with { type: "file" };
@@ -295,8 +307,11 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
       );
       return json(on.map(({ id, name, views }) => ({ id, name, views: views ?? [] })));
     }
+    // Each project is listed with what it shares: the policy is loaded for that, and only
+    // loaded. What is pending in it is recorded by the Sharing page's own route.
     if (path === "/api/overview" && request.method === "GET") {
-      return json({ version: pkg.version, dataDir: options.dataDir, storeDir, projects: listProjects(db) });
+      const projects = listProjects(db, loadPolicy(db, options.dataDir, env, now()));
+      return json({ version: pkg.version, dataDir: options.dataDir, storeDir, projects });
     }
     // Backups: the target the settings name, what is there, a copy now, and the way back.
     if (path === "/api/backups" && request.method === "GET") {
@@ -402,12 +417,56 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
     if (path === "/api/settings" && request.method === "PUT") {
       const body = await jsonObject(request);
       if (body instanceof Response) return body;
-      const validated = validatePatch(body);
+      // `confirm` is the person's yes to sharing more, not a setting.
+      const { confirm, ...patch } = body;
+      const validated = validatePatch(patch);
       if (!validated.ok) {
         return json({ error: "some settings could not be saved", errors: validated.errors }, 400);
       }
-      saveSettings(options.dataDir, validated.changes);
+      if (SHARING_KEYS.some((key) => key in validated.changes)) {
+        // A patch with a sharing list is written by the store's one path, which logs the
+        // change. It is given the request's own `confirm`, so a wider list is refused there,
+        // under the write lock, unless the request itself says yes.
+        const closed = sharingRefusal(loadPolicy(db, options.dataDir, env, now()));
+        if (closed !== null) return problem(409, closed);
+        const confirmed = confirm === true;
+        try {
+          applySettingsPatch(db, options.dataDir, validated.changes, "viewer", now(), confirmed);
+        } catch (error) {
+          if (error instanceof NeedsConfirm) return problem(400, error.message);
+          throw error;
+        }
+      } else {
+        saveSettings(options.dataDir, validated.changes);
+      }
       return json({ dataDir: options.dataDir, settings: publicSettings(env, options.dataDir) });
+    }
+    // Sharing: what may leave for the team's server, what a change would release, and one
+    // project's level. Nothing is sent from here.
+    if (path === "/api/sharing" && request.method === "GET") {
+      const list = url.searchParams.get("list") === "1";
+      return json(sharingView(db, options.dataDir, env, now(), list));
+    }
+    if (path === "/api/sharing/preview" && request.method === "POST") {
+      const body = await jsonObject(request);
+      if (body instanceof Response) return body;
+      const answer = sharingPreview(db, options.dataDir, env, now(), body);
+      return json(answer.body, answer.status);
+    }
+    const projectSharing = /^\/api\/projects\/(\d+)\/sharing$/.exec(path);
+    if (projectSharing !== null && request.method === "PUT") {
+      const body = await jsonObject(request);
+      if (body instanceof Response) return body;
+      const answer = setProjectSharing(
+        db,
+        options.dataDir,
+        env,
+        Number(projectSharing[1]),
+        body.level,
+        body.confirm === true,
+        now(),
+      );
+      return json(answer.body, answer.status);
     }
     if (path === "/api/doctor" && request.method === "GET") {
       return json(runChecks(doctorContext(options.dataDir, now())));

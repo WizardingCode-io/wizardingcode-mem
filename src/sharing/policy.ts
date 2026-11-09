@@ -93,6 +93,12 @@ const TOO_NEW = "the sharing schema is newer than this binary";
 const HAND_EDIT =
   "the sharing settings changed outside the viewer and the CLI; open the Sharing page or run share status to record it";
 
+/**
+ * How the problem that names the inert area ids opens, the ids after it. Exported for a
+ * reader that says those ids in its own words and leaves this sentence out.
+ */
+export const INERT_PROBLEM = "areas not in the taxonomy, ignored:";
+
 /** What a person is told about a stored level that reads `local`, by what made it so. */
 const LEVEL_PROBLEMS: Partial<Record<Reason, (project: string) => string>> = {
   disabled: (project) =>
@@ -227,7 +233,7 @@ function readPolicy(db: Db | null, dataDir: string, env: Env): SharingPolicy {
     problems: [
       ...emptiedOrIgnored,
       ...stored.problems,
-      ...(inert.length > 0 ? [`areas not in the taxonomy, ignored: ${inert.join(", ")}`] : []),
+      ...(inert.length > 0 ? [`${INERT_PROBLEM} ${inert.join(", ")}`] : []),
       ...(changedLists(fileLists, stored.seen).length > 0 ? [HAND_EDIT] : []),
     ],
   };

@@ -3,7 +3,12 @@ import type { HistoryOffer, HistoryProgress, HistoryStatus, PastSearch } from ".
 import type { LinkKind, LinksList, LinksOffer, LinkView, RulesList } from "./links";
 import type { ModuleInfo } from "./modules";
 import type { SemanticStatus } from "./semantic";
+import type { Level, Root } from "../../src/sharing/types.ts";
 
+// The levels, their labels and the Sharing page's patch are the engine's own, shared as
+// `modules.ts` shares the memory module's views: one rule, read by the server and the page.
+export { LEVEL_LABELS, LEVELS, type Level, type Root } from "../../src/sharing/types.ts";
+export { buildSharingPatch } from "../../src/sharing/patch.ts";
 export type { SemanticStatus } from "./semantic";
 export type { ModuleInfo, ModuleViewInfo } from "./modules";
 export type { AcceptedRule, LinkKind, LinksList, LinksOffer, LinkView, ProposedRule, RulesList } from "./links";
@@ -20,6 +25,14 @@ export interface Project {
   superseded: number;
   stale: number;
   lastActivity: number | null;
+  /** What it shares with the team's server, as the policy reads now. */
+  sharing: Level;
+  /** `allowed` for a level in force, else what makes it share nothing. */
+  sharingReason: string;
+  /** It has a git remote, the one name a team can match it by. */
+  remote: boolean;
+  /** Memory is off for it. */
+  disabled: boolean;
 }
 export type Kind = "decision" | "fix" | "gotcha" | "convention" | "change" | "discovery";
 export const KINDS: Kind[] = ["decision", "fix", "gotcha", "convention", "change", "discovery"];
@@ -92,9 +105,15 @@ export type PublicSetting =
 export type SettingKey =
   | "TYPESAFE_API_KEY"
   | "WIZARDINGCODE_MEM_TYPESAFE"
+  | "WIZARDINGCODE_MEM_SEMANTIC"
   | "WIZARDINGCODE_MEM_RETENTION_DAYS"
+  | "WIZARDINGCODE_MEM_HISTORY_DAYS"
   | "WIZARDINGCODE_MEM_UI_AUTO_OPEN"
   | "WIZARDINGCODE_MEM_STORE_DIR"
+  | "WIZARDINGCODE_MODULES"
+  | "WIZARDINGCODE_MEM_SHARE_ROOTS"
+  | "WIZARDINGCODE_MEM_SHARE_AREAS"
+  | "WIZARDINGCODE_MEM_AUTHOR"
   | "WIZARDINGCODE_MEM_BACKUP_TO"
   | "WIZARDINGCODE_MEM_BACKUP_EVERY_HOURS"
   | "WIZARDINGCODE_MEM_BACKUP_KEEP"
@@ -152,7 +171,49 @@ export interface BackupsView {
 export type BackupOutcome =
   | { ok: true; name: string; bytes: number }
   | { ok: false; reason: string; detail: string };
-export type RestoreOutcome = { ok: true; replaced: string; historyRemoved: boolean } | { ok: false; reason: string; detail: string };
+export type RestoreOutcome =
+  | { ok: true; replaced: string; historyRemoved: boolean; sharingReset: number }
+  | { ok: false; reason: string; detail: string };
+/** What would leave for the team's server under a policy (`Report` in src/sharing/report.ts). */
+export interface SharingReport {
+  counts: { entries: number; memories: number };
+  perRoot: Record<Root, { entries: number; areaTotals: Record<string, number> }>;
+  perProject: { id: number; level: Level; entries: number; memories: number }[];
+  items?: {
+    entries: { scope: string; projectId: number; slug: string; title: string; area: string }[];
+    memories: { id: number; projectId: number; title: string }[];
+    more: { entries: number; memories: number };
+  };
+}
+/** One change to what is shared, as the log keeps it. */
+export interface SharingChange {
+  id: number;
+  at: number;
+  source: "viewer" | "cli" | "restore" | "file" | "system";
+  /** `project:<id>`, `roots`, `areas` or `levels`. */
+  what: string;
+  old: string;
+  new: string;
+}
+/** The Sharing page's view: the policy in force and what would leave under it. */
+export interface SharingView {
+  epoch: number;
+  closed: boolean;
+  roots: Root[];
+  areas: string[];
+  inert: string[];
+  problems: string[];
+  lastChange: SharingChange | null;
+  taxonomies: Record<Root, { id: string; label: string }[] | null>;
+  levels: Record<Level, number>;
+  report: SharingReport;
+}
+/** A change about to be made, for its preview: a project's level, the roots, the areas. */
+export interface PolicyChange {
+  level?: { projectId: number; level: Level };
+  roots?: Root[];
+  areas?: string[];
+}
 /** A replacement either ran, or the count moved since it was shown (`stale`). */
 export type ReplaceOutcome =
   | { ok: true; projects: number; archived: number; spared: number }
@@ -213,8 +274,23 @@ export const api = {
       headers: { Authorization: `Bearer ${TOKEN}` },
     }).catch(() => undefined),
   settings: () => call<SettingsView>("/api/settings"),
-  saveSettings: (patch: SettingsPatch) =>
-    call<SettingsView>("/api/settings", { method: "PUT", body: JSON.stringify(patch) }),
+  /** With `confirm`, the person said yes to sharing more: the server requires it to widen. */
+  saveSettings: (patch: SettingsPatch, options?: { confirm?: boolean }) =>
+    call<SettingsView>("/api/settings", {
+      method: "PUT",
+      body: JSON.stringify(options?.confirm ? { ...patch, confirm: true } : patch),
+    }),
+  /** What may leave for the team's server; with `list`, each item that would. */
+  sharing: (list = false) => call<SharingView>(`/api/sharing${list ? "?list=1" : ""}`),
+  /** What would leave once a change is made. Writes nothing. */
+  sharingPreview: (change: PolicyChange) =>
+    call<{ report: SharingReport }>("/api/sharing/preview", { method: "POST", body: JSON.stringify(change) }),
+  /** Sets what one project shares; a wider level needs `confirm`. */
+  setProjectSharing: (id: number, level: Level, confirm: boolean) =>
+    call<{ level: Level; old: Level; boundAlias: string }>(`/api/projects/${id}/sharing`, {
+      method: "PUT",
+      body: JSON.stringify(confirm ? { level, confirm: true } : { level }),
+    }),
   doctor: () => call<Check[]>("/api/doctor"),
   backups: () => call<BackupsView>("/api/backups"),
   backupNow: () => call<BackupOutcome>("/api/backups", { method: "POST", body: "{}" }),

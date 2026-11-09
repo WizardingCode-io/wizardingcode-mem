@@ -20,12 +20,18 @@ export async function loadSettings(): Promise<void> {
   }
 }
 
-/** Saves a change; returns true when it was taken, false with `errors` filled when not. */
-export async function saveSettings(patch: SettingsPatch): Promise<boolean> {
+/**
+ * Saves a change; returns true when it was taken, false with `errors` filled when not.
+ * `confirm` says the person agreed to share more, which the server requires to widen.
+ */
+export async function saveSettings(
+  patch: SettingsPatch,
+  options?: { confirm?: boolean },
+): Promise<boolean> {
   settingsState.saving = true;
   settingsState.errors = {};
   try {
-    settingsState.view = await api.saveSettings(patch);
+    settingsState.view = await api.saveSettings(patch, options);
     return true;
   } catch (error) {
     if (error instanceof Error && "errors" in error) {

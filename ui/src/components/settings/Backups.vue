@@ -112,7 +112,7 @@ async function restore() {
   try {
     const outcome = await api.restoreBackup(restoring.value);
     if (outcome.ok) {
-      toast.add({ title: "Restored", description: `The previous database was kept as ${outcome.replaced.split("/").pop()}.${outcome.historyRemoved ? " The history index was removed; run wizardingcode-mem history index to rebuild it." : ""}`, color: "success" });
+      toast.add({ title: "Restored", description: `The previous database was kept as ${outcome.replaced.split("/").pop()}.${outcome.historyRemoved ? " The history index was removed; run wizardingcode-mem history index to rebuild it." : ""}${outcome.sharingReset > 0 ? ` Sharing levels were reset to Nothing (${outcome.sharingReset} projects); set them again.` : ""}`, color: "success" });
       restoring.value = null;
       await Promise.all([load(), loadOverview()]);
     } else {
