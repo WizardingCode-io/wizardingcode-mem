@@ -2,7 +2,7 @@ import pkg from "../../package.json" with { type: "json" };
 import type { ProjectRef } from "../core/project.ts";
 import type { SkipReason } from "../distill/pipeline.ts";
 import { noneSkipped, SKIPPED_KEY, type SkippedBy, skippedText } from "../distill/skips.ts";
-import { BUILT_IN, enabledModules } from "../engine/modules.ts";
+import { moduleEnabled } from "../engine/modules.ts";
 import type { HistoryStatus } from "../history/status.ts";
 import { USAGE_KEYS } from "../judge/index.ts";
 import { KNOWLEDGE_MODULE } from "../modules/knowledge/migrations.ts";
@@ -213,11 +213,7 @@ export function knowledgeStatus(db: Db | null, now: number, on: boolean): Knowle
 }
 
 /** Whether the modules setting has knowledge on; an unknown id is not logged from here. */
-function knowledgeOn(env: Env, dataDir: string): boolean {
-  return enabledModules(loadSettings(env, dataDir).modules, BUILT_IN, () => {}).some(
-    (module) => module.id === KNOWLEDGE_MODULE,
-  );
-}
+const knowledgeOn = (env: Env, dataDir: string) => moduleEnabled(KNOWLEDGE_MODULE, env, dataDir);
 
 /** The `knowledge` line of `status`. */
 export function formatKnowledge(knowledge: KnowledgeStatus): string {

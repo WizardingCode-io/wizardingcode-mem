@@ -17,7 +17,7 @@ import type { VisibleRepo } from "./visible.ts";
 const HOUR_MS = 3_600_000;
 
 /** The `meta` key of an agent's counter. */
-export const rateKey = (agentId: string) => `knowledge.rate:${agentId}`;
+const rateKey = (agentId: string) => `knowledge.rate:${agentId}`;
 
 /**
  * Counts one `knowledge_propose` call of an agent and says whether it may proceed. The

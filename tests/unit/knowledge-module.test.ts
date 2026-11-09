@@ -10,7 +10,6 @@ import type { HookEvent } from "../../src/core/types.ts";
 import type { EngineModule, MomentInput } from "../../src/engine/module.ts";
 import { handleHook } from "../../src/hooks/handle.ts";
 import { personAuthor } from "../../src/modules/knowledge/author.ts";
-import * as contributeModule from "../../src/modules/knowledge/contribute.ts";
 import {
   INTRO,
   PROMPT_INTRO,
@@ -672,33 +671,6 @@ describe("session start", () => {
     threePins();
     expect(pinLines(block(start("s1")))).toEqual(THREE_LINES);
     expect(pinLines(block(start("s2")))).toEqual(THREE_LINES);
-    const session = (agentSessionId: string) =>
-      touchSession(fx.db, {
-        agent: "claude-code",
-        agentSessionId,
-        projectId,
-        cwd: project,
-        branch: null,
-        now: NOW,
-      });
-    for (const id of ["s2", "s3"]) {
-      const row = session(id);
-      const input: MomentInput = {
-        db: fx.db,
-        moment: "session-start",
-        projectId,
-        branch: null,
-        root: project,
-        sessionId: row.id,
-        epoch: row.contextEpoch,
-        prompt: null,
-        path: null,
-        error: null,
-        now: NOW,
-        budgetChars: SESSION_START_SHARE,
-      };
-      expect(contributeModule.showsPins(input)).toBe(true);
-    }
   });
 });
 

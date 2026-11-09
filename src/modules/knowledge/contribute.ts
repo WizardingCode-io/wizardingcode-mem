@@ -39,7 +39,7 @@ function logTooNew(): void {
   logError(
     "knowledge",
     new Error(
-      "the knowledge tables are at a version this binary does not support; the module is silent",
+      "the knowledge tables are at a version this binary does not read (behind, or too new); the module is silent",
     ),
   );
 }
@@ -108,16 +108,6 @@ export const pinnedBlock = (lines: string[]) => wrapped(INTRO, lines);
 /** The last line when some pinned entries were left out. */
 export const pinnedCountLine = (left: number) =>
   `- +${left} pinned entries not shown; knowledge_search lists them`;
-
-/**
- * Whether a session start shows the pinned entries at all. D-9, as the person confirmed
- * it on 2026-11-09: at every session start, once per context, so a project the store
- * already knew, a start that was lost and an entry pinned later all reach the agent. The
- * other answer (a project's first session only) would change this body alone.
- */
-export function showsPins(_input: Pick<MomentInput, "db" | "projectId" | "sessionId">): boolean {
-  return true;
-}
 
 /**
  * The pinned entries, newest first, in the session-start block within `budgetChars`. A
@@ -200,7 +190,10 @@ function forPrompt(input: MomentInput, prompt: string, repoIds: number[]): strin
  * recorded as shown with `event: session-start`: one write transaction, like a prompt's.
  */
 function forSessionStart(input: MomentInput, repoIds: number[]): string | null {
-  if (!showsPins(input)) return null;
+  // D-9 (part 2), as the person confirmed it on 2026-11-09: every session start shows the
+  // pins, once per context, so a project the store already knew, a start that was lost and
+  // an entry pinned later all reach the agent. The other answer (a project's first session
+  // only) would add one check here and nothing else.
   const { db, sessionId, epoch, now, budgetChars } = input;
   return withWrite(db, () => {
     const shown = alreadyShown(db, sessionId, epoch);

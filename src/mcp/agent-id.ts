@@ -4,7 +4,9 @@
 import { AGENT_ID } from "../modules/knowledge/entry.ts";
 
 /** The id when the host's name matches no row. */
-const UNKNOWN = "mcp";
+/** The id of a host the handshake does not name: the one fallback, used by the tools too. */
+export const UNKNOWN_AGENT = "mcp";
+const UNKNOWN = UNKNOWN_AGENT;
 
 /** One row per host the product installs into: a prefix of the lower-cased name, and its id. */
 const HOSTS: readonly (readonly [prefix: string, id: string])[] = [

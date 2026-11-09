@@ -3,7 +3,7 @@ import { accessSync, constants, existsSync, readFileSync, statSync } from "node:
 import { basename, dirname, join } from "node:path";
 import { lastBackup } from "../backup/schedule.ts";
 import { semanticStatus } from "../embed/status.ts";
-import { BUILT_IN, enabledModules } from "../engine/modules.ts";
+import { moduleEnabled } from "../engine/modules.ts";
 import { ANTIGRAVITY } from "../install/antigravity.ts";
 import { CLAUDE_CODE } from "../install/claude-code.ts";
 import { claudeDesktopServer, hasClaudeDesktop } from "../install/claude-desktop.ts";
@@ -592,12 +592,8 @@ const KNOWLEDGE_OFF = "knowledge is off (WIZARDINGCODE_MODULES)";
  * minus the ones the setting enables. An unknown id in the setting is not logged from here,
  * since `doctor` writes nothing.
  */
-function knowledgeOff(env: Record<string, string | undefined>, dataDir: string): boolean {
-  const enabled = enabledModules(loadSettings(env, dataDir).modules, BUILT_IN, () => {});
-  return BUILT_IN.filter((module) => !enabled.includes(module)).some(
-    (module) => module.id === KNOWLEDGE_MODULE,
-  );
-}
+const knowledgeOff = (env: Record<string, string | undefined>, dataDir: string) =>
+  !moduleEnabled(KNOWLEDGE_MODULE, env, dataDir);
 
 /**
  * The characters the pinned lines take at session start, newest first, in the block they

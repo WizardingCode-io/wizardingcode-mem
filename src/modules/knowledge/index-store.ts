@@ -689,15 +689,6 @@ export function inEachRepo<T>(
 }
 
 /**
- * Rebuilds every repository under the data directory (or every one of a scope), and
- * forgets the rows of repositories whose folder is gone: the ones with nothing at their
- * name. A link or a file put where a folder was is set aside by name, and its rows stay.
- * A project folder is mapped to its project by its row, else through its manifest; a
- * folder no project claims is reported and indexes nothing. Refused, with nothing
- * forgotten, when the data directory has no knowledge folder at all and the index holds
- * repositories: the rows are another data directory's until the person says otherwise.
- */
-/**
  * No knowledge folder at all under this data directory, and repositories in the index: they
  * were written under another data directory that shares this database, or the folder was
  * removed whole, and the store cannot tell which. Read as "every repository is gone", a
@@ -733,6 +724,15 @@ export function requireKnowledgeRoot(
   }
 }
 
+/**
+ * Rebuilds every repository under the data directory (or every one of a scope), and
+ * forgets the rows of repositories whose folder is gone: the ones with nothing at their
+ * name. A link or a file put where a folder was is set aside by name, and its rows stay.
+ * A project folder is mapped to its project by its row, else through its manifest; a
+ * folder no project claims is reported and indexes nothing. Refused, with nothing
+ * forgotten, when the data directory has no knowledge folder at all and the index holds
+ * repositories: the rows are another data directory's until the person says otherwise.
+ */
 export function rebuildAll(
   store: KnowledgeStore,
   scope?: ScopeRef["scope"],

@@ -1,6 +1,14 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { EngineModule } from "../../src/engine/module.ts";
-import { BUILT_IN, enabledModules, moduleAllowed } from "../../src/engine/modules.ts";
+import {
+  BUILT_IN,
+  enabledModules,
+  moduleAllowed,
+  moduleEnabled,
+} from "../../src/engine/modules.ts";
 import { knowledge } from "../../src/modules/knowledge/index.ts";
 import { memory } from "../../src/modules/memory/index.ts";
 import { echo } from "../fixtures/echo-module.ts";
@@ -57,5 +65,20 @@ describe("enabledModules", () => {
   test("memory is always on: a list without it still has it, first", () => {
     expect(parse("echo").ids).toEqual(["memory", "echo"]);
     expect(parse("nonesuch")).toEqual({ ids: ["memory"], logged: ["nonesuch"] });
+  });
+});
+
+describe("moduleEnabled", () => {
+  // The one rule status and doctor ask: is this module on under the settings as they stand.
+  const dir = mkdtempSync(join(tmpdir(), "wizardingcode-mem-modules-"));
+
+  test("knowledge is on by default and off when the setting names memory alone", () => {
+    expect(moduleEnabled("knowledge", {}, dir)).toBe(true);
+    expect(moduleEnabled("knowledge", { WIZARDINGCODE_MODULES: "memory" }, dir)).toBe(false);
+  });
+
+  test("memory is on whatever the setting says; an unknown id is never on", () => {
+    expect(moduleEnabled("memory", { WIZARDINGCODE_MODULES: "nonesuch" }, dir)).toBe(true);
+    expect(moduleEnabled("nonesuch", {}, dir)).toBe(false);
   });
 });

@@ -1,6 +1,7 @@
 import { statSync } from "node:fs";
+import { KNOWLEDGE_MODULE, KNOWLEDGE_SCHEMA_VERSION } from "../modules/knowledge/migrations.ts";
 import { DEFAULTS } from "../settings/settings.ts";
-import { type Db, withWrite } from "./db.ts";
+import { type Db, moduleSchemaState, withWrite } from "./db.ts";
 import { anyLeaseActive } from "./meta.ts";
 
 // Keeps the database to what still serves a purpose. Memories are never touched here:
@@ -110,7 +111,11 @@ export function compact(db: Db, options: CompactOptions): CompactReport {
     }
     // Sessions are counted after their turns went: that is what leaves them empty.
     report.sessions = n(`SELECT count(*) AS n ${emptySessions}`, [cutoff, ...turnParams]);
-    const shownTables = hasShownTables(db);
+    // The module's rule: a knowledge schema this binary does not know (too new, or behind)
+    // is left alone, rows included; the sessions still go.
+    const shownTables =
+      hasShownTables(db) &&
+      moduleSchemaState(db, KNOWLEDGE_MODULE, KNOWLEDGE_SCHEMA_VERSION) === "current";
     if (shownTables) {
       report.knowledgeShown = n(`SELECT count(*) AS n ${orphanShown}`, [cutoff, ...turnParams]);
     }

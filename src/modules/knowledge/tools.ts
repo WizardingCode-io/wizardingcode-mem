@@ -6,6 +6,7 @@ import { resolveProject } from "../../core/project.ts";
 import type { ModuleTool, ToolCall, ToolMode } from "../../engine/module.ts";
 import { makeJudge } from "../../judge/index.ts";
 import type { Judge } from "../../judge/types.ts";
+import { UNKNOWN_AGENT } from "../../mcp/agent-id.ts";
 import { inert } from "../../retrieve/render.ts";
 import { openDb } from "../../store/db.ts";
 import { logError } from "../../util/log.ts";
@@ -28,6 +29,7 @@ import {
   GET_ANSWER_MAX,
   GET_BODY_MAX,
   GET_MAX_REFS,
+  PROPOSALS_PER_HOUR,
   SEARCH_DEFAULT_LIMIT,
   SEARCH_MAX_LIMIT,
 } from "./policy.ts";
@@ -95,7 +97,7 @@ const META: Record<ToolName, { title: string; annotations: ModuleTool["annotatio
 
 const TURNED_OFF = "Knowledge is turned off for this project.";
 const NO_MATCH = "No knowledge matches.";
-const QUOTA = "refused quota: 20 proposals in the last hour; a person decides them first";
+const QUOTA = `refused quota: ${PROPOSALS_PER_HOUR} proposals in the last hour; a person decides them first`;
 /** A reference as the agent gives it: a scope and a slug, never a path. */
 const REF = /^(workspace|shared|project)\/[a-z0-9][a-z0-9-]{0,79}$/;
 
@@ -475,7 +477,7 @@ async function runTool(
             store,
             context,
             args as ProposeArgs,
-            call.agentId ?? "mcp",
+            call.agentId ?? UNKNOWN_AGENT,
             makeJudge({ db, dataDir, toolPath: true }),
           );
       }

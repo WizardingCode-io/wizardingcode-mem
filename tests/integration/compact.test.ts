@@ -252,6 +252,19 @@ describe("compact", () => {
     expect(report).toMatchObject({ turns: 1, sessions: 1, knowledgeShown: 0 });
   });
 
+  test("a knowledge module at a version this binary does not know keeps its shown rows, and reports 0", () => {
+    // The module's rule (ADR 0024): a too-new schema is left alone by every reader and
+    // writer, compact included; the sessions still go.
+    seedShown();
+    db.run(
+      "INSERT INTO module_migrations (module, version, name, applied_at) VALUES ('knowledge', 8, 'later', 1)",
+    );
+    expect(compact(db, { now: NOW, vacuum: false, dryRun: true }).knowledgeShown).toBe(0);
+    const report = compact(db, { now: NOW, vacuum: false });
+    expect(report).toMatchObject({ sessions: 1, knowledgeShown: 0 });
+    expect(count("knowledge_shown")).toBe(5);
+  });
+
   test("a row of a removed session goes with it, so a session that reuses its id starts unshown", () => {
     const kept = repo("knowledge/projects/kept");
     const old = session("old", NOW - 200 * DAY);

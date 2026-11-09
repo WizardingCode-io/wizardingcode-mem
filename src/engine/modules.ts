@@ -1,6 +1,6 @@
 import { knowledge } from "../modules/knowledge/index.ts";
 import { memory } from "../modules/memory/index.ts";
-import { DEFAULTS } from "../settings/settings.ts";
+import { DEFAULTS, type Env, loadSettings } from "../settings/settings.ts";
 import { logError } from "../util/log.ts";
 import type { EngineModule } from "./module.ts";
 
@@ -49,4 +49,14 @@ export function enabledModules(
   const known = new Set(available.map((module) => module.id));
   for (const id of wanted) if (!known.has(id)) onUnknown(id);
   return available.filter((module) => wanted.has(module.id) && moduleAllowed(module.id));
+}
+
+/**
+ * Whether a built-in module is on under the settings as they stand: the one rule `status`
+ * and `doctor` ask. An unknown id in the setting is not logged here; the hook's parse does.
+ */
+export function moduleEnabled(id: string, env: Env, dataDir: string): boolean {
+  return enabledModules(loadSettings(env, dataDir).modules, BUILT_IN, () => {}).some(
+    (module) => module.id === id,
+  );
 }
