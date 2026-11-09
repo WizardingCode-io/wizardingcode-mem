@@ -5,6 +5,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   symlinkSync,
   utimesSync,
@@ -464,6 +465,8 @@ describe("rebuildAll", () => {
       try {
         expect(codeOf(() => rebuildAll(store))).toBe("invalid");
         expect(thrown(() => rebuildAll(store)).message).toContain(projects);
+        // The cause is named, so a disk fault is not read as a permission.
+        expect(thrown(() => rebuildAll(store)).message).toContain("EACCES");
         expect(codeOf(() => openRepo(store, ref))).toBe("invalid");
       } finally {
         chmodSync(projects, 0o700);
@@ -475,6 +478,8 @@ describe("rebuildAll", () => {
     chmodSync(root, 0o000);
     try {
       expect(codeOf(() => rebuildAll(store))).toBe("invalid");
+      // One repository asked for by its scope is refused too, not answered as "none yet".
+      expect(codeOf(() => openRepo(store, WORKSPACE))).toBe("invalid");
     } finally {
       chmodSync(root, 0o700);
     }
@@ -484,6 +489,141 @@ describe("rebuildAll", () => {
     expect(rebuildAll(store).results.size).toBe(2);
     expect(rows()).toEqual(before);
     expect(openRepo(store, ref)?.ref).toEqual(ref);
+  });
+
+  /** A project that is not a git repository, with one entry: its row is the only tie to its folder. */
+  function pathOnlyProject() {
+    const projectId = fx.addProject("path:/work/site");
+    const ref = { scope: "project", projectId } as const;
+    written("In the workspace");
+    written("In the project", {}, ref as unknown as typeof WORKSPACE);
+    const relative = (openRepo(store, ref) as Repo).relative;
+    const projects = join(fx.dataDir, "knowledge", "projects");
+    const state = () => ({
+      rows: fx.db.query("SELECT scope, path FROM knowledge_repos ORDER BY path").all(),
+      entries: entryRows().length,
+      folders: readdirSync(projects),
+    });
+    const write = () => writeEntry(store, ref, change({ title: "Another" }), person());
+    return { ref, relative, folder: repoPath(fx.dataDir, relative), state, write };
+  }
+
+  test("a link or a file where a project's folder was is refused by name: its rows stay and no second folder is made", () => {
+    const { ref, relative, folder, state, write } = pathOnlyProject();
+    const aside = join(fx.dir, "moved-aside");
+    const before = state();
+
+    for (const put of [
+      () => symlinkSync(aside, folder),
+      () => writeFileSync(folder, "not a folder"),
+    ]) {
+      renameSync(folder, aside);
+      put();
+      const all = rebuildAll(store);
+      expect([...all.refused.keys()]).toEqual([relative]);
+      expect(all.refused.get(relative)).toContain(folder);
+      expect([...all.results.keys()]).toEqual(["knowledge/workspace"]);
+      expect(state()).toEqual(before);
+      // A write is refused there too: the project is not given another folder.
+      expect(codeOf(write)).toBe("invalid");
+      expect(thrown(write).message).toContain(folder);
+      expect(codeOf(() => openRepo(store, ref))).toBe("invalid");
+      expect(state()).toEqual(before);
+
+      // The folder put back is the project's again, with what it held.
+      rmSync(folder, { force: true });
+      renameSync(aside, folder);
+      const again = rebuildAll(store);
+      expect(again.refused.size).toBe(0);
+      expect(again.results.get(relative)?.entries).toBe(1);
+      expect(openRepo(store, ref)?.relative).toBe(relative);
+      expect(state()).toEqual(before);
+    }
+  });
+
+  test("a link where the workspace's folder was is set aside by name, and its rows stay", () => {
+    written("In the workspace");
+    const folder = repoPath(fx.dataDir, "knowledge/workspace");
+    const aside = join(fx.dir, "moved-aside");
+    const rows = () => ({
+      repos: fx.db.query("SELECT scope, path FROM knowledge_repos ORDER BY path").all(),
+      entries: entryRows().length,
+    });
+    const before = rows();
+    renameSync(folder, aside);
+    symlinkSync(aside, folder);
+
+    const all = rebuildAll(store);
+    expect([...all.refused.keys()]).toEqual(["knowledge/workspace"]);
+    expect(all.refused.get("knowledge/workspace")).toContain(`${folder} is a link`);
+    expect(all.results.size).toBe(0);
+    expect(rows()).toEqual(before);
+    // Nothing was read or written through the link.
+    expect(realGit(aside, "status", "--porcelain").trim()).toBe("");
+    expect(realGit(aside, "rev-list", "--count", "HEAD").trim()).toBe("2");
+  });
+
+  test("a repository folder or a manifest that cannot be read never costs a project its folder", () => {
+    if (process.platform === "win32" || process.getuid?.() === 0) return;
+    const { ref, relative, folder, state, write } = pathOnlyProject();
+    const before = state();
+
+    // The folder itself: neither listed nor searched, then listed and not searched.
+    for (const bits of [0o000, 0o600]) {
+      chmodSync(folder, bits);
+      try {
+        const all = rebuildAll(store);
+        expect([...all.refused.keys()]).toEqual([relative]);
+        expect(all.refused.get(relative)).toContain("EACCES");
+        expect(codeOf(write)).toBe("invalid");
+      } finally {
+        chmodSync(folder, 0o700);
+      }
+      expect(state()).toEqual(before);
+    }
+
+    // Its manifest: the row still names the folder, so the repository is the same one.
+    const manifest = join(folder, "knowledge.json");
+    chmodSync(manifest, 0o000);
+    try {
+      expect(openRepo(store, ref)?.relative).toBe(relative);
+      expect(openRepo(store, ref, { create: person() })?.relative).toBe(relative);
+    } finally {
+      chmodSync(manifest, 0o600);
+    }
+    expect(state()).toEqual(before);
+
+    // Deleted, the same: a folder that is there is never traded for a new one.
+    rmSync(manifest);
+    expect(openRepo(store, ref, { create: person() })?.relative).toBe(relative);
+    expect(state()).toEqual(before);
+  });
+
+  test("an entries folder that cannot be read refuses the rebuild, and its rows stay", () => {
+    if (process.platform === "win32" || process.getuid?.() === 0) return;
+    const { ref, relative, folder, state } = pathOnlyProject();
+    const repo = openRepo(store, ref) as Repo;
+    const entries = join(folder, "entries");
+    const before = state();
+
+    // Neither listed nor searched; searched and not listed; listed and not searched.
+    for (const bits of [0o000, 0o300, 0o600]) {
+      chmodSync(entries, bits);
+      try {
+        const all = rebuildAll(store);
+        expect([...all.refused.keys()]).toEqual([relative]);
+        expect(all.refused.get(relative)).toContain(entries);
+        expect(all.refused.get(relative)).toContain("EACCES");
+        expect(codeOf(() => rebuildRepo(store, repo))).toBe("invalid");
+        // A read that finds the folder changed is refused the same way, not served as empty.
+        if (bits !== 0o600) expect(codeOf(() => ensureFresh(store, repo))).toBe("invalid");
+      } finally {
+        chmodSync(entries, 0o700);
+      }
+      expect(state()).toEqual(before);
+    }
+    ensureFresh(store, repo);
+    expect(listEntries(store, repo.id).map((entry) => entry.title)).toEqual(["In the project"]);
   });
 
   test("maps a project folder through its manifest, reports orphans, forgets folders that are gone", () => {

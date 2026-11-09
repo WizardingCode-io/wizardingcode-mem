@@ -1,6 +1,5 @@
 // The index of the knowledge store: rows in the engine's database, rebuilt from the files.
 // The files in the repositories are the truth; nothing here is the only copy of anything.
-import { lstatSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { withWrite } from "../../store/db.ts";
 import { parseEntry, parseProposal, UUID, unreadEntry, unreadProposal } from "./entry.ts";
@@ -12,6 +11,8 @@ import {
   hashOf,
   headOf,
   kindAt,
+  lookAt,
+  namesIn,
   OPEN_DIR,
   openRepo,
   readRegularFile,
@@ -326,15 +327,11 @@ const also = (problem: string | null, more: string) =>
 /**
  * The names of a folder to index: the visible ones, in byte order so that two rebuilds
  * agree, cut at the cap. Only `.md` files are knowledge; `over` counts what the cap left out.
+ * A folder that is not there holds none (git does not keep an empty one); a folder that
+ * cannot be listed is a refusal (`namesIn`), so its rows are never replaced by none.
  */
 function listFolder(repo: Repo, folder: string): { names: string[]; over: number } {
-  let all: string[];
-  try {
-    all = readdirSync(join(repo.path, ...folder.split("/")));
-  } catch {
-    return { names: [], over: 0 };
-  }
-  const visible = all
+  const visible = namesIn(join(repo.path, ...folder.split("/")))
     .filter((name) => !name.startsWith("."))
     .sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)));
   return {
@@ -345,15 +342,13 @@ function listFolder(repo: Repo, folder: string): { names: string[]; over: number
 
 /**
  * A listed file's bytes, or why it was not read. A link, a folder or anything else that
- * is not a regular file is never opened: it is listed with its problem.
+ * is not a regular file is never opened: it is listed with its problem. Null only for a
+ * name that went away since it was listed; a name that cannot be looked at is a refusal
+ * (`lookAt`), so a folder that lists and cannot be searched does not read as empty.
  */
 function readListed(path: string): { bytes: Uint8Array } | { problem: string } | null {
-  let stat: ReturnType<typeof lstatSync>;
-  try {
-    stat = lstatSync(path);
-  } catch {
-    return null;
-  }
+  const stat = lookAt(path);
+  if (stat === null) return null;
   if (stat.isSymbolicLink()) {
     return { problem: "a symbolic link; the knowledge store never follows links" };
   }
@@ -397,7 +392,10 @@ export interface RepoFiles {
 /**
  * Reads a repository's entries and proposals from its files. No file fails it: one that
  * cannot be read, has no usable id, or shares another's id is listed under its name with
- * its problem. It touches neither git nor the database, so `doctor` reads the same way.
+ * its problem. What does fail it is a folder that cannot be listed, or a name in it that
+ * cannot be looked at: a refusal that names the path (`listFolder`, `readListed`), so
+ * that no caller replaces the repository's rows with fewer than its files. It touches
+ * neither git nor the database, so `doctor` reads the same way.
  */
 export function readRepoFiles(store: KnowledgeStore, repo: Repo): RepoFiles {
   const taxonomy = taxonomyOrNull(store, repo);
@@ -571,8 +569,10 @@ export function inEachRepo<T>(
 
 /**
  * Rebuilds every repository under the data directory (or every one of a scope), and
- * forgets the rows of repositories whose folder is gone. A project folder is mapped to its
- * project through its manifest; a folder no project claims is reported and indexes nothing.
+ * forgets the rows of repositories whose folder is gone: the ones with nothing at their
+ * name. A link or a file put where a folder was is set aside by name, and its rows stay.
+ * A project folder is mapped to its project by its row, else through its manifest; a
+ * folder no project claims is reported and indexes nothing.
  */
 export function rebuildAll(
   store: KnowledgeStore,
@@ -589,9 +589,10 @@ export function rebuildAll(
     .all();
   for (const row of rows) {
     if (scope !== undefined && row.scope !== scope) continue;
-    // Only a folder that is not there is gone: one that cannot be looked at refuses the
-    // rebuild (`kindAt`), and its rows stay.
-    if (kindAt(repoPath(store.dataDir, row.path)) === "folder") continue;
+    // Only a name with nothing at it is gone. A folder that cannot be looked at refuses
+    // the rebuild (`kindAt`); a link or a file put where the folder was has been set aside
+    // by name above (`inEachRepo`). The rows of both stay.
+    if (kindAt(repoPath(store.dataDir, row.path)) !== "absent") continue;
     withWrite(store.db, () => {
       store.db.run("DELETE FROM knowledge_entries WHERE repo_id = ?", [row.id]);
       store.db.run("DELETE FROM knowledge_proposals WHERE repo_id = ?", [row.id]);

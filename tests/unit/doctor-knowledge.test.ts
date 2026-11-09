@@ -1,5 +1,14 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  symlinkSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { type Check, type DoctorContext, runChecks } from "../../src/doctor/checks.ts";
 import { doctorContext } from "../../src/doctor/context.ts";
@@ -272,6 +281,76 @@ describe("doctor: knowledge", () => {
     expect(check.status).toBe("warn");
     expect(check.detail).toContain(projects);
     expect(check.detail).not.toContain("abc");
+  });
+
+  /** The workspace and one project, an entry each; and a store directory that holds no database. */
+  function workspaceAndProject() {
+    const ref = { scope: "project", projectId: fx.addProject("path:/work/site") } as const;
+    writeEntry(store, WORKSPACE, change(), person());
+    writeEntry(store, ref, change({ title: "In the project" }), person());
+    const elsewhere = join(fx.dir, "no-database-here");
+    mkdirSync(elsewhere);
+    const relative = (openRepo(store, ref) as Repo).relative;
+    return { relative, folder: repoPath(fx.dataDir, relative), elsewhere };
+  }
+
+  test("a projects folder it cannot read is a warning that names it, with a database and with none", () => {
+    if (process.platform === "win32" || process.getuid?.() === 0) return;
+    const { elsewhere } = workspaceAndProject();
+    const projects = join(fx.dataDir, "knowledge", "projects");
+    // Neither listed nor searched; then listed and not searched.
+    for (const bits of [0o000, 0o600]) {
+      chmodSync(projects, bits);
+      try {
+        for (const check of [knowledge(), knowledge({ storeDir: elsewhere })]) {
+          expect(check.status).toBe("warn");
+          expect(check.detail).toContain(projects);
+          expect(check.detail).toContain("EACCES");
+        }
+      } finally {
+        chmodSync(projects, 0o700);
+      }
+    }
+    expect(knowledge({ storeDir: elsewhere }).detail).toContain("2 repositories, 2 entries");
+  });
+
+  test("a link or a file where a project's repository was is a warning that names it, and is never read through", () => {
+    const { relative, folder, elsewhere } = workspaceAndProject();
+    const aside = join(fx.dir, "moved-aside");
+    renameSync(folder, aside);
+    for (const [put, said] of [
+      [() => symlinkSync(aside, folder), "is a link"],
+      [() => writeFileSync(folder, "not a folder"), "is not a folder"],
+    ] as const) {
+      put();
+      for (const check of [knowledge(), knowledge({ storeDir: elsewhere })]) {
+        expect(check.status).toBe("warn");
+        expect(check.detail).toContain(`${relative}: ${folder} ${said}`);
+        // Neither counted nor read: the entry behind the link is not in the totals.
+        expect(check.detail).toContain("1 repository, 1 entry");
+      }
+      rmSync(folder, { force: true });
+    }
+  });
+
+  test("an entries folder it cannot read is a warning for that repository, and the others are still checked", () => {
+    if (process.platform === "win32" || process.getuid?.() === 0) return;
+    const { relative, folder, elsewhere } = workspaceAndProject();
+    const entries = join(folder, "entries");
+    for (const bits of [0o000, 0o600]) {
+      chmodSync(entries, bits);
+      try {
+        for (const check of [knowledge(), knowledge({ storeDir: elsewhere })]) {
+          expect(check.status).toBe("warn");
+          expect(check.detail).toContain(`${relative}: `);
+          expect(check.detail).toContain(entries);
+          expect(check.detail).toContain("EACCES");
+          expect(check.detail).toContain("2 repositories, 1 entry");
+        }
+      } finally {
+        chmodSync(entries, 0o700);
+      }
+    }
   });
 
   test("with no database, the checks that need it are skipped and said", () => {

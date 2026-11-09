@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import {
   ensureRepo,
@@ -293,6 +293,76 @@ describe("resolveRepo", () => {
     expect(resolveRepo(store, project(two), options)?.relative).toBe("knowledge/projects/same-2");
     expect(resolveRepo(store, project(three), options)?.relative).toBe("knowledge/projects/same-3");
     expect(resolveRepo(store, project(one), options)?.relative).toBe("knowledge/projects/same");
+  });
+
+  test("the folder a project's row names stays its repository while anything is there, whatever it holds", () => {
+    const store = fx.store({ env: { WIZARDINGCODE_MEM_AUTHOR: "Zoë" } });
+    // No remote: nothing but the row ties the project to its folder.
+    const id = fx.addProject("path:/x");
+    const first = ensureRepo(store, project(id));
+    const folders = () => readdirSync(repoPath(fx.dataDir, "knowledge/projects"));
+    const before = { rows: rows(), folders: folders() };
+
+    // Its manifest gone: the folder is still the project's, for a read and for a write.
+    rmSync(join(first.path, "knowledge.json"));
+    expect(resolveRepo(store, project(id), {})?.relative).toBe(first.relative);
+    expect(resolveRepo(store, project(id), { create: person })?.relative).toBe(first.relative);
+    expect(listRepos(store).orphans).toEqual([]);
+
+    // Emptied by hand: no repository to read, and a write makes it again in the same folder.
+    rmSync(first.path, { recursive: true });
+    mkdirSync(first.path);
+    expect(openRepo(store, project(id))).toBeNull();
+    expect(ensureRepo(store, project(id)).relative).toBe(first.relative);
+    expect(readManifest(first.path)?.project?.aliases).toEqual(["path:/x"]);
+    expect(realGit(first.path, "ls-files").trim().split("\n").sort()).toEqual([
+      ".gitignore",
+      "knowledge.json",
+    ]);
+    expect({ rows: rows(), folders: folders() }).toEqual(before);
+
+    // A link put where the folder was: refused by name, and nothing is made through it or
+    // beside it, also when a manifest would be written.
+    const aside = join(fx.dir, "moved-aside");
+    renameSync(first.path, aside);
+    rmSync(join(aside, "knowledge.json"));
+    rmSync(join(aside, ".git"), { recursive: true });
+    symlinkSync(aside, first.path);
+    for (const options of [{}, { create: person }]) {
+      expect(codeOf(() => resolveRepo(store, project(id), options))).toBe("invalid");
+      expect(thrown(() => resolveRepo(store, project(id), options)).message).toContain(
+        `${first.path} is a link`,
+      );
+    }
+    expect(existsSync(join(aside, "knowledge.json"))).toBe(false);
+    expect({ rows: rows(), folders: folders() }).toEqual(before);
+    rmSync(first.path);
+    renameSync(aside, first.path);
+
+    // Gone altogether, there is no repository, and a write makes a new one.
+    rmSync(first.path, { recursive: true });
+    expect(resolveRepo(store, project(id), {})).toBeNull();
+    const anew = ensureRepo(store, project(id));
+    expect(existsSync(join(anew.path, ".git"))).toBe(true);
+    expect(rows().filter((row) => row.scope === "project")).toEqual([
+      { scope: "project", project_id: id, path: anew.relative },
+    ]);
+  });
+
+  test("a name already on the disk is never taken for a new project's folder, a link included", () => {
+    const store = fx.store();
+    const id = fx.addProject("gitdir:/x/.git");
+    const name = projectFolderName("gitdir:/x/.git");
+    // No row names it and no manifest is in it: a link someone left at the name.
+    const outside = join(fx.dir, "outside");
+    mkdirSync(outside);
+    mkdirSync(repoPath(fx.dataDir, "knowledge/projects"), { recursive: true });
+    symlinkSync(outside, repoPath(fx.dataDir, `knowledge/projects/${name}`));
+
+    const repo = resolveRepo(store, project(id), { create: person });
+    expect(repo?.relative).toBe(`knowledge/projects/${name}-2`);
+    expect(readdirSync(outside)).toEqual([]);
+    expect(listRepos(store).orphans).toEqual([`knowledge/projects/${name}`]);
   });
 
   test("a project that does not exist is refused", () => {

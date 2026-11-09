@@ -2,14 +2,15 @@
 // folders. A project's repository is found by its manifest, not by its folder name: a
 // project that gains a remote, or whose index rows were lost, still finds the same folder.
 import { mkdirSync } from "node:fs";
+import { join } from "node:path";
 import { withWrite } from "../../store/db.ts";
 import { nowIso } from "./entry.ts";
 import { KnowledgeError } from "./errors.ts";
 import {
-  existsOnDisk,
-  isDirectory,
+  headOf,
   kindAt,
   knowledgeRoot,
+  MANIFEST_FILE,
   namesIn,
   projectFolderName,
   readManifest,
@@ -103,23 +104,25 @@ function projectAliases(
 
 interface ProjectFolder {
   relative: string;
+  /** Null when the folder holds none that reads, and for a name that is not a folder. */
   manifest: Manifest | null;
 }
 
-/** Every folder under `knowledge/projects/`, in name order, with its manifest when it has one. */
+/**
+ * Every name under `knowledge/projects/`, in name order, with its manifest when it is a
+ * folder that holds one. A link or a file at a name is listed too, and never read
+ * through: the project whose row names it is refused there, not given another folder.
+ */
 function projectFolders(store: KnowledgeStore): ProjectFolder[] {
   // A folder that cannot be listed, or a name in it that cannot be looked at, refuses the
   // listing: what is read as "no repository there" has its index rows forgotten.
   return namesIn(repoPath(store.dataDir, PROJECTS))
     .sort()
-    .filter(
-      (name) =>
-        !name.startsWith(".") &&
-        kindAt(repoPath(store.dataDir, `${PROJECTS}/${name}`)) === "folder",
-    )
+    .filter((name) => !name.startsWith("."))
     .map((name) => {
       const relative = `${PROJECTS}/${name}`;
-      return { relative, manifest: readManifest(repoPath(store.dataDir, relative)) };
+      const path = repoPath(store.dataDir, relative);
+      return { relative, manifest: kindAt(path) === "folder" ? readManifest(path) : null };
     });
 }
 
@@ -133,9 +136,13 @@ interface Match {
 }
 
 /**
- * The folder of a project among the manifests. The folder its row names wins while it
- * still holds a manifest; else the manifest matched by a remote, else the newest. A
- * manifest mapped to another project is never taken by a second one.
+ * The folder of a project. The name its row holds is the project's while anything is at
+ * it, whatever that is: a folder whose manifest is gone or does not read, a folder that
+ * cannot be looked into, a link or a file put where the folder was. Each is refused or
+ * reported where the repository is opened, and never traded for another folder: for a
+ * project with no remote the row is the only tie to its folder. Only when nothing is at
+ * the name is the folder looked for among the manifests: the one matched by a remote,
+ * else the newest. A manifest mapped to another project is never taken by a second one.
  */
 function matchProject(
   store: KnowledgeStore,
@@ -149,11 +156,11 @@ function matchProject(
   const row = rowFor(store, { scope: "project", projectId });
   let rowFolder: string | null = null;
   for (const folder of folders) {
-    if (folder.manifest === null || folder.manifest.scope !== "project") continue;
     if (row !== null && row.path === folder.relative) {
       rowFolder = folder.relative;
       continue;
     }
+    if (folder.manifest === null || folder.manifest.scope !== "project") continue;
     const shared = (folder.manifest.project?.aliases ?? []).filter((alias) => mine.has(alias));
     if (shared.length === 0) continue;
     const owner = rowAt(store, folder.relative);
@@ -206,7 +213,7 @@ export function resolveRepo(
   if (ref.scope !== "project") {
     const relative = repoFolder(ref);
     const path = repoPath(store.dataDir, relative);
-    if (!isDirectory(path)) {
+    if (kindAt(path) !== "folder") {
       // A link or a file where the folder goes is refused, never created through.
       refuseForeign(path);
       if (!create) return null;
@@ -220,6 +227,12 @@ export function resolveRepo(
 
   const project = projectAliases(store, ref.projectId);
   if (project === null) throw new KnowledgeError("missing", `there is no project ${ref.projectId}`);
+  const manifest = (): Manifest => ({
+    format: 1,
+    scope: "project",
+    project: { aliases: project.aliases },
+    createdAt: nowIso(store.now()),
+  });
   const match = matchProject(store, ref.projectId, project.aliases, projectFolders(store));
   let relative = match.taken;
   if (relative === null) {
@@ -228,18 +241,33 @@ export function resolveRepo(
     const name = (options.folderName ?? projectFolderName)(remote ?? project.key);
     // Anything already at the name, a link included, makes it taken: a new folder is new.
     const taken = (candidate: string) =>
-      existsOnDisk(repoPath(store.dataDir, candidate)) || rowAt(store, candidate) !== null;
+      kindAt(repoPath(store.dataDir, candidate)) !== "absent" || rowAt(store, candidate) !== null;
     relative = repoFolder(ref, name);
     for (let n = 2; taken(relative); n++) relative = repoFolder(ref, `${name}-${n}`);
     ensureParents(store, repoPath(store.dataDir, relative));
-    writeManifest(repoPath(store.dataDir, relative), {
-      format: 1,
-      scope: "project",
-      project: { aliases: project.aliases },
-      createdAt: nowIso(store.now()),
-    });
+    writeManifest(repoPath(store.dataDir, relative), manifest());
+    return {
+      ref,
+      path: repoPath(store.dataDir, relative),
+      relative,
+      id: saveRow(store, ref, relative),
+    };
   }
   const path = repoPath(store.dataDir, relative);
+  if (kindAt(path) !== "folder") {
+    // A link or a file where the project's folder was is refused by name, here as for
+    // the fixed scopes: never created through, and never passed over for a second folder.
+    refuseForeign(path);
+    // Nothing there after all: the name went away after it was listed.
+    if (!create) return null;
+    ensureParents(store, path);
+  }
+  // The folder the row names, emptied by hand: the repository a write makes again in it
+  // starts from its manifest, as a new one does. A repository that has commits keeps the
+  // manifest it has, or lacks, for the person to see.
+  if (create && kindAt(join(path, MANIFEST_FILE)) === "absent" && headOf(path) === null) {
+    writeManifest(path, manifest());
+  }
   return { ref, path, relative, id: saveRow(store, ref, relative) };
 }
 
@@ -249,9 +277,12 @@ export function projectAliasesOf(store: KnowledgeStore, projectId: number): stri
 }
 
 /**
- * Every repository under the data directory, mapped to its scope. A project folder no
- * project claims is an orphan and gets no row; a manifest a project matched but did not
- * take is ambiguous; a manifest wanted by a second project is claimed.
+ * Every name under the data directory where a repository is, mapped to its scope: a
+ * folder, and also a link or a file put where one goes, which is refused by name when it
+ * is opened (`openRepo`) and never read as a repository that is gone. A name under
+ * `knowledge/projects/` no project claims is an orphan and gets no row; a manifest a
+ * project matched but did not take is ambiguous; a manifest wanted by a second project is
+ * claimed.
  */
 export function listRepos(store: KnowledgeStore): {
   repos: Repo[];
@@ -289,7 +320,8 @@ export function scanRepos(store: KnowledgeStore): {
   for (const scope of ["workspace", "shared"] as const) {
     const relative = repoFolder({ scope });
     const path = repoPath(store.dataDir, relative);
-    if (kindAt(path) === "folder") found.push({ ref: { scope }, path, relative });
+    // A link or a file at the name is found too: opened, it is refused by name.
+    if (kindAt(path) !== "absent") found.push({ ref: { scope }, path, relative });
   }
 
   const folders = projectFolders(store);

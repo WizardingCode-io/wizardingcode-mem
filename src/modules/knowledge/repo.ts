@@ -18,6 +18,7 @@ import {
   readSync,
   renameSync,
   rmSync,
+  type Stats,
   statSync,
   writeFileSync,
 } from "node:fs";
@@ -73,30 +74,45 @@ export function knowledgeRoot(dataDir: string): string {
   return join(dataDir, "knowledge");
 }
 
-/** Why a look at the disk failed, when the reason is anything but "not there". */
+/**
+ * The refusal for a look at the disk that failed, or null when the failure only says that
+ * nothing is there. The error's code is named; the permissions are pointed at only when
+ * the code says so.
+ */
 function unseen(path: string, error: unknown): KnowledgeError | null {
   const code = (error as NodeJS.ErrnoException).code;
   if (code === "ENOENT" || code === "ENOTDIR") return null;
+  const hint =
+    code === "EACCES" || code === "EPERM"
+      ? "; check the permissions of that path and of the folders above it"
+      : "";
   return new KnowledgeError(
     "invalid",
-    `${path} cannot be looked at (${code}); check the permissions of that folder and of the ones above it. The knowledge store never takes what it cannot see for gone`,
+    `${path} cannot be looked at (${code})${hint}. The knowledge store never takes what it cannot see for gone`,
   );
 }
 
 /**
- * What is at a path itself, without following a link: a folder, something else, or
- * nothing. Only "not there" counts as nothing. Any other failure to look (a folder above
- * that cannot be searched, a disk fault) is a refusal that names its cause: a repository
- * the store could not see is never taken for one that is gone.
+ * What `lstat` finds at a path itself, without following a link; null when nothing is
+ * there. Only "not there" is nothing. Any other failure to look (a folder above that
+ * cannot be searched, a disk fault) is a refusal that names its cause: what the store
+ * could not see is never taken for gone.
  */
-export function kindAt(path: string): "folder" | "other" | "absent" {
+export function lookAt(path: string): Stats | null {
   try {
-    return lstatSync(path).isDirectory() ? "folder" : "other";
+    return lstatSync(path);
   } catch (error) {
     const refusal = unseen(path, error);
-    if (refusal === null) return "absent";
+    if (refusal === null) return null;
     throw refusal;
   }
+}
+
+/** What is at a path itself (`lookAt`): a folder, something else (a link, a file), or nothing. */
+export function kindAt(path: string): "folder" | "other" | "absent" {
+  const found = lookAt(path);
+  if (found === null) return "absent";
+  return found.isDirectory() ? "folder" : "other";
 }
 
 /** The names in a folder, none when it is not there; a folder that cannot be listed is a refusal. */
@@ -122,7 +138,7 @@ export function refuseLinkedRoots(dataDir: string): void {
     if (kindAt(folder) === "other") {
       throw new KnowledgeError(
         "invalid",
-        `${folder} is not a folder of its own (a link, or a file); the knowledge store keeps its repositories under it and never follows a link out of the data directory. Remove it; to keep the knowledge on another disk, move or link the data directory itself`,
+        `${folder} is not a folder of its own (a link, or a file); the knowledge store keeps its repositories under it and never follows a link out of the data directory. Remove it; to keep the knowledge on another disk, make the data directory itself a link`,
       );
     }
   }
@@ -828,7 +844,10 @@ export function headOf(repo: string): string | null {
 /**
  * `<entries>:<open>:<decided>:<newest folder mtime ms>`: three listings and three `stat`
  * calls, no per-file `stat`. It changes when a file is added, removed or renamed; an edit
- * in place changes neither it nor HEAD, and is caught by the dirty checks.
+ * in place changes neither it nor HEAD, and is caught by the dirty checks. A folder that
+ * cannot be listed counts as none here, and refuses nothing: the fingerprint then differs
+ * from the indexed one, and the rebuild that follows is where the folder is refused
+ * before a row is replaced (`listFolder` in `index-store.ts`).
  */
 export function fingerprintOf(repo: string): string {
   let newest = 0;

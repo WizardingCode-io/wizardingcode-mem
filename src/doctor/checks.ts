@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import { accessSync, constants, existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { accessSync, constants, existsSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { lastBackup } from "../backup/schedule.ts";
 import { semanticStatus } from "../embed/status.ts";
@@ -32,9 +32,10 @@ import {
   GIT_MIN_VERSION,
   GIT_TIMEOUT_MS,
   gitTooOld,
-  isDirectory,
+  kindAt,
   knowledgeRoot,
   MANIFEST_FILE,
+  namesIn,
   OPEN_DIR,
   parseGitVersion,
   parseManifest,
@@ -574,28 +575,32 @@ const FOLDER_WARN = 4000;
 const LOCK_STALE_MS = 60_000;
 const PROBLEMS_NAMED = 5;
 
-/** The repository folders with no database to map projects by: every folder is taken as it is. */
+/**
+ * The fixed scopes' names with no database to map projects by: whatever is at each, a
+ * link or a file included, as the module finds them (`scanRepos`).
+ */
 function foldersByHand(dataDir: string): FoundRepo[] {
   const found: FoundRepo[] = [];
   for (const scope of ["workspace", "shared"] as const) {
     const relative = `knowledge/${scope}`;
     const path = repoPath(dataDir, relative);
-    if (isDirectory(path)) found.push({ ref: { scope }, path, relative });
+    if (kindAt(path) !== "absent") found.push({ ref: { scope }, path, relative });
   }
   return found;
 }
 
-/** Every folder under `knowledge/projects/`, mapped or not. */
+/**
+ * Every name under `knowledge/projects/`, mapped or not, a link or a file included. Read
+ * with the module's own `namesIn` and `kindAt`: a folder that cannot be listed, or a name
+ * that cannot be looked at, is a refusal, which becomes this check's warning with or
+ * without a database, never a shorter list.
+ */
 function projectFolders(dataDir: string): string[] {
-  try {
-    return readdirSync(repoPath(dataDir, "knowledge/projects"))
-      .filter((name) => !name.startsWith("."))
-      .sort()
-      .map((name) => `knowledge/projects/${name}`)
-      .filter((relative) => isDirectory(repoPath(dataDir, relative)));
-  } catch {
-    return [];
-  }
+  return namesIn(repoPath(dataDir, "knowledge/projects"))
+    .filter((name) => !name.startsWith("."))
+    .sort()
+    .map((name) => `knowledge/projects/${name}`)
+    .filter((relative) => kindAt(repoPath(dataDir, relative)) !== "absent");
 }
 
 /**
@@ -608,7 +613,7 @@ function knowledgeRepositories(context: DoctorContext, db: Db | null): Check {
   const name = "knowledge";
   // The module's own rule, before anything under these folders is listed or read.
   refuseLinkedRoots(context.dataDir);
-  if (!isDirectory(knowledgeRoot(context.dataDir))) {
+  if (kindAt(knowledgeRoot(context.dataDir)) === "absent") {
     return { name, status: "skip", detail: "no knowledge repository yet" };
   }
   const env = context.env ?? process.env;
@@ -714,33 +719,37 @@ function knowledgeRepositories(context: DoctorContext, db: Db | null): Check {
     }
   }
 
-  // A folder under knowledge/ with no repository in it, mapped to a project or not.
+  // Every name where a repository goes, mapped to a project or not. The module's own
+  // rule comes first, before anything under a name is looked at: a link or a file put
+  // there, or a folder the store did not make, is said by name, and neither read nor
+  // handed to git. Then a folder with no repository in it is said.
   const folders = new Set([
     ...found.map((repo) => repo.relative),
     ...projectFolders(context.dataDir),
   ]);
+  const unread = new Set<string>();
   for (const relative of folders) {
-    if (!isDirectory(join(repoPath(context.dataDir, relative), ".git"))) {
+    const path = repoPath(context.dataDir, relative);
+    try {
+      refuseForeign(path);
+      if (kindAt(join(path, ".git")) === "folder") continue;
       warnings.push(`${relative} is not a git repository`);
+    } catch (error) {
+      if (!(error instanceof KnowledgeError)) throw error;
+      warnings.push(`${relative}: ${error.message}`);
     }
+    unread.add(relative);
   }
 
   let entries = 0;
   let drafts = 0;
   let open = 0;
+  // The repositories read: one the store refuses has its warning above, and is not counted.
   let repositories = 0;
   const problems: string[] = [];
   for (const repo of found) {
-    if (!isDirectory(join(repo.path, ".git"))) continue;
+    if (unread.has(repo.relative)) continue;
     repositories++;
-    try {
-      // The module's own rule: a folder the store did not make is neither read nor handed to git.
-      refuseForeign(repo.path);
-    } catch (error) {
-      if (!(error instanceof KnowledgeError)) throw error;
-      warnings.push(`${repo.relative}: ${error.message}`);
-      continue;
-    }
     try {
       // Never through a link, and never more than the cap: as the module reads every file.
       const bytes = readRegularFile(join(repo.path, MANIFEST_FILE));
@@ -763,9 +772,12 @@ function knowledgeRepositories(context: DoctorContext, db: Db | null): Check {
     } catch {
       // No lock: nothing is writing.
     }
-    for (const folder of [ENTRIES_DIR, OPEN_DIR, DECIDED_DIR]) {
-      try {
-        const count = readdirSync(join(repo.path, ...folder.split("/"))).filter(
+    let files: ReturnType<typeof readRepoFiles>;
+    try {
+      for (const folder of [ENTRIES_DIR, OPEN_DIR, DECIDED_DIR]) {
+        // None when the folder is not there: git does not track an empty one, so a fresh
+        // clone may not have it.
+        const count = namesIn(join(repo.path, ...folder.split("/"))).filter(
           (file) => !file.startsWith("."),
         ).length;
         if (count > FOLDER_WARN) {
@@ -773,12 +785,15 @@ function knowledgeRepositories(context: DoctorContext, db: Db | null): Check {
             `${repo.relative}: ${folder}/ holds ${count} files; the index keeps ${FOLDER_CAP}`,
           );
         }
-      } catch {
-        // A folder git does not track when empty: a fresh clone may not have it.
       }
+      files = readRepoFiles(store, { ...repo, id: 0 });
+    } catch (error) {
+      // A folder of entries or proposals that cannot be read is said by name, and never
+      // counted as an empty one. The other repositories are still checked.
+      if (!(error instanceof KnowledgeError)) throw error;
+      warnings.push(`${repo.relative}: ${error.message}`);
+      continue;
     }
-
-    const files = readRepoFiles(store, { ...repo, id: 0 });
     entries += files.entries.length;
     drafts += files.entries.filter(({ entry }) => entry.status === "draft").length;
     open += files.proposals.filter(({ path }) => path.startsWith(`${OPEN_DIR}/`)).length;
