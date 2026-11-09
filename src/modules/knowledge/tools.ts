@@ -20,6 +20,7 @@ import {
   ensureFresh,
   entryAt,
   type Hit,
+  requireKnowledgeRoot,
   searchEntries,
   taxonomyOrNull,
 } from "./index-store.ts";
@@ -326,6 +327,8 @@ async function propose(
 ): Promise<string> {
   const db = store.db;
   if (!allowProposal(db, agentId, store.now())) return QUOTA;
+  // Part 1's rule: no write in the state rebuild refuses (the folder gone, rows in the index).
+  requireKnowledgeRoot(store, "written", "the agent");
 
   const ref = refOf(args.repo, context.projectId);
   if (ref === null) throw invalid("repo: a project's repository needs a project folder");

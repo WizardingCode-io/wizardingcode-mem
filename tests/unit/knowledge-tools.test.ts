@@ -5,6 +5,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -816,6 +817,22 @@ describe("knowledge_propose, the refusals", () => {
     expect(await propose({ title: "Unrelated idea", body: "Nothing in common." })).toBe(
       "refused locked: another write to this repository is in progress; try again",
     );
+  });
+
+  test("the knowledge folder gone while the index holds repositories: nothing is written", async () => {
+    // Part 1's rule for a write in the state rebuild refuses: the folder may be under another
+    // data directory that shares this database, so a write would make a second copy of it.
+    write(WORKSPACE, { title: "Pricing rules", body: "Per project." });
+    const root = join(fx.dataDir, "knowledge");
+    renameSync(root, `${root}-away`);
+    try {
+      expect(await propose({ title: "Unrelated idea", body: "Nothing in common." })).toBe(
+        `refused invalid: ${root} is not there, and the index holds a repository under it; nothing was written. If the knowledge is under another data directory (WIZARDINGCODE_MEM_DATA_DIR, WIZARDINGCODE_HOME), run the agent under that one. If the folder was removed on purpose, make it again, empty, and run knowledge rebuild once more`,
+      );
+      expect(existsSync(root)).toBe(false);
+    } finally {
+      renameSync(`${root}-away`, root);
+    }
   });
 
   test("part 1's quota: the sixth open change to one entry", async () => {

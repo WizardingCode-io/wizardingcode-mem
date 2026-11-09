@@ -697,6 +697,42 @@ export function inEachRepo<T>(
  * forgotten, when the data directory has no knowledge folder at all and the index holds
  * repositories: the rows are another data directory's until the person says otherwise.
  */
+/**
+ * No knowledge folder at all under this data directory, and repositories in the index: they
+ * were written under another data directory that shares this database, or the folder was
+ * removed whole, and the store cannot tell which. Read as "every repository is gone", a
+ * rebuild would forget the rows of repositories that are all still on the disk, and a write
+ * would make a second copy of a repository beside the first. So the person says which: an
+ * empty folder made by hand means they are gone. `rebuild` and every write of an agent
+ * refuse in this state; `verb` says what was not done, `who` who should run under the other
+ * data directory.
+ */
+export function requireKnowledgeRoot(
+  store: KnowledgeStore,
+  verb: "forgotten" | "written",
+  who: "rebuild" | "the agent",
+  scope?: ScopeRef["scope"],
+): void {
+  const root = knowledgeRoot(store.dataDir);
+  // A rebuild of one scope looks at that scope's rows (a scope the index holds nothing of
+  // has nothing to forget); a write looks at every row, since it would make a folder tree
+  // here beside the one that holds them.
+  const known =
+    scope === undefined
+      ? store.db.query<{ n: number }, []>("SELECT count(*) AS n FROM knowledge_repos").get()?.n
+      : store.db
+          .query<{ n: number }, [string]>(
+            "SELECT count(*) AS n FROM knowledge_repos WHERE scope = ?",
+          )
+          .get(scope)?.n;
+  if (known !== undefined && known > 0 && kindAt(root) === "absent") {
+    throw new KnowledgeError(
+      "invalid",
+      `${root} is not there, and the index holds ${known === 1 ? "a repository" : `${known} repositories`} under it; nothing was ${verb}. If the knowledge is under another data directory (WIZARDINGCODE_MEM_DATA_DIR, WIZARDINGCODE_HOME), run ${who} under that one. If the folder was removed on purpose, make it again, empty, and run ${who === "rebuild" ? "rebuild" : "knowledge rebuild"} once more`,
+    );
+  }
+}
+
 export function rebuildAll(
   store: KnowledgeStore,
   scope?: ScopeRef["scope"],
@@ -709,19 +745,7 @@ export function rebuildAll(
       )
       .all()
       .filter((row) => scope === undefined || row.scope === scope);
-  // No knowledge folder at all under this data directory, and repositories in the index:
-  // they were written under another data directory that shares this database, or the
-  // folder was removed whole, and the store cannot tell which. Read as "every repository
-  // is gone", the first would forget the rows of repositories that are all still on the
-  // disk. So the person says which: an empty folder made by hand means they are gone.
-  const root = knowledgeRoot(store.dataDir);
-  const known = held().length;
-  if (known > 0 && kindAt(root) === "absent") {
-    throw new KnowledgeError(
-      "invalid",
-      `${root} is not there, and the index holds ${known === 1 ? "a repository" : `${known} repositories`} under it; nothing was forgotten. If the knowledge is under another data directory (WIZARDINGCODE_MEM_DATA_DIR, WIZARDINGCODE_HOME), run rebuild under that one. If the folder was removed on purpose, make it again, empty, and run rebuild once more`,
-    );
-  }
+  requireKnowledgeRoot(store, "forgotten", "rebuild", scope);
   const all = inEachRepo(store, scope, (repo) =>
     withRepoLeases(store, [repo.relative], () => rebuildRepo(store, repo)),
   );
