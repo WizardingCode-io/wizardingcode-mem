@@ -3,14 +3,14 @@
 // never imports the loader, so the two apply one rule.
 import { isLevel, type Level, type Reason, type SharingPolicy, TEAM_DESTINATION } from "./types.ts";
 
+/** The prefix of an alias taken from a git remote. */
+const REMOTE_ALIAS = "remote:";
+
 /**
  * The destinations there are: the team's server, alone. The roots and the areas apply to
  * these, and a level stored for any other reads `local`: a destination a later version
  * adds starts with every project at Nothing.
  */
-/** The prefix of an alias taken from a git remote. */
-const REMOTE_ALIAS = "remote:";
-
 export const DESTINATIONS: ReadonlySet<string> = new Set([TEAM_DESTINATION]);
 
 /** A host name of dotted labels (letters, digits, hyphens), with a port or without. */

@@ -673,13 +673,24 @@ describe("decide: entries", () => {
       expect(decide(noLevel, "team", inProject(P), [])).toEqual(keep("level-local"));
     });
 
-    test("stays with what downgraded its project's level", () => {
+    test("stays with what downgraded its project's level, named as effectiveLevel named it", () => {
       const downgraded = (reason: Reason) =>
         policy({ areas, levels: new Map([levelRow(DOWN, "local", reason)]) });
-      expect(decide(downgraded("disabled"), "team", inProject(DOWN), [])).toEqual(keep("disabled"));
-      expect(decide(downgraded("unbound-alias"), "team", inProject(DOWN), [])).toEqual(
-        keep("unbound-alias"),
-      );
+      for (const reason of ["level-local", "disabled", "unbound-alias"] as const) {
+        expect(decide(downgraded(reason), "team", inProject(DOWN), [])).toEqual(keep(reason));
+        expect(decide(downgraded(reason), "team", memory({ projectId: DOWN }), [])).toEqual(
+          keep(reason),
+        );
+      }
+    });
+
+    test("a local row that claims allowed is a broken rule, never read as Nothing", () => {
+      // effectiveLevel never makes that pair. A policy built by hand with it must not get a
+      // plausible refusal that hides the broken rule.
+      const broken = policy({ areas, levels: new Map([levelRow(DOWN, "local", "allowed")]) });
+      const names = new RegExp(`local.*allowed.*${DOWN}.*team`);
+      expect(() => decide(broken, "team", inProject(DOWN), [])).toThrow(names);
+      expect(() => decide(broken, "team", memory({ projectId: DOWN }), [])).toThrow(names);
     });
 
     test("stays when no project owns it", () => {

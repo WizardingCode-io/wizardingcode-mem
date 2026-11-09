@@ -99,8 +99,6 @@ const idList = (ids: readonly number[]) => JSON.stringify(ids);
 
 // --- Previews -----------------------------------------------------------------------------
 
-/** The change counter an epoch was made from: what `epochOf` puts above its hash. */
-
 /** The levels with one project's replaced. A project at Nothing has no level. */
 function withLevel(
   levels: ReadonlyMap<string, LevelRow>,

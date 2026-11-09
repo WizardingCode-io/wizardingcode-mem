@@ -299,7 +299,9 @@ export function isDefault(policy: SharingPolicy): boolean {
 /**
  * Why a project's level does not reach `needed`; null when it does. A project at
  * `knowledge` asked for its memories says so; one that shares nothing gives what made its
- * level read `local`.
+ * level read `local`, as `effectiveLevel` named it. A level that reads `local` is never
+ * `allowed` (that is `effectiveLevel`'s rule); a row that says both is a broken rule, and
+ * is thrown rather than read as a plausible refusal that would hide it.
  */
 function levelRefusal(
   policy: SharingPolicy,
@@ -310,7 +312,12 @@ function levelRefusal(
   const { level, reason } = levelOf(policy, projectId, destination);
   if (!widens(level, needed)) return null;
   if (level === "knowledge") return "level-knowledge";
-  return reason === "allowed" ? "level-local" : reason;
+  if (reason === "allowed") {
+    throw new Error(
+      `a sharing level reads local and allowed at once, which effectiveLevel never gives: project ${projectId}, destination ${destination}`,
+    );
+  }
+  return reason;
 }
 
 /**
