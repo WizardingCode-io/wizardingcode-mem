@@ -11,6 +11,7 @@ import {
   hashOf,
   headOf,
   kindAt,
+  knowledgeRoot,
   lookAt,
   namesIn,
   OPEN_DIR,
@@ -572,23 +573,39 @@ export function inEachRepo<T>(
  * forgets the rows of repositories whose folder is gone: the ones with nothing at their
  * name. A link or a file put where a folder was is set aside by name, and its rows stay.
  * A project folder is mapped to its project by its row, else through its manifest; a
- * folder no project claims is reported and indexes nothing.
+ * folder no project claims is reported and indexes nothing. Refused, with nothing
+ * forgotten, when the data directory has no knowledge folder at all and the index holds
+ * repositories: the rows are another data directory's until the person says otherwise.
  */
 export function rebuildAll(
   store: KnowledgeStore,
   scope?: ScopeRef["scope"],
 ): InEachRepo<RebuildResult> {
   requireSchema(store);
+  const held = () =>
+    store.db
+      .query<{ id: number; scope: string; path: string }, []>(
+        "SELECT id, scope, path FROM knowledge_repos",
+      )
+      .all()
+      .filter((row) => scope === undefined || row.scope === scope);
+  // No knowledge folder at all under this data directory, and repositories in the index:
+  // they were written under another data directory that shares this database, or the
+  // folder was removed whole, and the store cannot tell which. Read as "every repository
+  // is gone", the first would forget the rows of repositories that are all still on the
+  // disk. So the person says which: an empty folder made by hand means they are gone.
+  const root = knowledgeRoot(store.dataDir);
+  const known = held().length;
+  if (known > 0 && kindAt(root) === "absent") {
+    throw new KnowledgeError(
+      "invalid",
+      `${root} is not there, and the index holds ${known === 1 ? "a repository" : `${known} repositories`} under it; nothing was forgotten. If the knowledge is under another data directory (WIZARDINGCODE_MEM_DATA_DIR, WIZARDINGCODE_HOME), run rebuild under that one. If the folder was removed on purpose, make it again, empty, and run rebuild once more`,
+    );
+  }
   const all = inEachRepo(store, scope, (repo) =>
     withRepoLeases(store, [repo.relative], () => rebuildRepo(store, repo)),
   );
-  const rows = store.db
-    .query<{ id: number; scope: string; path: string }, []>(
-      "SELECT id, scope, path FROM knowledge_repos",
-    )
-    .all();
-  for (const row of rows) {
-    if (scope !== undefined && row.scope !== scope) continue;
+  for (const row of held()) {
     // Only a name with nothing at it is gone. A folder that cannot be looked at refuses
     // the rebuild (`kindAt`); a link or a file put where the folder was has been set aside
     // by name above (`inEachRepo`). The rows of both stay.

@@ -333,6 +333,37 @@ describe("doctor: knowledge", () => {
     }
   });
 
+  test("a link or a file where the workspace's repository was is a warning that names it, with a database and with none", () => {
+    const { elsewhere } = workspaceAndProject();
+    const folder = repoPath(fx.dataDir, "knowledge/workspace");
+    const aside = join(fx.dir, "moved-aside");
+    renameSync(folder, aside);
+    // Behind the link, a taxonomy without the area of the project's entry: read through
+    // the link, it would list that entry among the ones with problems.
+    const taxonomy = join(aside, "taxonomy.md");
+    writeFileSync(
+      taxonomy,
+      readFileSync(taxonomy, "utf8")
+        .split("\n")
+        .filter((line) => !line.includes("sales"))
+        .join("\n"),
+    );
+    for (const [put, said] of [
+      [() => symlinkSync(aside, folder), "is a link"],
+      [() => writeFileSync(folder, "not a folder"), "is not a folder"],
+    ] as const) {
+      put();
+      for (const check of [knowledge(), knowledge({ storeDir: elsewhere })]) {
+        expect(check.status).toBe("warn");
+        expect(check.detail).toContain(`knowledge/workspace: ${folder} ${said}`);
+        // The project's repository is still read, and nothing through the link.
+        expect(check.detail).toContain("1 repository, 1 entry");
+        expect(check.detail).not.toContain("in-the-project");
+      }
+      rmSync(folder, { force: true });
+    }
+  });
+
   test("an entries folder it cannot read is a warning for that repository, and the others are still checked", () => {
     if (process.platform === "win32" || process.getuid?.() === 0) return;
     const { relative, folder, elsewhere } = workspaceAndProject();

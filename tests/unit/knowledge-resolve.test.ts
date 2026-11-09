@@ -308,6 +308,8 @@ describe("resolveRepo", () => {
     expect(resolveRepo(store, project(id), {})?.relative).toBe(first.relative);
     expect(resolveRepo(store, project(id), { create: person })?.relative).toBe(first.relative);
     expect(listRepos(store).orphans).toEqual([]);
+    // The repository has commits: no new manifest is written into it behind the person's back.
+    expect(existsSync(join(first.path, "knowledge.json"))).toBe(false);
 
     // Emptied by hand: no repository to read, and a write makes it again in the same folder.
     rmSync(first.path, { recursive: true });

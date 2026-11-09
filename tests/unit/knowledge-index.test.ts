@@ -597,6 +597,59 @@ describe("rebuildAll", () => {
     rmSync(manifest);
     expect(openRepo(store, ref, { create: person() })?.relative).toBe(relative);
     expect(state()).toEqual(before);
+    // A repository that has commits is not given a new manifest behind the person's back:
+    // the deletion stays theirs to see, as git shows it.
+    expect(existsSync(manifest)).toBe(false);
+    expect(status(openRepo(store, ref) as Repo)).toEqual([" D knowledge.json"]);
+  });
+
+  test("a data directory with no knowledge folder, and rows in the index, refuses the rebuild and forgets nothing", () => {
+    const { ref, relative, state } = pathOnlyProject();
+    const before = state();
+    // One database and a second data directory with nothing in it: the rows were written
+    // under the first.
+    const other = join(fx.dir, "another-data-directory");
+    mkdirSync(other);
+    const elsewhere = fx.store({ dataDir: other, env: { WIZARDINGCODE_MEM_AUTHOR: "Zoë" } });
+
+    for (const scope of [undefined, "workspace", "project"] as const) {
+      expect(codeOf(() => rebuildAll(elsewhere, scope))).toBe("invalid");
+    }
+    expect(thrown(() => rebuildAll(elsewhere)).message).toContain(join(other, "knowledge"));
+    // A scope the index holds nothing of has nothing to forget, and is not refused.
+    expect(rebuildAll(elsewhere, "shared").results.size).toBe(0);
+    expect(state()).toEqual(before);
+
+    // Under the data directory the knowledge is in, nothing was lost.
+    expect(rebuildAll(store).refused.size).toBe(0);
+    expect(openRepo(store, ref)?.relative).toBe(relative);
+    expect(state()).toEqual(before);
+
+    // An empty knowledge folder made there by hand is the person's word that they are gone.
+    mkdirSync(join(other, "knowledge"));
+    expect(rebuildAll(elsewhere).results.size).toBe(0);
+    expect(state()).toEqual({ rows: [], entries: 0, folders: before.folders });
+  });
+
+  test("a project's rebuild never reads the taxonomy through a link at the workspace's name", () => {
+    const { relative } = pathOnlyProject();
+    const folder = repoPath(fx.dataDir, "knowledge/workspace");
+    const aside = join(fx.dir, "moved-aside");
+    renameSync(folder, aside);
+    // Behind the link, a taxonomy without the area of the project's entry: read through
+    // the link, it would mark that entry with a problem.
+    const taxonomy = join(aside, "taxonomy.md");
+    const without = readFileSync(taxonomy, "utf8")
+      .split("\n")
+      .filter((line) => !line.includes("sales"))
+      .join("\n");
+    expect("problem" in parseTaxonomy(without)).toBe(false);
+    writeFileSync(taxonomy, without);
+    symlinkSync(aside, folder);
+
+    const all = rebuildAll(store);
+    expect([...all.refused.keys()]).toEqual(["knowledge/workspace"]);
+    expect(all.results.get(relative)).toMatchObject({ entries: 1, problems: 0 });
   });
 
   test("an entries folder that cannot be read refuses the rebuild, and its rows stay", () => {

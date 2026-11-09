@@ -166,8 +166,13 @@ export function rootOf(ref: ScopeRef): RootRef {
   return ref.scope === "shared" ? { scope: "shared" } : { scope: "workspace" };
 }
 
-/** Whether a folder is at the path itself: a link to a folder is not one. */
-export function isDirectory(path: string): boolean {
+/**
+ * Whether a folder is at the path itself: a link to a folder is not one. Any failure to
+ * look reads as "no" here, unlike `kindAt`: it is used only inside a repository, behind
+ * one of the refusals that ask with `kindAt`, `lookAt` or `namesIn`, and never to decide
+ * whether a repository is there.
+ */
+function isDirectory(path: string): boolean {
   try {
     return lstatSync(path).isDirectory();
   } catch {
@@ -175,7 +180,10 @@ export function isDirectory(path: string): boolean {
   }
 }
 
-/** Whether anything is at the path: a file, a folder, or a link, whatever the link points at. */
+/**
+ * Whether anything is at the path: a file, a folder, or a link, whatever the link points
+ * at. Any failure to look reads as "no" here too, under the same limit as `isDirectory`.
+ */
 export function existsOnDisk(path: string): boolean {
   try {
     lstatSync(path);
@@ -696,12 +704,16 @@ export function writeManifest(repo: string, manifest: Manifest): void {
 
 /**
  * The taxonomy a repository's areas are checked against: its root's. Null when the root
- * repository does not exist yet. A taxonomy file that cannot be read is refused: no area
- * can be checked against it until a person fixes it.
+ * repository does not exist yet, and when a link or a file is at the root's name: the
+ * root is refused by name where it is opened, and its taxonomy is never read through the
+ * link. A taxonomy file that cannot be read is refused: no area can be checked against
+ * it until a person fixes it.
  */
 export function taxonomyFor(store: KnowledgeStore, ref: ScopeRef): Taxonomy | null {
   const root = rootOf(ref);
-  const file = join(repoPath(store.dataDir, repoFolder(root)), TAXONOMY_FILE);
+  const folder = repoPath(store.dataDir, repoFolder(root));
+  if (kindAt(folder) !== "folder") return null;
+  const file = join(folder, TAXONOMY_FILE);
   const bytes = readRegularFile(file);
   if (bytes === null) return null;
   const taxonomy = parseTaxonomy(new TextDecoder().decode(bytes));
