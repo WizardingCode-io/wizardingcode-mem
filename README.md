@@ -301,6 +301,38 @@ Each session reads its own project. Two things widen that, and both wait for you
 
 Suggestions and proposals are worked out in the background after distilling, never while you wait; with no link and no rule of yours, what your agent sees is exactly what it saw before. Older binaries (0.5.0) cannot open the database once a newer one has migrated it: update every agent together.
 
+## Knowledge
+
+Memory is what happened. Knowledge is what you wrote down on purpose: strategies, personas, patterns, how your team works. It is kept as Markdown files with frontmatter, catalogued by area, context and subject, and every change is a commit with its author.
+
+**This is the store only.** You write, decide and list knowledge from the command line. Agents are not shown knowledge yet, the viewer has no view for it yet, and nothing is shared or synced: those are the next parts ([ADR 0024](docs/adr/0024-knowledge-module.md)).
+
+The files live under the data directory, never inside your projects, one git repository per scope:
+
+| Scope | Where | For |
+|---|---|---|
+| workspace | `~/.wizardingcode/mem/knowledge/workspace/` | What holds across your projects |
+| project | `~/.wizardingcode/mem/knowledge/projects/<folder>/` | What holds for one project |
+| shared | `~/.wizardingcode/mem/knowledge/shared/` | What a team will share, once the team server exists |
+
+```sh
+wizardingcode-mem knowledge write --scope workspace --title "Discovery call script" \
+  --kind strategy --area sales --context "agency clients" --subject "discovery call" \
+  --body-file script.md
+wizardingcode-mem knowledge list
+```
+
+- **Kinds:** `knowledge`, `strategy`, `persona`, `pattern`. **Areas** start as code, management, marketing, sales, video, design, operations, finance and people; `knowledge area add | rename | remove` changes them. Renaming an area changes its label and no entry.
+- **Versions.** To change an entry, give the version you read: `--slug <slug> --base <n>`. A change based on an older version is refused, never applied over the newer one.
+- **Agents propose, you decide.** A change an agent makes through the engine is a proposal file, never the entry. `knowledge accept --scope <scope> <id>` writes it into the entry in a commit under your name that names the agent; `knowledge reject` files it with your decision. Nothing is deleted.
+- **Editing in an editor works.** The files are plain Markdown. A file you edit, add or delete by hand is yours to commit: `knowledge adopt` does it, as you. Until then the entry is listed as a draft, and the engine refuses to write over it.
+- **The database holds an index only.** `knowledge rebuild` recreates it from the files.
+- **Your name** on what you write is `WIZARDINGCODE_MEM_AUTHOR`, else your global git `user.name`, else `you`.
+
+git 2.32 or newer is needed to write. Your own git hooks, templates, signing and configuration never run in these repositories.
+
+`wizardingcode-mem backup` copies the database and **does not copy these repositories**. Back up `~/.wizardingcode/mem/knowledge/` as you would any folder.
+
 ## Settings
 
 Every setting can be changed from the viewer, with no file to edit and no command to type. Open the viewer (it opens by itself when a session starts, or run `wizardingcode-mem ui`) and choose the gear at the bottom left.
@@ -347,6 +379,7 @@ Edit `~/.wizardingcode/mem/env` yourself, or set the variable in the environment
 | `WIZARDINGCODE_MEM_RETENTION_DAYS` | How long `compact` keeps finished turns no memory came from | `90` |
 | `WIZARDINGCODE_MEM_SEMANTIC` | `off` keeps the search model but searches by words only | `on` |
 | `WIZARDINGCODE_MEM_UI_AUTO_OPEN` | Open the viewer when a session starts | `on` |
+| `WIZARDINGCODE_MEM_AUTHOR` | Your name on the knowledge you write (set by hand: the viewer has no field for it yet) | your git `user.name`, else `you` |
 | `WIZARDINGCODE_MEM_STORE_DIR` | Where the database lives, when it was moved to another disk (set by **Storage**, not by hand) | the data directory |
 | `WIZARDINGCODE_MEM_BACKUP_TO` | Where backups go: a folder, or `s3://bucket/prefix` | — |
 | `WIZARDINGCODE_MEM_BACKUP_EVERY_HOURS` | Hours between backups; `0` means only on demand | `24` |
@@ -375,6 +408,7 @@ The binary is at `~/.wizardingcode/mem/bin/wizardingcode-mem`; put that director
 | `wizardingcode-mem history import` · `index` · `search` · `forget` · `replace-imports` · `restore-imports` | Learn from past sessions (see above) |
 | `wizardingcode-mem embed download` · `status` · `delete` · `backfill` | Search by meaning (see above) |
 | `wizardingcode-mem rejudge` | Asks TypeSafe to judge imported memories properly |
+| `wizardingcode-mem knowledge write` · `accept` · `reject` · `area` · `list` · `rebuild` · `adopt` | The knowledge store (see above) |
 | `wizardingcode-mem install [<name>]` · `uninstall <name>` | The direct install: every agent and app found, or one (`claude-code`, `claude-desktop`, `codex`, `cursor`, `opencode`, `qwen`, `droid`, `copilot`, `antigravity`) |
 
 ## TypeSafe, if you want it
