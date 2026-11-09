@@ -1,13 +1,5 @@
 import { Database } from "bun:sqlite";
-import {
-  accessSync,
-  constants,
-  existsSync,
-  lstatSync,
-  readdirSync,
-  readFileSync,
-  statSync,
-} from "node:fs";
+import { accessSync, constants, existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { lastBackup } from "../backup/schedule.ts";
 import { semanticStatus } from "../embed/status.ts";
@@ -40,12 +32,14 @@ import {
   GIT_MIN_VERSION,
   GIT_TIMEOUT_MS,
   gitTooOld,
+  isDirectory,
   knowledgeRoot,
   MANIFEST_FILE,
   OPEN_DIR,
   parseGitVersion,
   parseManifest,
   readRegularFile,
+  refuseForeign,
   repoPath,
   runGit,
   statusOf,
@@ -579,14 +573,6 @@ const FOLDER_WARN = 4000;
 const LOCK_STALE_MS = 60_000;
 const PROBLEMS_NAMED = 5;
 
-function isDirectory(path: string): boolean {
-  try {
-    return lstatSync(path).isDirectory();
-  } catch {
-    return false;
-  }
-}
-
 /** The repository folders with no database to map projects by: every folder is taken as it is. */
 function foldersByHand(dataDir: string): FoundRepo[] {
   const found: FoundRepo[] = [];
@@ -744,6 +730,14 @@ function knowledgeRepositories(context: DoctorContext, db: Db | null): Check {
   for (const repo of found) {
     if (!isDirectory(join(repo.path, ".git"))) continue;
     repositories++;
+    try {
+      // The module's own rule: a folder the store did not make is neither read nor handed to git.
+      refuseForeign(repo.path);
+    } catch (error) {
+      if (!(error instanceof KnowledgeError)) throw error;
+      warnings.push(`${repo.relative}: ${error.message}`);
+      continue;
+    }
     try {
       // Never through a link, and never more than the cap: as the module reads every file.
       const bytes = readRegularFile(join(repo.path, MANIFEST_FILE));

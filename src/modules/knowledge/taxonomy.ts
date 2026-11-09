@@ -52,9 +52,9 @@ function checkPerson(person: PersonWriter): void {
 }
 
 /**
- * Writes the next version of the taxonomy in one commit of `taxonomy.md`. `repos` are the
- * repositories whose leases are held, the root first; `next` is given the current areas
- * and returns the new ones, or refuses.
+ * Writes the next version of the taxonomy in one commit of `taxonomy.md`, under the
+ * leases its caller holds. `next` is given the current areas and the root repository, and
+ * returns the new areas, or refuses.
  */
 function change(
   store: KnowledgeStore,

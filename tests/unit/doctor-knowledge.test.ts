@@ -225,7 +225,24 @@ describe("doctor: knowledge", () => {
     const check = knowledge();
     expect(check.status).toBe("warn");
     expect(check.detail).toContain("knowledge.json");
-    expect(check.detail).toContain("not a regular file");
+    expect(check.detail).toContain("a link");
+  });
+
+  test("a linked knowledge folder is a warning, and nothing is read through it", () => {
+    const repo = ensureRepo(store, WORKSPACE);
+    const outside = join(fx.dir, "outside-entries");
+    mkdirSync(outside);
+    writeFileSync(
+      join(outside, "elsewhere.md"),
+      "---\ntitle: Elsewhere\nkind: knowledge\narea: code\nstatus: active\nversion: 1\n---\nA note.\n",
+    );
+    rmSync(join(repo.path, "entries"), { recursive: true });
+    symlinkSync(outside, join(repo.path, "entries"));
+    const check = knowledge();
+    expect(check.status).toBe("warn");
+    expect(check.detail).toContain(join(repo.path, "entries"));
+    expect(check.detail).toContain("a link");
+    expect(check.detail).toContain("0 entries");
   });
 
   test("with no database, the checks that need it are skipped and said", () => {

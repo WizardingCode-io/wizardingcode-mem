@@ -40,7 +40,7 @@ import type {
   KnowledgeStore,
   Repo,
 } from "../../src/modules/knowledge/types.ts";
-import { codeOf, type Fixture, knowledgeFixture } from "../helpers/knowledge.ts";
+import { codeOf, type Fixture, knowledgeFixture, thrown } from "../helpers/knowledge.ts";
 import { realGit, stubGit } from "../helpers/stub-git.ts";
 
 const WORKSPACE = { scope: "workspace" } as const;
@@ -669,6 +669,74 @@ describe("adopt", () => {
     ).toEqual([]);
     // And then it goes through.
     expect(adopt(broken, WORKSPACE, person()).adopted).toBe(3);
+  });
+
+  test("a repository a person put inside the knowledge folders is refused, and nothing is committed", () => {
+    const { repo } = handWork();
+    const nested = join(repo.path, "entries", "notes");
+    mkdirSync(nested);
+    realGit(nested, "init", "-q", "-b", "main");
+    writeFileSync(join(nested, "f.md"), "x\n");
+    const before = commits(repo);
+
+    const call = () => adopt(store, WORKSPACE, person());
+    expect(codeOf(call)).toBe("invalid");
+    expect(thrown(call).message).toContain("entries/notes");
+    expect(commits(repo)).toBe(before);
+    expect(readIntent(repo)).toBeNull();
+    expect(status(repo)).toContain(" M entries/edited-entry.md");
+    // Moved out of the knowledge folders, it no longer stops the person's work.
+    rmSync(nested, { recursive: true });
+    expect(adopt(store, WORKSPACE, person()).adopted).toBe(3);
+  });
+
+  test("an adopt that stops midway is undone at every path, each said once", () => {
+    const { repo, edited, added } = handWork();
+    const taxonomyFile = join(repo.path, "taxonomy.md");
+    const taxonomy = readFileSync(taxonomyFile, "utf8").replace("  - people: People\n", "");
+    writeFileSync(taxonomyFile, taxonomy);
+    writeFileSync(join(repo.path, "entries", "notes.txt"), "not an entry\n");
+    const handState = status(repo);
+    // The commit fails, and so does the first attempt to take the paths out of the index.
+    const broken = fx.store({
+      now: () => clock,
+      env: {
+        WIZARDINGCODE_MEM_AUTHOR: "Zoë",
+        PATH: fx.pathWith(
+          stubGit(join(fx.dir, "stopping-adopt"), {
+            fail: "commit",
+            failOnce: "reset",
+            stderr: "fatal: boom",
+          }),
+        ),
+      },
+    });
+    expect(codeOf(() => adopt(broken, WORKSPACE, person()))).toBe("git");
+
+    // The record says what the adopt left at each of its paths, a removal included.
+    const record = readIntent(repo);
+    expect(Object.keys(record?.written ?? {}).sort()).toEqual([
+      "entries/added-entry.md",
+      "entries/deleted-entry.md",
+      "entries/edited-entry.md",
+      "entries/notes.txt",
+      "taxonomy.md",
+    ]);
+    expect(record?.written?.["entries/deleted-entry.md"]).toBeNull();
+    expect(record?.written?.["taxonomy.md"]).toBe(hashOf(Buffer.from(taxonomy)));
+    expect(record?.written?.["entries/notes.txt"]).toBe(hashOf(Buffer.from("not an entry\n")));
+
+    const said: string[] = [];
+    store.report = (message) => said.push(message);
+    openRepo(store, WORKSPACE);
+    expect(status(repo)).toEqual(handState);
+    expect(readFileSync(entryFile(repo, "edited-entry"), "utf8")).toBe(edited);
+    expect(readFileSync(entryFile(repo, "added-entry"), "utf8")).toBe(added);
+    expect(readFileSync(taxonomyFile, "utf8")).toBe(taxonomy);
+    expect(readIntent(repo)).toBeNull();
+    expect(said).toHaveLength(1);
+    expect(said[0]).toContain("was undone");
+    for (const path of Object.keys(record?.written ?? {})) expect(said[0]).toContain(path);
   });
 
   test("a repository killed mid-adopt gets the person's bytes back at the next open", () => {

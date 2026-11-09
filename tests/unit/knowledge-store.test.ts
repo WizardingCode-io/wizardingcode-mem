@@ -18,9 +18,10 @@ import {
   UUID,
 } from "../../src/modules/knowledge/entry.ts";
 import { ModuleSchemaTooNewError } from "../../src/modules/knowledge/errors.ts";
-import { fileHash, rebuildRepo } from "../../src/modules/knowledge/index-store.ts";
+import { rebuildRepo } from "../../src/modules/knowledge/index-store.ts";
 import {
   ensureRepo,
+  hashOf,
   headOf,
   leaseKey,
   openRepo,
@@ -214,7 +215,7 @@ describe("a person's write", () => {
       status: "active",
       body: "The body.",
       problem: null,
-      hash: fileHash(readFileSync(entryFile(repo))),
+      hash: hashOf(readFileSync(entryFile(repo))),
     });
     expect(repoRow(repo)?.head).toBe(headOf(repo.path));
     expect(repoRow(repo)?.head).not.toBeNull();
@@ -522,7 +523,7 @@ describe("an agent's write", () => {
       entryId: entry.id,
       slug: SLUG,
       baseVersion: 2,
-      baseHash: fileHash(readFileSync(entryFile(repo))),
+      baseHash: hashOf(readFileSync(entryFile(repo))),
       proposedBy: "agent:claude-code",
       proposedAt: nowIso(clock),
       body: "The agent's body.",

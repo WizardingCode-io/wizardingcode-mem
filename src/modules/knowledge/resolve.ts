@@ -1,12 +1,13 @@
 // Which folder is which repository. The workspace and the shared repositories have fixed
 // folders. A project's repository is found by its manifest, not by its folder name: a
 // project that gains a remote, or whose index rows were lost, still finds the same folder.
-import { lstatSync, mkdirSync, readdirSync } from "node:fs";
+import { mkdirSync, readdirSync } from "node:fs";
 import { withWrite } from "../../store/db.ts";
 import { nowIso } from "./entry.ts";
 import { KnowledgeError } from "./errors.ts";
 import {
   existsOnDisk,
+  isDirectory,
   knowledgeRoot,
   projectFolderName,
   readManifest,
@@ -19,14 +20,6 @@ import { requireSchema } from "./schema.ts";
 import type { KnowledgeStore, Manifest, Repo, ScopeRef, Writer } from "./types.ts";
 
 const PROJECTS = "knowledge/projects";
-
-function isDirectory(path: string): boolean {
-  try {
-    return lstatSync(path).isDirectory();
-  } catch {
-    return false;
-  }
-}
 
 /** Only these aliases tie a manifest to a project: a folder path can be reused by another repository. */
 const strong = (alias: string) => alias.startsWith("remote:") || alias.startsWith("gitdir:");

@@ -3,6 +3,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import {
   ensureRepo,
+  leaseKey,
   openRepo,
   projectFolderName,
   readManifest,
@@ -11,6 +12,7 @@ import {
 } from "../../src/modules/knowledge/repo.ts";
 import { listRepos, resolveRepo } from "../../src/modules/knowledge/resolve.ts";
 import type { Manifest } from "../../src/modules/knowledge/types.ts";
+import { setMeta } from "../../src/store/meta.ts";
 import { codeOf, type Fixture, knowledgeFixture } from "../helpers/knowledge.ts";
 import { realGit } from "../helpers/stub-git.ts";
 
@@ -131,6 +133,35 @@ describe("resolveRepo", () => {
     expect(realGit(first.path, "status", "--porcelain")).toBe("");
     ensureRepo(store, project(id));
     expect(commits()).toBe(2);
+  });
+
+  test("the manifest's commit waits while another process holds the repository", () => {
+    const store = fx.store({ env: { WIZARDINGCODE_MEM_AUTHOR: "Writer" } });
+    const id = fx.addProject("gitdir:/x/.git", "path:/x");
+    const first = ensureRepo(store, project(id));
+    const commits = () => Number(realGit(first.path, "rev-list", "--count", "HEAD").trim());
+    fx.db.run(
+      "INSERT INTO project_aliases (alias, project_id) VALUES ('remote:github.com/x/y', ?)",
+      [id],
+    );
+    // Another live process is working in the project's repository.
+    const key = leaseKey(first.relative);
+    setMeta(
+      fx.db,
+      key,
+      JSON.stringify({ owner: `${process.pid}-writer`, until: store.now() + 60_000 }),
+    );
+
+    expect(ensureRepo(store, project(id)).relative).toBe(first.relative);
+    expect(commits()).toBe(1);
+    expect(readManifest(first.path)?.project?.aliases).toEqual(["gitdir:/x/.git", "path:/x"]);
+    expect(realGit(first.path, "status", "--porcelain")).toBe("");
+
+    // Once that process is done, the next write teaches the manifest.
+    fx.db.run("DELETE FROM meta WHERE key = ?", [key]);
+    ensureRepo(store, project(id));
+    expect(commits()).toBe(2);
+    expect(readManifest(first.path)?.project?.aliases).toContain("remote:github.com/x/y");
   });
 
   test("a manifest the person is editing is left to them", () => {

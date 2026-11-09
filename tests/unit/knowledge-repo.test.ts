@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
+  appendFileSync,
   chmodSync,
   existsSync,
   mkdirSync,
@@ -8,6 +9,7 @@ import {
   rmSync,
   statSync,
   symlinkSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
@@ -24,6 +26,7 @@ import {
   GIT_TIMEOUT_MS,
   hashOf,
   headOf,
+  type Intent,
   KNOWLEDGE_LEASE_MS,
   keepBytes,
   knowledgeRoot,
@@ -37,6 +40,7 @@ import {
   repoFolder,
   requireGit,
   resetGitCaches,
+  restoreKept,
   rootOf,
   runGit,
   stagePaths,
@@ -76,6 +80,24 @@ function commitFile(store: KnowledgeStore, repo: Repo, path: string, text: strin
   stagePaths(store, repo, [path], "write");
   commitPaths(store, repo, [path], `test: ${path}`, identityOf(personAuthor(store)), "write");
 }
+
+/** A program that leaves a marker when git runs it. */
+function trap(name: string): { script: string; marker: string } {
+  const marker = join(fx.dir, `${name}-ran`);
+  const script = join(fx.dir, `${name}.sh`);
+  writeFileSync(script, `#!/bin/sh\n: > '${marker}'\ncat\n`);
+  chmodSync(script, 0o755);
+  return { script, marker };
+}
+
+const AN_ENTRY = {
+  title: "An entry",
+  kind: "knowledge",
+  area: "code",
+  context: "",
+  subject: "",
+  body: "x",
+} as const;
 
 describe("names and versions", () => {
   test("the constants", () => {
@@ -324,6 +346,109 @@ describe("a repository's own git configuration", () => {
     }
     writeFileSync(config, `${BASE}\tignorecase = true\n# hooksPath = commented\n`);
     expect(codeOf(() => checkRepoConfig(repo.path))).toBeNull();
+  });
+
+  test("a second section on a header's line is read as git reads it, and its program never runs", () => {
+    const store = fx.store({ env: { WIZARDINGCODE_MEM_AUTHOR: "Writer" } });
+    const repo = ensureRepo(store, WORKSPACE);
+    const { script, marker } = trap("second-header");
+    writeFileSync(
+      join(repo.path, ".git", "config"),
+      `${BASE}[core][filter "x"]\n\tclean = ${script}\n`,
+    );
+    writeFileSync(join(repo.path, ".gitattributes"), "* filter=x\n");
+    // git itself reads that line as a filter section.
+    expect(realGit(repo.path, "config", "--local", "--list")).toContain("filter.x.clean=");
+
+    expect(codeOf(() => checkRepoConfig(repo.path))).toBe("invalid");
+    expect(thrown(() => checkRepoConfig(repo.path)).message).toContain("filter.x.clean");
+    expect(codeOf(() => openRepo(store, WORKSPACE))).toBe("invalid");
+    expect(codeOf(() => writeEntry(store, WORKSPACE, AN_ENTRY, personAuthor(store)))).toBe(
+      "invalid",
+    );
+    expect(existsSync(marker)).toBe(false);
+    expect(existsSync(join(repo.path, "entries", "an-entry.md"))).toBe(false);
+  });
+
+  test("only the settings git init writes are allowed, each line read as git reads it", () => {
+    const store = fx.store();
+    const repo = ensureRepo(store, WORKSPACE);
+    const config = join(repo.path, ".git", "config");
+    const messageFor = (text: string) => {
+      writeFileSync(config, text);
+      expect(codeOf(() => checkRepoConfig(repo.path))).toBe("invalid");
+      return thrown(() => checkRepoConfig(repo.path)).message;
+    };
+
+    const refused: [string, string][] = [
+      [`${BASE}[remote "origin"]\n\turl = ext::sh -c x\n`, "remote.origin.url"],
+      [`${BASE}[protocol "ext"]\n\tallow = always\n`, "protocol.ext.allow"],
+      [`${BASE}[alias]\n\tst = !sh -c x\n`, "alias.st"],
+      [`${BASE}[credential]\n\thelper = /tmp/x\n`, "credential.helper"],
+      [`${BASE}[submodule]\n\trecurse = true\n`, "submodule.recurse"],
+      [`${BASE}[extensions]\n\tpartialClone = origin\n`, "extensions.partialClone"],
+      [`${BASE}\tworktree = /tmp/elsewhere\n`, "core.worktree"],
+      [`${BASE}\tattributesFile = /tmp/x\n`, "core.attributesFile"],
+      [`${BASE}\tpager = /tmp/x\n`, "core.pager"],
+      // A lone carriage return is white space to git, not the end of a line.
+      ['[core]\r[filter "x"]\n\tclean = /tmp/x\n', "filter.x.clean"],
+      // The old spelling of a subsection.
+      ["[filter.x]\n\tclean = /tmp/x\n", "filter.x.clean"],
+      ['[core] [diff "x"] textconv = /tmp/x\n', "diff.x.textconv"],
+      // A value that goes on to the next line: every line is still read as a line.
+      [`${BASE}\tbare = \\\n[filter "x"]\n\tclean = /tmp/x\n`, "filter.x.clean"],
+    ];
+    for (const [text, name] of refused) expect(messageFor(text)).toContain(name);
+
+    // A line git would not take, or would take another way, is refused by its number.
+    const unread: [string, number][] = [
+      ["bare = false\n", 1],
+      [`${BASE}!!\n`, 5],
+      [`${BASE}[core\n`, 5],
+      [`${BASE}[core "x" y]\n`, 5],
+      [`${BASE}\tbare false\n`, 5],
+      [`${BASE}[ core]\n`, 5],
+    ];
+    for (const [text, line] of unread) expect(messageFor(text)).toContain(`line ${line}`);
+
+    const allowed = [
+      BASE,
+      `${String.fromCharCode(0xfeff)}${BASE}`,
+      BASE.replaceAll("\n", "\r\n"),
+      "[CORE]\n\tRepositoryFormatVersion = 0\n\tFileMode = true\n\tBARE = false\n\tlogallrefupdates = true\n\tignorecase = true\n\tprecomposeunicode = true\n\tsymlinks = false\n",
+      "[core] bare = false\n",
+      `${BASE}; a comment\n# another\n\n\t  \n`,
+      `${BASE}[core]\n\tbare\n`,
+      '[core "any"]\n',
+    ];
+    for (const text of allowed) {
+      writeFileSync(config, text);
+      expect(codeOf(() => checkRepoConfig(repo.path))).toBeNull();
+    }
+  });
+
+  test("the repository git init makes on this machine passes the check", () => {
+    const repo = ensureRepo(fx.store(), WORKSPACE);
+    expect(readFileSync(join(repo.path, ".git", "config"), "utf8")).toContain("[core]");
+    expect(codeOf(() => checkRepoConfig(repo.path))).toBeNull();
+  });
+
+  test("a configuration that is a link, or too large to be one git init wrote, is refused", () => {
+    const store = fx.store();
+    const repo = ensureRepo(store, WORKSPACE);
+    const config = join(repo.path, ".git", "config");
+    const outside = join(fx.dir, "outside-config");
+    writeFileSync(outside, BASE);
+    rmSync(config);
+    symlinkSync(outside, config);
+    expect(codeOf(() => checkRepoConfig(repo.path))).toBe("invalid");
+    expect(thrown(() => checkRepoConfig(repo.path)).message).toContain("not a regular file");
+    expect(codeOf(() => openRepo(store, WORKSPACE))).toBe("invalid");
+
+    rmSync(config);
+    writeFileSync(config, `${BASE}${"# padding\n".repeat(30_000)}`);
+    expect(codeOf(() => checkRepoConfig(repo.path))).toBe("invalid");
+    expect(thrown(() => checkRepoConfig(repo.path)).message).toContain("256 KiB");
   });
 });
 
@@ -656,7 +781,7 @@ describe("an interrupted operation", () => {
   test("the intent record round-trips", () => {
     const repo = ensureRepo(fx.store(), WORKSPACE);
     expect(readIntent(repo)).toBeNull();
-    const intent = {
+    const intent: Intent = {
       operation: "accept",
       writer: person,
       existed: ["entries/a.md"],
@@ -857,6 +982,177 @@ describe("an interrupted operation", () => {
     expect(said.join("\n")).toContain("entries/b.md");
   });
 
+  test("a path the operation never reached is neither touched nor reported", () => {
+    const { store, said } = reporting();
+    const repo = ensureRepo(store, WORKSPACE);
+    // The operation wrote and staged the first of its two files, then died.
+    writeFileSync(join(repo.path, "entries", "one.md"), "written\n");
+    stagePaths(store, repo, ["entries/one.md"], "write");
+    writeIntent(repo, {
+      operation: "write",
+      writer: person,
+      existed: [],
+      created: ["entries/one.md", "entries/two.md"],
+      written: { "entries/one.md": hash("written\n"), "entries/two.md": hash("never written\n") },
+    });
+
+    openRepo(store, WORKSPACE);
+    expect(status(repo)).toBe("");
+    expect(readIntent(repo)).toBeNull();
+    expect(said).toHaveLength(1);
+    expect(said[0]).toContain("entries/one.md");
+    expect(said[0]).not.toContain("entries/two.md");
+  });
+
+  test("an adopt whose commit landed is not undone for the files the person left alone", () => {
+    const { store, said } = reporting();
+    const repo = ensureRepo(store, WORKSPACE);
+    // The adopt committed its rewrite of both files, then died before removing its record.
+    commitFile(store, repo, "entries/a.md", "a, stamped\n");
+    commitFile(store, repo, "entries/b.md", "b, stamped\n");
+    const kept = keepBytes(
+      repo,
+      new Map([
+        ["entries/a.md", Buffer.from("a, by hand\n")],
+        ["entries/b.md", Buffer.from("b, by hand\n")],
+      ]),
+    );
+    writeIntent(repo, {
+      operation: "adopt",
+      writer: person,
+      existed: [],
+      created: ["entries/a.md", "entries/b.md"],
+      written: { "entries/a.md": hash("a, stamped\n"), "entries/b.md": hash("b, stamped\n") },
+      keptBytesFile: kept,
+    });
+    // The person goes on working on a before the next command.
+    writeFileSync(join(repo.path, "entries", "a.md"), "a, edited again\n");
+
+    openRepo(store, WORKSPACE);
+    expect(readFileSync(join(repo.path, "entries", "b.md"), "utf8")).toBe("b, stamped\n");
+    expect(readFileSync(join(repo.path, "entries", "a.md"), "utf8")).toBe("a, edited again\n");
+    expect(status(repo)).toBe(" M entries/a.md");
+    expect(readIntent(repo)).toBeNull();
+    expect(existsSync(join(repo.path, ".git", kept))).toBe(false);
+    expect(said).toHaveLength(1);
+    expect(said[0]).toContain("entries/a.md");
+    expect(said[0]).not.toContain("entries/b.md");
+  });
+
+  test("a record that names a path outside the knowledge folders is not acted on", () => {
+    const store = fx.store();
+    const repo = ensureRepo(store, WORKSPACE);
+    const config = join(repo.path, ".git", "config");
+    const before = readFileSync(config, "utf8");
+    // What a dropped folder could carry: a record and kept bytes that name the configuration.
+    const kept = keepBytes(
+      repo,
+      new Map([[".git/config", Buffer.from(`${before}[filter "x"]\n\tclean = /tmp/x\n`)]]),
+    );
+    writeFileSync(join(repo.path, "entries", "x.md"), "untracked\n");
+    writeFileSync(
+      join(repo.path, ".git", "wizardingcode-op.json"),
+      JSON.stringify({
+        operation: "adopt",
+        writer: person,
+        existed: [".git/config", "entries/x.md"],
+        created: [],
+        written: { ".git/config": hash(before) },
+        keptBytesFile: kept,
+      }),
+    );
+
+    expect(readIntent(repo)).toBeNull();
+    expect(openRepo(store, WORKSPACE)?.id).toBe(repo.id);
+    expect(readFileSync(config, "utf8")).toBe(before);
+    expect(existsSync(join(repo.path, ".git", "wizardingcode-op.json"))).toBe(false);
+    expect(readFileSync(join(repo.path, "entries", "x.md"), "utf8")).toBe("untracked\n");
+  });
+
+  test("a record is read only when every path is one the store writes", () => {
+    const repo = ensureRepo(fx.store(), WORKSPACE);
+    const file = join(repo.path, ".git", "wizardingcode-op.json");
+    const read = (fields: Record<string, unknown>) => {
+      writeFileSync(
+        file,
+        JSON.stringify({ operation: "write", writer: person, existed: [], created: [], ...fields }),
+      );
+      return readIntent(repo);
+    };
+    const outside = [
+      ".git/config",
+      ".GIT/config",
+      "../outside.md",
+      "entries/../.git/config",
+      "entries/.git/config",
+      "entries//a.md",
+      "entries/",
+      "entries",
+      "/etc/hosts",
+      "README.md",
+      ".gitignore",
+    ];
+    for (const path of outside) {
+      expect(read({ existed: [path] })).toBeNull();
+      expect(read({ created: [path] })).toBeNull();
+      expect(read({ written: { [path]: null } })).toBeNull();
+    }
+    expect(read({ operation: "something else" })).toBeNull();
+    expect(read({ keptBytesFile: "../config" })).toBeNull();
+    expect(read({ written: ["entries/a.md"] })).toBeNull();
+
+    const own = [
+      "knowledge.json",
+      "taxonomy.md",
+      "entries/a.md",
+      "entries/assets/a.png",
+      "proposals/open/x.md",
+      "proposals/decided/x.md",
+    ];
+    for (const path of own) {
+      expect(read({ existed: [path], written: { [path]: "0123456789abcdef" } })).not.toBeNull();
+    }
+    for (const operation of ["write", "accept", "reject", "adopt", "taxonomy"] as const) {
+      expect(read({ operation })?.operation).toBe(operation);
+    }
+  });
+
+  test("kept bytes are written back only as entry files", () => {
+    const repo = ensureRepo(fx.store(), WORKSPACE);
+    const config = join(repo.path, ".git", "config");
+    const before = readFileSync(config, "utf8");
+    // A folder under entries/ that leads out of the repository.
+    const outside = join(fx.dir, "outside-kept");
+    mkdirSync(outside);
+    symlinkSync(outside, join(repo.path, "entries", "linked"));
+    const kept = keepBytes(
+      repo,
+      new Map([
+        [".git/config", Buffer.from("replaced\n")],
+        ["entries/linked/a.md", Buffer.from("through a link\n")],
+        ["entries/deeper/a.md", Buffer.from("in a folder\n")],
+        ["taxonomy.md", Buffer.from("replaced\n")],
+        ["entries/a.md", Buffer.from("kept\n")],
+      ]),
+    );
+    const taxonomy = readFileSync(join(repo.path, "taxonomy.md"), "utf8");
+    restoreKept(repo, kept);
+    expect(readFileSync(config, "utf8")).toBe(before);
+    expect(readdirSync(outside)).toEqual([]);
+    expect(existsSync(join(repo.path, "entries", "deeper"))).toBe(false);
+    expect(readFileSync(join(repo.path, "taxonomy.md"), "utf8")).toBe(taxonomy);
+    expect(readFileSync(join(repo.path, "entries", "a.md"), "utf8")).toBe("kept\n");
+    expect(existsSync(join(repo.path, ".git", kept))).toBe(false);
+  });
+
+  test("undoing never removes a file outside the knowledge folders", () => {
+    const store = fx.store();
+    const repo = ensureRepo(store, WORKSPACE);
+    const call = () => undoStaged(store, repo, { existed: [], created: [".git/config"] }, "write");
+    expect(codeOf(call)).toBe("invalid");
+    expect(existsSync(join(repo.path, ".git", "config"))).toBe(true);
+  });
+
   test("the revert waits while another process holds the repository", () => {
     const store = fx.store();
     const repo = ensureRepo(store, WORKSPACE);
@@ -882,15 +1178,6 @@ describe("an interrupted operation", () => {
 
 describe("a folder that is not the store's own repository", () => {
   const BASE = "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n";
-
-  /** A program that leaves a marker when git runs it. */
-  function trap(name: string): { script: string; marker: string } {
-    const marker = join(fx.dir, `${name}-ran`);
-    const script = join(fx.dir, `${name}.sh`);
-    writeFileSync(script, `#!/bin/sh\n: > '${marker}'\ncat\n`);
-    chmodSync(script, 0o755);
-    return { script, marker };
-  }
 
   test("a configuration git would read from somewhere else is refused", () => {
     const store = fx.store();
@@ -1011,6 +1298,73 @@ describe("a folder that is not the store's own repository", () => {
     expect(codeOf(call)).toBe("invalid");
     expect(thrown(call).message).toContain("entries");
     expect(readdirSync(outside)).toEqual([]);
+  });
+
+  test("a link where the store keeps a file of its own is refused, and nothing is written through it", () => {
+    const outside = join(fx.dir, "the-persons-file.txt");
+    writeFileSync(outside, "the person's file\n");
+    const folder = join(fx.dataDir, "knowledge", "workspace");
+    mkdirSync(folder, { recursive: true });
+    for (const name of [".gitignore", "taxonomy.md", "knowledge.json"]) {
+      symlinkSync(outside, join(folder, name));
+      const call = () => ensureRepo(fx.store(), WORKSPACE);
+      expect(codeOf(call)).toBe("invalid");
+      expect(thrown(call).message).toContain(name);
+      expect(readFileSync(outside, "utf8")).toBe("the person's file\n");
+      expect(existsSync(join(folder, ".git"))).toBe(false);
+      rmSync(join(folder, name));
+    }
+    // A link to nothing is a link all the same: its target is never created.
+    symlinkSync(join(fx.dir, "not-there.md"), join(folder, "taxonomy.md"));
+    expect(codeOf(() => ensureRepo(fx.store(), WORKSPACE))).toBe("invalid");
+    expect(existsSync(join(fx.dir, "not-there.md"))).toBe(false);
+  });
+
+  test("git never runs in a repository nested in the store's", () => {
+    const store = fx.store();
+    const repo = ensureRepo(store, WORKSPACE);
+    const { script, marker } = trap("nested");
+    const nested = join(repo.path, "entries", "sub");
+    mkdirSync(nested);
+    realGit(nested, "init", "-q", "-b", "main");
+    writeFileSync(join(nested, "f.txt"), "one\n");
+    realGit(nested, "add", "f.txt");
+    realGit(
+      nested,
+      "-c",
+      "user.name=t",
+      "-c",
+      "user.email=t@example.invalid",
+      "commit",
+      "-qm",
+      "x",
+    );
+    const head = realGit(nested, "rev-parse", "HEAD").trim();
+    // The nested repository's own configuration is one the store never reads.
+    appendFileSync(join(nested, ".git", "config"), `[filter "x"]\n\tclean = ${script}\n`);
+    writeFileSync(join(nested, ".gitattributes"), "* filter=x\n");
+    const later = new Date(Date.now() + 60_000);
+    utimesSync(join(nested, "f.txt"), later, later);
+    // The index a dropped folder could carry: an entry that points at the nested repository.
+    realGit(repo.path, "update-index", "--add", "--cacheinfo", `160000,${head},entries/sub`);
+
+    expect(openRepo(store, WORKSPACE)?.id).toBe(repo.id);
+    expect(statusOf(store, repo, [])).toEqual([]);
+    expect(existsSync(marker)).toBe(false);
+    // The trap is live: git without the store's flag does run it.
+    realGit(repo.path, "status", "--porcelain");
+    expect(existsSync(marker)).toBe(true);
+  });
+
+  test("a .gitmodules file is refused: the store keeps no nested repositories", () => {
+    const store = fx.store();
+    const repo = ensureRepo(store, WORKSPACE);
+    writeFileSync(
+      join(repo.path, ".gitmodules"),
+      '[submodule "x"]\n\tpath = entries/sub\n\tignore = none\n',
+    );
+    expect(codeOf(() => openRepo(store, WORKSPACE))).toBe("invalid");
+    expect(thrown(() => openRepo(store, WORKSPACE)).message).toContain(".gitmodules");
   });
 
   test("a temporary file name that is already a link is not written through", () => {

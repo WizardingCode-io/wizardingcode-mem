@@ -107,7 +107,8 @@ export function rootOf(ref: ScopeRef): RootRef {
   return ref.scope === "shared" ? { scope: "shared" } : { scope: "workspace" };
 }
 
-function isDirectory(path: string): boolean {
+/** Whether a folder is at the path itself: a link to a folder is not one. */
+export function isDirectory(path: string): boolean {
   try {
     return lstatSync(path).isDirectory();
   } catch {
@@ -128,8 +129,9 @@ export function existsOnDisk(path: string): boolean {
 /**
  * Refuses a folder the store did not make: one that is a link, one whose `.git` is a file
  * or a link (a gitfile names another repository, and every later commit would land
- * there), or one whose knowledge folders are links. Checked before git is run and before
- * anything is written, so nothing is read or written outside the repository.
+ * there), one whose knowledge folders or own files are links, or one with a `.gitmodules`
+ * file (the store keeps no repository inside its own). Checked before git is run and
+ * before anything is written, so nothing is read or written outside the repository.
  */
 export function refuseForeign(repoFolder: string): void {
   const refuse = (path: string, what: string): never => {
@@ -159,6 +161,20 @@ export function refuseForeign(repoFolder: string): void {
     if (found !== null && !found.isDirectory()) {
       refuse(path, found.isSymbolicLink() ? "a link" : "not a folder");
     }
+  }
+  for (const name of [MANIFEST_FILE, TAXONOMY_FILE, ".gitignore"]) {
+    const path = join(repoFolder, name);
+    const found = kind(path);
+    if (found !== null && !found.isFile()) {
+      refuse(path, found.isSymbolicLink() ? "a link" : "not a regular file");
+    }
+  }
+  const modules = join(repoFolder, ".gitmodules");
+  if (kind(modules) !== null) {
+    throw new KnowledgeError(
+      "invalid",
+      `${modules} names repositories nested in this one, and the knowledge store keeps none; remove it`,
+    );
   }
 }
 
@@ -291,6 +307,13 @@ function configArgs(dataDir: string): string[] {
     "core.pager=cat",
     "diff.external=",
     "core.sshCommand=",
+    // git never looks into a repository nested in this one.
+    "diff.ignoreSubmodules=all",
+    "submodule.recurse=false",
+    // A new repository keeps the formats the store reads, whatever a later git defaults
+    // to: other formats are written to `.git/config` as extensions, which are refused.
+    "init.defaultObjectFormat=sha1",
+    "init.defaultRefFormat=files",
   ];
   return settings.flatMap((setting) => ["-c", setting]);
 }
@@ -403,28 +426,38 @@ export function gitUserName(store: KnowledgeStore): string | null {
   return name;
 }
 
-const REFUSED_SECTIONS: Record<string, string> = {
-  include: "include",
-  includeif: "includeIf",
-  filter: "filter",
-};
-/** Keys that name a program git would run, or that make git read its configuration elsewhere. */
-const REFUSED_KEYS: Record<string, string> = {
-  hookspath: "core.hooksPath",
-  fsmonitor: "core.fsmonitor",
-  sshcommand: "core.sshCommand",
-  worktreeconfig: "extensions.worktreeConfig",
-  textconv: "a diff driver's textconv",
-  command: "a diff driver's command",
-  driver: "a merge driver",
-};
+/**
+ * The settings `git init` writes into a new repository, in git's own lower case. A
+ * knowledge repository's configuration may carry these and no other: a list of what is
+ * refused would have to name every setting that runs a program or reads another file.
+ */
+const ALLOWED_SETTINGS = new Set([
+  "core.repositoryformatversion",
+  "core.filemode",
+  "core.bare",
+  "core.logallrefupdates",
+  "core.ignorecase",
+  "core.precomposeunicode",
+  "core.symlinks",
+]);
 /** Files under `.git/` that make git read a configuration other than `.git/config`. */
 const REFUSED_FILES = ["commondir", "config.worktree"];
 
+// The tokens of one configuration line, as git's parser takes them: white space, any
+// number of section headers, then at most one key. git's white space is these six
+// characters; a carriage return alone does not end a line.
+const CONFIG_SPACE = /^[ \t\v\f\r]+/;
+const CONFIG_HEADER = /^\[([A-Za-z0-9.-]+)(?:[ \t\v\f\r]+"((?:[^"\\]|\\.)*)")?\]/;
+const CONFIG_KEY = /^([A-Za-z][A-Za-z0-9-]*)[ \t]*(?:=|$)/;
+/** How much of a subsection's name a refusal shows. */
+const SHOWN_MAX = 40;
+
 /**
- * Refuses a repository whose own configuration could run a program, before git is run in
- * it. A folder a person or a later sync dropped under `knowledge/` could carry one: a
- * filter runs on add or restore. Read as text, with no process. git reads a repository's
+ * Refuses a repository whose own configuration holds anything but the settings `git
+ * init` writes, before git is run in it. A folder a person or a later sync dropped under
+ * `knowledge/` could carry a configuration that runs a program: a filter runs on add or
+ * restore. Read as text, with no process, every line by git's own grammar: a line the
+ * store cannot read that way is refused, never skipped. git reads a repository's
  * configuration from `.git/config`, from the directory a `commondir` file names, and from
  * `config.worktree` when the worktree extension is on: the last two are refused outright,
  * so the one file read here is the one git reads.
@@ -435,7 +468,7 @@ export function checkRepoConfig(repo: string): void {
   const refuse = (name: string): never => {
     throw new KnowledgeError(
       "invalid",
-      `the repository's own git configuration sets ${name}, which the knowledge store never allows; remove it from ${file}`,
+      `the repository's own git configuration sets ${name}, and a knowledge repository carries only the settings git init writes; remove it from ${file}`,
     );
   };
   for (const name of REFUSED_FILES) {
@@ -446,25 +479,50 @@ export function checkRepoConfig(repo: string): void {
       );
     }
   }
-  let text: string;
-  try {
-    text = readFileSync(file, "utf8");
-  } catch {
-    return;
-  }
-  for (const raw of text.split("\n")) {
-    let line = raw.trim();
-    if (line === "" || line.startsWith("#") || line.startsWith(";")) continue;
-    const header = /^\[\s*([A-Za-z0-9-]+)[^\]]*\]\s*(.*)$/.exec(line);
-    if (header !== null) {
-      const section = REFUSED_SECTIONS[(header[1] as string).toLowerCase()];
-      if (section !== undefined) refuse(section);
-      // A key may follow its section on the same line.
-      line = header[2] as string;
+  // A regular file within the cap, or the repository is refused: git would follow a link
+  // to another file, and no configuration `git init` writes is that large.
+  const bytes = readRegularFile(file);
+  if (bytes === null) return;
+  // The decoder drops a leading byte order mark, as git does.
+  const text = new TextDecoder().decode(bytes);
+  // The section the next key belongs to: its name as git compares it, and as it is shown.
+  let section: { name: string; shown: string } | null = null;
+  // Every physical line is read, also one that continues the value before it: git reads
+  // fewer lines as settings than this does, never more.
+  const lines = text.split("\n");
+  for (const [index, raw] of lines.entries()) {
+    let rest = raw.endsWith("\r") ? raw.slice(0, -1) : raw;
+    for (;;) {
+      rest = rest.replace(CONFIG_SPACE, "");
+      if (rest === "" || rest.startsWith("#") || rest.startsWith(";")) break;
+      const header = CONFIG_HEADER.exec(rest);
+      if (header !== null) {
+        const base = header[1] as string;
+        const subsection = header[2];
+        section =
+          subsection === undefined
+            ? { name: base.toLowerCase(), shown: base }
+            : {
+                name: `${base.toLowerCase()}.${subsection}`,
+                // A subsection is any text: shown without what a terminal would act on.
+                shown: `${base}.${subsection.replace(/[^\x20-\x7e]/g, "?").slice(0, SHOWN_MAX)}`,
+              };
+        rest = rest.slice(header[0].length);
+        continue;
+      }
+      const key = CONFIG_KEY.exec(rest)?.[1];
+      if (key === undefined || section === null) {
+        throw new KnowledgeError(
+          "invalid",
+          `line ${index + 1} of ${file} is not one the knowledge store reads the way git does, and a knowledge repository carries only the settings git init writes; remove the line`,
+        );
+      }
+      if (!ALLOWED_SETTINGS.has(`${section.name}.${key.toLowerCase()}`)) {
+        refuse(`${section.shown}.${key}`);
+      }
+      // The rest of the line is the key's value.
+      break;
     }
-    const key = /^([A-Za-z][A-Za-z0-9-]*)/.exec(line)?.[1]?.toLowerCase();
-    const refused = key === undefined ? undefined : REFUSED_KEYS[key];
-    if (refused !== undefined) refuse(refused);
   }
 }
 
@@ -550,16 +608,17 @@ function createRepository(store: KnowledgeStore, repo: Repo): void {
   }
   // The manifest is already there: `resolveRepo` writes it with the folder.
   const paths = [MANIFEST_FILE, ".gitignore"];
-  writeFileSync(join(repo.path, ".gitignore"), `${GITIGNORE.join("\n")}\n`);
+  // Written beside the name and renamed over it: never through a link left at the name.
+  writeFileAtomic(join(repo.path, ".gitignore"), `${GITIGNORE.join("\n")}\n`);
   if (repo.ref.scope !== "project") {
     paths.push(TAXONOMY_FILE);
-    if (!existsSync(join(repo.path, TAXONOMY_FILE))) {
+    if (!existsOnDisk(join(repo.path, TAXONOMY_FILE))) {
       const taxonomy = {
         version: 1,
         updated: nowIso(store.now()),
         areas: DEFAULT_AREAS.map((area) => ({ ...area })),
       };
-      writeFileSync(join(repo.path, TAXONOMY_FILE), renderTaxonomy(taxonomy));
+      writeFileAtomic(join(repo.path, TAXONOMY_FILE), renderTaxonomy(taxonomy));
     }
   }
   for (const folder of FOLDERS) {
@@ -580,31 +639,53 @@ function createRepository(store: KnowledgeStore, repo: Repo): void {
  * A project's manifest learns the aliases the project has gained (a remote added to a
  * repository that had none), in a commit of `knowledge.json` alone by the person: the
  * engine's own change is never left for `adopt` to credit to someone. Only on a write
- * path, under the leases. A manifest a person is editing is left to them.
+ * path, and under the repository's own lease. A manifest a person is editing is left to
+ * them.
  */
 function learnAliases(store: KnowledgeStore, repo: Repo): void {
   if (repo.ref.scope !== "project") return;
-  const manifest = readManifest(repo.path);
-  const aliases = projectAliasesOf(store, repo.ref.projectId);
-  if (manifest === null || aliases === null) return;
-  const known = manifest.project?.aliases ?? [];
-  const gained = aliases.filter((alias) => !known.includes(alias));
-  if (gained.length === 0) return;
-  if (statusOf(store, repo, [MANIFEST_FILE]).length > 0) return;
-  writeManifest(repo.path, { ...manifest, project: { aliases: [...known, ...gained] } });
+  const projectId = repo.ref.projectId;
+  const unlearned = () => {
+    const manifest = readManifest(repo.path);
+    const aliases = projectAliasesOf(store, projectId);
+    if (manifest === null || aliases === null) return null;
+    const known = manifest.project?.aliases ?? [];
+    const gained = aliases.filter((alias) => !known.includes(alias));
+    return gained.length === 0 ? null : { manifest, known, gained };
+  };
+  // Most opens have nothing to learn, and take no lease to find that out.
+  if (unlearned() === null) return;
+  const learn = () => {
+    // Read again under the lease: another process may have learned them meanwhile.
+    const found = unlearned();
+    if (found === null || statusOf(store, repo, [MANIFEST_FILE]).length > 0) return;
+    const { manifest, known, gained } = found;
+    writeManifest(repo.path, { ...manifest, project: { aliases: [...known, ...gained] } });
+    try {
+      stagePaths(store, repo, [MANIFEST_FILE], "write");
+      commitPaths(
+        store,
+        repo,
+        [MANIFEST_FILE],
+        `knowledge: manifest learns ${gained.length === 1 ? "an alias" : `${gained.length} aliases`} of its project`,
+        identityOf(personAuthor(store)),
+        "write",
+      );
+    } catch (error) {
+      undoStaged(store, repo, { existed: [MANIFEST_FILE], created: [] }, "write");
+      throw error;
+    }
+  };
+  if (holds(store, repo.relative)) {
+    learn();
+    return;
+  }
+  // The commit is made under the repository's own lease. While another process holds
+  // it, the aliases wait for the next write.
   try {
-    stagePaths(store, repo, [MANIFEST_FILE], "write");
-    commitPaths(
-      store,
-      repo,
-      [MANIFEST_FILE],
-      `knowledge: manifest learns ${gained.length === 1 ? "an alias" : `${gained.length} aliases`} of its project`,
-      identityOf(personAuthor(store)),
-      "write",
-    );
+    withRepoLeases(store, [repo.relative], learn);
   } catch (error) {
-    undoStaged(store, repo, { existed: [MANIFEST_FILE], created: [] }, "write");
-    throw error;
+    if (!(error instanceof KnowledgeError && error.code === "locked")) throw error;
   }
 }
 
@@ -675,12 +756,26 @@ export function fingerprintOf(repo: string): string {
 
 // --- Staging, committing, undoing -------------------------------------------------------
 
-/** The porcelain lines of the given paths (the whole repository when none): `XY path`. */
+/**
+ * The porcelain lines of the given paths (the whole repository when none): `XY path`.
+ * A repository nested in this one is never looked into: without the flag, git runs a
+ * second `git status` inside it, under that repository's own configuration, which the
+ * store never checked. The flag given here wins over any setting, a `.gitmodules` one too.
+ */
 export function statusOf(store: KnowledgeStore, repo: Repo, paths: string[]): string[] {
   const answer = runGit(
     store,
     repo.path,
-    ["status", "--porcelain", "-z", "--untracked-files=all", "--no-renames", "--", ...paths],
+    [
+      "status",
+      "--porcelain",
+      "-z",
+      "--untracked-files=all",
+      "--no-renames",
+      "--ignore-submodules=all",
+      "--",
+      ...paths,
+    ],
     { operation: "status", readOnly: true },
   );
   return answer.stdout.split("\0").filter((line) => line !== "");
@@ -731,6 +826,10 @@ export function undoStaged(
   paths: { existed: string[]; created: string[] },
   operation: string,
 ): void {
+  const foreign = [...paths.existed, ...paths.created].find((path) => !ownPath(path));
+  if (foreign !== undefined) {
+    throw new KnowledgeError("invalid", `${foreign} is not a path the knowledge store writes`);
+  }
   if (paths.existed.length > 0) {
     runGit(
       store,
@@ -745,6 +844,20 @@ export function undoStaged(
     });
     for (const path of paths.created) rmSync(join(repo.path, ...path.split("/")), { force: true });
   }
+}
+
+/**
+ * Whether a path is one the store writes or adopts: the manifest, the taxonomy, or a file
+ * under `entries/` or `proposals/`. Nothing else is restored, removed or written back by
+ * name: not a path that climbs out of the repository, and nothing under `.git`.
+ */
+export function ownPath(path: string): boolean {
+  if (path === MANIFEST_FILE || path === TAXONOMY_FILE) return true;
+  const parts = path.split("/");
+  if (parts.length < 2 || (parts[0] !== ENTRIES_DIR && parts[0] !== "proposals")) return false;
+  return parts.every(
+    (part) => part !== "" && part !== "." && part !== ".." && part.toLowerCase() !== ".git",
+  );
 }
 
 /** Takes paths out of the index and leaves the files as they are: for a person's own work. */
@@ -808,8 +921,12 @@ export function restoreToHead(
 // tree and removed after its commit. A killed process leaves it behind, and the next
 // `openRepo` puts the tree back by it.
 
+/** The operations that leave a record. A record of any other is not read. */
+export const INTENT_OPERATIONS = ["write", "accept", "reject", "adopt", "taxonomy"] as const;
+export type IntentOperation = (typeof INTENT_OPERATIONS)[number];
+
 export interface Intent {
-  operation: string;
+  operation: IntentOperation;
   writer: Writer;
   /** Paths the operation changes that exist at HEAD. */
   existed: string[];
@@ -832,30 +949,40 @@ export function writeIntent(repo: Repo, intent: Intent): void {
   writeFileAtomic(intentPath(repo), JSON.stringify(intent));
 }
 
+const KEPT_NAME = /^wizardingcode-kept-[0-9a-f-]+\.json$/;
+
+/**
+ * The record an operation left, or null when there is none the store can act on. The
+ * record sits in a folder that may have been dropped here, so it is taken only when it is
+ * one the store could have written: a known operation, and no path but the store's own.
+ * A record that names `.git/config` would otherwise have the revert write there.
+ */
 export function readIntent(repo: Repo): Intent | null {
-  let text: string;
+  let raw: unknown;
   try {
-    text = readFileSync(intentPath(repo), "utf8");
+    raw = JSON.parse(readFileSync(intentPath(repo), "utf8"));
   } catch {
     return null;
   }
-  try {
-    const raw = JSON.parse(text) as Partial<Intent>;
-    const texts = (value: unknown): value is string[] =>
-      Array.isArray(value) && value.every((item) => typeof item === "string");
-    if (typeof raw.operation !== "string" || !texts(raw.existed) || !texts(raw.created))
-      return null;
-    return raw as Intent;
-  } catch {
-    return null;
+  const plain = (value: unknown): value is Record<string, unknown> =>
+    typeof value === "object" && value !== null && !Array.isArray(value);
+  const ownPaths = (value: unknown): value is string[] =>
+    Array.isArray(value) && value.every((item) => typeof item === "string" && ownPath(item));
+  if (!plain(raw)) return null;
+  const { operation, existed, created, written, keptBytesFile } = raw;
+  const operations: readonly unknown[] = INTENT_OPERATIONS;
+  if (!operations.includes(operation)) return null;
+  if (!ownPaths(existed) || !ownPaths(created)) return null;
+  if (written !== undefined && !(plain(written) && ownPaths(Object.keys(written)))) return null;
+  if (keptBytesFile !== undefined) {
+    if (typeof keptBytesFile !== "string" || !KEPT_NAME.test(keptBytesFile)) return null;
   }
+  return raw as unknown as Intent;
 }
 
 export function clearIntent(repo: Repo): void {
   rmSync(intentPath(repo), { force: true });
 }
-
-const KEPT_NAME = /^wizardingcode-kept-[0-9a-f-]+\.json$/;
 
 /** Keeps files' bytes under `.git/` for an adopt; returns the name the intent records. */
 export function keepBytes(repo: Repo, files: Map<string, Uint8Array>): string {
@@ -868,24 +995,26 @@ export function keepBytes(repo: Repo, files: Map<string, Uint8Array>): string {
 
 /**
  * Writes the kept bytes back, byte for byte, and forgets them. With `only`, just those
- * paths: the ones the person did not go on working on.
+ * paths: the ones the person did not go on working on. Only entry files are ever kept,
+ * so only a file directly under `entries/` is written: a kept file put there by hand
+ * writes nowhere else.
  */
 export function restoreKept(repo: Repo, name: string | undefined, only?: Set<string>): void {
   if (name === undefined || !KEPT_NAME.test(name)) return;
   const file = join(repo.path, ".git", name);
-  let kept: Record<string, string>;
+  let kept: unknown;
   try {
-    kept = JSON.parse(readFileSync(file, "utf8")) as Record<string, string>;
+    kept = JSON.parse(readFileSync(file, "utf8"));
   } catch {
     return;
   }
-  for (const [path, encoded] of Object.entries(kept)) {
+  for (const [path, encoded] of Object.entries((kept ?? {}) as Record<string, unknown>)) {
     if (only !== undefined && !only.has(path)) continue;
-    // The paths were written by the engine; a record edited by hand must not write elsewhere.
-    if (path.split("/").some((part) => part === "" || part === "." || part === "..")) continue;
-    const target = join(repo.path, ...path.split("/"));
-    mkdirSync(dirname(target), { recursive: true, mode: 0o700 });
-    writeFileAtomic(target, Buffer.from(encoded, "base64"));
+    const parts = path.split("/");
+    if (parts.length !== 2 || parts[0] !== ENTRIES_DIR || !ownPath(path)) continue;
+    if (typeof encoded !== "string") continue;
+    mkdirSync(join(repo.path, ENTRIES_DIR), { recursive: true, mode: 0o700 });
+    writeFileAtomic(join(repo.path, ...parts), Buffer.from(encoded, "base64"));
   }
   rmSync(file, { force: true });
 }
@@ -915,11 +1044,12 @@ function report(store: KnowledgeStore, operation: string, message: string): void
 /**
  * Puts the tree back after an operation that stopped before it finished, and says so.
  *
- * Only a path that is still as the engine left it is put back: an engine write is
- * restored from HEAD, and an adopt, which held the person's own uncommitted work, gets
- * the bytes it kept. A path the person edited after the interruption is theirs: it is
- * only taken out of the index and left for `adopt`. A record that does not say what was
- * written puts nothing back. An operation whose commit landed has nothing to put back.
+ * Each path is judged by itself. One that is clean against HEAD needs nothing: its commit
+ * landed, or the operation never reached it. Of the others, only a path that is still as
+ * the engine left it is put back: an engine write is restored from HEAD, and an adopt,
+ * which held the person's own uncommitted work, gets the bytes it kept. A path that is
+ * not as the engine left it may be the person's work: it is only taken out of the index
+ * and left for `adopt`. A record that does not say what was written puts nothing back.
  * Skipped while another process holds the repository's lease: that operation is not
  * interrupted, it is running.
  */
@@ -933,26 +1063,29 @@ function revertInterrupted(store: KnowledgeStore, repo: Repo): void {
   const revert = () => {
     const paths = [...new Set([...intent.existed, ...intent.created])];
     const operation = intent.operation;
-    // Clean against HEAD: the commit landed before the process died.
-    const landed = paths.length === 0 || statusOf(store, repo, paths).length === 0;
-    if (landed) {
+    const changed =
+      paths.length === 0
+        ? new Set<string>()
+        : new Set(statusOf(store, repo, paths).map((line) => line.slice(3)));
+    const pending = paths.filter((path) => changed.has(path));
+    if (pending.length === 0) {
       dropKept(repo, intent.keptBytesFile);
       clearIntent(repo);
       return;
     }
-    const asLeft = paths.filter((path) => {
+    const asLeft = pending.filter((path) => {
       const written = intent.written?.[path];
       return written !== undefined && stateOf(repo, path) === written;
     });
-    const edited = paths.filter((path) => !asLeft.includes(path));
+    const others = pending.filter((path) => !asLeft.includes(path));
     if (operation === "adopt") {
       // The person's own work: taken out of the index, never restored from HEAD.
-      unstage(store, repo, paths, operation);
+      unstage(store, repo, pending, operation);
       restoreKept(repo, intent.keptBytesFile, new Set(asLeft));
       dropKept(repo, intent.keptBytesFile);
     } else {
       if (asLeft.length > 0) restoreToHead(store, repo, asLeft, operation);
-      if (edited.length > 0) unstage(store, repo, edited, operation);
+      if (others.length > 0) unstage(store, repo, others, operation);
     }
     clearIntent(repo);
     if (asLeft.length > 0) {
@@ -962,11 +1095,11 @@ function revertInterrupted(store: KnowledgeStore, repo: Repo): void {
         `an interrupted ${operation} in ${repo.relative} was undone: ${asLeft.join(", ")}`,
       );
     }
-    if (edited.length > 0) {
+    if (others.length > 0) {
       report(
         store,
         operation,
-        `an interrupted ${operation} in ${repo.relative} left ${edited.join(", ")} as they are now, since they changed after it; run wizardingcode-mem knowledge adopt to commit them`,
+        `an interrupted ${operation} in ${repo.relative} left these as they are now, since the store cannot tell them from a person's own work: ${others.join(", ")}; run wizardingcode-mem knowledge adopt to commit them`,
       );
     }
   };

@@ -293,7 +293,7 @@ function migrateModules(db: Db, path: string, dir: string, schemas: readonly Mod
     record: (lock, migration) =>
       lock.run(
         `INSERT INTO ${MODULE_MIGRATIONS_TABLE} (module, version, name, applied_at) VALUES (?, ?, ?, ?)`,
-        [owner.get(migration) ?? "", migration.version, migration.name, Date.now()],
+        [owner.get(migration) as string, migration.version, migration.name, Date.now()],
       ),
     // A first module migration on a store has nothing of a module to lose; a later one does.
     backupVersion: (lock) =>

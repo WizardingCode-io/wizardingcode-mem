@@ -330,7 +330,7 @@ wizardingcode-mem knowledge list
 - **Your name** on what you write is `WIZARDINGCODE_MEM_AUTHOR`, else your global git `user.name`, else `you`. It is kept in the entry, in the commit and in the index for as long as the repository's history: nothing here deletes it. Changing the setting changes what is written from then on; removing a name already written means rewriting that repository's history with git and running `knowledge rebuild` ([ADR 0024](docs/adr/0024-knowledge-module.md), Personal data). Nothing leaves your machine in this part.
 - **An interrupted write is undone.** If a write is cut short, the next command puts the files back and says so. A file you edited in the meantime is yours and is left as it is, for `knowledge adopt`.
 
-git 2.32 or newer is needed to write. Your own git hooks, templates, signing and configuration never run in these repositories, and a folder under `knowledge/` whose own git configuration could run a program, or whose `.git` points somewhere else, is refused.
+git 2.32 or newer is needed to write. Your own git hooks, templates, signing and configuration never run in these repositories. A repository under `knowledge/` keeps only the git settings `git init` writes: one whose `.git/config` holds anything else (a remote or a filter you added, for example), whose `.git` points somewhere else, or that holds another git repository inside it, is refused, and the message names what to remove.
 
 `wizardingcode-mem backup` copies the database and **does not copy these repositories**. Back up `~/.wizardingcode/mem/knowledge/` as you would any folder. The database copy does hold the index, so the text of your entries goes wherever your backups go.
 

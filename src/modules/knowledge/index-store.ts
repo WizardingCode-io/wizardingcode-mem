@@ -30,9 +30,6 @@ import type {
   Taxonomy,
 } from "./types.ts";
 
-/** The SHA-256 of a file's bytes as read, first 16 hex. */
-export const fileHash = hashOf;
-
 /** A file with no usable id is indexed under its name, so it is listed and never lost. */
 const rowId = (id: string, name: string) =>
   UUID.test(id) || id.startsWith("dup:") ? id : `file:${name}`;
@@ -440,7 +437,7 @@ export function readRepoFiles(store: KnowledgeStore, repo: Repo): RepoFiles {
         };
       }
     }
-    entries.push({ entry, path, hash: "problem" in file ? "" : fileHash(file.bytes) });
+    entries.push({ entry, path, hash: "problem" in file ? "" : hashOf(file.bytes) });
   }
 
   const proposals: { proposal: KnowledgeProposal; path: string; hash: string }[] = [];
@@ -474,7 +471,7 @@ export function readRepoFiles(store: KnowledgeStore, repo: Repo): RepoFiles {
           problem: also(proposal.problem, "under proposals/decided with no decision"),
         };
       }
-      proposals.push({ proposal, path, hash: "problem" in file ? "" : fileHash(file.bytes) });
+      proposals.push({ proposal, path, hash: "problem" in file ? "" : hashOf(file.bytes) });
     }
   }
   return { entries, proposals, overCap };

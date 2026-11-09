@@ -2,6 +2,7 @@
 // frontmatter is a small YAML subset this file reads and writes itself (no dependency):
 // `key: value` lines, plain scalars, double-quoted strings, whole numbers, block lists.
 // Parsing never throws: a file that cannot be read as an entry becomes a draft with a problem.
+import { clip } from "../../util/text.ts";
 import { KnowledgeError } from "./errors.ts";
 import type { KnowledgeEntry, KnowledgeProposal, ListItem, Taxonomy } from "./types.ts";
 
@@ -169,9 +170,8 @@ export function parseFrontmatter(text: string): Frontmatter | { problem: string 
   return { map, order, body, raw };
 }
 
-function clipLine(line: string): string {
-  return line.length > 60 ? `${line.slice(0, 60)}…` : line;
-}
+/** A line of a file, short enough to quote in a problem: 60 characters and an ellipsis. */
+const clipLine = (line: string): string => clip(line, 61, "…");
 
 const quote = (value: string) => `"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
 

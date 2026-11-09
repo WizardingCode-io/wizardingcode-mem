@@ -33,7 +33,6 @@ import {
   countOpen,
   countOpenAll,
   ensureFresh,
-  fileHash,
   rebuildRepo,
   recordedFingerprint,
   recordRepoAfter,
@@ -48,9 +47,11 @@ import {
   dropKept,
   ENTRIES_DIR,
   ensureRepo,
+  existsOnDisk,
   fingerprintOf,
   hashOf,
   headOf,
+  type IntentOperation,
   keepBytes,
   MANIFEST_FILE,
   OPEN_DIR,
@@ -96,8 +97,6 @@ const OPEN_PER_REPO = 200;
 const ADOPT = "wizardingcode-mem knowledge adopt";
 
 const invalid = (message: string) => new KnowledgeError("invalid", message);
-
-export { requireSchema };
 
 // --- The shape of what is written -------------------------------------------------------
 
@@ -254,7 +253,7 @@ function readCurrent(repo: Repo, slug: string, taxonomy: Taxonomy | null): Curre
   if (bytes === null) return null;
   return {
     entry: parseEntry(new TextDecoder().decode(bytes), slug, taxonomy),
-    hash: fileHash(bytes),
+    hash: hashOf(bytes),
   };
 }
 
@@ -267,7 +266,7 @@ const stale = (current: number, based: number, what: string) =>
 // --- The commit and the failure rule -----------------------------------------------------
 
 export interface Commit {
-  operation: string;
+  operation: IntentOperation;
   writer: Writer;
   /** Files written and staged. */
   write: { path: string; text: string }[];
@@ -317,13 +316,13 @@ export function commit(store: KnowledgeStore, repo: Repo, change: Commit): Commi
       mkdirSync(dirname(target), { recursive: true, mode: 0o700 });
       writeFileAtomic(target, file.text);
     }
-    const written = change.write.map((file) => file.path);
-    stagePaths(store, repo, written, change.operation);
+    const staged = change.write.map((file) => file.path);
+    stagePaths(store, repo, staged, change.operation);
     if (change.remove.length > 0) removePaths(store, repo, change.remove, change.operation);
     commitPaths(
       store,
       repo,
-      [...written, ...change.remove],
+      [...staged, ...change.remove],
       change.message,
       identityOf(change.writer),
       change.operation,
@@ -462,7 +461,7 @@ export function writeEntry(
       message: `knowledge: ${current === null ? "create" : "update"} ${slug} (v${entry.version})`,
     });
     settle(store, repo, committed, () =>
-      upsertEntry(store, repo.id, entry, path, fileHash(Buffer.from(text))),
+      upsertEntry(store, repo.id, entry, path, hashOf(Buffer.from(text))),
     );
     return { kind: "written" as const, entry };
   });
@@ -570,7 +569,7 @@ function propose(
       proposalId: proposal.id,
     });
     settle(store, repo, committed, () =>
-      upsertProposal(store, repo.id, proposal, path, fileHash(Buffer.from(text))),
+      upsertProposal(store, repo.id, proposal, path, hashOf(Buffer.from(text))),
     );
     return proposal;
   });
@@ -687,8 +686,8 @@ export function acceptProposal(
       proposalId,
     });
     settle(store, repo, committed, () => {
-      upsertEntry(store, repo.id, entry, paths.entry, fileHash(Buffer.from(entryText)));
-      upsertProposal(store, repo.id, decided, paths.decided, fileHash(Buffer.from(decidedText)));
+      upsertEntry(store, repo.id, entry, paths.entry, hashOf(Buffer.from(entryText)));
+      upsertProposal(store, repo.id, decided, paths.decided, hashOf(Buffer.from(decidedText)));
     });
     return entry;
   });
@@ -733,7 +732,7 @@ export function rejectProposal(
       proposalId,
     });
     settle(store, repo, committed, () =>
-      upsertProposal(store, repo.id, decided, paths.decided, fileHash(Buffer.from(text))),
+      upsertProposal(store, repo.id, decided, paths.decided, hashOf(Buffer.from(text))),
     );
     return decided;
   });
@@ -758,15 +757,6 @@ export function readEntry(
 // --- Hand edits: adopt -------------------------------------------------------------------
 
 const ENTRY_FILE = new RegExp(`^${ENTRIES_DIR}/([^/]+)\\.md$`);
-
-function onDisk(repo: Repo, path: string): boolean {
-  try {
-    lstatSync(absolute(repo, path));
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 /**
  * The text an entry file a person wrote by hand is committed as: an id when it has none,
@@ -844,9 +834,16 @@ function adoptIn(
     MANIFEST_FILE,
   ]).map((line) => line.slice(3));
   if (changed.length === 0) return { adopted: 0, problems: [] };
+  // git names a folder, not its files, only where the folder is a repository of its own.
+  const nested = changed.find((path) => path.endsWith("/"));
+  if (nested !== undefined) {
+    throw invalid(
+      `${nested} is a git repository of its own, and the knowledge store keeps none inside its folders; move it out of ${repo.relative}, then run ${ADOPT} again`,
+    );
+  }
 
   const atHead = pathsAtHead(store, repo, changed, "adopt");
-  const present = changed.filter((path) => onDisk(repo, path));
+  const present = changed.filter((path) => existsOnDisk(absolute(repo, path)));
   const deleted = changed.filter((path) => !present.includes(path) && atHead.has(path));
   // A file added to the index by hand and then deleted: there is nothing left to commit.
   const vanished = changed.filter((path) => !present.includes(path) && !atHead.has(path));
@@ -882,9 +879,19 @@ function adoptIn(
   }
 
   const keptName = keepBytes(repo, kept);
-  // What adopt leaves at each entry file: its rewrite, or the person's bytes untouched.
+  // What adopt leaves at each path: nothing where the file is gone, an entry's rewrite,
+  // and otherwise the person's bytes untouched. A file that cannot be read as a regular
+  // file has no line here, and an interrupted adopt leaves it as it finds it.
   const written: Record<string, string | null> = {};
-  for (const [path, bytes] of kept) written[path] = hashOf(bytes);
+  for (const path of [...deleted, ...vanished]) written[path] = null;
+  for (const path of present) {
+    try {
+      const bytes = kept.get(path) ?? readRegularFile(absolute(repo, path));
+      if (bytes !== null) written[path] = hashOf(bytes);
+    } catch (error) {
+      if (!(error instanceof KnowledgeError)) throw error;
+    }
+  }
   for (const { path, text } of rewrites) written[path] = hashOf(Buffer.from(text));
   writeIntent(repo, {
     operation: "adopt",
