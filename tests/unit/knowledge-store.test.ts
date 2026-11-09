@@ -66,6 +66,8 @@ const change = (over: Partial<EntryChange> = {}): EntryChange => ({
 
 const SLUG = "discovery-call-script";
 const person = () => personAuthor(store);
+/** A text with the shape of a key, put together at run time: no key-shaped text sits in this file. */
+const fakeAwsKey = () => ["AKIA", "A1B2C3D4", "E5F6G7H8"].join("");
 
 function written(result: ReturnType<typeof writeEntry>): KnowledgeEntry {
   if (result.kind !== "written") throw new Error("expected a written entry");
@@ -585,7 +587,7 @@ describe("an agent's write", () => {
 
   test("secrets in an agent's text are redacted before the proposal is written", () => {
     const key = `sk-ant-api03-${"a".repeat(40)}`;
-    const aws = `AKIA${"A1B2C3D4E5F6G7H8".slice(0, 16)}`;
+    const aws = fakeAwsKey();
     const body = `Use the key ${key} when calling.`;
     const context = `account ${aws}`;
     const proposal = proposed(writeEntry(store, WORKSPACE, change({ body, context }), agent));
@@ -615,7 +617,7 @@ describe("an agent's write", () => {
     expect(codeOf(bySlug)).toBe("invalid");
     expect(thrown(bySlug).message).toContain("slug");
 
-    const context = `${"c".repeat(96)} AKIAA1B2C3D4E5F6G7H8`;
+    const context = `${"c".repeat(96)} ${fakeAwsKey()}`;
     expect(context.length).toBeLessThanOrEqual(120);
     expect(redact(context, { env: store.env }).length).toBeGreaterThan(120);
     const byContext = () => writeEntry(store, WORKSPACE, change({ context }), agent);
