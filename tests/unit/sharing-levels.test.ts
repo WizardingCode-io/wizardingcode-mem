@@ -104,6 +104,23 @@ describe("effectiveLevel", () => {
       reason: "level-local",
     });
   });
+
+  test("a row stored at local shares nothing, as a project with no row does", () => {
+    expect(effectiveLevel({ ...row, level: "local" }, known, "team", TEAM)).toEqual({
+      level: "local",
+      reason: "level-local",
+    });
+    // Nothing was chosen, so nothing is downgraded: memory off or a lost alias changes no reason.
+    for (const project of [
+      { ...known, disabled: true },
+      { ...known, aliases: [] },
+    ]) {
+      expect(effectiveLevel({ ...row, level: "local" }, project, "team", TEAM)).toEqual({
+        level: "local",
+        reason: "level-local",
+      });
+    }
+  });
 });
 
 describe("policyWith", () => {

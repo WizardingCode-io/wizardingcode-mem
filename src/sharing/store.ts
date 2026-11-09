@@ -7,8 +7,20 @@ import { parseShareList, type SettingKey, type SharingKey } from "../settings/se
 import { type Db, withWrite } from "../store/db.ts";
 import { getMeta, setMeta } from "../store/meta.ts";
 import { plural } from "../util/text.ts";
+import { DESTINATIONS, effectiveLevel, levelOf } from "./levels.ts";
 import { GENERATION_KEY, newGeneration } from "./migrations.ts";
-import { isRoot, LEVEL_LABELS, LEVELS, type Root, shareListText } from "./types.ts";
+import {
+  isLevel,
+  isRoot,
+  LEVEL_LABELS,
+  LEVELS,
+  type Level,
+  type Root,
+  type SharingPolicy,
+  shareListText,
+  TEAM_DESTINATION,
+  widens,
+} from "./types.ts";
 
 export { GENERATION_KEY, newGeneration };
 
@@ -71,9 +83,17 @@ export interface ChangeRow {
   source: ChangeSource;
   /** `project:<id>`, `roots`, `areas` or `levels`. */
   what: string;
+  /** What it was: a level, a list as comma text or `none`, or `rebind` (see `REBIND`). */
   old: string;
   new: string;
 }
+
+/**
+ * What the log holds as `old` where a level whose alias was gone is set again: it read
+ * `local`, and the row says instead that the level was bound to the alias the project
+ * has now.
+ */
+export const REBIND = "rebind";
 
 function logChange(
   db: Db,
@@ -118,9 +138,17 @@ export interface StoredLevel {
 }
 
 /**
+ * Whether the store ever ran the sharing schema, asked of `sqlite_master` by name. The
+ * recorded module version cannot say: a store no module ever migrated reads as current.
+ */
+export function hasLevelsTable(db: Db): boolean {
+  return db.query("SELECT 1 FROM sqlite_master WHERE name = 'sharing_levels'").get() !== null;
+}
+
+/**
  * Every stored level, as written; what each is worth now is `effectiveLevel`'s to say. The
  * table must exist: a reader of a store that may never have run the sharing schema asks
- * `sqlite_master` first.
+ * `hasLevelsTable` first.
  */
 export function levelRows(db: Db): StoredLevel[] {
   return db
@@ -148,10 +176,217 @@ export function setLevelMessage(reason: SetLevelRefusal): string {
   return SET_LEVEL_MESSAGES[reason];
 }
 
+// --- Setting a project's level ----------------------------------------------------------
+
+/** What a level depends on in its project: that it exists, that memory is on, its aliases. */
+export interface ProjectState {
+  known: boolean;
+  disabled: boolean;
+  /** Every alias of the project, by name. */
+  aliases: string[];
+}
+
+/**
+ * A project as a write must see it: read inside the caller's transaction, so that the level
+ * is judged against the project as it is when the write happens.
+ */
+export function projectState(db: Db, projectId: number): ProjectState {
+  const project = db
+    .query<{ disabled: number }, [number]>("SELECT disabled FROM projects WHERE id = ?")
+    .get(projectId);
+  if (project === null) return { known: false, disabled: false, aliases: [] };
+  const aliases = db
+    .query<{ alias: string }, [number]>(
+      "SELECT alias FROM project_aliases WHERE project_id = ? ORDER BY alias",
+    )
+    .all(projectId);
+  return {
+    known: true,
+    disabled: project.disabled === 1,
+    aliases: aliases.map((row) => row.alias),
+  };
+}
+
+/**
+ * What setting a level would do under the policy a person is looking at: the level in
+ * force, and whether the new one lets more leave. The check made before a person is asked;
+ * `setLevel` checks again, against what the store holds by then.
+ */
+export function previewLevel(
+  policy: SharingPolicy,
+  projectId: number,
+  level: Level,
+): { current: Level; widened: boolean } {
+  const current = levelOf(policy, projectId, TEAM_DESTINATION).level;
+  return { current, widened: widens(current, level) };
+}
+
+export interface SetLevelInput {
+  projectId: number;
+  destination: string;
+  level: Level;
+  source: ChangeSource;
+  now: number;
+  /** A person agreed to let more leave. Without it a widening is refused. */
+  confirm: boolean;
+  /** The remote alias of the folder the person is in: bound to, when it is the project's. */
+  remoteAlias?: string | null;
+}
+
+/**
+ * What a level set did. `old` is the level that was in force; `boundAlias` the remote alias
+ * the level is bound to, empty for `local`; `rebound` says that a level whose alias was gone
+ * is bound to another one now.
+ */
+export type SetLevelOutcome =
+  | { ok: true; old: Level; widened: boolean; boundAlias: string; rebound: boolean }
+  | { ok: false; reason: SetLevelRefusal };
+
+/** A project's identity for a team is its git remote: the only alias a level is bound to. */
+const REMOTE_ALIAS = "remote:";
+
+type Bound = { level: string; boundAlias: string };
+
+function storedLevel(db: Db, projectId: number, destination: string): Bound | null {
+  return db
+    .query<Bound, [number, string]>(
+      `SELECT level, bound_alias AS boundAlias FROM sharing_levels
+        WHERE project_id = ? AND destination = ?`,
+    )
+    .get(projectId, destination);
+}
+
+function removeLevel(db: Db, projectId: number, destination: string): void {
+  db.run("DELETE FROM sharing_levels WHERE project_id = ? AND destination = ?", [
+    projectId,
+    destination,
+  ]);
+}
+
+/**
+ * The remote alias a level is bound to as it is written: the one the caller names, when it
+ * is the project's; else the one the level is bound to already, while the project still
+ * has it, so that a change of level alone never moves the name a team knows the project
+ * by; else the project's first by name. Undefined for a project without a remote.
+ */
+function aliasToBind(
+  remotes: string[],
+  given: string | null | undefined,
+  bound: string | null,
+): string | undefined {
+  if (typeof given === "string" && remotes.includes(given)) return given;
+  if (bound !== null && remotes.includes(bound)) return bound;
+  return remotes[0];
+}
+
+/**
+ * Sets one project's level for one destination. Everything is read inside the write's own
+ * transaction, never taken from a policy the caller loaded: another process may have moved
+ * the row or the project since. What can never be done is refused before a confirmation is
+ * asked for, so nobody confirms a widening that is then refused, and every caller gets the
+ * refusals in one order from here:
+ *
+ * 1. The level must be one of the levels (`invalid`) and the project exist (`no-project`).
+ * 2. `local` removes the stored row, also one that only reads `local` (a disabled project,
+ *    a lost alias): the person chose Nothing, and nothing may bring the level back. It is
+ *    refused for nothing else: a project with memory off or no remote can share nothing.
+ * 3. Above `local` the project must have memory on (`disabled`) and a remote alias
+ *    (`no-remote`), which the level is bound to (`aliasToBind`).
+ * 4. The level in force is what `effectiveLevel` makes of the stored row and the project
+ *    now. A later level than that one is a widening, refused without `confirm`
+ *    (`needs-confirm`).
+ * 5. The level already in force writes nothing and logs nothing. Any other is written,
+ *    logged as `project:<id>` from the level in force to the new one, and counted once. A
+ *    stored level whose alias was gone is thereby bound to an alias the project has now:
+ *    the log says `rebind` for what it was, and the outcome says `rebound`.
+ *
+ * A destination that is not configured is the caller's mistake, not a person's: it throws.
+ * A level stored for it would take force unasked the day the destination exists.
+ */
+export function setLevel(db: Db, input: SetLevelInput): SetLevelOutcome {
+  const { projectId, destination, level, source, now } = input;
+  if (!DESTINATIONS.has(destination)) {
+    throw new Error(`the sharing destination ${destination} is not configured`);
+  }
+  const refused = (reason: SetLevelRefusal): SetLevelOutcome => ({ ok: false, reason });
+  const what = `project:${projectId}`;
+  return withWrite(db, (): SetLevelOutcome => {
+    if (!isLevel(level)) return refused("invalid");
+    const project = projectState(db, projectId);
+    if (!project.known) return refused("no-project");
+    const stored = storedLevel(db, projectId, destination);
+    const inForce = effectiveLevel(stored, project, destination, DESTINATIONS);
+
+    if (level === "local") {
+      // A row stored at `local` already says Nothing: there is nothing to remove or log.
+      if (stored !== null && stored.level !== level) {
+        removeLevel(db, projectId, destination);
+        logChange(db, now, source, what, stored.level, level);
+        bumpCounter(db);
+      }
+      return { ok: true, old: inForce.level, widened: false, boundAlias: "", rebound: false };
+    }
+
+    if (project.disabled) return refused("disabled");
+    const remotes = project.aliases.filter((alias) => alias.startsWith(REMOTE_ALIAS));
+    const boundAlias = aliasToBind(remotes, input.remoteAlias, stored?.boundAlias ?? null);
+    if (boundAlias === undefined) return refused("no-remote");
+    const widened = widens(inForce.level, level);
+    if (widened && !input.confirm) return refused("needs-confirm");
+    if (stored !== null && inForce.level === level) {
+      return { ok: true, old: level, widened, boundAlias: stored.boundAlias, rebound: false };
+    }
+
+    const rebound = inForce.reason === "unbound-alias";
+    db.run(
+      `INSERT INTO sharing_levels (project_id, destination, level, bound_alias, set_at, source)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT (project_id, destination) DO UPDATE SET
+         level = excluded.level, bound_alias = excluded.bound_alias,
+         set_at = excluded.set_at, source = excluded.source`,
+      [projectId, destination, level, boundAlias, now, source],
+    );
+    logChange(db, now, source, what, rebound ? REBIND : inForce.level, level);
+    bumpCounter(db);
+    return { ok: true, old: inForce.level, widened, boundAlias, rebound };
+  });
+}
+
+// --- Levels that no longer hold ---------------------------------------------------------
+
+/**
+ * Removes every stored level whose downgrade still holds: its project has memory off, or
+ * no longer carries the alias the level was set under. Each row is read with its project
+ * inside this transaction, so a level a person has just set again is seen as it is now and
+ * kept. Each removal is logged as the system's, from the stored level to `local`, and the
+ * counter moves once. Without this a level would come back unasked when memory is turned
+ * on again or the alias returns. Nothing else is removed: a row for a destination or with
+ * a level this version does not know may be a newer version's.
+ */
+export function reconcileLevels(db: Db, now: number): { removed: number[] } {
+  return withWrite(db, () => {
+    const removed: number[] = [];
+    for (const row of levelRows(db)) {
+      const project = projectState(db, row.projectId);
+      const { reason } = effectiveLevel(row, project, row.destination, DESTINATIONS);
+      if (reason !== "disabled" && reason !== "unbound-alias") continue;
+      removeLevel(db, row.projectId, row.destination);
+      logChange(db, now, "system", `project:${row.projectId}`, row.level, "local");
+      removed.push(row.projectId);
+    }
+    if (removed.length > 0) bumpCounter(db);
+    return { removed };
+  });
+}
+
 // --- The two lists: the file and the baseline -------------------------------------------
 
 const strings = (value: unknown): string[] =>
   Array.isArray(value) && value.every((item) => typeof item === "string") ? value : [];
+
+/** Whether two lists hold the same ids, in whatever order. Neither repeats an id, as parsed. */
+const sameList = (a: readonly string[], b: readonly string[]): boolean =>
+  a.length === b.length && a.every((id) => b.includes(id));
 
 /** The baseline; the empty lists when none was recorded, or when it cannot be read. */
 export function settingsSeen(db: Db): Lists {
@@ -173,6 +408,14 @@ export function fileListsOf(dataDir: string): Lists {
   const file = readEnvFile(join(dataDir, ENV_FILE));
   const list = (key: SharingKey) => parseShareList(file[key] ?? null, key).list;
   return { roots: list(ROOTS_KEY).filter(isRoot), areas: list(AREAS_KEY) };
+}
+
+/**
+ * Which of the file's lists differ from the baseline: a hand edit nobody recorded yet. One
+ * rule for the loader, which reports it, and for the reconcile, which records it.
+ */
+export function changedLists(file: Lists, seen: Lists): ("roots" | "areas")[] {
+  return (["roots", "areas"] as const).filter((list) => !sameList(file[list], seen[list]));
 }
 
 /** What a patch does to one sharing list of the file. A widening is an id added. */
@@ -209,13 +452,53 @@ export class NeedsConfirm extends Error {
 }
 
 /**
+ * Records a hand edit of the env file, inside the caller's transaction: for each of the
+ * file's own lists that differs from the baseline, a change with the file as its source;
+ * then the counter moves once and the baseline becomes the file's lists. The file's lists
+ * are read here and are never a caller's, which an environment may have narrowed: two
+ * processes with different environments record the same thing, once. With the file as last
+ * recorded it writes nothing. Returns the lists that had changed.
+ */
+function recordHandEdit(db: Db, dataDir: string, now: number): ("roots" | "areas")[] {
+  const file = fileListsOf(dataDir);
+  const seen = settingsSeen(db);
+  const changed = changedLists(file, seen);
+  if (changed.length === 0) return changed;
+  for (const list of changed) {
+    logChange(db, now, "file", list, shareListText(seen[list]), shareListText(file[list]));
+  }
+  bumpCounter(db);
+  setMeta(db, SETTINGS_SEEN_KEY, JSON.stringify(file));
+  return changed;
+}
+
+/**
+ * Records a hand edit of the env file nobody recorded yet (`recordHandEdit`), in its own
+ * transaction: what the viewer, the CLI and a sync do when they look. An audit only: the
+ * epoch moved when the file did.
+ */
+export function reconcileSettings(
+  db: Db,
+  dataDir: string,
+  now: number,
+): { changed: ("roots" | "areas")[] } {
+  return withWrite(db, () => ({ changed: recordHandEdit(db, dataDir, now) }));
+}
+
+/**
  * Writes a settings patch to the env file: the one path for a patch that holds a sharing
- * key. In one transaction the file's lists are read, a widening without `confirm` is refused
- * (`NeedsConfirm`), each sharing key in the patch is logged with its old and new list, the
- * counter moves once, the file is written, and the baseline becomes the file's new lists.
- * The rows are written before the file, so what can fail in the database fails with the file
- * untouched; a file write that throws rolls the rows back. A patch with no sharing key only
- * writes the file.
+ * key. In one transaction: a hand edit of the file nobody recorded yet is recorded first
+ * (`recordHandEdit`), so no caller has to reconcile before it saves and a patch that repeats
+ * an edited list does not swallow the edit; then the patch is judged against the file's
+ * lists as they are: a widening without `confirm` is refused (`NeedsConfirm`), each list the
+ * patch changes is logged with its old and new value, the counter moves once when a list
+ * changed, the file is written, and the baseline becomes the file's new lists. So the
+ * counter moves once for a hand edit found and once for the patch's own change. A list the
+ * patch repeats as the file holds it is no change: it writes no row and leaves the counter,
+ * so a save that changes nothing neither grows the log nor moves the epoch. The rows are
+ * written before the file, so what can fail in the database fails with the file untouched;
+ * a refusal and a file write that throws roll every row back, the hand edit's included,
+ * which stays to be recorded. A patch with no sharing key changes no list.
  */
 export function applySettingsPatch(
   db: Db,
@@ -227,9 +510,11 @@ export function applySettingsPatch(
   io: { writeEnvFile: typeof writeEnvFile } = { writeEnvFile },
 ): { sharing: SettingsChange[] } {
   return withWrite(db, () => {
+    recordHandEdit(db, dataDir, now);
     const sharing = previewSettingsPatch(dataDir, changes);
     if (!confirm && sharing.some((change) => change.widened)) throw new NeedsConfirm();
-    for (const change of sharing) {
+    const changed = sharing.filter((change) => !sameList(change.old, change.new));
+    for (const change of changed) {
       logChange(
         db,
         now,
@@ -239,7 +524,7 @@ export function applySettingsPatch(
         shareListText(change.new),
       );
     }
-    if (sharing.length > 0) bumpCounter(db);
+    if (changed.length > 0) bumpCounter(db);
     io.writeEnvFile(join(dataDir, ENV_FILE), changes);
     if (sharing.length > 0) setMeta(db, SETTINGS_SEEN_KEY, JSON.stringify(fileListsOf(dataDir)));
     return { sharing };
@@ -276,8 +561,4 @@ export function resetLevels(db: Db, now: number, counterFloor: number, fileLists
     setMeta(db, SETTINGS_SEEN_KEY, JSON.stringify(fileLists));
     return removed;
   });
-}
-
-function hasLevelsTable(db: Db): boolean {
-  return db.query("SELECT 1 FROM sqlite_master WHERE name = 'sharing_levels'").get() !== null;
 }

@@ -257,7 +257,9 @@ export interface Decision {
 
 /**
  * One project's level for one destination, as it reads now. `reason` is `allowed` for a
- * level in force, or what made a stored level read `local` (`disabled`, `unbound-alias`).
+ * level in force, or what made a stored level read `local`: `disabled`, `unbound-alias`,
+ * `level-local` for a row stored at `local` or at a level this version does not know,
+ * `unknown-destination` for a destination that is not configured.
  */
 export interface LevelRow {
   projectId: number;
@@ -269,7 +271,7 @@ export interface LevelRow {
 
 /** Everything the predicate needs, loaded once: no ruling reads the database or a file. */
 export interface SharingPolicy {
-  /** Equal for two policies only when the lists are the same and nothing changed between. */
+  /** Equal for two policies only when the lists in force are the same and nothing changed since. */
   epoch: number;
   /** The policy could not be loaded: nothing leaves. */
   closed: boolean;

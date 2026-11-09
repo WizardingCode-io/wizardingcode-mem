@@ -1,7 +1,14 @@
 // How a project's level reads, and the policy's epoch. A leaf over `types.ts`: the store
-// (which writes levels) and the loader (which reads them) both import it and never each
-// other, so the two apply one rule.
+// (which writes levels) and the loader (which reads them) both import it, and the store
+// never imports the loader, so the two apply one rule.
 import { isLevel, type Level, type Reason, type SharingPolicy, TEAM_DESTINATION } from "./types.ts";
+
+/**
+ * The destinations there are: the team's server, alone. The roots and the areas apply to
+ * these, and a level stored for any other reads `local`: a destination a later version
+ * adds starts with every project at Nothing.
+ */
+export const DESTINATIONS: ReadonlySet<string> = new Set([TEAM_DESTINATION]);
 
 /** The key of one project's level for one destination in `SharingPolicy.levels`. */
 export function levelKey(projectId: number, destination: string): string {
@@ -11,9 +18,10 @@ export function levelKey(projectId: number, destination: string): string {
 /**
  * The level a stored row is worth now, and why. One rule for the loader and for a write:
  * a destination that is not configured, a project that is not known, and a project with no
- * row share nothing; a row reads `local` while its project is disabled or no longer carries
- * the remote alias the level was set under, and when its level is not one this version knows
- * (the loader reports that one as a problem). Otherwise the row's level is in force.
+ * row share nothing, and a row stored at `local` says what no row says; a row reads `local`
+ * while its project is disabled or no longer carries the remote alias the level was set
+ * under, and when its level is not one this version knows (the loader reports that one as a
+ * problem). Otherwise the row's level is in force.
  */
 export function effectiveLevel(
   row: { level: string; boundAlias: string } | null,
@@ -24,7 +32,7 @@ export function effectiveLevel(
   const local = (reason: Reason) => ({ level: "local" as const, reason });
   if (!destinations.has(destination)) return local("unknown-destination");
   if (!project.known) return local("no-project");
-  if (row === null) return local("level-local");
+  if (row === null || row.level === "local") return local("level-local");
   if (project.disabled) return local("disabled");
   if (!project.aliases.includes(row.boundAlias)) return local("unbound-alias");
   if (!isLevel(row.level)) return local("level-local");
@@ -68,14 +76,13 @@ function hash20(text: string): number {
 
 /**
  * The policy's epoch, derived and never stored: the change counter above twenty bits of a
- * hash of the lists in force. A hand edit of the env file moves it with no write, and the
- * counter keeps apart two policies with the same lists at different times. Equal epochs mean
- * the same lists and no recorded change between.
+ * hash of the lists in force, the roots and the areas their taxonomy holds. A hand edit of
+ * the env file moves it with no write, and so does an area added to a taxonomy that a list
+ * already names; the counter keeps apart two policies with the same lists at different
+ * times. Equal epochs mean the same lists in force and no recorded change between.
  */
-export function epochOf(counter: number, settings: { roots: string[]; areas: string[] }): number {
-  return (
-    counter * 2 ** HASH_BITS + hash20(`${settings.roots.join(",")}|${settings.areas.join(",")}`)
-  );
+export function epochOf(counter: number, inForce: { roots: string[]; areas: string[] }): number {
+  return counter * 2 ** HASH_BITS + hash20(`${inForce.roots.join(",")}|${inForce.areas.join(",")}`);
 }
 
 /** A hand-built policy, for tests: open, empty, for the team destination, but for `parts`. */
@@ -83,7 +90,7 @@ export function policyWith(parts: Partial<SharingPolicy>): SharingPolicy {
   return {
     epoch: 0,
     closed: false,
-    destinations: new Set([TEAM_DESTINATION]),
+    destinations: new Set(DESTINATIONS),
     projects: new Set(),
     roots: new Set(),
     areas: new Set(),

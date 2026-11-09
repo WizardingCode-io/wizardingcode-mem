@@ -331,6 +331,177 @@ describe("applySettingsPatch", () => {
     db.close();
   });
 
+  test("a patch that repeats both lists as the file holds them logs nothing and leaves the counter", () => {
+    const db = open();
+    const lists = { [ROOTS_KEY]: "shared", [AREAS_KEY]: "workspace:sales" };
+    applySettingsPatch(db, dir, lists, "viewer", 10, true);
+    const logged = recentChanges(db, 10);
+    expect(logged).toHaveLength(2);
+
+    // What the viewer's Save sends: both lists every time, here beside a key that changed.
+    const outcome = applySettingsPatch(
+      db,
+      dir,
+      { ...lists, WIZARDINGCODE_MEM_RETENTION_DAYS: "30" },
+      "viewer",
+      20,
+      false,
+    );
+    expect(outcome.sharing).toEqual([
+      { key: ROOTS_KEY, old: ["shared"], new: ["shared"], widened: false },
+      { key: AREAS_KEY, old: ["workspace:sales"], new: ["workspace:sales"], widened: false },
+    ]);
+    expect(recentChanges(db, 10)).toEqual(logged);
+    expect(counterOf(db)).toBe(1);
+    // The file is still written: the patch held another key.
+    expect(loadSettings({}, dir).retentionDays).toBe(30);
+    expect(settingsSeen(db)).toEqual({ roots: ["shared"], areas: ["workspace:sales"] });
+    db.close();
+  });
+
+  test("a list written another way is the same list", () => {
+    const db = open();
+    applySettingsPatch(db, dir, { [ROOTS_KEY]: "shared,workspace" }, "cli", 10, true);
+    applySettingsPatch(
+      db,
+      dir,
+      { [ROOTS_KEY]: " Workspace, shared ,workspace " },
+      "cli",
+      20,
+      false,
+    );
+    // An absent key and `none` are both the empty list.
+    applySettingsPatch(db, dir, { [AREAS_KEY]: "none" }, "cli", 30, false);
+    applySettingsPatch(db, dir, { [AREAS_KEY]: null }, "cli", 40, false);
+    expect(recentChanges(db, 10).map((change) => change.at)).toEqual([10]);
+    expect(counterOf(db)).toBe(1);
+    db.close();
+  });
+
+  test("a patch that changes one list and repeats the other logs one row and moves the counter once", () => {
+    const db = open();
+    applySettingsPatch(
+      db,
+      dir,
+      { [ROOTS_KEY]: "shared", [AREAS_KEY]: "workspace:sales" },
+      "viewer",
+      10,
+      true,
+    );
+    const outcome = applySettingsPatch(
+      db,
+      dir,
+      { [ROOTS_KEY]: "shared", [AREAS_KEY]: "workspace:ops,workspace:sales" },
+      "viewer",
+      20,
+      true,
+    );
+    expect(outcome.sharing.map((change) => [change.key, change.widened])).toEqual([
+      [ROOTS_KEY, false],
+      [AREAS_KEY, true],
+    ]);
+    expect(
+      recentChanges(db, 10)
+        .filter((change) => change.at === 20)
+        .map((change) => [change.what, change.old, change.new, change.source]),
+    ).toEqual([["areas", "workspace:sales", "workspace:ops,workspace:sales", "viewer"]]);
+    expect(recentChanges(db, 10)).toHaveLength(3);
+    expect(counterOf(db)).toBe(2);
+    expect(settingsSeen(db)).toEqual({
+      roots: ["shared"],
+      areas: ["workspace:ops", "workspace:sales"],
+    });
+    db.close();
+  });
+
+  describe("on a file edited by hand since it was last recorded", () => {
+    const logged = (db: Database) =>
+      recentChanges(db, 10)
+        .reverse()
+        .map((change) => [change.what, change.old, change.new, change.source, change.at]);
+
+    test("a patch that repeats the edited list records the edit as the file's, and nothing of its own", () => {
+      const db = open();
+      writeFileSync(envFile(), `${ROOTS_KEY}=workspace\n`);
+      const outcome = applySettingsPatch(
+        db,
+        dir,
+        { [ROOTS_KEY]: "workspace" },
+        "viewer",
+        10,
+        false,
+      );
+      expect(outcome.sharing).toEqual([
+        { key: ROOTS_KEY, old: ["workspace"], new: ["workspace"], widened: false },
+      ]);
+      expect(logged(db)).toEqual([["roots", "none", "workspace", "file", 10]]);
+      expect(counterOf(db)).toBe(1);
+      expect(settingsSeen(db)).toEqual({ roots: ["workspace"], areas: [] });
+      db.close();
+    });
+
+    test("a patch that changes another list records the edit, then its own change: two moves of the counter", () => {
+      const db = open();
+      writeFileSync(envFile(), `${ROOTS_KEY}=workspace\n`);
+      applySettingsPatch(
+        db,
+        dir,
+        { [ROOTS_KEY]: "workspace", [AREAS_KEY]: "workspace:sales" },
+        "viewer",
+        10,
+        true,
+      );
+      expect(logged(db)).toEqual([
+        ["roots", "none", "workspace", "file", 10],
+        ["areas", "none", "workspace:sales", "viewer", 10],
+      ]);
+      expect(counterOf(db)).toBe(2);
+      expect(settingsSeen(db)).toEqual({ roots: ["workspace"], areas: ["workspace:sales"] });
+      db.close();
+    });
+
+    test("a patch with no sharing key records the edit too", () => {
+      const db = open();
+      writeFileSync(envFile(), `${ROOTS_KEY}=workspace\n`);
+      applySettingsPatch(db, dir, { WIZARDINGCODE_MEM_RETENTION_DAYS: "30" }, "viewer", 10, false);
+      expect(logged(db)).toEqual([["roots", "none", "workspace", "file", 10]]);
+      expect(counterOf(db)).toBe(1);
+      expect(settingsSeen(db)).toEqual({ roots: ["workspace"], areas: [] });
+      expect(loadSettings({}, dir).retentionDays).toBe(30);
+      db.close();
+    });
+
+    test("the patch is judged against the file as edited, and a refusal records nothing", () => {
+      const db = open();
+      writeFileSync(envFile(), `${ROOTS_KEY}=workspace\n`);
+      expect(() =>
+        applySettingsPatch(db, dir, { [ROOTS_KEY]: "workspace,shared" }, "viewer", 10, false),
+      ).toThrow(NeedsConfirm);
+      expect(logged(db)).toEqual([]);
+      expect(counterOf(db)).toBe(0);
+      expect(getMeta(db, SETTINGS_SEEN_KEY)).toBeNull();
+      expect(envText()).toBe(`${ROOTS_KEY}=workspace\n`);
+      db.close();
+    });
+
+    test("a file write that throws rolls the record of the edit back with the rest", () => {
+      const db = open();
+      writeFileSync(envFile(), `${ROOTS_KEY}=workspace\n`);
+      const io = {
+        writeEnvFile: () => {
+          throw new Error("disk");
+        },
+      };
+      expect(() =>
+        applySettingsPatch(db, dir, { [AREAS_KEY]: "workspace:sales" }, "cli", 10, true, io),
+      ).toThrow("disk");
+      expect(logged(db)).toEqual([]);
+      expect(counterOf(db)).toBe(0);
+      expect(getMeta(db, SETTINGS_SEEN_KEY)).toBeNull();
+      db.close();
+    });
+  });
+
   test("a patch with no sharing key writes the file and records nothing", () => {
     const db = open();
     const outcome = applySettingsPatch(
