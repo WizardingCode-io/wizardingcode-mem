@@ -432,6 +432,16 @@ What is sent is the text of the turn being judged, and only that. If the service
 - **A project is a repository.** Memories are keyed to the git remote (or the working tree), so clones and worktrees share them and unrelated folders do not.
 - **Removable.** `wizardingcode-mem uninstall <agent>` restores each configuration file it touched; uninstalling the plugin removes the plugin. Delete `~/.wizardingcode/mem` to delete everything.
 
+### Sharing
+
+Nothing is sent anywhere today: there is no team server yet. The sharing policy says in advance what may leave this machine once one is configured, and by default nothing may. You make three choices:
+
+- **Each project's level**: Nothing, Knowledge, or Knowledge and memories. Set it in the viewer (Across projects, then the project's Sharing section) or with `wizardingcode-mem share project <local|knowledge|all>` in the project's folder. A project needs a git remote to be set above Nothing, because a team matches projects by their remote. Knowledge and memories sends every active memory of the project that is not stale, branch-bound, imported or one of your rules.
+- **The roots**: whether the workspace's knowledge and the shared repository's knowledge may leave. `WIZARDINGCODE_MEM_SHARE_ROOTS`, a comma list of `workspace` and `shared`, or `none`.
+- **The areas**: which knowledge areas may leave, by root-qualified id, such as `workspace:sales`. `WIZARDINGCODE_MEM_SHARE_AREAS`, a comma list, or `none`. A new area starts private. The workspace's areas also govern every project's knowledge.
+
+The two lists live in the settings file and on the viewer's Settings → Sharing page; `wizardingcode-mem share roots …` and `share areas …` set them from a shell. The environment can only narrow them, never widen them, and a list with an invalid token counts as empty. Every widening is confirmed first (in a terminal, `--yes` answers for you), and every change is logged. `wizardingcode-mem share status` shows what is allowed and how much would leave; `share explain <scope>/<slug>` and `share explain memory <id>` say why one item would or would not. Lowering a level recalls nothing already sent. Restoring a backup puts every project back to Nothing. The rules and their limits are in [ADR 0025](docs/adr/0025-sharing-policy.md).
+
 ## Coming from claude-mem
 
 ```sh

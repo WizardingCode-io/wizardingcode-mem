@@ -467,6 +467,7 @@ describe("wizardingcode-mem status", () => {
         `project   demo (path:${project})`,
         "memories  3 active (1 stale) · 1 superseded · 1 archived",
         "turns     3 distilled · 1 skipped (unknown 1) · 1 failed · 1 queued",
+        "sharing   nothing leaves this machine (every default)",
         "hooks     prompt p50 10 ms, p95 19 ms · turn-end p50 4 ms, p95 4 ms · 21 runs, 1 error",
         "judge     heuristic only (no TypeSafe key) · model calls made by wizardingcode-mem: 0",
         `data      ${dataDir}`,

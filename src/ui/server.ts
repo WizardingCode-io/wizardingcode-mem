@@ -366,7 +366,13 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
       if (target === null) return problem(400, "no backup target is configured");
       db.close();
       try {
-        const outcome = await restoreBackup({ storeDir, target, name: body.name, now: now() });
+        const outcome = await restoreBackup({
+          storeDir,
+          dataDir: options.dataDir,
+          target,
+          name: body.name,
+          now: now(),
+        });
         return json(outcome, outcome.ok ? 200 : outcome.reason === "busy" ? 409 : 400);
       } finally {
         db = openDb({ dataDir: storeDir, busyTimeoutMs: 2000 });
@@ -633,7 +639,7 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
     if (path === "/api/status" && request.method === "GET") {
       const projectId = Number(url.searchParams.get("project"));
       const project = Number.isInteger(projectId) ? projectRef(db, projectId) : null;
-      return json(statusReport(db, project, options.dataDir));
+      return json(statusReport(db, project, options.dataDir, { env, now: now() }));
     }
     if (path === "/api/history" && request.method === "GET") {
       return json(

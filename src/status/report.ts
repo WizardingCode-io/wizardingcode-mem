@@ -4,7 +4,17 @@ import type { SkipReason } from "../distill/pipeline.ts";
 import { noneSkipped, SKIPPED_KEY, type SkippedBy, skippedText } from "../distill/skips.ts";
 import type { HistoryStatus } from "../history/status.ts";
 import { USAGE_KEYS } from "../judge/index.ts";
-import { loadSettings } from "../settings/settings.ts";
+import { type Env, loadSettings, publicSettings } from "../settings/settings.ts";
+import { levelOf } from "../sharing/levels.ts";
+import { isDefault, loadPolicy } from "../sharing/policy.ts";
+import { wouldLeave } from "../sharing/report.ts";
+import {
+  LEVEL_LABELS,
+  type Level,
+  type Root,
+  shareListText,
+  TEAM_DESTINATION,
+} from "../sharing/types.ts";
 import type { Db } from "../store/db.ts";
 import { getMeta } from "../store/meta.ts";
 import { plural } from "../util/text.ts";
@@ -35,6 +45,30 @@ export interface StatusReport {
   dataDir: string;
   /** The history import across projects; set by callers that look at the transcripts. */
   history?: HistoryStatus;
+  sharing: SharingStatus;
+}
+
+/**
+ * What the sharing policy says for the current project, and what would leave under it from
+ * the index as it is: this project's own repository and memories, or, with no project, the
+ * machine's, at the level Nothing.
+ */
+export interface SharingStatus {
+  level: Level;
+  roots: Root[];
+  /** The allowed areas in force: listed, and in their root's taxonomy. */
+  areas: number;
+  wouldLeave: { entries: number; memories: number };
+  problems: number;
+  /** The lists the environment narrowed: the file allows more than is in force. */
+  narrowedByEnv: ("roots" | "areas")[];
+  /**
+   * Nothing leaves this machine by any choice: no root, no area, no project above Nothing,
+   * no problem (`isDefault`), and no list narrowed by the environment.
+   */
+  default: boolean;
+  /** The projects other than this one whose level in force is above Nothing. */
+  othersSharing: number;
 }
 
 const EVENT_ORDER = [
@@ -132,11 +166,88 @@ function skippedBy(db: Db | null, project: ProjectRef | null): StatusReport["tur
   return by;
 }
 
+/** The setting behind each list, whose source says whether the environment narrowed it. */
+const SHARING_LISTS = {
+  roots: "WIZARDINGCODE_MEM_SHARE_ROOTS",
+  areas: "WIZARDINGCODE_MEM_SHARE_AREAS",
+} as const;
+
+/**
+ * The sharing line's figures. Read-only: the policy is loaded and counted as it stands, with
+ * no reconcile and no git, so a store that never ran the sharing schema reads every default
+ * and nothing is written to it.
+ */
+function sharingStatus(
+  db: Db | null,
+  project: ProjectRef | null,
+  dataDir: string,
+  env: Env,
+  now: number,
+): SharingStatus {
+  const policy = loadPolicy(db, dataDir, env, now);
+  const projectId = project?.id;
+  const report = wouldLeave(db, dataDir, env, policy, {
+    now,
+    fresh: false,
+    ...(projectId === undefined ? {} : { projectId }),
+  });
+  const sources = publicSettings(env, dataDir);
+  const narrowedByEnv = (["roots", "areas"] as const).filter(
+    (list) => sources[SHARING_LISTS[list]].source === "env",
+  );
+  // Over every known project, as `perProject` reads levels: that list holds this project
+  // alone when the counts are this project's.
+  const othersSharing = [...policy.projects].filter(
+    (id) => id !== projectId && levelOf(policy, id, TEAM_DESTINATION).level !== "local",
+  ).length;
+  return {
+    level: projectId === undefined ? "local" : levelOf(policy, projectId, TEAM_DESTINATION).level,
+    roots: [...policy.roots].sort(),
+    areas: policy.areas.size,
+    wouldLeave: report.counts,
+    problems: policy.problems.length,
+    narrowedByEnv,
+    default: isDefault(policy) && narrowedByEnv.length === 0,
+    othersSharing,
+  };
+}
+
+/**
+ * The `sharing` line of `status`. The default sentence is about the machine, so it is said
+ * only when nothing leaves it by any choice and no list is narrowed by the environment (a
+ * narrowed list hides what the file allows). Otherwise the line gives this project's level
+ * and counts, and says how many other projects share.
+ */
+export function formatSharing(sharing: StatusReport["sharing"]): string {
+  const { level, roots, areas, problems, narrowedByEnv, othersSharing } = sharing;
+  if (sharing.default) return "sharing   nothing leaves this machine (every default)";
+  const byEnv = (list: "roots" | "areas") =>
+    narrowedByEnv.includes(list) ? " (set by the environment)" : "";
+  const { entries, memories } = sharing.wouldLeave;
+  const parts = [
+    `this project: ${LEVEL_LABELS[level]}`,
+    `roots: ${shareListText(roots)}${byEnv("roots")}`,
+    `${plural(areas, "allowed area")}${byEnv("areas")}`,
+    `would leave: ${plural(entries, "entry", "entries")}, ${plural(memories, "memory", "memories")} (index as it is)`,
+  ];
+  if (othersSharing > 0) {
+    parts.push(
+      othersSharing === 1 ? "1 other project shares" : `${othersSharing} other projects share`,
+    );
+  }
+  if (problems > 0) parts.push(`${plural(problems, "problem")}; see doctor`);
+  return `sharing   ${parts.join(" · ")}`;
+}
+
+/** `env` and `now` default to the process's: the sharing line reads the settings with them. */
 export function statusReport(
   db: Db | null,
   project: ProjectRef | null,
   dataDir: string,
+  options: { env?: Env; now?: number } = {},
 ): StatusReport {
+  const env = options.env ?? process.env;
+  const now = options.now ?? Date.now();
   const count = (sql: string) =>
     db === null || project === null
       ? 0
@@ -162,6 +273,7 @@ export function statusReport(
     modelCalls: 0,
     judge: judgeReport(db, project, dataDir),
     dataDir,
+    sharing: sharingStatus(db, project, dataDir, env, now),
   };
 }
 
@@ -222,6 +334,8 @@ export function formatStatus(report: StatusReport): string {
       `turns     ${turns.distilled} distilled · ${skippedText(turns.skipped, turns.skippedBy)} · ${turns.failed} failed · ${turns.queued} queued`,
     );
   }
+  // Printed whether or not anything is stored here: what leaves concerns the machine.
+  lines.push(formatSharing(report.sharing));
   if (hooks.runs > 0) {
     const speeds = hooks.latency.map((l) => `${l.event} p50 ${l.p50} ms, p95 ${l.p95} ms`);
     lines.push(

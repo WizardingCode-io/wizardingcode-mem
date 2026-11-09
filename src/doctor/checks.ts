@@ -50,6 +50,13 @@ import {
 import { type FoundRepo, scanRepos } from "../modules/knowledge/resolve.ts";
 import type { KnowledgeStore } from "../modules/knowledge/types.ts";
 import { loadSettings } from "../settings/settings.ts";
+import { isDefault, loadPolicy } from "../sharing/policy.ts";
+import {
+  type Level,
+  type SharingPolicy,
+  shareListText,
+  TEAM_DESTINATION,
+} from "../sharing/types.ts";
 import { hookLatency } from "../status/report.ts";
 import {
   DB_FILE,
@@ -852,6 +859,51 @@ function knowledge(context: DoctorContext, db: Db | null): Check {
   }
 }
 
+// --- Sharing --------------------------------------------------------------------------
+
+/** How many projects stand at a level for the team, as the policy reads them now. */
+function projectsAt(policy: SharingPolicy, level: Level): number {
+  return [...policy.levels.values()].filter(
+    (row) => row.destination === TEAM_DESTINATION && row.level === level,
+  ).length;
+}
+
+/**
+ * What may leave this machine, or every problem the policy's loader raised: an emptied
+ * list, an ignored environment value, a level that no longer holds, an inert area id, a hand
+ * edit nobody recorded, a level this version does not know, a newer sharing schema. It only
+ * looks: nothing is reconciled here. Its own try, not `readingDb`'s: at the current schema a
+ * store may still lack the sharing tables, which is every default and not an older schema.
+ * Sharing chosen with no team server configured is no warning: there is nothing to fix.
+ */
+function sharing(context: DoctorContext, db: Db | null): Check {
+  const name = "sharing";
+  if (db === null) return { name, status: "skip", detail: "no database yet" };
+  try {
+    const policy = loadPolicy(db, context.dataDir, context.env ?? process.env, context.now);
+    if (policy.problems.length > 0) {
+      return { name, status: "warn", detail: policy.problems.join(" · ") };
+    }
+    if (isDefault(policy)) {
+      return { name, status: "ok", detail: "nothing leaves this machine (every default)" };
+    }
+    const detail = [
+      `roots: ${shareListText([...policy.roots].sort())}`,
+      plural(policy.areas.size, "allowed area"),
+      `knowledge: ${plural(projectsAt(policy, "knowledge"), "project")}`,
+      `knowledge and memories: ${plural(projectsAt(policy, "all"), "project")}`,
+      `epoch ${policy.epoch}`,
+    ].join(" · ");
+    return { name, status: "ok", detail };
+  } catch (error) {
+    return {
+      name,
+      status: "warn",
+      detail: `could not be checked: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
 /** Looks, and changes nothing: no directory, database or setting is created or altered. */
 export function runChecks(context: DoctorContext): Check[] {
   const { check: databaseCheck, db } = database(context);
@@ -868,6 +920,7 @@ export function runChecks(context: DoctorContext): Check[] {
       readingDb("semantic search", db, () => semanticSearch(context, db)),
       readingDb("backups", db, () => backups(context, db)),
       knowledge(context, db),
+      sharing(context, db),
       // Claude Code is the host this started on: its absence is a warning, not a skip.
       hooksHost("Claude Code", CLAUDE_CODE, context.settingsPath, null, context),
       hooksHost("Codex", CODEX, context.codexHooksPath, "codex", context),
