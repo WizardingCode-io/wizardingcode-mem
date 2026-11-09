@@ -141,7 +141,7 @@ function checkFields(fields: Fields): Fields {
   };
 }
 
-function checkArea(area: string, taxonomy: Taxonomy): void {
+export function checkArea(area: string, taxonomy: Taxonomy): void {
   if (taxonomy.areas.some((known) => known.id === area)) return;
   throw invalid(
     `area: ${area} is not in the taxonomy (${taxonomy.areas.map((known) => known.id).join(", ")})`,
@@ -322,6 +322,8 @@ function nextEntry(
     author: string;
     now: string;
     supersedes: string | null;
+    /** Undefined keeps the current entry's value; a new entry is not pinned. */
+    pinned: boolean | undefined;
     what: string;
   },
 ): KnowledgeEntry {
@@ -340,6 +342,7 @@ function nextEntry(
     created: current?.entry.created ?? next.now,
     updated: next.now,
     supersedes: next.supersedes ?? current?.entry.supersedes ?? null,
+    pinned: next.pinned ?? current?.entry.pinned ?? false,
     body: next.body,
     // Keys this version does not know are kept as they were written.
     extra: current?.entry.extra ?? [],
@@ -390,6 +393,7 @@ export function writeEntry(
       author: authorOf(writer),
       now: nowIso(store.now()),
       supersedes: change.supersedes ?? null,
+      pinned: change.pinned,
       what: "write",
     });
     const path = entryPath(slug);
@@ -412,6 +416,54 @@ export function writeEntry(
 
 // --- An agent's write: a proposal ------------------------------------------------------
 
+/**
+ * The slug a proposal takes: the caller's, checked, or the one made from the redacted
+ * title. A caller's slug that redaction would change is refused: it would name a file
+ * after a secret.
+ */
+export function proposalSlug(store: KnowledgeStore, change: EntryChange): string {
+  if (change.slug !== undefined) {
+    checkSlug(change.slug);
+    if (redact(change.slug, { env: store.env }) !== change.slug) {
+      throw invalid("slug: it reads as a secret and would be redacted; choose another");
+    }
+    return change.slug;
+  }
+  return slugify(redact(change.title, { env: store.env }).trim());
+}
+
+/**
+ * The version a proposal is based on; 0 for a new entry. A caller's slug that names an
+ * entry is a change to it, at the current version unless the caller gave one; a slug made
+ * from the title is a new entry. Refused when the target does not match: an entry that
+ * exists for a new one, none for a change, another version than the base.
+ */
+export function proposalBase(
+  slug: string,
+  change: EntryChange,
+  current: { version: number } | null,
+): number {
+  const base =
+    change.baseVersion === undefined
+      ? change.slug !== undefined && current !== null
+        ? current.version
+        : 0
+      : checkBase(change.baseVersion);
+  if (base === 0 && current !== null) {
+    throw new KnowledgeError(
+      "exists",
+      `${entryPath(slug)} exists at version ${current.version}; propose a change with its slug and base version ${current.version}`,
+    );
+  }
+  if (base > 0 && current === null) {
+    throw new KnowledgeError("missing", `there is no entry ${slug} to change`);
+  }
+  if (current !== null && current.version !== base) {
+    throw stale(current.version, base, "proposal");
+  }
+  return base;
+}
+
 function propose(
   store: KnowledgeStore,
   ref: ScopeRef,
@@ -421,12 +473,7 @@ function propose(
   // A proposal enters a history the engine never rewrites, and a session's text may carry
   // a secret. The limits apply to what is stored: the text after redaction.
   const clean = (text: string): string => redact(text, { env: store.env });
-  if (change.slug !== undefined) {
-    checkSlug(change.slug);
-    if (clean(change.slug) !== change.slug) {
-      throw invalid("slug: it reads as a secret and would be redacted; choose another");
-    }
-  }
+  const slug = proposalSlug(store, change);
   const status = change.status;
   const fields = checkFields({
     title: clean(change.title),
@@ -436,32 +483,14 @@ function propose(
     subject: clean(change.subject),
     status: status ?? "active",
   });
-  const slug = change.slug ?? slugify(fields.title);
   const body = bodyOf(clean(change.body));
+  const extras = change.proposal;
 
   return underLeases(store, ref, true, (repo, taxonomy) => {
     checkArea(fields.area, taxonomy);
     checkTarget(store, repo, slug);
     const current = readCurrent(repo, slug, taxonomy);
-    // A caller's slug that names an entry is a change to it; a slug from the title is a new entry.
-    const base =
-      change.baseVersion === undefined
-        ? change.slug !== undefined && current !== null
-          ? current.entry.version
-          : 0
-        : checkBase(change.baseVersion);
-    if (base === 0 && current !== null) {
-      throw new KnowledgeError(
-        "exists",
-        `${entryPath(slug)} exists at version ${current.entry.version}; propose a change with its slug and base version ${current.entry.version}`,
-      );
-    }
-    if (base > 0 && current === null) {
-      throw new KnowledgeError("missing", `there is no entry ${slug} to change`);
-    }
-    if (current !== null && current.entry.version !== base) {
-      throw stale(current.entry.version, base, "proposal");
-    }
+    const base = proposalBase(slug, change, current === null ? null : current.entry);
 
     const waiting = countOpen(
       store,
@@ -496,6 +525,10 @@ function propose(
       decidedBy: null,
       decidedAt: null,
       decidedVersion: null,
+      contradicts: extras?.contradicts ?? [],
+      onBehalfOf: extras?.onBehalfOf ?? null,
+      judgedBy: extras?.judgedBy ?? null,
+      judgeVersion: extras?.judgeVersion ?? null,
       extra: [],
       problem: null,
     };
@@ -599,6 +632,8 @@ export function acceptProposal(
       author: authorOf(person),
       now,
       supersedes: null,
+      // A proposal carries no pin: the entry keeps the one a person gave it.
+      pinned: undefined,
       what: "proposal",
     });
     const decided: KnowledgeProposal = {

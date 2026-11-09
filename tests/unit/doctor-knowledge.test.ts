@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { type Check, type DoctorContext, runChecks } from "../../src/doctor/checks.ts";
 import { doctorContext } from "../../src/doctor/context.ts";
 import { agentWriter, personAuthor } from "../../src/modules/knowledge/author.ts";
+import { KNOWLEDGE_SCHEMA_VERSION } from "../../src/modules/knowledge/migrations.ts";
 import { ensureRepo, openRepo, repoPath, writeManifest } from "../../src/modules/knowledge/repo.ts";
 import { adopt, writeEntry } from "../../src/modules/knowledge/store.ts";
 import type { EntryChange, KnowledgeStore, Repo } from "../../src/modules/knowledge/types.ts";
@@ -155,7 +156,8 @@ describe("doctor: knowledge", () => {
   test("warns when the knowledge tables are newer than this binary", () => {
     ensureRepo(store, WORKSPACE);
     fx.db.run(
-      "INSERT INTO module_migrations (module, version, name, applied_at) VALUES ('knowledge', 7, 'x', 0)",
+      "INSERT INTO module_migrations (module, version, name, applied_at) VALUES ('knowledge', ?, 'x', 0)",
+      [KNOWLEDGE_SCHEMA_VERSION + 1],
     );
     const check = knowledge();
     expect(check.status).toBe("warn");

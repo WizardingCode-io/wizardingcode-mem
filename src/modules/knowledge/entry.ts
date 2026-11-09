@@ -213,6 +213,29 @@ class Reader {
     return null;
   }
 
+  /** `true` or `false`; absent is false. Any other value is false with a problem. */
+  flag(key: string): boolean {
+    const value = this.text(key);
+    if (value === null || value === "false") return false;
+    if (value === "true") return true;
+    this.problems.push(`${key} must be true or false`);
+    return false;
+  }
+
+  /** A block list of entry ids; absent is none. A scalar, or an item that is not an id, is a problem. */
+  ids(key: string): string[] {
+    const value = this.front.map.get(key);
+    if (value === undefined) return [];
+    if (!Array.isArray(value)) {
+      this.problems.push(`${key} must be a list of entry ids, one - <id> line each`);
+      return [];
+    }
+    const ids = value.filter((item): item is string => typeof item === "string" && UUID.test(item));
+    if (ids.length !== value.length)
+      this.problems.push(`${key} holds an item that is not an entry id`);
+    return ids;
+  }
+
   /** The lines of every key outside `known`, in the file's order. */
   extra(known: readonly string[]): string[] {
     return this.front.order
@@ -280,7 +303,7 @@ const overCap = (text: string) =>
 
 // --- An entry ---------------------------------------------------------------------
 
-const ENTRY_KEYS = [
+export const ENTRY_KEYS = [
   "id",
   "title",
   "kind",
@@ -293,6 +316,7 @@ const ENTRY_KEYS = [
   "created",
   "updated",
   "supersedes",
+  "pinned",
 ] as const;
 
 /** The row of a file that could not be read as an entry: listed by its name, with why. */
@@ -311,6 +335,7 @@ export function unreadEntry(slug: string, problem: string): KnowledgeEntry {
     created: null,
     updated: null,
     supersedes: null,
+    pinned: false,
     body: "",
     extra: [],
     problem,
@@ -341,6 +366,7 @@ export function parseEntry(text: string, slug: string, taxonomy: Taxonomy | null
     created: reader.text("created"),
     updated: reader.text("updated"),
     supersedes: reader.text("supersedes"),
+    pinned: reader.flag("pinned"),
     body: front.body,
     extra: reader.extra(ENTRY_KEYS),
     problem: null,
@@ -365,12 +391,14 @@ export function renderEntry(entry: KnowledgeEntry): string {
   if (entry.created !== null) lines.push(`created: ${scalar(entry.created)}`);
   if (entry.updated !== null) lines.push(`updated: ${scalar(entry.updated)}`);
   if (entry.supersedes !== null) lines.push(`supersedes: ${scalar(entry.supersedes)}`);
+  // An entry that is not pinned says nothing: the files of part 1 stay as they were.
+  if (entry.pinned) lines.push("pinned: true");
   return document([...lines, ...entry.extra], entry.body);
 }
 
 // --- A proposal -------------------------------------------------------------------
 
-const PROPOSAL_KEYS = [
+export const PROPOSAL_KEYS = [
   "id",
   "entry",
   "slug",
@@ -388,6 +416,10 @@ const PROPOSAL_KEYS = [
   "decided_by",
   "decided_at",
   "decided_version",
+  "contradicts",
+  "on_behalf_of",
+  "judged_by",
+  "judge_version",
 ] as const;
 
 /** The row of a file that could not be read as a proposal. */
@@ -411,6 +443,10 @@ export function unreadProposal(fileName: string, problem: string): KnowledgeProp
     decidedBy: null,
     decidedAt: null,
     decidedVersion: null,
+    contradicts: [],
+    onBehalfOf: null,
+    judgedBy: null,
+    judgeVersion: null,
     extra: [],
     problem,
   };
@@ -466,6 +502,10 @@ export function parseProposal(
     decidedBy: reader.text("decided_by"),
     decidedAt: reader.text("decided_at"),
     decidedVersion: reader.whole("decided_version", 1, false),
+    contradicts: reader.ids("contradicts"),
+    onBehalfOf: reader.text("on_behalf_of"),
+    judgedBy: reader.text("judged_by"),
+    judgeVersion: reader.text("judge_version"),
     extra: reader.extra(PROPOSAL_KEYS),
     problem: null,
   };
@@ -490,6 +530,14 @@ export function renderProposal(proposal: KnowledgeProposal): string {
     `subject: ${quote(proposal.subject)}`,
     `status: ${scalar(proposal.status)}`,
   );
+  // What the agent's proposal records, each only when it is set: a person's proposal file
+  // reads as part 1 wrote it.
+  if (proposal.onBehalfOf !== null) lines.push(`on_behalf_of: ${quote(proposal.onBehalfOf)}`);
+  if (proposal.judgedBy !== null) lines.push(`judged_by: ${scalar(proposal.judgedBy)}`);
+  if (proposal.judgeVersion !== null) lines.push(`judge_version: ${quote(proposal.judgeVersion)}`);
+  if (proposal.contradicts.length > 0) {
+    lines.push("contradicts:", ...proposal.contradicts.map((id) => `  - ${id}`));
+  }
   if (proposal.decision !== null) lines.push(`decision: ${proposal.decision}`);
   if (proposal.decidedBy !== null) lines.push(`decided_by: ${quote(proposal.decidedBy)}`);
   if (proposal.decidedAt !== null) lines.push(`decided_at: ${scalar(proposal.decidedAt)}`);

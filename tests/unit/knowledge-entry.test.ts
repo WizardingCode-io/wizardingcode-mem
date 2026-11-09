@@ -81,6 +81,7 @@ describe("parseEntry", () => {
       created: "2026-11-08T23:10:00.000Z",
       updated: "2026-11-09T08:00:00.000Z",
       supersedes: null,
+      pinned: false,
       body: "The body.",
       extra: [],
       problem: null,
@@ -305,6 +306,10 @@ The proposed body.
       decidedBy: null,
       decidedAt: null,
       decidedVersion: null,
+      contradicts: [],
+      onBehalfOf: null,
+      judgedBy: null,
+      judgeVersion: null,
       extra: [],
       problem: null,
     });

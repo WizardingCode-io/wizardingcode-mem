@@ -5,9 +5,18 @@ import { join } from "node:path";
 import { resolveProject } from "../../src/core/project.ts";
 import type { Redacted } from "../../src/core/redact.ts";
 import { MEMORY_KINDS } from "../../src/core/types.ts";
+import {
+  readRepoState,
+  rebuildRepo,
+  replaceRepoRows,
+} from "../../src/modules/knowledge/index-store.ts";
+import { ensureRepo, openRepo } from "../../src/modules/knowledge/repo.ts";
+import { openStore } from "../../src/modules/knowledge/store-open.ts";
+import type { KnowledgeStore, Repo, ScopeRef } from "../../src/modules/knowledge/types.ts";
 import { openDb, withWrite } from "../../src/store/db.ts";
 import { insertMemory } from "../../src/store/memories.ts";
 import { hostBinary, runBinary } from "../helpers/binary.ts";
+import { type CorpusEntry, commitEntryFiles } from "../helpers/knowledge.ts";
 
 // A hook sits between the user and the model on every prompt. These budgets are for
 // the compiled binary, measured from outside, against a project with 5,000 memories in
@@ -45,6 +54,17 @@ const LINKED_PROJECTS = 10;
 const LINKED_MEMORIES_EACH = 2000;
 const USER_RULES = 20;
 
+// The knowledge the measured project sees: the workspace's, the shared and its own
+// repository, of 2,000 entries each, 10 of them pinned in each; and 30 other projects'
+// repositories of 200 entries, which it does not see, whose words are the prompts' too.
+const VISIBLE_ENTRIES = 2000;
+const PINNED_EACH = 10;
+const HIDDEN_REPOS = 30;
+const HIDDEN_ENTRIES = 200;
+const KNOWLEDGE_ROWS = 3 * VISIBLE_ENTRIES + HIDDEN_REPOS * HIDDEN_ENTRIES;
+/** Half the shortest hook busy timeout (100 ms on a prompt). */
+const REBUILD_TRANSACTION_MS = 50;
+
 let binary: string;
 let base: string;
 let dataDir: string;
@@ -61,6 +81,70 @@ function generator(seed: number) {
     state = (state * 1103515245 + 12345) & 0x7fffffff;
     return state % max;
   };
+}
+
+/** A measured prompt: a paragraph of about twenty searchable words, not a question. */
+const promptText = (word: () => string) =>
+  `why does the ${word()} ${word()} ${word()} when the ${word()} ${word()} is slow? I checked the ${word()} and the ${word()}, the ${word()} looks fine, but the ${word()} ${word()} keeps hitting the ${word()} ${word()} and then the ${word()} ${word()} fails on the ${word()} ${word()}. Could the ${word()} ${word()} be the problem?`;
+
+/** The prompts the prompt cases send, in order: the first is the unmeasured run. */
+function measuredPrompts(count: number): string[] {
+  const next = generator(7);
+  const word = () => WORDS[next(WORDS.length)] as string;
+  return Array.from({ length: count }, () => promptText(word));
+}
+
+/** A knowledge store on the measured data directory, with a throwaway home for git. */
+function knowledgeStoreOf(db: ReturnType<typeof openDb>): KnowledgeStore {
+  const home = join(base, "home");
+  mkdirSync(home, { recursive: true });
+  return openStore({
+    db,
+    dataDir,
+    env: { PATH: process.env.PATH, HOME: home, WIZARDINGCODE_MEM_AUTHOR: "Perf" },
+  });
+}
+
+/**
+ * The knowledge corpus: each repository made through the store, its entry files written
+ * in the store's format, staged and committed once, then indexed by a rebuild. One
+ * workspace entry holds the words of the first measured prompt, so that knowledge has an
+ * entry to show.
+ */
+function buildKnowledge(db: ReturnType<typeof openDb>, projectId: number): void {
+  const store = knowledgeStoreOf(db);
+  const next = generator(99);
+  const word = () => WORDS[next(WORDS.length)] as string;
+  const entries = (prefix: string, count: number, pinned: number): CorpusEntry[] =>
+    Array.from({ length: count }, (_, i) => ({
+      slug: `${prefix}-${i}`,
+      title: `The ${word()} ${word()} must ${word()} before the ${word()} ${word()}`,
+      body: `Because the ${word()} ${word()} would otherwise ${word()} the ${word()}.\n\nThe ${word()} ${word()} keeps the ${word()} ${word()} in step.`,
+      area: "code",
+      pinned: i < pinned,
+    }));
+  const fill = (ref: ScopeRef, items: CorpusEntry[]) => {
+    const repo = ensureRepo(store, ref);
+    commitEntryFiles(repo.path, items);
+    rebuildRepo(store, repo);
+  };
+  const [, firstMeasured] = measuredPrompts(2);
+  fill({ scope: "workspace" }, [
+    ...entries("workspace", VISIBLE_ENTRIES - 1, PINNED_EACH),
+    {
+      slug: "the-first-measured-prompt",
+      title: "What the first measured prompt asks about",
+      body: firstMeasured as string,
+    },
+  ]);
+  fill({ scope: "shared" }, entries("shared", VISIBLE_ENTRIES, PINNED_EACH));
+  fill({ scope: "project", projectId }, entries("project", VISIBLE_ENTRIES, PINNED_EACH));
+  for (let i = 0; i < HIDDEN_REPOS; i++) {
+    const dir = join(base, `knowledge-other-${i}`);
+    mkdirSync(dir);
+    const other = resolveProject(db, dir).id;
+    fill({ scope: "project", projectId: other }, entries(`other-${i}`, HIDDEN_ENTRIES, 0));
+  }
 }
 
 beforeAll(() => {
@@ -167,7 +251,12 @@ beforeAll(() => {
     }
   });
   linkedDb.close();
-}, 240_000);
+
+  // After the copy: the linked store measures links and rules, as before.
+  const knowledgeDb = openDb({ dataDir, busyTimeoutMs: 5000 });
+  buildKnowledge(knowledgeDb, projectId);
+  knowledgeDb.close();
+}, 480_000);
 
 afterAll(() => {
   rmSync(base, { recursive: true, force: true });
@@ -228,6 +317,35 @@ const BUDGET_MS = {
   "tool-failed": BASE_BUDGET_MS["tool-failed"] * SLACK,
 };
 
+describe(`the knowledge corpus of ${KNOWLEDGE_ROWS} entries`, () => {
+  test("every entry of the corpus is searchable", () => {
+    const db = openDb({ dataDir, busyTimeoutMs: 5000 });
+    try {
+      const rows = db.query<{ n: number }, []>("SELECT count(*) AS n FROM knowledge_fts").get()?.n;
+      expect(rows).toBe(KNOWLEDGE_ROWS);
+    } finally {
+      db.close();
+    }
+  });
+
+  test(`a rebuild's write transaction at ${VISIBLE_ENTRIES} entries takes under ${REBUILD_TRANSACTION_MS} ms`, () => {
+    const db = openDb({ dataDir, busyTimeoutMs: 5000 });
+    try {
+      const store = knowledgeStoreOf(db);
+      const repo = openRepo(store, { scope: "workspace" }) as Repo;
+      const state = readRepoState(store, repo);
+      expect(state.files.entries).toHaveLength(VISIBLE_ENTRIES);
+      const started = performance.now();
+      replaceRepoRows(store, repo, state);
+      const ms = performance.now() - started;
+      console.log(`rebuild write transaction, ${VISIBLE_ENTRIES} entries: ${ms.toFixed(1)} ms`);
+      expect(ms).toBeLessThan(REBUILD_TRANSACTION_MS);
+    } finally {
+      db.close();
+    }
+  }, 60_000);
+});
+
 describe(`hook latency with ${MEMORIES} memories`, () => {
   test(`a prompt is answered within ${BUDGET_MS.prompt} ms`, async () => {
     const next = generator(7);
@@ -235,7 +353,7 @@ describe(`hook latency with ${MEMORIES} memories`, () => {
     // A real prompt is a paragraph, not a question: twenty or so searchable words.
     const result = await measure("prompt", (run) => ({
       prompt_id: `p${run}`,
-      prompt: `why does the ${word()} ${word()} ${word()} when the ${word()} ${word()} is slow? I checked the ${word()} and the ${word()}, the ${word()} looks fine, but the ${word()} ${word()} keeps hitting the ${word()} ${word()} and then the ${word()} ${word()} fails on the ${word()} ${word()}. Could the ${word()} ${word()} be the problem?`,
+      prompt: promptText(word),
     }));
     console.log(`prompt: ${result.shown}`);
     // The measurement only means something if retrieval actually ran and found things.
@@ -301,9 +419,6 @@ describe(`hook latency with ${MEMORIES} memories`, () => {
 // gives. Copilot's prompt is capture-only (the host drops a prompt hook's output) and
 // Antigravity has no prompt event: its brief comes with the first model invocation.
 describe(`hook latency of the newer agents with ${MEMORIES} memories`, () => {
-  const promptText = (word: () => string) =>
-    `why does the ${word()} ${word()} ${word()} when the ${word()} ${word()} is slow? I checked the ${word()} and the ${word()}, the ${word()} looks fine, but the ${word()} ${word()} keeps hitting the ${word()} ${word()} and then the ${word()} ${word()} fails on the ${word()} ${word()}. Could the ${word()} ${word()} be the problem?`;
-
   for (const agent of ["qwen", "droid"] as const) {
     const common = { session_id: `perf-${agent}`, cwd: project };
     test(`${agent}: a prompt is answered within ${BUDGET_MS.prompt} ms`, async () => {

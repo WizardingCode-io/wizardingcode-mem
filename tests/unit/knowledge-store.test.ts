@@ -19,6 +19,7 @@ import {
 } from "../../src/modules/knowledge/entry.ts";
 import { ModuleSchemaTooNewError } from "../../src/modules/knowledge/errors.ts";
 import { rebuildRepo } from "../../src/modules/knowledge/index-store.ts";
+import { KNOWLEDGE_SCHEMA_VERSION } from "../../src/modules/knowledge/migrations.ts";
 import {
   ensureRepo,
   hashOf,
@@ -332,16 +333,16 @@ describe("a person's write", () => {
       entryFile(repo),
       readFileSync(entryFile(repo), "utf8").replace(
         "---\nThe body.",
-        "pinned: true\n---\nThe body.",
+        "flagged: true\n---\nThe body.",
       ),
     );
     commitByHand(repo, `entries/${SLUG}.md`);
     const second = written(
       writeEntry(store, WORKSPACE, change({ slug: SLUG, baseVersion: 1 }), person()),
     );
-    expect(second).toMatchObject({ status: "draft", version: 2, extra: ["pinned: true"] });
+    expect(second).toMatchObject({ status: "draft", version: 2, extra: ["flagged: true"] });
     expect(second.supersedes).toBe("3f2a9c6e-7b1d-4e0f-8a2b-9c1d2e3f4a5b");
-    expect(readFileSync(entryFile(repo), "utf8")).toContain("\npinned: true\n---\n");
+    expect(readFileSync(entryFile(repo), "utf8")).toContain("\nflagged: true\n---\n");
   });
 
   test("a project write before any workspace write creates the workspace repository first", () => {
@@ -488,7 +489,8 @@ describe("a person's write", () => {
   test("tables newer than this binary's are left alone", () => {
     writeEntry(store, WORKSPACE, change(), person());
     fx.db.run(
-      "INSERT INTO module_migrations (module, version, name, applied_at) VALUES ('knowledge', 7, 'x', 0)",
+      "INSERT INTO module_migrations (module, version, name, applied_at) VALUES ('knowledge', ?, 'x', 0)",
+      [KNOWLEDGE_SCHEMA_VERSION + 1],
     );
     expect(() => writeEntry(store, WORKSPACE, change({ title: "Other" }), person())).toThrow(
       ModuleSchemaTooNewError,

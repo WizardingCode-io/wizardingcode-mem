@@ -73,6 +73,8 @@ export interface KnowledgeEntry {
   created: string | null;
   updated: string | null;
   supersedes: string | null;
+  /** Shown at every session start. Only a person's write sets it; false when the file says nothing. */
+  pinned: boolean;
   body: string;
   /** The frontmatter lines of the keys this version does not know, in the file's order. */
   extra: string[];
@@ -101,6 +103,13 @@ export interface KnowledgeProposal {
   decidedBy: string | null;
   decidedAt: string | null;
   decidedVersion: number | null;
+  /** The ids of the entries the judge found the proposal contradicts. */
+  contradicts: string[];
+  /** The person the agent worked for when it proposed. */
+  onBehalfOf: string | null;
+  /** The judge that compared the proposal with its neighbours, and its version; null with none. */
+  judgedBy: string | null;
+  judgeVersion: string | null;
   extra: string[];
   problem: string | null;
 }
@@ -118,6 +127,18 @@ export interface EntryChange {
   /** Absent or 0: a new entry. */
   baseVersion?: number;
   supersedes?: string;
+  /** A person's write only: undefined keeps the entry's value (false for a new entry). */
+  pinned?: boolean;
+  /** An agent's write only: what the proposal records beside the change. */
+  proposal?: ProposalExtras;
+}
+
+/** What an agent's proposal records beside its change; `contradicts` holds entry ids. */
+export interface ProposalExtras {
+  contradicts: string[];
+  onBehalfOf: string;
+  judgedBy: string | null;
+  judgeVersion: string | null;
 }
 
 export interface Taxonomy {

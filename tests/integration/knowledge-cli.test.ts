@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { agentWriter } from "../../src/modules/knowledge/author.ts";
 import { parseEntry } from "../../src/modules/knowledge/entry.ts";
+import { KNOWLEDGE_SCHEMA_VERSION } from "../../src/modules/knowledge/migrations.ts";
 import {
   hashOf,
   headOf,
@@ -433,7 +434,8 @@ describe("knowledge list, rebuild and adopt", () => {
     withDb((db) => {
       db.run("UPDATE knowledge_entries SET title = 'theirs'");
       db.run(
-        "INSERT INTO module_migrations (module, version, name, applied_at) VALUES ('knowledge', 7, 'x', 0)",
+        "INSERT INTO module_migrations (module, version, name, applied_at) VALUES ('knowledge', ?, 'x', 0)",
+        [KNOWLEDGE_SCHEMA_VERSION + 1],
       );
     });
     for (const args of [

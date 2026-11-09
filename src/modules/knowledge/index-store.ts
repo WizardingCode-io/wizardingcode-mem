@@ -22,7 +22,7 @@ import {
   taxonomyFor,
   withRepoLeases,
 } from "./repo.ts";
-import { listRepos } from "./resolve.ts";
+import { DELETE_REPO_SEARCH_ROWS, dropRepoRows, listRepos } from "./resolve.ts";
 import { requireSchema } from "./schema.ts";
 import type {
   KnowledgeEntry,
@@ -43,26 +43,47 @@ const rowId = (id: string, name: string) =>
  */
 const proposalName = (path: string) => path.slice("proposals/".length);
 
-/** One row per slug: a problem row and a later good row for the same file never collide. */
-export function upsertEntry(
+/** Deletes one search row by its rowid: the lookup the search table answers without a scan. */
+export const DELETE_SEARCH_ROW = "DELETE FROM knowledge_fts WHERE rowid = ?";
+
+/** Only an active entry with no problem is searchable: everything else is listed only. */
+const searchable = (entry: KnowledgeEntry) => entry.status === "active" && entry.problem === null;
+
+/**
+ * Writes an entry row, and its search row when it is searchable, with no row of its slug
+ * or of its id in the way. The caller has removed both, or knows there are none.
+ */
+function insertEntry(
   store: KnowledgeStore,
   repoId: number,
   entry: KnowledgeEntry,
   path: string,
   hash: string,
 ): void {
-  store.db.run("DELETE FROM knowledge_entries WHERE repo_id = ? AND slug = ?", [
-    repoId,
-    entry.slug,
-  ]);
-  store.db.run(
-    `INSERT OR REPLACE INTO knowledge_entries
-       (repo_id, id, slug, path, title, kind, area, context, subject, status, author, version,
-        created, updated, supersedes, body, problem, hash)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
+  const id = rowId(entry.id, entry.slug);
+  const ftsRowid = searchable(entry)
+    ? Number(
+        store.db
+          .query(
+            `INSERT INTO knowledge_fts (title, area, context, subject, body, repo_id, entry_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          )
+          .run(entry.title, entry.area, entry.context, entry.subject, entry.body, repoId, id)
+          .lastInsertRowid,
+      )
+    : null;
+  // A plain insert: with foreign keys on, an INSERT OR REPLACE here cost fifteen times as
+  // much per row (measured at 2,000 rows), and a rebuild's transaction writes thousands.
+  store.db
+    .query(
+      `INSERT INTO knowledge_entries
+         (repo_id, id, slug, path, title, kind, area, context, subject, status, author, version,
+          created, updated, supersedes, body, problem, hash, pinned, fts_rowid)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
       repoId,
-      rowId(entry.id, entry.slug),
+      id,
       entry.slug,
       path,
       entry.title,
@@ -79,8 +100,35 @@ export function upsertEntry(
       entry.body,
       entry.problem,
       hash,
-    ],
-  );
+      entry.pinned ? 1 : 0,
+      ftsRowid,
+    );
+}
+
+/**
+ * One row per slug and one per id: a problem row and a later good row for the same file
+ * never collide, and an entry renamed to another slug leaves no row under the old one. The
+ * search rows of the rows it replaces go with them, by the rowids those rows hold.
+ */
+export function upsertEntry(
+  store: KnowledgeStore,
+  repoId: number,
+  entry: KnowledgeEntry,
+  path: string,
+  hash: string,
+): void {
+  const id = rowId(entry.id, entry.slug);
+  const replaced = store.db
+    .query<{ fts_rowid: number }, [number, string, string]>(
+      `SELECT fts_rowid FROM knowledge_entries
+        WHERE repo_id = ? AND (slug = ? OR id = ?) AND fts_rowid IS NOT NULL`,
+    )
+    .all(repoId, entry.slug, id);
+  for (const row of replaced) store.db.query(DELETE_SEARCH_ROW).run(row.fts_rowid);
+  store.db
+    .query("DELETE FROM knowledge_entries WHERE repo_id = ? AND (slug = ? OR id = ?)")
+    .run(repoId, entry.slug, id);
+  insertEntry(store, repoId, entry, path, hash);
 }
 
 /** The folder says whether a proposal is open; a decided one says how in its frontmatter. */
@@ -98,13 +146,16 @@ export function upsertProposal(
   hash: string,
 ): void {
   const state = stateOf(proposal, path);
-  store.db.run(
-    `INSERT OR REPLACE INTO knowledge_proposals
-       (repo_id, id, path, state, entry_id, slug, base_version, base_hash, proposed_by,
-        proposed_at, decided_by, decided_at, decided_version, title, kind, area, context,
-        subject, status, body, problem, hash)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
+  store.db
+    .query(
+      `INSERT OR REPLACE INTO knowledge_proposals
+         (repo_id, id, path, state, entry_id, slug, base_version, base_hash, proposed_by,
+          proposed_at, decided_by, decided_at, decided_version, title, kind, area, context,
+          subject, status, body, problem, hash, contradicts, on_behalf_of, judged_by,
+          judge_version)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
       repoId,
       rowId(proposal.id, proposalName(path)),
       path,
@@ -127,8 +178,11 @@ export function upsertProposal(
       state === "open" ? proposal.body : "",
       proposal.problem,
       hash,
-    ],
-  );
+      JSON.stringify(proposal.contradicts),
+      proposal.onBehalfOf,
+      proposal.judgedBy,
+      proposal.judgeVersion,
+    );
 }
 
 /**
@@ -201,6 +255,7 @@ interface EntryRow {
   created: string | null;
   updated: string | null;
   supersedes: string | null;
+  pinned: number;
   body: string;
   problem: string | null;
 }
@@ -210,11 +265,11 @@ export function listEntries(store: KnowledgeStore, repoId: number): KnowledgeEnt
   return store.db
     .query<EntryRow, [number]>(
       `SELECT id, slug, title, kind, area, context, subject, status, author, version, created,
-              updated, supersedes, body, problem
+              updated, supersedes, pinned, body, problem
          FROM knowledge_entries WHERE repo_id = ? ORDER BY slug`,
     )
     .all(repoId)
-    .map((row) => ({ ...row, extra: [] }));
+    .map((row) => ({ ...row, pinned: row.pinned === 1, extra: [] }));
 }
 
 interface ProposalRow {
@@ -237,6 +292,10 @@ interface ProposalRow {
   status: string;
   body: string;
   problem: string | null;
+  contradicts: string;
+  on_behalf_of: string | null;
+  judged_by: string | null;
+  judge_version: string | null;
 }
 
 /** The repository's proposals as indexed: the open ones first, then by id. */
@@ -249,7 +308,7 @@ export function listProposals(
     .query<ProposalRow, [number, string | null, string | null]>(
       `SELECT id, state, entry_id, slug, base_version, base_hash, proposed_by, proposed_at,
               decided_by, decided_at, decided_version, title, kind, area, context, subject,
-              status, body, problem
+              status, body, problem, contradicts, on_behalf_of, judged_by, judge_version
          FROM knowledge_proposals
         WHERE repo_id = ? AND (? IS NULL OR state = ?)
         ORDER BY state = 'open' DESC, id`,
@@ -274,9 +333,23 @@ export function listProposals(
       decidedBy: row.decided_by,
       decidedAt: row.decided_at,
       decidedVersion: row.decided_version,
+      contradicts: idsOf(row.contradicts),
+      onBehalfOf: row.on_behalf_of,
+      judgedBy: row.judged_by,
+      judgeVersion: row.judge_version,
       extra: [],
       problem: row.problem,
     }));
+}
+
+/** The ids a JSON list column holds; none when it holds anything else. */
+function idsOf(json: string): string[] {
+  try {
+    const value: unknown = JSON.parse(json);
+    return Array.isArray(value) ? value.filter((id): id is string => typeof id === "string") : [];
+  } catch {
+    return [];
+  }
 }
 
 /** Open proposals for one target: by entry id for an existing entry, by slug for a new one. */
@@ -477,50 +550,94 @@ export function readRepoFiles(store: KnowledgeStore, repo: Repo): RepoFiles {
   return { entries, proposals, overCap };
 }
 
+/** What a rebuild reads before its transaction: git's answers and the files. */
+export interface RepoState {
+  head: string | null;
+  fingerprint: string;
+  /** The paths git lists as changed; null when git could not be asked. */
+  changed: Set<string> | null;
+  files: RepoFiles;
+}
+
+/**
+ * Everything a rebuild needs from the disk and from git, read with no lock held: the
+ * write transaction that follows only replaces rows, so a hook waits for it as briefly as
+ * it can. The head and the fingerprint are taken before the files are read: a file added
+ * while they are read then shows as a fingerprint the index does not hold, and the next
+ * refresh reads the repository again. Writes nothing.
+ */
+export function readRepoState(store: KnowledgeStore, repo: Repo): RepoState {
+  const head = headOf(repo.path);
+  const fingerprint = fingerprintOf(repo.path);
+  const changed = changedPaths(store, repo);
+  return { head, fingerprint, changed, files: readRepoFiles(store, repo) };
+}
+
+/** The files as they are indexed: one git lists as changed is a draft with a problem. */
+function marked(state: RepoState): Pick<RepoFiles, "entries" | "proposals"> {
+  const { changed, files } = state;
+  return {
+    entries: files.entries.map((file) =>
+      changed?.has(file.path)
+        ? {
+            ...file,
+            entry: {
+              ...file.entry,
+              status: "draft",
+              problem: also(file.entry.problem, CHANGED_OUTSIDE),
+            },
+          }
+        : file,
+    ),
+    proposals: files.proposals.map((file) =>
+      changed?.has(file.path)
+        ? {
+            ...file,
+            proposal: { ...file.proposal, problem: also(file.proposal.problem, CHANGED_OUTSIDE) },
+          }
+        : file,
+    ),
+  };
+}
+
+/**
+ * The one write transaction of a rebuild: the repository's search rows go by the rowids
+ * its entry rows hold, then its entry and proposal rows, and the rows of `state` are
+ * written in their place. No statement reads another repository's rows. The rows of what
+ * was shown stay: a rebuild does not unsay what a session was shown.
+ */
+export function replaceRepoRows(store: KnowledgeStore, repo: Repo, state: RepoState): void {
+  const { entries, proposals } = marked(state);
+  withWrite(store.db, () => {
+    store.db.query(DELETE_REPO_SEARCH_ROWS).run(repo.id);
+    store.db.run("DELETE FROM knowledge_entries WHERE repo_id = ?", [repo.id]);
+    store.db.run("DELETE FROM knowledge_proposals WHERE repo_id = ?", [repo.id]);
+    // The files hold one slug per name and one id per entry (`readRepoFiles`): nothing to replace.
+    for (const { entry, path, hash } of entries) insertEntry(store, repo.id, entry, path, hash);
+    for (const { proposal, path, hash } of proposals) {
+      upsertProposal(store, repo.id, proposal, path, hash);
+    }
+    recordRepo(
+      store,
+      repo.id,
+      state.head,
+      state.fingerprint,
+      state.files.overCap,
+      state.changed !== null,
+    );
+  });
+}
+
 /**
  * Replaces the repository's rows with what its files hold, in one transaction. A file git
  * lists as changed is a draft with a problem until a person adopts it.
  */
 export function rebuildRepo(store: KnowledgeStore, repo: Repo): RebuildResult {
   requireSchema(store);
-  // Taken before the files are read: a file added while they are read then shows as a
-  // fingerprint the index does not hold, and the next refresh reads the repository again.
-  const head = headOf(repo.path);
-  const fingerprint = fingerprintOf(repo.path);
-  const changed = changedPaths(store, repo);
-  const files = readRepoFiles(store, repo);
-  const { overCap } = files;
-  const entries = files.entries.map((file) =>
-    changed?.has(file.path)
-      ? {
-          ...file,
-          entry: {
-            ...file.entry,
-            status: "draft",
-            problem: also(file.entry.problem, CHANGED_OUTSIDE),
-          },
-        }
-      : file,
-  );
-  const proposals = files.proposals.map((file) =>
-    changed?.has(file.path)
-      ? {
-          ...file,
-          proposal: { ...file.proposal, problem: also(file.proposal.problem, CHANGED_OUTSIDE) },
-        }
-      : file,
-  );
-
+  const state = readRepoState(store, repo);
   store.renew?.();
-  withWrite(store.db, () => {
-    store.db.run("DELETE FROM knowledge_entries WHERE repo_id = ?", [repo.id]);
-    store.db.run("DELETE FROM knowledge_proposals WHERE repo_id = ?", [repo.id]);
-    for (const { entry, path, hash } of entries) upsertEntry(store, repo.id, entry, path, hash);
-    for (const { proposal, path, hash } of proposals) {
-      upsertProposal(store, repo.id, proposal, path, hash);
-    }
-    recordRepo(store, repo.id, head, fingerprint, overCap, changed !== null);
-  });
+  replaceRepoRows(store, repo, state);
+  const { entries, proposals } = marked(state);
   return {
     entries: entries.length,
     proposals: proposals.length,
@@ -528,8 +645,8 @@ export function rebuildRepo(store: KnowledgeStore, repo: Repo): RebuildResult {
     problems:
       entries.filter(({ entry }) => entry.problem !== null).length +
       proposals.filter(({ proposal }) => proposal.problem !== null).length,
-    overCap,
-    dirtyChecked: changed !== null,
+    overCap: state.files.overCap,
+    dirtyChecked: state.changed !== null,
   };
 }
 
@@ -611,11 +728,17 @@ export function rebuildAll(
     // by name above (`inEachRepo`). The rows of both stay.
     if (kindAt(repoPath(store.dataDir, row.path)) !== "absent") continue;
     withWrite(store.db, () => {
-      store.db.run("DELETE FROM knowledge_entries WHERE repo_id = ?", [row.id]);
-      store.db.run("DELETE FROM knowledge_proposals WHERE repo_id = ?", [row.id]);
+      dropRepoRows(store.db, row.id);
       store.db.run("DELETE FROM knowledge_repos WHERE id = ?", [row.id]);
     });
   }
+  // A search row no entry row points at is the index writer's gap: `doctor` reports it,
+  // and this pass is how `knowledge rebuild` repairs it, whatever the scope rebuilt.
+  withWrite(store.db, () => {
+    store.db.run(
+      "DELETE FROM knowledge_fts WHERE rowid NOT IN (SELECT fts_rowid FROM knowledge_entries WHERE fts_rowid IS NOT NULL)",
+    );
+  });
   return all;
 }
 

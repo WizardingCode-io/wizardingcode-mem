@@ -32,7 +32,7 @@ const USAGE = `Usage: wizardingcode-mem knowledge <command> [options]
 Commands:
   write    --scope workspace|shared|project --title <text> --kind <kind> --area <id>
            [--context <text>] [--subject <text>] [--slug <slug>] [--base <n>]
-           [--status active|draft|archived]
+           [--status active|draft|archived] [--pinned | --unpin]
            (--body-file <path> | --body <text> | the body on standard input)
   accept   --scope <scope> <proposal id>
   reject   --scope <scope> <proposal id>
@@ -65,14 +65,29 @@ const WRITE_FLAGS = [
   "--body",
 ];
 
-/** Splits the arguments into the options this subcommand takes and what is left. */
-function parse(argv: string[], allowed: string[]): { flags: Map<string, string>; rest: string[] } {
+/** The options of `write` that take no value. */
+const WRITE_SWITCHES = ["--pinned", "--unpin"];
+
+/**
+ * Splits the arguments into the options this subcommand takes and what is left. An option
+ * of `allowed` takes the next argument as its value; one of `switches` takes none, and
+ * its value is the empty string.
+ */
+function parse(
+  argv: string[],
+  allowed: string[],
+  switches: string[] = [],
+): { flags: Map<string, string>; rest: string[] } {
   const flags = new Map<string, string>();
   const rest: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i] as string;
     if (!arg.startsWith("--")) {
       rest.push(arg);
+      continue;
+    }
+    if (switches.includes(arg)) {
+      flags.set(arg, "");
       continue;
     }
     if (!allowed.includes(arg)) throw new UsageError(`unknown option ${arg}`);
@@ -124,10 +139,19 @@ async function bodyOf(flags: Map<string, string>): Promise<string> {
   return await Bun.stdin.text();
 }
 
+/** `--pinned` pins, `--unpin` unpins; neither leaves the entry's pin as it is. */
+function pinnedOf(flags: Map<string, string>): boolean | undefined {
+  const pin = flags.has("--pinned");
+  const unpin = flags.has("--unpin");
+  if (pin && unpin) throw new UsageError("give --pinned or --unpin, not both");
+  if (pin) return true;
+  return unpin ? false : undefined;
+}
+
 const out = (line: string) => process.stdout.write(`${line}\n`);
 
 async function write(store: KnowledgeStore, argv: string[]): Promise<void> {
-  const { flags, rest } = parse(argv, WRITE_FLAGS);
+  const { flags, rest } = parse(argv, WRITE_FLAGS, WRITE_SWITCHES);
   if (rest.length > 0) throw new UsageError(`unexpected argument ${rest[0]}`);
   const scope = scopeOf(flags);
   if (scope === undefined) throw new UsageError("--scope is required");
@@ -140,6 +164,7 @@ async function write(store: KnowledgeStore, argv: string[]): Promise<void> {
   }
   const slug = flags.get("--slug");
   const status = flags.get("--status");
+  const pinned = pinnedOf(flags);
   // A trailing newline is the file's or the shell's, not the entry's.
   const body = (await bodyOf(flags)).replace(/\r?\n$/, "");
   const result = writeEntry(
@@ -155,6 +180,7 @@ async function write(store: KnowledgeStore, argv: string[]): Promise<void> {
       ...(slug === undefined ? {} : { slug }),
       ...(status === undefined ? {} : { status }),
       ...(base === undefined ? {} : { baseVersion: Number(base) }),
+      ...(pinned === undefined ? {} : { pinned }),
     },
     personAuthor(store),
   );

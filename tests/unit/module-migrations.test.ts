@@ -73,32 +73,38 @@ describe("the knowledge module's schema", () => {
       { module: SHARING_MODULE, migrations: SHARING_MIGRATIONS },
     ]);
     expect(KNOWLEDGE_MODULE).toBe("knowledge");
-    expect(KNOWLEDGE_SCHEMA_VERSION).toBe(6);
-    expect(KNOWLEDGE_MIGRATIONS.map((m) => [m.version, m.name])).toEqual([[6, "knowledge_store"]]);
+    expect(KNOWLEDGE_SCHEMA_VERSION).toBe(7);
+    expect(KNOWLEDGE_MIGRATIONS.map((m) => [m.version, m.name])).toEqual([
+      [6, "knowledge_store"],
+      [7, "knowledge_agent"],
+    ]);
   });
 
   test("a fresh database gets migration 6 after the core ones, and the core version stays", () => {
     const db = open();
     expect(userVersion(db)).toBe(LATEST_VERSION);
     const recorded = rows(db);
-    expect(recorded).toHaveLength(2);
+    expect(recorded).toHaveLength(3);
     expect(recorded[0]).toMatchObject({ module: "knowledge", version: 6, name: "knowledge_store" });
     expect(recorded[0]?.applied_at).toBeGreaterThan(0);
-    expect(recorded[1]).toMatchObject({ module: "sharing", version: 1, name: "sharing_policy" });
+    expect(recorded[1]).toMatchObject({ module: "knowledge", version: 7, name: "knowledge_agent" });
     expect(recorded[1]?.applied_at).toBeGreaterThan(0);
+    expect(recorded[2]).toMatchObject({ module: "sharing", version: 1, name: "sharing_policy" });
+    expect(recorded[2]?.applied_at).toBeGreaterThan(0);
     const names = tables(db);
     expect(names).toEqual(
       expect.arrayContaining(["knowledge_repos", "knowledge_entries", "knowledge_proposals"]),
     );
-    expect(names).not.toContain("knowledge_fts");
-    expect(moduleVersion(db, "knowledge")).toBe(6);
+    expect(names).toContain("knowledge_fts");
+    expect(names).toContain("knowledge_shown");
+    expect(moduleVersion(db, "knowledge")).toBe(7);
     db.close();
   });
 
   test("a second open applies nothing and takes no backup", () => {
     open().close();
     const db = open();
-    expect(rows(db)).toHaveLength(2);
+    expect(rows(db)).toHaveLength(3);
     expect(backups()).toEqual([]);
     db.close();
   });
@@ -109,6 +115,7 @@ describe("the knowledge module's schema", () => {
     const db = open();
     expect(rows(db).map((row) => [row.module, row.version, row.name])).toEqual([
       ["knowledge", 6, "knowledge_store"],
+      ["knowledge", 7, "knowledge_agent"],
       ["sharing", 1, "sharing_policy"],
     ]);
     expect(backups()).toEqual([]);
@@ -117,18 +124,20 @@ describe("the knowledge module's schema", () => {
 
   test("moduleSchemaState tells current, behind and too new; a newer row does not stop openDb", () => {
     const db = open();
-    expect(moduleSchemaState(db, "knowledge", 6)).toBe("current");
-    expect(moduleSchemaState(db, "knowledge", 7)).toBe("behind");
+    expect(moduleSchemaState(db, "knowledge", KNOWLEDGE_SCHEMA_VERSION)).toBe("current");
+    expect(moduleSchemaState(db, "knowledge", KNOWLEDGE_SCHEMA_VERSION + 1)).toBe("behind");
     db.run(
-      "INSERT INTO module_migrations (module, version, name, applied_at) VALUES ('knowledge', 7, 'x', 0)",
+      "INSERT INTO module_migrations (module, version, name, applied_at) VALUES ('knowledge', ?, 'x', 0)",
+      [KNOWLEDGE_SCHEMA_VERSION + 1],
     );
-    expect(moduleSchemaState(db, "knowledge", 6)).toBe("too-new");
+    expect(moduleSchemaState(db, "knowledge", KNOWLEDGE_SCHEMA_VERSION)).toBe("too-new");
     db.close();
     const again = open();
-    expect(moduleSchemaState(again, "knowledge", 6)).toBe("too-new");
+    expect(moduleSchemaState(again, "knowledge", KNOWLEDGE_SCHEMA_VERSION)).toBe("too-new");
     expect(rows(again).map((row) => [row.module, row.version])).toEqual([
       ["knowledge", 6],
       ["knowledge", 7],
+      ["knowledge", 8],
       ["sharing", 1],
     ]);
     again.close();
@@ -197,13 +206,12 @@ describe("the knowledge module's schema", () => {
         applied_at: 0,
       })),
       expect.objectContaining({ module: "knowledge", version: 6, name: "knowledge_store" }),
+      expect.objectContaining({ module: "knowledge", version: 7, name: "knowledge_agent" }),
       expect.objectContaining({ module: "sharing", version: 1, name: "sharing_policy" }),
     ]);
     const names = tables(db);
     for (const gone of [
-      "knowledge_fts",
       "knowledge_state",
-      "knowledge_shown",
       "promoted_memories",
       "injections_memory_shown",
       "injections_memory_contexts",
@@ -250,6 +258,16 @@ describe("the knowledge module's schema", () => {
       .map((column) => column.name);
     expect(columns).toContain("repo_id");
     expect(columns).not.toContain("essential");
+    // Migration 7 made both names again, in its own shape: the withdrawn rows are gone.
+    expect(db.query<{ n: number }, []>("SELECT count(*) AS n FROM knowledge_fts").get()?.n).toBe(0);
+    const columnsOf = (name: string) =>
+      db
+        .query<{ name: string }, []>(`PRAGMA table_info(${name})`)
+        .all()
+        .map((column) => column.name);
+    expect(columnsOf("knowledge_fts")).not.toContain("tags");
+    expect(columnsOf("knowledge_shown")).toContain("repo_id");
+    expect(columnsOf("knowledge_shown")).not.toContain("slug");
     expect(backups()).toHaveLength(1);
     expect(backups()[0]).toContain(`-v${LATEST_VERSION}-`);
     db.close();
@@ -292,6 +310,8 @@ describe("the knowledge module's schema", () => {
       "body",
       "problem",
       "hash",
+      "pinned",
+      "fts_rowid",
     ]);
     expect(columnsOf("knowledge_proposals")).toEqual([
       "repo_id",
@@ -316,6 +336,10 @@ describe("the knowledge module's schema", () => {
       "body",
       "problem",
       "hash",
+      "contradicts",
+      "on_behalf_of",
+      "judged_by",
+      "judge_version",
     ]);
     expect(tables(db)).toEqual(
       expect.arrayContaining(["knowledge_proposals_entry", "knowledge_proposals_slug"]),
@@ -363,7 +387,9 @@ describe("the knowledge module's schema", () => {
     open().close();
     const db = openExisting(dir);
     expect(db).not.toBeNull();
-    expect(moduleSchemaState(db as Database, "knowledge", 6)).toBe("current");
+    expect(moduleSchemaState(db as Database, "knowledge", KNOWLEDGE_SCHEMA_VERSION)).toBe(
+      "current",
+    );
     db?.close();
   });
 
@@ -388,6 +414,7 @@ describe("the knowledge module's schema", () => {
     const db = new Database(join(dir, DB_FILE), { readonly: true });
     expect(rows(db).map((row) => [row.module, row.version])).toEqual([
       ["knowledge", 6],
+      ["knowledge", 7],
       ["sharing", 1],
     ]);
     db.close();

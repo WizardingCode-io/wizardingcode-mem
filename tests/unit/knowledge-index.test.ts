@@ -21,6 +21,7 @@ import {
   rebuildAll,
   rebuildRepo,
 } from "../../src/modules/knowledge/index-store.ts";
+import { KNOWLEDGE_SCHEMA_VERSION } from "../../src/modules/knowledge/migrations.ts";
 import {
   ensureRepo,
   hashOf,
@@ -151,6 +152,7 @@ describe("rebuildRepo", () => {
     expect(entryRows()).toEqual(entries);
     expect(proposalRows()).toEqual(proposals);
 
+    fx.db.run("DELETE FROM knowledge_fts");
     fx.db.run("DELETE FROM knowledge_entries");
     fx.db.run("DELETE FROM knowledge_proposals");
     rebuildRepo(store, repo);
@@ -361,7 +363,8 @@ describe("tables a newer version wrote", () => {
     fx.db.run("UPDATE knowledge_entries SET title = 'theirs'");
     fx.db.run("UPDATE knowledge_repos SET head = 'theirs'");
     fx.db.run(
-      "INSERT INTO module_migrations (module, version, name, applied_at) VALUES ('knowledge', 7, 'x', 0)",
+      "INSERT INTO module_migrations (module, version, name, applied_at) VALUES ('knowledge', ?, 'x', 0)",
+      [KNOWLEDGE_SCHEMA_VERSION + 1],
     );
     for (const call of [
       () => rebuildAll(store),

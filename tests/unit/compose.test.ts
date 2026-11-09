@@ -191,16 +191,17 @@ describe("compose: the remainder", () => {
     );
     expect(out).toBe("first\n\nsecond");
     expect(other).toEqual([600]);
-    expect(memory).toEqual([1800 - 2]);
+    // F5′: the remainder is charged what the others wrote, plus a blank line each.
+    expect(memory).toEqual([2400 - 6 - 2]);
   });
 
-  test("shares that take the whole budget leave the remainder nothing", () => {
+  test("shares that would take the whole budget charge the remainder only what they wrote", () => {
     const memory: number[] = [];
     compose(
       [says("memory", "remainder", "x", memory), says("a", 0.7, "y"), says("b", 0.7, "z")],
       input("prompt"),
     );
-    expect(memory).toEqual([0]);
+    expect(memory).toEqual([2400 - 3 - 3]);
   });
 
   test("a module without contribute leaves the remainder whole", () => {
@@ -208,5 +209,123 @@ describe("compose: the remainder", () => {
     const tools: EngineModule = { id: "tools-only", name: "Tools only", share: 0.5 };
     compose([says("memory", "remainder", "x", memory), tools], input("file-read"));
     expect(memory).toEqual([1200]);
+  });
+});
+
+describe("compose: F5′, the remainder is charged what the declared modules wrote", () => {
+  const budget = MOMENT_BUDGET.prompt;
+
+  test("a declared module that says nothing leaves the remainder the whole budget", () => {
+    const memory: number[] = [];
+    const out = compose(
+      [says("memory", "remainder", "brief", memory), says("knowledge", 0.25, null)],
+      input("prompt"),
+    );
+    expect(memory).toEqual([budget]);
+    expect(out).toBe("brief");
+  });
+
+  test("a declared module that writes n characters leaves the remainder budget − n − 2", () => {
+    const memory: number[] = [];
+    compose(
+      [says("memory", "remainder", "brief", memory), says("knowledge", 0.25, "k".repeat(100))],
+      input("prompt"),
+    );
+    expect(memory).toEqual([budget - 102]);
+  });
+
+  test("a declared module that throws charges nothing, and the error is told once", () => {
+    const memory: number[] = [];
+    const errors: string[] = [];
+    const thrower: EngineModule = {
+      id: "knowledge",
+      name: "Knowledge",
+      share: 0.25,
+      contribute: () => {
+        throw new Error("broken");
+      },
+    };
+    const out = compose(
+      [says("memory", "remainder", "brief", memory), thrower],
+      input("prompt"),
+      (id) => errors.push(id),
+    );
+    expect(memory).toEqual([budget]);
+    expect(errors).toEqual(["knowledge"]);
+    expect(out).toBe("brief");
+  });
+
+  test("a declared module that overruns its share charges nothing, and none of its text is kept", () => {
+    const memory: number[] = [];
+    const out = compose(
+      [
+        says("memory", "remainder", "brief", memory),
+        says("knowledge", 0.25, "k".repeat(Math.floor(0.25 * budget) + 1)),
+      ],
+      input("prompt"),
+    );
+    expect(memory).toEqual([budget]);
+    expect(out).toBe("brief");
+  });
+
+  test("two declared modules writing 100 and 50 leave the remainder budget − 154", () => {
+    const memory: number[] = [];
+    compose(
+      [
+        says("memory", "remainder", "brief", memory),
+        says("a", 0.2, "a".repeat(100)),
+        says("b", 0.2, "b".repeat(50)),
+      ],
+      input("prompt"),
+    );
+    expect(memory).toEqual([budget - 154]);
+  });
+
+  test("the output is joined in engine order, the remainder first when it is first", () => {
+    const asked: string[] = [];
+    const tracked = (id: string, share: EngineModule["share"]): EngineModule => ({
+      id,
+      name: id,
+      share,
+      contribute: () => {
+        asked.push(id);
+        return id;
+      },
+    });
+    const out = compose(
+      [tracked("memory", "remainder"), tracked("a", 0.2), tracked("b", 0.2)],
+      input("prompt"),
+    );
+    expect(out).toBe("memory\n\na\n\nb");
+    // The declared modules are asked first: what they wrote is what the remainder is charged.
+    expect(asked).toEqual(["a", "b", "memory"]);
+  });
+
+  test("the text never exceeds the budget, over 200 random shares and lengths", () => {
+    let seed = 7;
+    const random = () => {
+      seed = (seed * 1103515245 + 12345) % 2147483648;
+      return seed / 2147483648;
+    };
+    const moments: Moment[] = ["session-start", "prompt", "file-read", "tool-failed"];
+    for (let run = 0; run < 200; run++) {
+      const moment = moments[run % moments.length] as Moment;
+      const count = 1 + Math.floor(random() * 3);
+      const modules: EngineModule[] = [];
+      const remainderAt = Math.floor(random() * (count + 1));
+      for (let i = 0; i <= count; i++) {
+        const share: EngineModule["share"] = i === remainderAt ? "remainder" : random();
+        // Each module writes some fraction of what it is given, or a little more than that.
+        const ratio = random() * 1.1;
+        modules.push({
+          id: `m${i}`,
+          name: `m${i}`,
+          share,
+          contribute: (given) => "x".repeat(Math.floor(given.budgetChars * ratio)),
+        });
+      }
+      const out = compose(modules, input(moment));
+      expect(out?.length ?? 0).toBeLessThanOrEqual(MOMENT_BUDGET[moment]);
+    }
   });
 });

@@ -1,14 +1,17 @@
 // What the knowledge store's tests share: a data directory, a throwaway home, a database,
 // and stores whose environment the test controls. No test touches the person's git
 // configuration or depends on the shell beyond `PATH`.
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { renderEntry } from "../../src/modules/knowledge/entry.ts";
 import { KnowledgeError } from "../../src/modules/knowledge/errors.ts";
 import { resetGitCaches } from "../../src/modules/knowledge/repo.ts";
 import { openStore } from "../../src/modules/knowledge/store-open.ts";
-import type { KnowledgeStore } from "../../src/modules/knowledge/types.ts";
+import type { KnowledgeEntry, KnowledgeStore } from "../../src/modules/knowledge/types.ts";
 import { type Db, openDb } from "../../src/store/db.ts";
+import { realGit } from "./stub-git.ts";
 
 export interface StoreOverrides {
   env?: Record<string, string | undefined>;
@@ -77,6 +80,51 @@ export function knowledgeFixture(name: string): Fixture {
       rmSync(dir, { recursive: true, force: true });
     },
   };
+}
+
+/** What a corpus entry says; the rest of the entry takes the defaults of `entryFiles`. */
+export type CorpusEntry = Pick<KnowledgeEntry, "slug" | "title" | "body"> & Partial<KnowledgeEntry>;
+
+/**
+ * Writes entries into a repository's `entries/` folder in the store's own format, then
+ * stages them with one `git add` and commits them once, by hand: a corpus of thousands
+ * of entries without thousands of commits. The index is not told; a rebuild reads them.
+ */
+export function commitEntryFiles(repoPath: string, entries: CorpusEntry[]): void {
+  const folder = join(repoPath, "entries");
+  mkdirSync(folder, { recursive: true });
+  for (const entry of entries) {
+    const full: KnowledgeEntry = {
+      id: randomUUID(),
+      kind: "knowledge",
+      area: "code",
+      context: "",
+      subject: "",
+      status: "active",
+      author: "Corpus",
+      version: 1,
+      created: "2026-11-01T08:00:00.000Z",
+      updated: "2026-11-01T08:00:00.000Z",
+      supersedes: null,
+      pinned: false,
+      extra: [],
+      problem: null,
+      ...entry,
+    };
+    writeFileSync(join(folder, `${entry.slug}.md`), renderEntry(full));
+  }
+  realGit(repoPath, "add", "-A");
+  realGit(
+    repoPath,
+    "-c",
+    "user.name=Corpus",
+    "-c",
+    "user.email=corpus@example.invalid",
+    "commit",
+    "-q",
+    "-m",
+    "corpus",
+  );
 }
 
 /** The code of the `KnowledgeError` a call throws; null when it does not throw. */

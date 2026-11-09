@@ -3,7 +3,7 @@
 // project that gains a remote, or whose index rows were lost, still finds the same folder.
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { withWrite } from "../../store/db.ts";
+import { type Db, withWrite } from "../../store/db.ts";
 import { nowIso } from "./entry.ts";
 import { KnowledgeError } from "./errors.ts";
 import {
@@ -59,6 +59,25 @@ function rowAt(store: KnowledgeStore, relative: string): RepoRow | null {
     .get(relative);
 }
 
+/**
+ * Deletes a repository's search rows by the rowids its entry rows hold: the search table
+ * answers that by rowid, so no write scans it.
+ */
+export const DELETE_REPO_SEARCH_ROWS =
+  "DELETE FROM knowledge_fts WHERE rowid IN (SELECT fts_rowid FROM knowledge_entries WHERE repo_id = ? AND fts_rowid IS NOT NULL)";
+
+/**
+ * Forgets everything indexed from a repository: its search rows, then its entries, its
+ * proposals and the record of what was shown from it. Every path that drops a
+ * repository's rows calls it, inside its own write transaction.
+ */
+export function dropRepoRows(db: Db, repoId: number): void {
+  db.query(DELETE_REPO_SEARCH_ROWS).run(repoId);
+  db.run("DELETE FROM knowledge_entries WHERE repo_id = ?", [repoId]);
+  db.run("DELETE FROM knowledge_proposals WHERE repo_id = ?", [repoId]);
+  db.run("DELETE FROM knowledge_shown WHERE repo_id = ?", [repoId]);
+}
+
 /** The `knowledge_repos` row of a repository at a folder, written when missing or moved. */
 function saveRow(store: KnowledgeStore, ref: ScopeRef, relative: string): number {
   const existing = rowFor(store, ref);
@@ -69,8 +88,7 @@ function saveRow(store: KnowledgeStore, ref: ScopeRef, relative: string): number
     if (current !== null) {
       if (current.path === relative) return current.id;
       // The repository is in another folder now: what was indexed describes the old one.
-      store.db.run("DELETE FROM knowledge_entries WHERE repo_id = ?", [current.id]);
-      store.db.run("DELETE FROM knowledge_proposals WHERE repo_id = ?", [current.id]);
+      dropRepoRows(store.db, current.id);
       store.db.run(
         "UPDATE knowledge_repos SET path = ?, head = NULL, fingerprint = NULL, indexed_at = 0 WHERE id = ?",
         [relative, current.id],
