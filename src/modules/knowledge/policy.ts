@@ -20,6 +20,24 @@ export const BM25_WEIGHTS = [4, 2, 2, 2, 1] as const;
 /** Repositories one drain rebuilds at most, each in its own transaction. */
 export const REFRESH_PER_DRAIN = 3;
 
+// The tools.
+/** References one `knowledge_get` reads at most. */
+export const GET_MAX_REFS = 10;
+/** An entry's body in a `knowledge_get` answer is cut past this many characters. */
+export const GET_BODY_MAX = 8000;
+/** A `knowledge_get` answer renders no further block past this many characters. */
+export const GET_ANSWER_MAX = 32000;
+export const SEARCH_DEFAULT_LIMIT = 10;
+export const SEARCH_MAX_LIMIT = 25;
+/** `knowledge_propose` calls per agent id per hour, whatever their result. */
+export const PROPOSALS_PER_HOUR = 20;
+/** Entries a draft is compared with by the configured judge: one request, 16 questions. */
+export const NEIGHBOURS = 8;
+/** Distinct non-generic tokens of a draft's body that join its title's in the neighbour search. */
+export const NEIGHBOUR_BODY_TOKENS = 40;
+/** Each body the judge reads, the draft's included, is clipped to this many characters. */
+export const JUDGE_BODY_MAX = 2000;
+
 /** The fields the floor reads. The area is not one: every entry of an area shares its word. */
 export interface FloorEntry {
   title: string;

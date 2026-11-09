@@ -4,17 +4,19 @@ import { enabledModules } from "../engine/modules.ts";
 import { loadSettings } from "../settings/settings.ts";
 import { logError } from "../util/log.ts";
 import { defaultDataDir } from "../util/paths.ts";
-import { GLOBAL_INSTRUCTIONS, moduleTools } from "./run.ts";
+import { agentIdFromClient } from "./agent-id.ts";
+import { globalInstructions, moduleTools } from "./run.ts";
 
 // Tool descriptions are sent to the model in every session, so each is one sentence.
 
 /**
  * The MCP server: the enabled modules' tools over stdio (memory's: project_links inside a
  * project, memory_projects with --global). It lives as long as the host keeps its stdin
- * open, and holds no database connection between calls.
+ * open, and holds no database connection between calls. Each call carries the agent id:
+ * `agent` when the server was started with one, else the host's name from the handshake.
  */
 export async function runMcpServer(
-  options: { global?: boolean; modules?: readonly EngineModule[] } = {},
+  options: { global?: boolean; modules?: readonly EngineModule[]; agent?: string } = {},
 ): Promise<void> {
   const global = options.global === true;
   // The SDK is loaded here and nowhere else: hooks must never pay for it.
@@ -31,10 +33,14 @@ export async function runMcpServer(
 
   // Without a project folder (Claude Desktop's chat) the server spans every project and
   // tells the model how to use it.
+  const instructions = global ? globalInstructions(modules) : undefined;
   const server = new McpServer(
     { name: "wizardingcode-mem", version: pkg.version },
-    global ? { instructions: GLOBAL_INSTRUCTIONS } : undefined,
+    instructions === undefined ? undefined : { instructions },
   );
+  // Asked at each call: the handshake has happened by then. The SDK marks it deprecated
+  // and keeps it working in both protocol eras.
+  const agentId = () => options.agent ?? agentIdFromClient(server.server.getClientVersion()?.name);
   for (const tool of tools) {
     server.registerTool(
       tool.name,
@@ -49,6 +55,7 @@ export async function runMcpServer(
           return answer(
             await tool.run(args, {
               projectDir: global ? null : process.env.CLAUDE_PROJECT_DIR || process.cwd(),
+              agentId: agentId(),
             }),
           );
         } catch (error) {

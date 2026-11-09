@@ -1,4 +1,4 @@
-import { enabledModules } from "../../engine/modules.ts";
+import { BUILT_IN, enabledModules } from "../../engine/modules.ts";
 import { moduleTools } from "../../mcp/run.ts";
 import { loadSettings } from "../../settings/settings.ts";
 import { logError } from "../../util/log.ts";
@@ -30,6 +30,16 @@ export async function run(argv: string[]): Promise<number> {
     return global ? usage(names(other), names(tools)) : usage(names(tools), names(other));
   };
   if (tool === undefined) {
+    // A tool of a built-in module the setting turned off is not unknown: the agent is told
+    // why it cannot use it. Listing a module's tools opens no database.
+    const off = BUILT_IN.filter((module) => !modules.includes(module));
+    for (const module of off) {
+      const offered = await moduleTools([module], global ? "global" : "project", () => {});
+      if (offered.some((candidate) => candidate.name === name)) {
+        process.stdout.write(`${module.id} is off (WIZARDINGCODE_MODULES)\n`);
+        return 0;
+      }
+    }
     process.stderr.write(`wizardingcode-mem tool: unknown tool "${name ?? ""}"\n${await help()}`);
     return EXIT_USAGE;
   }
@@ -56,6 +66,8 @@ export async function run(argv: string[]): Promise<number> {
   try {
     const answer = await tool.run(parsed.data, {
       projectDir: global ? null : (projectDir as string),
+      // The bridge is OpenCode's transport, and the one agent that calls it.
+      agentId: "opencode",
     });
     process.stdout.write(`${answer}\n`);
     return 0;

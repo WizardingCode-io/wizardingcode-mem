@@ -42,6 +42,11 @@ export type ToolMode = "project" | "global";
 /** Where one call was made: the project's folder, or null in global mode. */
 export interface ToolCall {
   projectDir: string | null;
+  /**
+   * The agent that made the call (`claude-code`, `opencode`…), not authenticated; absent
+   * when the transport cannot tell, and then a proposal is written as `agent:mcp`.
+   */
+  agentId?: string;
 }
 
 export interface ModuleTool {
@@ -89,6 +94,11 @@ export interface EngineModule {
    * bridge run, never on the hook path; a module loads what its tools need here.
    */
   tools?(mode: ToolMode): Promise<ModuleTool[]> | ModuleTool[];
+  /**
+   * What the MCP server tells the model about this module when it has no project folder
+   * (`mcp --global`); the enabled modules' sentences are joined by one space, in order.
+   */
+  globalInstructions?: string;
   /** The viewer's rail buttons for this module, in order. */
   views?: ModuleView[];
 }

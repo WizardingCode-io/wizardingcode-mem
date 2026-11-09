@@ -383,7 +383,7 @@ export function countOpenAll(store: KnowledgeStore, repoId: number): number {
 }
 
 /** The root's taxonomy, or null when it does not exist or cannot be read: a rebuild never fails on it. */
-export function taxonomyOrNull(store: KnowledgeStore, repo: Repo): Taxonomy | null {
+export function taxonomyOrNull(store: KnowledgeStore, repo: Pick<Repo, "ref">): Taxonomy | null {
   try {
     return taxonomyFor(store, repo.ref);
   } catch (error) {
@@ -885,6 +885,77 @@ const toHit = (row: HitRow): Hit => ({
   bm25: row.rank,
 });
 
+/** An entry row and its repository's scope, as every reader below selects them. */
+const HIT_COLUMNS = `e.id, e.slug, e.title, e.kind, e.area, e.context, e.subject, e.status, e.author,
+              e.version, e.created, e.updated, e.supersedes, e.pinned, e.body, e.problem,
+              e.repo_id, e.hash, r.scope`;
+
+/** `repo_id IN (?, …)` for the given ids; never empty, the callers return before. */
+const placeholders = (ids: number[]) => ids.map(() => "?").join(", ");
+
+/**
+ * The active, problem-free entries of the given repositories with no search: the pinned
+ * first, then the newest `updated`. What `knowledge_search` lists for a query with no token.
+ */
+export function browseEntries(
+  db: Db,
+  repoIds: number[],
+  filters: { area?: string; kind?: string },
+  limit: number,
+): Hit[] {
+  if (repoIds.length === 0 || limit <= 0) return [];
+  return db
+    .query<HitRow, (string | number | null)[]>(
+      `SELECT ${HIT_COLUMNS}, 0 AS rank
+         FROM knowledge_entries e
+         JOIN knowledge_repos r ON r.id = e.repo_id
+        WHERE e.repo_id IN (${placeholders(repoIds)})
+          AND e.status = 'active' AND e.problem IS NULL
+          AND (? IS NULL OR e.area = ?)
+          AND (? IS NULL OR e.kind = ?)
+        ORDER BY e.pinned DESC, e.updated DESC, e.repo_id, e.slug
+        LIMIT ?`,
+    )
+    .all(
+      ...repoIds,
+      filters.area ?? null,
+      filters.area ?? null,
+      filters.kind ?? null,
+      filters.kind ?? null,
+      limit,
+    )
+    .map(toHit);
+}
+
+/** The indexed row of a slug in one repository, whatever its status; null when there is none. */
+export function entryAt(db: Db, repoId: number, slug: string): Hit | null {
+  const row = db
+    .query<HitRow, [number, string]>(
+      `SELECT ${HIT_COLUMNS}, 0 AS rank
+         FROM knowledge_entries e
+         JOIN knowledge_repos r ON r.id = e.repo_id
+        WHERE e.repo_id = ? AND e.slug = ?`,
+    )
+    .get(repoId, slug);
+  return row === null ? null : toHit(row);
+}
+
+/** Every open proposal of the given repositories, by title and body: a draft's other neighbours. */
+export function openProposalTexts(
+  db: Db,
+  repoIds: number[],
+): { repoId: number; id: string; entryId: string; title: string; body: string }[] {
+  if (repoIds.length === 0) return [];
+  return db
+    .query<{ repoId: number; id: string; entryId: string; title: string; body: string }, number[]>(
+      `SELECT repo_id AS repoId, id, entry_id AS entryId, title, body
+         FROM knowledge_proposals
+        WHERE state = 'open' AND repo_id IN (${placeholders(repoIds)})
+        ORDER BY repo_id, id`,
+    )
+    .all(...repoIds);
+}
+
 /** The key of an entry a context was shown: `<repo id>:<entry id>`. */
 export const shownKey = (repoId: number, entryId: string) => `${repoId}:${entryId}`;
 
@@ -908,9 +979,7 @@ export function searchEntries(
   const without = filters.without ?? null;
   return db
     .query<HitRow, (string | number | null)[]>(
-      `SELECT e.id, e.slug, e.title, e.kind, e.area, e.context, e.subject, e.status, e.author,
-              e.version, e.created, e.updated, e.supersedes, e.pinned, e.body, e.problem,
-              e.repo_id, e.hash, r.scope, bm25(knowledge_fts, ${BM25_WEIGHTS.join(", ")}) AS rank
+      `SELECT ${HIT_COLUMNS}, bm25(knowledge_fts, ${BM25_WEIGHTS.join(", ")}) AS rank
          FROM knowledge_fts f
          JOIN knowledge_entries e ON e.repo_id = f.repo_id AND e.id = f.entry_id
          JOIN knowledge_repos r ON r.id = e.repo_id

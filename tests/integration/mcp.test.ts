@@ -429,6 +429,9 @@ describe("wizardingcode-mem mcp", () => {
       const tools = (await request("tools/list", {})).tools as { name: string }[];
       expect(tools.map((tool) => tool.name).sort()).toEqual([
         "history_search",
+        "knowledge_get",
+        "knowledge_propose",
+        "knowledge_search",
         "memory_get",
         "memory_save",
         "memory_search",
