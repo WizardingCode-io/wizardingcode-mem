@@ -538,6 +538,8 @@ describe("knowledge list, rebuild and adopt", () => {
     const fault = await cli("adopt");
     expect(fault.exitCode).toBe(1);
     expect(fault.stderr).toContain("git");
+    // Said once, as the fault it is: not as a repository set aside.
+    expect(fault.stderr).not.toContain("knowledge/");
     expect(fault.stdout).toBe("");
   });
 

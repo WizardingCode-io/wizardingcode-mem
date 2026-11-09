@@ -40,6 +40,7 @@ import {
   parseManifest,
   readRegularFile,
   refuseForeign,
+  refuseLinkedRoots,
   repoPath,
   runGit,
   statusOf,
@@ -605,6 +606,8 @@ function projectFolders(dataDir: string): string[] {
  */
 function knowledgeRepositories(context: DoctorContext, db: Db | null): Check {
   const name = "knowledge";
+  // The module's own rule, before anything under these folders is listed or read.
+  refuseLinkedRoots(context.dataDir);
   if (!isDirectory(knowledgeRoot(context.dataDir))) {
     return { name, status: "skip", detail: "no knowledge repository yet" };
   }

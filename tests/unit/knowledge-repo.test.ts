@@ -52,6 +52,7 @@ import {
   writeFileAtomic,
   writeIntent,
 } from "../../src/modules/knowledge/repo.ts";
+import { listRepos } from "../../src/modules/knowledge/resolve.ts";
 import { writeEntry } from "../../src/modules/knowledge/store.ts";
 import type { KnowledgeStore, Repo } from "../../src/modules/knowledge/types.ts";
 import { DB_FILE } from "../../src/store/db.ts";
@@ -1652,6 +1653,121 @@ describe("a folder that is not the store's own repository", () => {
     // Put back as the store made it, the repository takes the write.
     expect(write().kind).toBe("written");
     expect(existsSync(join(repo.path, "entries", "an-entry.md"))).toBe(true);
+  });
+
+  test("a repository is refused before git is run in it", () => {
+    const dump = join(fx.dir, "git-was-run.txt");
+    const store = fx.store({
+      env: {
+        WIZARDINGCODE_MEM_AUTHOR: "Writer",
+        PATH: fx.pathWith(stubGit(join(fx.dir, "watched-git"), { dumpEnvTo: dump })),
+      },
+    });
+    const repo = ensureRepo(store, WORKSPACE);
+    rmSync(join(repo.path, ".git", "COMMIT_EDITMSG"));
+    symlinkSync(join(fx.dir, "the-persons-file"), join(repo.path, ".git", "COMMIT_EDITMSG"));
+    // The version of this git is known by now: any call from here on is one in the repository.
+    rmSync(dump);
+
+    const write = () => writeEntry(store, WORKSPACE, AN_ENTRY, personAuthor(store));
+    expect(codeOf(write)).toBe("invalid");
+    expect(existsSync(dump)).toBe(false);
+  });
+
+  test("a folder inside .git that cannot be listed refuses the repository", () => {
+    if (!unix || process.getuid?.() === 0) return;
+    const store = fx.store({ env: { WIZARDINGCODE_MEM_AUTHOR: "Writer" } });
+    const repo = ensureRepo(store, WORKSPACE);
+    const gitDir = join(repo.path, ".git");
+    const victim = join(fx.dir, "the-persons-file");
+    const write = () => writeEntry(store, WORKSPACE, AN_ENTRY, personAuthor(store));
+    /** A link inside a folder that can be searched and not listed, as an archive can carry it. */
+    const refusedWith = (name: string, folder: string, modeBits: number) => {
+      const path = join(gitDir, ...name.split("/"));
+      rmSync(path, { force: true });
+      symlinkSync(victim, path);
+      writeFileSync(victim, "the person's own lines\n");
+      chmodSync(folder, modeBits);
+      try {
+        expect(codeOf(write)).toBe("invalid");
+        expect(thrown(write).message).toContain(folder);
+        expect(readFileSync(victim, "utf8")).toBe("the person's own lines\n");
+      } finally {
+        chmodSync(folder, 0o700);
+      }
+      rmSync(path);
+    };
+    refusedWith("COMMIT_EDITMSG", gitDir, 0o300);
+    refusedWith("logs/HEAD", join(gitDir, "logs"), 0o100);
+    expect(write().kind).toBe("written");
+  });
+
+  test("the socket a person's own git leaves in .git is let through, and no other", async () => {
+    if (!unix) return;
+    const store = fx.store();
+    const repo = ensureRepo(store, WORKSPACE);
+    // A socket's path is short on some systems, so it is made at a short path and moved in.
+    const made = join(fx.dir, "s");
+    const listener = Bun.listen({ unix: made, socket: { data() {} } });
+    try {
+      renameSync(made, join(repo.path, ".git", "fsmonitor--daemon.ipc"));
+      expect(openRepo(store, WORKSPACE)?.id).toBe(repo.id);
+
+      renameSync(
+        join(repo.path, ".git", "fsmonitor--daemon.ipc"),
+        join(repo.path, ".git", "another.ipc"),
+      );
+      expect(codeOf(() => openRepo(store, WORKSPACE))).toBe("invalid");
+      expect(thrown(() => openRepo(store, WORKSPACE)).message).toContain("another.ipc");
+    } finally {
+      listener.stop(true);
+    }
+  });
+
+  test("HEAD is followed only to a ref of the repository's own", () => {
+    const store = fx.store();
+    const repo = ensureRepo(store, WORKSPACE);
+    const head = join(repo.path, ".git", "HEAD");
+    const real = headOf(repo.path);
+    expect(real).toMatch(/^[0-9a-f]{40}$/);
+    writeFileSync(join(fx.dir, "an-outside-file"), "0123456789abcdef0123456789abcdef01234567\n");
+    const climbing = join("..", "..", "..", "..", "an-outside-file");
+    for (const ref of [climbing, `refs/../${climbing}`, "/etc/hosts", "refs/heads/../../config"]) {
+      writeFileSync(head, `ref: ${ref}\n`);
+      expect(headOf(repo.path)).toBeNull();
+    }
+    writeFileSync(head, "ref: refs/heads/main\n");
+    expect(headOf(repo.path)).toBe(real);
+  });
+
+  test("a link where the repositories' folders go is refused, and nothing is made through it", () => {
+    const outside = join(fx.dir, "the-persons-folder");
+    mkdirSync(outside);
+    const store = fx.store({ env: { WIZARDINGCODE_MEM_AUTHOR: "Writer" } });
+    const id = fx.addProject("gitdir:/x/.git", "path:/x");
+    const project = { scope: "project", projectId: id } as const;
+    const write = () => writeEntry(store, project, AN_ENTRY, personAuthor(store));
+
+    // The folder every project's repository goes under.
+    ensureRepo(store, WORKSPACE);
+    const projects = join(fx.dataDir, "knowledge", "projects");
+    symlinkSync(outside, projects);
+    expect(codeOf(write)).toBe("invalid");
+    expect(thrown(write).message).toContain(projects);
+    expect(codeOf(() => listRepos(store))).toBe("invalid");
+    expect(readdirSync(outside)).toEqual([]);
+    rmSync(projects);
+    expect(write().kind).toBe("written");
+
+    // The knowledge folder itself.
+    const root = join(fx.dataDir, "knowledge");
+    renameSync(root, join(fx.dir, "kept-aside"));
+    symlinkSync(outside, root);
+    for (const call of [write, () => ensureRepo(store, WORKSPACE), () => listRepos(store)]) {
+      expect(codeOf(call)).toBe("invalid");
+      expect(thrown(call).message).toContain(root);
+    }
+    expect(readdirSync(outside)).toEqual([]);
   });
 
   test("a temporary file name that is already a link is not written through", () => {

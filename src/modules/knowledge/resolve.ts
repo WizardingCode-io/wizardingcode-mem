@@ -12,6 +12,7 @@ import {
   projectFolderName,
   readManifest,
   refuseForeign,
+  refuseLinkedRoots,
   repoFolder,
   repoPath,
   writeManifest,
@@ -200,6 +201,7 @@ export function resolveRepo(
   options: { create?: Writer; folderName?: (aliasOrKey: string) => string },
 ): Repo | null {
   requireSchema(store);
+  refuseLinkedRoots(store.dataDir);
   const create = options.create !== undefined;
   if (ref.scope !== "project") {
     const relative = repoFolder(ref);
@@ -282,6 +284,7 @@ export function scanRepos(store: KnowledgeStore): {
   ambiguous: { projectId: number; taken: string; others: string[] }[];
   claimed: { path: string; byProjectId: number; wantedBy: number }[];
 } {
+  refuseLinkedRoots(store.dataDir);
   const found: FoundRepo[] = [];
   for (const scope of ["workspace", "shared"] as const) {
     const relative = repoFolder({ scope });

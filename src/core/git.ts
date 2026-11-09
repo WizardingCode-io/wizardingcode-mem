@@ -58,6 +58,12 @@ export function headOfGitDir(gitDir: string): string | null {
   const head = read(join(gitDir, "HEAD"))?.trim() ?? "";
   const ref = head.match(/^ref:\s*(.+)$/)?.[1];
   if (ref === undefined) return SHA.test(head) ? head : null;
+  // A ref is a name under `refs/`. Anything else in HEAD (a path that climbs out of the
+  // git directory, an absolute path) is not followed: it would read another file.
+  const parts = ref.split("/");
+  if (parts[0] !== "refs" || parts.some((part) => part === "" || part === "." || part === "..")) {
+    return null;
+  }
   return resolveRef(gitDir, gitDir, ref);
 }
 

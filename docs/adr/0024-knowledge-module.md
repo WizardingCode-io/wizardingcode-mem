@@ -83,7 +83,9 @@ Every git call goes through one runner (`runGit`): a synchronous process killed 
 - git also reads a repository's configuration from the directory a `.git/commondir` file names, and from `.git/config.worktree` when `extensions.worktreeConfig` is set. Both files are refused, so the one file read is the one git reads. A `.git/objects/info/alternates` file, which has git read objects from another repository on the disk, is refused with them.
 - A new repository is created with the object and ref formats the store reads (`init.defaultObjectFormat=sha1`, `init.defaultRefFormat=files`). git writes other formats to `.git/config` as extensions, which the rule above refuses.
 - A folder the store did not make is refused before git runs and before anything is written: a repository folder that is a link, a `.git` that is a file or a link (a gitfile names another repository, and every commit would land there), an `entries` or `proposals` folder that is a link, a link where the store keeps `knowledge.json`, `taxonomy.md` or `.gitignore`, and a `.gitmodules` file.
-- A `.git` that holds anything but regular files and folders is refused. git writes inside it: its commit message and a line of its log in place, objects and branches into its folders. Through a link there, git wrote into a file of the person's, and through linked `refs` and `objects` folders it committed into another repository. Every entry is read with its kind, at every depth, except the files inside the object folders, which git only reads or replaces whole.
+- A `.git` that holds anything but regular files and folders is refused. git writes inside it: its commit message and a line of its log in place, objects and branches into its folders. Through a link there, git wrote into a file of the person's, and through linked `refs` and `objects` folders it committed into another repository. Every entry is read with its kind, at every depth, except the files inside the folders of `objects/`, which git only reads or replaces whole. A folder there that cannot be listed is refused as well, since git goes through it by name all the same and what it holds would go unchecked. One thing other than a file or a folder is let through: the socket `fsmonitor--daemon.ipc` at the top of `.git`, which a person's own git leaves there while its file monitor runs, and which the store's git never uses.
+- `knowledge/` and `knowledge/projects/` must be folders themselves. Every repository is listed and created under them, and through a link at either a project's whole repository, with the person's name in it, was created in another folder. Both are checked before anything under them is listed or created.
+- The store reads a repository's HEAD without git, and follows it only to a name under `refs/`. A HEAD that names a path out of the git directory is read as no commit.
 - git never runs in a repository nested inside a knowledge repository. `git status` is always given `--ignore-submodules=all`, which wins over every setting. Without it, git runs a second `git status` inside the nested repository, under that repository's own configuration, which the store never checked. Every git call also carries `diff.ignoreSubmodules=all` and `submodule.recurse=false` as a second layer; a `.gitmodules` setting overrides those two, and only the flag wins over it. `adopt` refuses a folder that is a git repository of its own, and names it.
 - A path is followed only through folders. Where a folder on the way to a file, inside the repository, is a link, the file beyond it is another folder's: the store does not read it as its own, restore it or remove it, whatever a record says.
 - Paths are passed to git as literal paths (`GIT_LITERAL_PATHSPECS`): a file a person named with `*` or `[` never matches another.
@@ -152,7 +154,9 @@ The only personal data this part holds is the person's author name (the `WIZARDI
 
 **Retention.** As long as the repository's history. The engine never rewrites a commit and never deletes an entry, so a name written once stays until a person removes it. This differs from memory, where `compact` prunes old records.
 
-**Erasure.** There is no command for it in this part. A new name applies to what is written from then on: change the setting. To remove a name already written from one repository, a person rewrites that repository's history with git (the author and committer of its commits, and the `author` and `decided_by` lines in its files), then runs `wizardingcode-mem knowledge rebuild`, which replaces the index rows from the files. Deleting a repository's folder and running `rebuild` removes everything it held, the index rows included. A repository the store refuses is not rebuilt: its rows, the name among them, stay as they were last indexed until it is accepted again or its folder is removed. A command that does this is a later part's work, and is needed before knowledge is shared with a team, where a name leaves the machine.
+**Erasure.** There is no command for it in this part. A new name applies to what is written from then on: change the setting. To remove a name already written from one repository, a person rewrites that repository's history with git (the author and committer of its commits, and the `author` and `decided_by` lines in its files), then runs `wizardingcode-mem knowledge rebuild`, which replaces the index rows from the files. Deleting a repository's folder and running `rebuild` removes everything it held, the index rows included. A command that erases a name is a later part's work, and is needed before knowledge is shared with a team, where a name leaves the machine.
+
+A repository the store refuses is not rebuilt: its rows, the name among them, stay as they were last indexed until it is accepted again or its folder is removed.
 
 `wizardingcode-mem backup` copies the database, and the database now holds the index: the text of entries and the names above go wherever backups are configured to go (a folder, or a bucket).
 
@@ -169,9 +173,12 @@ Decided proposals are never deleted, and each folder is indexed up to 5,000 name
 - A project that is not a git repository is known by its folder path alone. A manifest is never matched by a path, so when the index rows of such a project are lost (a database restored from an older copy, a new database), its repository is reported as an orphan by `rebuild` and is not re-attached.
 - Only `.md` files in the three folders are knowledge. Other files there are ignored by the index, and committed as they are by `adopt`.
 - An entry is not renamed and not moved between repositories in this part.
-- A file a person adds by hand while a write is under way is recorded in the fingerprint without being read. The window opens when the write has checked the folders and closes when it has indexed its commit: the time of its git calls, about 50 ms on the machine measured below. The file is still listed by git as untracked, so `doctor` reports it and `adopt` commits and indexes it.
+- A file a person adds by hand while a write is under way is recorded in the fingerprint without being read. The window opens when the write has checked the folders and closes when it has indexed its commit: the time of its git calls, about 40 ms on the machine measured below. The file is still listed by git as untracked, so `doctor` reports it and `adopt` commits and indexes it.
 - A knowledge repository's `.git/config` holds only what `git init` writes. A setting a person adds there (a remote, a local user name) makes every command on that repository refuse it, naming the setting, until the person removes it. `list`, `rebuild` and `adopt` go on with the other repositories, say the refused one on standard error and exit with 1. A refused workspace repository still stops every project's write, since a project's areas are checked against the workspace's taxonomy.
 - `/dev/null` as the global configuration, a file as the hooks path and an empty template name were run on macOS with git 2.54.0. They were not run on Windows, where the binary is also built.
+- The files inside the folders of `.git/objects/` are not checked. A linked object or pack there is not a way to write, but it has git read another repository's objects, as an `alternates` file would. Listing those folders on every open was measured at 4 ms with 500 loose objects and 8 ms with 6,700, against 0.3 ms without, and every read would pay it. Nothing leaves the machine in this part. The sync part closes it before it sends a repository's objects anywhere.
+- A person's own git, set up with `core.fsmonitor`, leaves a socket in `.git/` while its daemon runs. That one socket is let through. Anything else a tool leaves there that is neither a file nor a folder makes the store refuse the repository, naming it, until it is removed. Which tools do so was not surveyed.
+- A file that is hard-linked to another is not told from any other file. A hard link to a file outside the repository can only be made by a process of the person's own user on the same disk, which could write that file itself.
 - The two format settings were run with git 2.54.0, where they leave `.git/config` as `git init` writes it by default. With the other formats named, the same git writes `extensions.objectformat` and `extensions.refstorage`. No git that defaults to those formats existed to run them against.
 - A module migration that fails makes `openDb` fail, so memory stops until the cause is fixed, over a module no hook reads in this part. Containing the failure would need a rule for not repeating the attempt, and its backup, on every open; that is not built.
 - On a store that ran the withdrawn module, the one backup taken before migration 6 drops its tables is kept among the two most recent upgrade backups, and two later upgrades rotate it away.
@@ -184,13 +191,13 @@ Measured on 2026-11-09 on one machine (an Apple silicon Mac, git 2.54.0, a local
 
 | Operation | p50 | p95 |
 | :- | :- | :- |
-| The first write, which creates the repository | 92 ms (one run) | |
-| A person's new entry | 44 ms | 52 ms |
-| A person's change | 44 ms | 53 ms |
-| An agent's proposal | 44 ms | 50 ms |
-| Accepting a proposal | 71 ms | 77 ms |
-| Reading an entry | 1 ms | 1 ms |
-| Rebuilding the index of 31 entries and 30 proposals | 15 ms (one run) | |
+| The first write, which creates the repository | 100 ms (one run) | |
+| A person's new entry | 39 ms | 43 ms |
+| A person's change | 39 ms | 44 ms |
+| An agent's proposal | 40 ms | 45 ms |
+| Accepting a proposal | 57 ms | 68 ms |
+| Reading an entry | under 1 ms | 1 ms |
+| Rebuilding the index of 31 entries and 30 proposals | 13 ms (one run) | |
 
 Not measured: a repository of thousands of entries, a slow or network disk, Linux, Windows. The next part runs one write per tool call and measures again before accepting the cost there.
 

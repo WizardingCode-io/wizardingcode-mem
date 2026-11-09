@@ -73,6 +73,24 @@ export function knowledgeRoot(dataDir: string): string {
   return join(dataDir, "knowledge");
 }
 
+/**
+ * Refuses a `knowledge/` or a `knowledge/projects/` that is not a folder itself. Every
+ * repository is listed and created under these two: through a link at either, a whole
+ * repository, with the person's name in it, would be made in another folder. Checked
+ * before anything under them is listed or created.
+ */
+export function refuseLinkedRoots(dataDir: string): void {
+  const root = knowledgeRoot(dataDir);
+  for (const folder of [root, join(root, "projects")]) {
+    if (existsOnDisk(folder) && !isDirectory(folder)) {
+      throw new KnowledgeError(
+        "invalid",
+        `${folder} is not a folder of its own (a link, or a file); the knowledge store keeps its repositories under it and never follows a link out of the data directory. Remove it`,
+      );
+    }
+  }
+}
+
 /** A repository's path relative to the data directory, with forward slashes. */
 export function repoFolder(ref: ScopeRef, projectFolder?: string): string {
   if (ref.scope !== "project") return `knowledge/${ref.scope}`;
@@ -118,9 +136,9 @@ export function existsOnDisk(path: string): boolean {
  * Refuses a folder the store did not make: one that is a link, one whose `.git` is a file
  * or a link (a gitfile names another repository, and every later commit would land
  * there), one whose knowledge folders or own files are links, one with a `.gitmodules`
- * file (the store keeps no repository inside its own), or one whose `.git` holds a link.
- * Checked before git is run and before anything is written, so nothing is read or written
- * outside the repository.
+ * file (the store keeps no repository inside its own), or one whose `.git` holds anything
+ * but regular files and folders. Checked before git is run and before anything is
+ * written, so nothing is read or written outside the repository.
  */
 export function refuseForeign(repoFolder: string): void {
   /** Whatever is at the path must be what the store keeps there: a folder, or a regular file. */
@@ -153,11 +171,20 @@ export function refuseForeign(repoFolder: string): void {
 }
 
 /**
+ * The socket a person's own git leaves at the top of `.git` while its file monitor runs.
+ * The store's git never uses it: every call passes `core.fsmonitor=false`.
+ */
+const FSMONITOR_SOCKET = "fsmonitor--daemon.ipc";
+
+/**
  * Refuses a `.git` that holds anything but regular files and folders. git writes inside
  * it: its commit message and a line of its log in place, objects and branches into its
  * folders. Through a link there, git would write into another file, or commit into
  * another repository. Every entry is read with its kind, at every depth, except the files
- * inside the object folders, which git only reads or replaces whole.
+ * inside the folders of `objects/`: git only reads those or replaces them whole, and
+ * listing them on every open costs milliseconds that grow with the history. A folder that
+ * cannot be listed is refused too: git goes through it by name all the same, so what it
+ * holds would go unchecked. Only a folder that is not there has nothing to check.
  */
 function refuseLinksInside(gitDir: string): void {
   const objects = join(gitDir, "objects");
@@ -165,14 +192,20 @@ function refuseLinksInside(gitDir: string): void {
     let entries: Dirent[];
     try {
       entries = readdirSync(folder, { withFileTypes: true });
-    } catch {
-      return;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+      throw new KnowledgeError(
+        "invalid",
+        `${folder} cannot be listed, so the knowledge store cannot check what git would write through; make it readable`,
+      );
     }
     for (const entry of entries) {
       const path = join(folder, entry.name);
       if (entry.isDirectory()) {
         if (folder !== objects) walk(path);
-      } else if (!entry.isFile()) {
+      } else if (entry.isFile()) continue;
+      else if (folder === gitDir && entry.name === FSMONITOR_SOCKET && entry.isSocket()) continue;
+      else {
         throw new KnowledgeError(
           "invalid",
           `${path} is ${entry.isSymbolicLink() ? "a link" : "not a regular file"}, and the knowledge store never lets git write through one; remove it`,
@@ -1005,11 +1038,13 @@ export interface Change {
 }
 
 /**
- * Writes, stages and commits only the given paths: the one place the failure rule lives.
- * The intent record goes first and is left in place, for the caller to remove once it has
- * done what follows the commit. When anything fails, every path is put back to what HEAD
- * holds and the record is removed; when even that fails, the record is left for the next
- * open to act on. The error thrown is the first one, whatever the undo did.
+ * Writes, stages and commits only the given paths: the failure rule of every write the
+ * engine makes of its own text. The intent record goes first and is left in place, for
+ * the caller to remove once it has done what follows the commit. When anything fails,
+ * every path is put back to what HEAD holds and the record is removed; when even that
+ * fails, the record is left for the next open to act on. The error thrown is the first
+ * one, whatever the undo did. `adopt` alone keeps a frame of its own: what it commits is
+ * a person's work, which is given back byte for byte and never restored from HEAD.
  */
 export function commitChange(store: KnowledgeStore, repo: Repo, change: Change): void {
   // What each path holds once the operation is done: how an interrupted one is told from

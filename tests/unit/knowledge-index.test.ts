@@ -698,6 +698,40 @@ describe("adopt", () => {
     expect(message.split("\n")).not.toContain("Signed-off-by: someone else");
     expect(message).toContain("entries/a?Signed-off-by: someone else?");
     expect(status(repo)).toEqual([""]);
+
+    // Every character a terminal or a log acts on, not the line break alone.
+    writeFileSync(join(repo.path, "entries", "b\tc\x1b[31md\x7fe"), "x\n");
+    expect(adopt(store, WORKSPACE, person()).adopted).toBe(1);
+    expect(realGit(repo.path, "log", "-1", "--format=%B")).toContain("entries/b?c?[31md?e");
+  });
+
+  test("an adopt of large entries that stops midway gives every byte back", () => {
+    // Two entries near the size one file may have: together, kept bytes several times that.
+    const repo = ensureRepo(store, WORKSPACE);
+    const big = (letter: string) => byHand(NOTE, letter.repeat(200 * 1024));
+    writeFileSync(entryFile(repo, "first-big"), big("a"));
+    writeFileSync(entryFile(repo, "second-big"), big("b"));
+    const broken = fx.store({
+      now: () => clock,
+      env: {
+        WIZARDINGCODE_MEM_AUTHOR: "Zoë",
+        PATH: fx.pathWith(
+          stubGit(join(fx.dir, "stopping-big-adopt"), {
+            fail: "commit",
+            failOnce: "reset",
+            stderr: "fatal: boom",
+          }),
+        ),
+      },
+    });
+    expect(codeOf(() => adopt(broken, WORKSPACE, person()))).toBe("git");
+    // The adopt had rewritten both files; the record and the kept bytes are what is left.
+    expect(readFileSync(entryFile(repo, "first-big"), "utf8")).not.toBe(big("a"));
+
+    openRepo(store, WORKSPACE);
+    expect(readFileSync(entryFile(repo, "first-big"), "utf8")).toBe(big("a"));
+    expect(readFileSync(entryFile(repo, "second-big"), "utf8")).toBe(big("b"));
+    expect(readIntent(repo)).toBeNull();
   });
 
   test("an adopt that stops midway is undone at every path, each said once", () => {

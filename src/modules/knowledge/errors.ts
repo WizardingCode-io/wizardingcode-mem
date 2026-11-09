@@ -21,9 +21,10 @@ export class KnowledgeError extends Error {
 }
 
 /**
- * Whether an error is the store refusing one repository as it stands (code `invalid`),
- * rather than a fault such as a missing git or a lease held elsewhere. The one place that
- * says so: a command over several repositories sets a refusal aside and goes on.
+ * Whether an error is the store refusing what it was given as it stands (code `invalid`:
+ * a repository it did not make, or a request it cannot take), rather than a fault such as
+ * a missing git or a lease held elsewhere. The one place that says so: a command over
+ * several repositories sets a refusal aside and goes on.
  */
 export const isRefusal = (error: unknown): error is KnowledgeError =>
   error instanceof KnowledgeError && error.code === "invalid";

@@ -211,32 +211,35 @@ function rebuildLine(relative: string, result: RebuildResult): string {
 }
 
 /**
- * The repositories the store refused during a command. One of them does not stop the
- * command for the others (`inEachRepo`); the command then exits with 1.
+ * Says on standard error each repository the store set aside during a command, and how
+ * many there were. One of them does not stop the command for the others (`inEachRepo`);
+ * a command that set one aside exits with 1.
  */
-type Refused = string[];
-
-/** Says each refused repository on standard error, and keeps it for the exit code. */
-function sayRefused(all: InEachRepo<unknown>, refused: Refused): void {
+function sayRefused(all: InEachRepo<unknown>): number {
   for (const [relative, message] of all.refused) {
-    refused.push(relative);
     process.stderr.write(`wizardingcode-mem: ${relative}: ${message}\n`);
   }
+  return all.refused.size;
 }
 
-function rebuild(store: KnowledgeStore, argv: string[], refused: Refused): void {
+/** What to say when no repository was worked in and none was set aside. */
+function sayNothing(all: InEachRepo<unknown>, scope: Scope | undefined): void {
+  if (all.results.size === 0 && all.refused.size === 0) out(nothing(scope));
+}
+
+function rebuild(store: KnowledgeStore, argv: string[]): number {
   const { flags, rest } = parse(argv, ["--scope"]);
   if (rest.length > 0) throw new UsageError(`unexpected argument ${rest[0]}`);
   const scope = scopeOf(flags);
   const all = rebuildAll(store, scope);
   for (const [relative, result] of all.results) out(rebuildLine(relative, result));
-  sayRefused(all, refused);
+  const refused = sayRefused(all);
   for (const repo of all.repos) {
     if (all.results.has(repo.relative) || all.refused.has(repo.relative)) continue;
     out(`${repo.relative}: not a repository`);
   }
   if (all.repos.length === 0) out(nothing(scope));
-  if (scope !== undefined && scope !== "project") return;
+  if (scope !== undefined && scope !== "project") return refused;
   for (const orphan of all.orphans) out(`orphan ${orphan}`);
   // A manifest a project matched and did not take, or one that belongs to another project.
   const unclear = new Set([
@@ -244,27 +247,30 @@ function rebuild(store: KnowledgeStore, argv: string[], refused: Refused): void 
     ...all.claimed.map((claim) => claim.path),
   ]);
   for (const path of unclear) out(`ambiguous ${path}`);
+  return refused;
 }
 
-function adoptAll(store: KnowledgeStore, argv: string[], refused: Refused): void {
+function adoptAll(store: KnowledgeStore, argv: string[]): number {
   const { flags, rest } = parse(argv, ["--scope"]);
   if (rest.length > 0) throw new UsageError(`unexpected argument ${rest[0]}`);
   const scope = scopeOf(flags);
   const person = personAuthor(store);
-  const all = inEachRepo(store, scope, (repo) => adopt(store, repo.ref, person));
-  for (const [relative, result] of all.results) {
+  // Each repository's line is printed as its adopt ends: a fault in a later one stops the
+  // command, and what was adopted before it has been said.
+  const all = inEachRepo(store, scope, (repo) => {
+    const result = adopt(store, repo.ref, person);
     out(
       result.adopted === 0
-        ? `${relative}: clean`
-        : `${relative}: adopted ${plural(result.adopted, "change")}`,
+        ? `${repo.relative}: clean`
+        : `${repo.relative}: adopted ${plural(result.adopted, "change")}`,
     );
     for (const problem of result.problems) out(`  ${problem}`);
-  }
-  sayRefused(all, refused);
-  if (all.results.size === 0 && all.refused.size === 0) out(nothing(scope));
+  });
+  sayNothing(all, scope);
+  return sayRefused(all);
 }
 
-function list(store: KnowledgeStore, argv: string[], refused: Refused): void {
+function list(store: KnowledgeStore, argv: string[]): number {
   const { flags, rest } = parse(argv, ["--scope"]);
   if (rest.length > 0) throw new UsageError(`unexpected argument ${rest[0]}`);
   const scope = scopeOf(flags);
@@ -275,24 +281,21 @@ function list(store: KnowledgeStore, argv: string[], refused: Refused): void {
       // A write is under way: the rows are listed as they stand.
       if (!(error instanceof KnowledgeError && error.code === "locked")) throw error;
     }
-    return { entries: listEntries(store, repo.id), proposals: listProposals(store, repo.id) };
-  });
-  for (const [relative, { entries, proposals }] of all.results) {
-    out(relative);
-    for (const entry of entries) {
+    out(repo.relative);
+    for (const entry of listEntries(store, repo.id)) {
       out(
         `  ${entry.slug}  ${entry.kind}  ${entry.area}  ${entry.status}  v${entry.version}  ${entry.author}`,
       );
       if (entry.problem !== null) out(`    problem: ${entry.problem}`);
     }
-    for (const proposal of proposals) {
+    for (const proposal of listProposals(store, repo.id)) {
       const state = proposal.decision ?? "open";
       out(`  ${state}  ${proposal.id}  ${proposal.slug}  by ${proposal.proposedBy}`);
       if (proposal.problem !== null) out(`    problem: ${proposal.problem}`);
     }
-  }
-  sayRefused(all, refused);
-  if (all.results.size === 0 && all.refused.size === 0) out(nothing(scope));
+  });
+  sayNothing(all, scope);
+  return sayRefused(all);
 }
 
 /**
@@ -317,14 +320,15 @@ export async function run(argv: string[]): Promise<number> {
       // What the store did on its own, such as undoing an interrupted write, is said here.
       report: (message) => process.stderr.write(`wizardingcode-mem: ${message}\n`),
     });
-    const refused: Refused = [];
+    // How many repositories the command set aside: none for a command on one repository.
+    let refused = 0;
     if (command === "write") await write(store, rest);
     else if (command === "accept" || command === "reject") decide(store, rest, command);
     else if (command === "area") area(store, rest);
-    else if (command === "rebuild") rebuild(store, rest, refused);
-    else if (command === "adopt") adoptAll(store, rest, refused);
-    else list(store, rest, refused);
-    return refused.length > 0 ? 1 : 0;
+    else if (command === "rebuild") refused = rebuild(store, rest);
+    else if (command === "adopt") refused = adoptAll(store, rest);
+    else refused = list(store, rest);
+    return refused > 0 ? 1 : 0;
   } catch (error) {
     if (error instanceof UsageError) {
       process.stderr.write(`wizardingcode-mem: ${error.message}\n\n${USAGE}`);

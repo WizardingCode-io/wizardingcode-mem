@@ -245,6 +245,20 @@ describe("doctor: knowledge", () => {
     expect(check.detail).toContain("0 entries");
   });
 
+  test("a link where every project's repository goes is a warning, and nothing is read through it", () => {
+    writeEntry(store, WORKSPACE, change(), person());
+    // A repository of another folder, as the link would reach it.
+    const outside = join(fx.dir, "outside-projects");
+    mkdirSync(join(outside, "abc", ".git"), { recursive: true });
+    const projects = join(fx.dataDir, "knowledge", "projects");
+    rmSync(projects, { recursive: true, force: true });
+    symlinkSync(outside, projects);
+    const check = knowledge();
+    expect(check.status).toBe("warn");
+    expect(check.detail).toContain(projects);
+    expect(check.detail).not.toContain("abc");
+  });
+
   test("with no database, the checks that need it are skipped and said", () => {
     writeEntry(store, WORKSPACE, change(), person());
     const elsewhere = join(fx.dir, "no-database-here");
