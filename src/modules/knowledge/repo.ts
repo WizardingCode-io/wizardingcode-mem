@@ -14,7 +14,6 @@ import {
   mkdirSync,
   openSync,
   readdirSync,
-  readFileSync,
   readSync,
   renameSync,
   rmSync,
@@ -55,34 +54,22 @@ export const ENTRIES_DIR = "entries";
 export const OPEN_DIR = "proposals/open";
 export const DECIDED_DIR = "proposals/decided";
 const FOLDERS = [ENTRIES_DIR, OPEN_DIR, DECIDED_DIR];
+/** What the store keeps in a repository's folder, and what each is when it is there. */
+const OWN_LAYOUT: [name: string, kind: "folder" | "file"][] = [
+  [".git", "folder"],
+  [ENTRIES_DIR, "folder"],
+  ["proposals", "folder"],
+  [OPEN_DIR, "folder"],
+  [DECIDED_DIR, "folder"],
+  [MANIFEST_FILE, "file"],
+  [TAXONOMY_FILE, "file"],
+  [".gitignore", "file"],
+];
 
 // --- Where things are ---------------------------------------------------------------
 
 export function knowledgeRoot(dataDir: string): string {
   return join(dataDir, "knowledge");
-}
-
-/** What git is pointed at instead of the person's templates, hooks and configuration. */
-export function supportPaths(dataDir: string): {
-  template: string;
-  noHooks: string;
-  emptyConfig: string;
-} {
-  const root = knowledgeRoot(dataDir);
-  return {
-    template: join(root, ".template"),
-    noHooks: join(root, ".no-hooks"),
-    emptyConfig: join(root, ".gitconfig-empty"),
-  };
-}
-
-export function ensureSupportFolders(dataDir: string): void {
-  const paths = supportPaths(dataDir);
-  mkdirSync(knowledgeRoot(dataDir), { recursive: true, mode: 0o700 });
-  mkdirSync(paths.template, { recursive: true, mode: 0o700 });
-  mkdirSync(paths.noHooks, { recursive: true, mode: 0o700 });
-  // An empty file is portable where `/dev/null` is not.
-  if (!existsSync(paths.emptyConfig)) writeFileSync(paths.emptyConfig, "", { mode: 0o600 });
 }
 
 /** A repository's path relative to the data directory, with forward slashes. */
@@ -134,43 +121,26 @@ export function existsOnDisk(path: string): boolean {
  * before anything is written, so nothing is read or written outside the repository.
  */
 export function refuseForeign(repoFolder: string): void {
-  const refuse = (path: string, what: string): never => {
+  /** Whatever is at the path must be what the store keeps there: a folder, or a regular file. */
+  const mustBe = (path: string, wanted: "folder" | "file"): void => {
+    let found: ReturnType<typeof lstatSync>;
+    try {
+      found = lstatSync(path);
+    } catch {
+      return;
+    }
+    if (wanted === "folder" ? found.isDirectory() : found.isFile()) return;
+    const what = found.isSymbolicLink() ? "a link" : `not a ${wanted}`;
     throw new KnowledgeError(
       "invalid",
       `${path} is ${what}; the knowledge store never follows one out of its own repository`,
     );
   };
-  const kind = (path: string) => {
-    try {
-      return lstatSync(path);
-    } catch {
-      return null;
-    }
-  };
-  const folder = kind(repoFolder);
-  if (folder === null) return;
-  if (!folder.isDirectory())
-    refuse(repoFolder, folder.isSymbolicLink() ? "a link" : "not a folder");
-  const git = kind(join(repoFolder, ".git"));
-  if (git !== null && !git.isDirectory()) {
-    refuse(join(repoFolder, ".git"), git.isSymbolicLink() ? "a link" : "a file, not a folder");
-  }
-  for (const inner of [ENTRIES_DIR, "proposals", OPEN_DIR, DECIDED_DIR]) {
-    const path = join(repoFolder, ...inner.split("/"));
-    const found = kind(path);
-    if (found !== null && !found.isDirectory()) {
-      refuse(path, found.isSymbolicLink() ? "a link" : "not a folder");
-    }
-  }
-  for (const name of [MANIFEST_FILE, TAXONOMY_FILE, ".gitignore"]) {
-    const path = join(repoFolder, name);
-    const found = kind(path);
-    if (found !== null && !found.isFile()) {
-      refuse(path, found.isSymbolicLink() ? "a link" : "not a regular file");
-    }
-  }
+  if (!existsOnDisk(repoFolder)) return;
+  mustBe(repoFolder, "folder");
+  for (const [name, wanted] of OWN_LAYOUT) mustBe(join(repoFolder, ...name.split("/")), wanted);
   const modules = join(repoFolder, ".gitmodules");
-  if (kind(modules) !== null) {
+  if (existsOnDisk(modules)) {
     throw new KnowledgeError(
       "invalid",
       `${modules} names repositories nested in this one, and the knowledge store keeps none; remove it`,
@@ -183,7 +153,7 @@ export function refuseForeign(repoFolder: string): void {
  * link as the second guard. Null when there is no file; a `KnowledgeError` for anything
  * that is not a regular file, or one over the cap.
  */
-export function readRegularFile(path: string): Uint8Array | null {
+export function readRegularFile(path: string, max = ENTRY_MAX_BYTES): Uint8Array | null {
   let stat: ReturnType<typeof lstatSync>;
   try {
     stat = lstatSync(path);
@@ -199,8 +169,11 @@ export function readRegularFile(path: string): Uint8Array | null {
   }
   try {
     const size = fstatSync(fd).size;
-    if (size > ENTRY_MAX_BYTES) {
-      throw new KnowledgeError("invalid", `${path} is over 256 KiB, the cap for one file`);
+    if (size > max) {
+      throw new KnowledgeError(
+        "invalid",
+        `${path} is over ${max / 1024} KiB, the cap for one file`,
+      );
     }
     const bytes = new Uint8Array(size);
     let read = 0;
@@ -281,7 +254,7 @@ export function gitEnv(
     if (store.env.HOME !== undefined) env.HOME = store.env.HOME;
     if (store.env.XDG_CONFIG_HOME !== undefined) env.XDG_CONFIG_HOME = store.env.XDG_CONFIG_HOME;
   } else {
-    env.GIT_CONFIG_GLOBAL = supportPaths(store.dataDir).emptyConfig;
+    env.GIT_CONFIG_GLOBAL = NO_CONFIG;
     env.GIT_CONFIG_NOSYSTEM = "1";
   }
   if (options.readOnly === true) env.GIT_OPTIONAL_LOCKS = "0";
@@ -294,11 +267,20 @@ export function gitEnv(
   return env;
 }
 
-/** A `-c` value wins over the repository's own `.git/config`, so a local setting never runs either. */
-function configArgs(dataDir: string): string[] {
+/**
+ * git's own name for no configuration file, on every system: it reads `/dev/null` as an
+ * empty file, and maps the name to the null device where there is no such path.
+ */
+const NO_CONFIG = "/dev/null";
+
+/**
+ * A `-c` value wins over the repository's own `.git/config`, so a local setting never runs
+ * either. The store keeps no folder or file of its own for git to be pointed at: one that
+ * sat beside the repositories could be filled by whoever can drop a file there.
+ */
+function configArgs(repo: string | null): string[] {
   const settings = [
     "commit.gpgsign=false",
-    `core.hooksPath=${supportPaths(dataDir).noHooks}`,
     "core.autocrlf=false",
     "init.defaultBranch=main",
     "user.useConfigOnly=false",
@@ -307,7 +289,8 @@ function configArgs(dataDir: string): string[] {
     "core.pager=cat",
     "diff.external=",
     "core.sshCommand=",
-    // git never looks into a repository nested in this one.
+    // A second layer under the flag `statusOf` passes. A `.gitmodules` setting overrides
+    // these two, and only that flag wins over it.
     "diff.ignoreSubmodules=all",
     "submodule.recurse=false",
     // A new repository keeps the formats the store reads, whatever a later git defaults
@@ -315,6 +298,10 @@ function configArgs(dataDir: string): string[] {
     "init.defaultObjectFormat=sha1",
     "init.defaultRefFormat=files",
   ];
+  // Hooks are looked for inside the repository's own configuration file. Nothing can be
+  // inside a file, so git finds no hook, on any system. A call with no repository yet
+  // (`init`, `--version`) runs none.
+  if (repo !== null) settings.push(`core.hooksPath=${join(repo, ".git", "config")}`);
   return settings.flatMap((setting) => ["-c", setting]);
 }
 
@@ -347,7 +334,7 @@ export function runGit(
   const cwd = repo ?? store.dataDir;
   let result: ReturnType<typeof Bun.spawnSync>;
   try {
-    result = Bun.spawnSync([git, ...location, ...configArgs(store.dataDir), ...args], {
+    result = Bun.spawnSync([git, ...location, ...configArgs(repo), ...args], {
       ...(existsSync(cwd) ? { cwd } : {}),
       env: gitEnv(store, options),
       stdin: "ignore",
@@ -440,12 +427,18 @@ const ALLOWED_SETTINGS = new Set([
   "core.precomposeunicode",
   "core.symlinks",
 ]);
-/** Files under `.git/` that make git read a configuration other than `.git/config`. */
-const REFUSED_FILES = ["commondir", "config.worktree"];
+/** Files under `.git/` that make git read from somewhere other than this repository. */
+const REFUSED_FILES: [file: string, what: string][] = [
+  ["commondir", "its configuration"],
+  ["config.worktree", "its configuration"],
+  ["objects/info/alternates", "objects"],
+];
+const ONLY_INIT = "a knowledge repository carries only the settings git init writes";
 
 // The tokens of one configuration line, as git's parser takes them: white space, any
-// number of section headers, then at most one key. git's white space is these six
-// characters; a carriage return alone does not end a line.
+// number of section headers, then at most one key. git's white space is six characters:
+// the five here, and the line feed the line split has already taken. A carriage return
+// alone does not end a line.
 const CONFIG_SPACE = /^[ \t\v\f\r]+/;
 const CONFIG_HEADER = /^\[([A-Za-z0-9.-]+)(?:[ \t\v\f\r]+"((?:[^"\\]|\\.)*)")?\]/;
 const CONFIG_KEY = /^([A-Za-z][A-Za-z0-9-]*)[ \t]*(?:=|$)/;
@@ -460,22 +453,18 @@ const SHOWN_MAX = 40;
  * store cannot read that way is refused, never skipped. git reads a repository's
  * configuration from `.git/config`, from the directory a `commondir` file names, and from
  * `config.worktree` when the worktree extension is on: the last two are refused outright,
- * so the one file read here is the one git reads.
+ * so the one file read here is the one git reads. An `alternates` file, which has git
+ * read objects from another repository on the disk, is refused with them.
  */
 export function checkRepoConfig(repo: string): void {
   const gitDir = join(repo, ".git");
   const file = join(gitDir, "config");
-  const refuse = (name: string): never => {
-    throw new KnowledgeError(
-      "invalid",
-      `the repository's own git configuration sets ${name}, and a knowledge repository carries only the settings git init writes; remove it from ${file}`,
-    );
-  };
-  for (const name of REFUSED_FILES) {
-    if (existsOnDisk(join(gitDir, name))) {
+  for (const [name, what] of REFUSED_FILES) {
+    const path = join(gitDir, ...name.split("/"));
+    if (existsOnDisk(path)) {
       throw new KnowledgeError(
         "invalid",
-        `${join(gitDir, name)} makes git read its configuration from somewhere else, which the knowledge store never allows; remove it`,
+        `${path} makes git read ${what} from somewhere else, which the knowledge store never allows; remove it`,
       );
     }
   }
@@ -514,11 +503,14 @@ export function checkRepoConfig(repo: string): void {
       if (key === undefined || section === null) {
         throw new KnowledgeError(
           "invalid",
-          `line ${index + 1} of ${file} is not one the knowledge store reads the way git does, and a knowledge repository carries only the settings git init writes; remove the line`,
+          `line ${index + 1} of ${file} is not one the knowledge store reads the way git does, and ${ONLY_INIT}; remove the line`,
         );
       }
       if (!ALLOWED_SETTINGS.has(`${section.name}.${key.toLowerCase()}`)) {
-        refuse(`${section.shown}.${key}`);
+        throw new KnowledgeError(
+          "invalid",
+          `the repository's own git configuration sets ${section.shown}.${key}, and ${ONLY_INIT}; remove it from ${file}`,
+        );
       }
       // The rest of the line is the key's value.
       break;
@@ -570,8 +562,10 @@ export function readManifest(repo: string): Manifest | null {
   return "problem" in manifest ? null : manifest;
 }
 
+const manifestText = (manifest: Manifest) => `${JSON.stringify(manifest, null, 2)}\n`;
+
 export function writeManifest(repo: string, manifest: Manifest): void {
-  writeFileAtomic(join(repo, MANIFEST_FILE), `${JSON.stringify(manifest, null, 2)}\n`);
+  writeFileAtomic(join(repo, MANIFEST_FILE), manifestText(manifest));
 }
 
 /**
@@ -598,13 +592,10 @@ export function taxonomyFor(store: KnowledgeStore, ref: ScopeRef): Taxonomy | nu
 
 /** Writes what a new repository holds and makes its first commit, always as the person. */
 function createRepository(store: KnowledgeStore, repo: Repo): void {
-  ensureSupportFolders(store.dataDir);
   mkdirSync(repo.path, { recursive: true, mode: 0o700 });
   if (!isDirectory(join(repo.path, ".git"))) {
-    const template = supportPaths(store.dataDir).template;
-    runGit(store, null, ["init", "-q", `--template=${template}`, repo.path], {
-      operation: "write",
-    });
+    // An empty template name copies no template: no hook, no attributes, no configuration.
+    runGit(store, null, ["init", "-q", "--template=", repo.path], { operation: "write" });
   }
   // The manifest is already there: `resolveRepo` writes it with the folder.
   const paths = [MANIFEST_FILE, ".gitignore"];
@@ -660,7 +651,18 @@ function learnAliases(store: KnowledgeStore, repo: Repo): void {
     const found = unlearned();
     if (found === null || statusOf(store, repo, [MANIFEST_FILE]).length > 0) return;
     const { manifest, known, gained } = found;
-    writeManifest(repo.path, { ...manifest, project: { aliases: [...known, ...gained] } });
+    const next: Manifest = { ...manifest, project: { aliases: [...known, ...gained] } };
+    const person = personAuthor(store);
+    // The record first, as for any write: a process that dies here leaves a manifest the
+    // next open puts back, not one that waits for `adopt`.
+    writeIntent(repo, {
+      operation: "write",
+      writer: person,
+      existed: [MANIFEST_FILE],
+      created: [],
+      written: { [MANIFEST_FILE]: hashOf(Buffer.from(manifestText(next))) },
+    });
+    writeManifest(repo.path, next);
     try {
       stagePaths(store, repo, [MANIFEST_FILE], "write");
       commitPaths(
@@ -668,25 +670,19 @@ function learnAliases(store: KnowledgeStore, repo: Repo): void {
         repo,
         [MANIFEST_FILE],
         `knowledge: manifest learns ${gained.length === 1 ? "an alias" : `${gained.length} aliases`} of its project`,
-        identityOf(personAuthor(store)),
+        identityOf(person),
         "write",
       );
     } catch (error) {
+      // When even this fails, the record stays for the next open.
       undoStaged(store, repo, { existed: [MANIFEST_FILE], created: [] }, "write");
+      clearIntent(repo);
       throw error;
     }
+    clearIntent(repo);
   };
-  if (holds(store, repo.relative)) {
-    learn();
-    return;
-  }
-  // The commit is made under the repository's own lease. While another process holds
-  // it, the aliases wait for the next write.
-  try {
-    withRepoLeases(store, [repo.relative], learn);
-  } catch (error) {
-    if (!(error instanceof KnowledgeError && error.code === "locked")) throw error;
-  }
+  // While another process holds the repository, the aliases wait for the next write.
+  underOwnLease(store, repo, learn);
 }
 
 /**
@@ -826,9 +822,17 @@ export function undoStaged(
   paths: { existed: string[]; created: string[] },
   operation: string,
 ): void {
-  const foreign = [...paths.existed, ...paths.created].find((path) => !ownPath(path));
+  const all = [...paths.existed, ...paths.created];
+  const foreign = all.find((path) => !ownPath(path));
   if (foreign !== undefined) {
     throw new KnowledgeError("invalid", `${foreign} is not a path the knowledge store writes`);
+  }
+  const linked = all.find((path) => !reachedByFolders(repo.path, path));
+  if (linked !== undefined) {
+    throw new KnowledgeError(
+      "invalid",
+      `${linked} is reached through a link, and the knowledge store never follows one out of its own repository`,
+    );
   }
   if (paths.existed.length > 0) {
     runGit(
@@ -849,15 +853,31 @@ export function undoStaged(
 /**
  * Whether a path is one the store writes or adopts: the manifest, the taxonomy, or a file
  * under `entries/` or `proposals/`. Nothing else is restored, removed or written back by
- * name: not a path that climbs out of the repository, and nothing under `.git`.
+ * name: not a path that climbs out of the repository, and nothing under `.git`. This reads
+ * the path's text only; `reachedByFolders` reads what is on the disk.
  */
-export function ownPath(path: string): boolean {
+function ownPath(path: string): boolean {
   if (path === MANIFEST_FILE || path === TAXONOMY_FILE) return true;
   const parts = path.split("/");
   if (parts.length < 2 || (parts[0] !== ENTRIES_DIR && parts[0] !== "proposals")) return false;
   return parts.every(
     (part) => part !== "" && part !== "." && part !== ".." && part.toLowerCase() !== ".git",
   );
+}
+
+/**
+ * Whether every folder on the way to a path, inside the repository, is a folder itself.
+ * A link among them leads out of the repository, and what lies beyond it is not the
+ * store's to read, write or remove, whatever the path says. A folder that is not there
+ * leads nowhere.
+ */
+function reachedByFolders(repoPath: string, path: string): boolean {
+  let folder = repoPath;
+  for (const part of path.split("/").slice(0, -1)) {
+    folder = join(folder, part);
+    if (existsOnDisk(folder) && !isDirectory(folder)) return false;
+  }
+  return true;
 }
 
 /** Takes paths out of the index and leaves the files as they are: for a person's own work. */
@@ -952,41 +972,68 @@ export function writeIntent(repo: Repo, intent: Intent): void {
 const KEPT_NAME = /^wizardingcode-kept-[0-9a-f-]+\.json$/;
 
 /**
- * The record an operation left, or null when there is none the store can act on. The
- * record sits in a folder that may have been dropped here, so it is taken only when it is
- * one the store could have written: a known operation, and no path but the store's own.
- * A record that names `.git/config` would otherwise have the revert write there.
+ * A record and a kept-bytes file are read as regular files, never through a link, and no
+ * larger than this: an adopt of thousands of files writes a long record, not an endless one.
  */
-export function readIntent(repo: Repo): Intent | null {
+const RECORD_MAX_BYTES = 64 * 1024 * 1024;
+
+const isPlain = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+/**
+ * What is at the record's path: nothing, a record the store can act on, or one it cannot,
+ * with the kept-bytes file it names when the name is one the store gives. The record sits
+ * in a folder that may have been dropped here, so it is acted on only when it is one the
+ * store could have written: a known operation, and no path but the store's own. A record
+ * that names `.git/config` would otherwise have the revert write there.
+ */
+function readRecord(repo: Repo): { present: boolean; intent: Intent | null; kept?: string } {
+  const file = intentPath(repo);
+  if (!existsOnDisk(file)) return { present: false, intent: null };
   let raw: unknown;
   try {
-    raw = JSON.parse(readFileSync(intentPath(repo), "utf8"));
+    const bytes = readRegularFile(file, RECORD_MAX_BYTES);
+    raw = bytes === null ? null : JSON.parse(new TextDecoder().decode(bytes));
   } catch {
-    return null;
+    return { present: true, intent: null };
   }
-  const plain = (value: unknown): value is Record<string, unknown> =>
-    typeof value === "object" && value !== null && !Array.isArray(value);
+  if (!isPlain(raw)) return { present: true, intent: null };
+  const { operation, existed, created, written, keptBytesFile } = raw;
+  const named = typeof keptBytesFile === "string" && KEPT_NAME.test(keptBytesFile);
+  const rejected = { present: true, intent: null, ...(named ? { kept: keptBytesFile } : {}) };
   const ownPaths = (value: unknown): value is string[] =>
     Array.isArray(value) && value.every((item) => typeof item === "string" && ownPath(item));
-  if (!plain(raw)) return null;
-  const { operation, existed, created, written, keptBytesFile } = raw;
   const operations: readonly unknown[] = INTENT_OPERATIONS;
-  if (!operations.includes(operation)) return null;
-  if (!ownPaths(existed) || !ownPaths(created)) return null;
-  if (written !== undefined && !(plain(written) && ownPaths(Object.keys(written)))) return null;
-  if (keptBytesFile !== undefined) {
-    if (typeof keptBytesFile !== "string" || !KEPT_NAME.test(keptBytesFile)) return null;
+  if (!operations.includes(operation)) return rejected;
+  if (!ownPaths(existed) || !ownPaths(created)) return rejected;
+  if (written !== undefined && !(isPlain(written) && ownPaths(Object.keys(written)))) {
+    return rejected;
   }
-  return raw as unknown as Intent;
+  if (keptBytesFile !== undefined && !named) return rejected;
+  return { ...rejected, intent: raw as unknown as Intent };
 }
 
+/** The record an operation left, or null when there is none the store can act on. */
+export function readIntent(repo: Repo): Intent | null {
+  return readRecord(repo).intent;
+}
+
+/** Removes whatever is at the record's path, also a folder or a link someone left there. */
 export function clearIntent(repo: Repo): void {
-  rmSync(intentPath(repo), { force: true });
+  rmSync(intentPath(repo), { force: true, recursive: true });
 }
 
-/** Keeps files' bytes under `.git/` for an adopt; returns the name the intent records. */
-export function keepBytes(repo: Repo, files: Map<string, Uint8Array>): string {
-  const name = `wizardingcode-kept-${randomUUID()}.json`;
+/** A new name for an adopt's kept bytes, under `.git/`. */
+export function keptFileName(): string {
+  return `wizardingcode-kept-${randomUUID()}.json`;
+}
+
+/** Keeps files' bytes under `.git/` for an adopt, under the name the intent records. */
+export function keepBytes(
+  repo: Repo,
+  files: Map<string, Uint8Array>,
+  name = keptFileName(),
+): string {
   const kept: Record<string, string> = {};
   for (const [path, bytes] of files) kept[path] = Buffer.from(bytes).toString("base64");
   writeFileAtomic(join(repo.path, ".git", name), JSON.stringify(kept));
@@ -1004,15 +1051,16 @@ export function restoreKept(repo: Repo, name: string | undefined, only?: Set<str
   const file = join(repo.path, ".git", name);
   let kept: unknown;
   try {
-    kept = JSON.parse(readFileSync(file, "utf8"));
+    const bytes = readRegularFile(file, RECORD_MAX_BYTES);
+    kept = bytes === null ? null : JSON.parse(new TextDecoder().decode(bytes));
   } catch {
     return;
   }
-  for (const [path, encoded] of Object.entries((kept ?? {}) as Record<string, unknown>)) {
+  for (const [path, encoded] of Object.entries(isPlain(kept) ? kept : {})) {
     if (only !== undefined && !only.has(path)) continue;
     const parts = path.split("/");
     if (parts.length !== 2 || parts[0] !== ENTRIES_DIR || !ownPath(path)) continue;
-    if (typeof encoded !== "string") continue;
+    if (typeof encoded !== "string" || !reachedByFolders(repo.path, path)) continue;
     mkdirSync(join(repo.path, ENTRIES_DIR), { recursive: true, mode: 0o700 });
     writeFileAtomic(join(repo.path, ...parts), Buffer.from(encoded, "base64"));
   }
@@ -1026,6 +1074,8 @@ export function dropKept(repo: Repo, name: string | undefined): void {
 
 /** What is at a path now, as the intent record names it: a hash, null for nothing, or unknown. */
 function stateOf(repo: Repo, path: string): string | null | undefined {
+  // Beyond a link is another folder's file: never read as the engine's, so never put back.
+  if (!reachedByFolders(repo.path, path)) return undefined;
   try {
     const bytes = readRegularFile(join(repo.path, ...path.split("/")));
     return bytes === null ? null : hashOf(bytes);
@@ -1054,10 +1104,21 @@ function report(store: KnowledgeStore, operation: string, message: string): void
  * interrupted, it is running.
  */
 function revertInterrupted(store: KnowledgeStore, repo: Repo): void {
-  const intent = readIntent(repo);
+  const record = readRecord(repo);
+  if (!record.present) return;
+  const intent = record.intent;
   if (intent === null) {
-    // A record nobody can read names no paths; it cannot be acted on, only removed.
-    if (existsSync(intentPath(repo)) && !leaseHeldElsewhere(store, repo)) clearIntent(repo);
+    // A record the store did not write names no path it may touch: it is removed, with
+    // the kept bytes it names, nothing is put back, and the person is told.
+    underOwnLease(store, repo, () => {
+      dropKept(repo, record.kept);
+      clearIntent(repo);
+      report(
+        store,
+        "revert",
+        `a record of an interrupted operation in ${repo.relative} was not one the store wrote; it was removed and nothing was put back`,
+      );
+    });
     return;
   }
   const revert = () => {
@@ -1103,15 +1164,7 @@ function revertInterrupted(store: KnowledgeStore, repo: Repo): void {
       );
     }
   };
-  if (holds(store, repo.relative)) {
-    revert();
-    return;
-  }
-  try {
-    withRepoLeases(store, [repo.relative], revert);
-  } catch (error) {
-    if (!(error instanceof KnowledgeError && error.code === "locked")) throw error;
-  }
+  underOwnLease(store, repo, revert);
 }
 
 // --- The leases ---------------------------------------------------------------------
@@ -1122,18 +1175,6 @@ export function leaseKey(relative: string): string {
 
 /** The repositories each store's running operation holds, so a nested step knows what it has. */
 const held = new WeakMap<KnowledgeStore, Map<string, string>>();
-
-const holds = (store: KnowledgeStore, relative: string) => held.get(store)?.has(relative) === true;
-
-function leaseHeldElsewhere(store: KnowledgeStore, repo: Repo): boolean {
-  if (holds(store, repo.relative)) return false;
-  // Claiming and releasing tells a live owner from a stale row without reading the lease.
-  const probe = `${process.pid}-${randomUUID()}`;
-  const key = leaseKey(repo.relative);
-  if (!claimLease(store.db, key, probe, store.now(), KNOWLEDGE_LEASE_MS)) return true;
-  releaseLease(store.db, key, probe);
-  return false;
-}
 
 /**
  * Runs `fn` holding the lease of each repository, claimed in the given order: the root
@@ -1173,5 +1214,23 @@ export function withRepoLeases<T>(store: KnowledgeStore, relatives: string[], fn
       mine.delete(relative);
       releaseLease(store.db, leaseKey(relative), owner);
     }
+  }
+}
+
+/**
+ * Runs a step of `openRepo` under the repository's own lease, which the running operation
+ * may hold already. While another process holds it the step is not run: that process is
+ * working there, and the step waits for a later open. Only that refusal is let pass: a
+ * `locked` raised once the step has started is a lease lost midway, and is thrown.
+ */
+function underOwnLease(store: KnowledgeStore, repo: Repo, step: () => void): void {
+  let started = false;
+  try {
+    withRepoLeases(store, [repo.relative], () => {
+      started = true;
+      step();
+    });
+  } catch (error) {
+    if (started || !(error instanceof KnowledgeError && error.code === "locked")) throw error;
   }
 }

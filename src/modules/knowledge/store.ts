@@ -53,6 +53,7 @@ import {
   headOf,
   type IntentOperation,
   keepBytes,
+  keptFileName,
   MANIFEST_FILE,
   OPEN_DIR,
   openRepo,
@@ -878,7 +879,7 @@ function adoptIn(
     if (text !== null) rewrites.push({ path, text });
   }
 
-  const keptName = keepBytes(repo, kept);
+  const keptName = keptFileName();
   // What adopt leaves at each path: nothing where the file is gone, an entry's rewrite,
   // and otherwise the person's bytes untouched. A file that cannot be read as a regular
   // file has no line here, and an interrupted adopt leaves it as it finds it.
@@ -901,6 +902,8 @@ function adoptIn(
     written,
     keptBytesFile: keptName,
   });
+  // After the record that names them: kept bytes no record names would never be removed.
+  keepBytes(repo, kept, keptName);
   const count = paths.length;
   try {
     for (const { path, text } of rewrites) writeFileAtomic(absolute(repo, path), text);

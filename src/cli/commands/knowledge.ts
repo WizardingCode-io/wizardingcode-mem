@@ -209,14 +209,31 @@ function rebuildLine(relative: string, result: RebuildResult): string {
   return `${relative}: ${parts.join(", ")}`;
 }
 
-function rebuild(store: KnowledgeStore, argv: string[]): void {
+/**
+ * The repositories the store refused during a command, each said on standard error. One
+ * of them does not stop the command for the others; the command then exits with 1.
+ */
+type Refused = string[];
+
+function refuse(refused: Refused, relative: string, message: string): void {
+  refused.push(relative);
+  process.stderr.write(`wizardingcode-mem: ${relative}: ${message}\n`);
+}
+
+/** Whether an error is the store refusing one repository, rather than a fault. */
+const isRefusal = (error: unknown): error is KnowledgeError =>
+  error instanceof KnowledgeError && error.code === "invalid";
+
+function rebuild(store: KnowledgeStore, argv: string[], refused: Refused): void {
   const { flags, rest } = parse(argv, ["--scope"]);
   if (rest.length > 0) throw new UsageError(`unexpected argument ${rest[0]}`);
   const scope = scopeOf(flags);
   const all = rebuildAll(store, scope);
   for (const [relative, result] of all.results) out(rebuildLine(relative, result));
+  for (const [relative, message] of all.refused) refuse(refused, relative, message);
   for (const repo of all.repos) {
-    if (!all.results.has(repo.relative)) out(`${repo.relative}: not a repository`);
+    if (all.results.has(repo.relative) || all.refused.has(repo.relative)) continue;
+    out(`${repo.relative}: not a repository`);
   }
   if (all.repos.length === 0) out(nothing(scope));
   if (scope !== undefined && scope !== "project") return;
@@ -229,38 +246,51 @@ function rebuild(store: KnowledgeStore, argv: string[]): void {
   for (const path of unclear) out(`ambiguous ${path}`);
 }
 
-/** The repositories of a scope that are repositories, opened. */
-function opened(store: KnowledgeStore, scope: Scope | undefined): Repo[] {
-  return listRepos(store)
-    .repos.filter((repo) => scope === undefined || repo.ref.scope === scope)
-    .map((repo) => openRepo(store, repo.ref))
-    .filter((repo): repo is Repo => repo !== null);
+/** The repositories of a scope that are repositories, opened; one the store refuses is said. */
+function opened(store: KnowledgeStore, scope: Scope | undefined, refused: Refused): Repo[] {
+  const repos: Repo[] = [];
+  for (const found of listRepos(store).repos) {
+    if (scope !== undefined && found.ref.scope !== scope) continue;
+    try {
+      const repo = openRepo(store, found.ref);
+      if (repo !== null) repos.push(repo);
+    } catch (error) {
+      if (!isRefusal(error)) throw error;
+      refuse(refused, found.relative, error.message);
+    }
+  }
+  return repos;
 }
 
-function adoptAll(store: KnowledgeStore, argv: string[]): void {
+function adoptAll(store: KnowledgeStore, argv: string[], refused: Refused): void {
   const { flags, rest } = parse(argv, ["--scope"]);
   if (rest.length > 0) throw new UsageError(`unexpected argument ${rest[0]}`);
   const scope = scopeOf(flags);
-  const repos = opened(store, scope);
-  if (repos.length === 0) out(nothing(scope));
+  const repos = opened(store, scope, refused);
+  if (repos.length === 0 && refused.length === 0) out(nothing(scope));
   const person = personAuthor(store);
   for (const repo of repos) {
-    const result = adopt(store, repo.ref, person);
-    out(
-      result.adopted === 0
-        ? `${repo.relative}: clean`
-        : `${repo.relative}: adopted ${plural(result.adopted, "change")}`,
-    );
-    for (const problem of result.problems) out(`  ${problem}`);
+    try {
+      const result = adopt(store, repo.ref, person);
+      out(
+        result.adopted === 0
+          ? `${repo.relative}: clean`
+          : `${repo.relative}: adopted ${plural(result.adopted, "change")}`,
+      );
+      for (const problem of result.problems) out(`  ${problem}`);
+    } catch (error) {
+      if (!isRefusal(error)) throw error;
+      refuse(refused, repo.relative, error.message);
+    }
   }
 }
 
-function list(store: KnowledgeStore, argv: string[]): void {
+function list(store: KnowledgeStore, argv: string[], refused: Refused): void {
   const { flags, rest } = parse(argv, ["--scope"]);
   if (rest.length > 0) throw new UsageError(`unexpected argument ${rest[0]}`);
   const scope = scopeOf(flags);
-  const repos = opened(store, scope);
-  if (repos.length === 0) out(nothing(scope));
+  const repos = opened(store, scope, refused);
+  if (repos.length === 0 && refused.length === 0) out(nothing(scope));
   for (const repo of repos) {
     try {
       withRepoLeases(store, [repo.relative], () => ensureFresh(store, repo));
@@ -305,13 +335,14 @@ export async function run(argv: string[]): Promise<number> {
       // What the store did on its own, such as undoing an interrupted write, is said here.
       report: (message) => process.stderr.write(`wizardingcode-mem: ${message}\n`),
     });
+    const refused: Refused = [];
     if (command === "write") await write(store, rest);
     else if (command === "accept" || command === "reject") decide(store, rest, command);
     else if (command === "area") area(store, rest);
-    else if (command === "rebuild") rebuild(store, rest);
-    else if (command === "adopt") adoptAll(store, rest);
-    else list(store, rest);
-    return 0;
+    else if (command === "rebuild") rebuild(store, rest, refused);
+    else if (command === "adopt") adoptAll(store, rest, refused);
+    else list(store, rest, refused);
+    return refused.length > 0 ? 1 : 0;
   } catch (error) {
     if (error instanceof UsageError) {
       process.stderr.write(`wizardingcode-mem: ${error.message}\n\n${USAGE}`);

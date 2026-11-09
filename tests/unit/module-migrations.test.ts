@@ -156,6 +156,10 @@ describe("the knowledge module's schema", () => {
       CREATE INDEX injections_memory_shown ON injections(memory_id, at);
       CREATE INDEX injections_memory_contexts ON injections(memory_id, session_id, context_epoch);
       INSERT INTO knowledge_entries (project_id, slug, title) VALUES (1, 'old', 'An old entry');
+      -- What its promotion pass kept in the core table meta, beside a row that is not its own.
+      INSERT INTO meta (key, value) VALUES
+        ('knowledge.promote.cursor', '{}'), ('knowledge.not-standing', '[]'),
+        ('knowledge.promote.lease', '{"owner":"1-x","until":1}'), ('kept.by.the.core', 'yes');
     `);
     // The fixture is the withdrawn shape in use: the trigger filled the full-text table.
     expect(old.query<{ n: number }, []>("SELECT count(*) AS n FROM knowledge_fts").get()?.n).toBe(
@@ -195,6 +199,15 @@ describe("the knowledge module's schema", () => {
         .map((row) => row.name)
         .filter((name) => name.startsWith("knowledge_")),
     ).toEqual([]);
+    // Its three rows in meta are gone, and no other row with them.
+    expect(
+      db
+        .query<{ key: string }, []>(
+          "SELECT key FROM meta WHERE key LIKE 'knowledge.%' OR key = 'kept.by.the.core' ORDER BY key",
+        )
+        .all()
+        .map((row) => row.key),
+    ).toEqual(["kept.by.the.core"]);
     db.run(
       "INSERT INTO knowledge_repos (scope, project_id, path, indexed_at) VALUES ('workspace', 0, 'knowledge/workspace', 0)",
     );

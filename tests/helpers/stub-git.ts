@@ -13,6 +13,8 @@ export interface StubBehaviour {
   version?: string;
   /** The script writes its environment here on every call. */
   dumpEnvTo?: string;
+  /** Arguments put ahead of the caller's on every call that reaches the real git. */
+  prepend?: string[];
 }
 
 const REAL_GIT = Bun.which("git");
@@ -66,7 +68,8 @@ export function stubGit(dir: string, behaviour: StubBehaviour): string {
       "fi",
     );
   }
-  lines.push(`exec ${quoted(REAL_GIT)} "$@"`);
+  const prepended = (behaviour.prepend ?? []).map((arg) => `${quoted(arg)} `).join("");
+  lines.push(`exec ${quoted(REAL_GIT)} ${prepended}"$@"`);
   const script = join(dir, "git");
   writeFileSync(script, `${lines.join("\n")}\n`);
   chmodSync(script, 0o755);

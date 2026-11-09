@@ -14,6 +14,10 @@ DROP TABLE IF EXISTS promoted_memories;
 -- pass. No core query uses them: memory reads `injections` as it did before that module.
 DROP INDEX IF EXISTS injections_memory_shown;
 DROP INDEX IF EXISTS injections_memory_contexts;
+-- Three rows its promotion pass kept in the core table `meta`: a cursor, a list and a
+-- lease. Nothing reads them now, and the new leases are named `knowledge.lease:<path>`.
+DELETE FROM meta
+ WHERE key IN ('knowledge.promote.cursor', 'knowledge.not-standing', 'knowledge.promote.lease');
 
 -- One row per repository. `path` is relative to the data directory. `project_id` is 0 for
 -- the workspace and the shared repositories, and a plain integer for a project: no foreign

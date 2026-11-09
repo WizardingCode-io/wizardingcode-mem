@@ -11,6 +11,7 @@ import {
   fingerprintOf,
   hashOf,
   headOf,
+  isDirectory,
   OPEN_DIR,
   openRepo,
   readRegularFile,
@@ -541,18 +542,28 @@ export function rebuildRepo(store: KnowledgeStore, repo: Repo): RebuildResult {
 export function rebuildAll(
   store: KnowledgeStore,
   scope?: ScopeRef["scope"],
-): ReturnType<typeof listRepos> & { results: Map<string, RebuildResult> } {
+): ReturnType<typeof listRepos> & {
+  results: Map<string, RebuildResult>;
+  /** The repositories the store refused, each with why: the others are rebuilt all the same. */
+  refused: Map<string, string>;
+} {
   requireSchema(store);
   const listed = listRepos(store);
   const repos = listed.repos.filter((repo) => scope === undefined || repo.ref.scope === scope);
   const results = new Map<string, RebuildResult>();
+  const refused = new Map<string, string>();
   for (const found of repos) {
-    const repo = openRepo(store, found.ref);
-    if (repo === null) continue;
-    results.set(
-      repo.relative,
-      withRepoLeases(store, [repo.relative], () => rebuildRepo(store, repo)),
-    );
+    try {
+      const repo = openRepo(store, found.ref);
+      if (repo === null) continue;
+      results.set(
+        repo.relative,
+        withRepoLeases(store, [repo.relative], () => rebuildRepo(store, repo)),
+      );
+    } catch (error) {
+      if (!(error instanceof KnowledgeError && error.code === "invalid")) throw error;
+      refused.set(found.relative, error.message);
+    }
   }
   const rows = store.db
     .query<{ id: number; scope: string; path: string }, []>(
@@ -561,20 +572,15 @@ export function rebuildAll(
     .all();
   for (const row of rows) {
     if (scope !== undefined && row.scope !== scope) continue;
-    let exists = false;
-    try {
-      exists = lstatSync(repoPath(store.dataDir, row.path)).isDirectory();
-    } catch {
-      // The folder is gone.
-    }
-    if (exists) continue;
+    if (isDirectory(repoPath(store.dataDir, row.path))) continue;
+    // The folder is gone.
     withWrite(store.db, () => {
       store.db.run("DELETE FROM knowledge_entries WHERE repo_id = ?", [row.id]);
       store.db.run("DELETE FROM knowledge_proposals WHERE repo_id = ?", [row.id]);
       store.db.run("DELETE FROM knowledge_repos WHERE id = ?", [row.id]);
     });
   }
-  return { ...listed, repos, results };
+  return { ...listed, repos, results, refused };
 }
 
 /** Rebuilds the repository's rows when its HEAD or its fingerprint is not what was indexed. */

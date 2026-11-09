@@ -20,7 +20,6 @@ import {
   clearIntent,
   commitPaths,
   ensureRepo,
-  ensureSupportFolders,
   fingerprintOf,
   GIT_MIN_VERSION,
   GIT_TIMEOUT_MS,
@@ -45,7 +44,6 @@ import {
   runGit,
   stagePaths,
   statusOf,
-  supportPaths,
   taxonomyFor,
   undoStaged,
   unstage,
@@ -150,24 +148,70 @@ describe("names and versions", () => {
   });
 });
 
-describe("the support folders", () => {
-  test("an empty template, a folder with no hooks and an empty configuration", () => {
-    ensureSupportFolders(fx.dataDir);
-    const paths = supportPaths(fx.dataDir);
-    expect(paths).toEqual({
-      template: join(fx.dataDir, "knowledge", ".template"),
-      noHooks: join(fx.dataDir, "knowledge", ".no-hooks"),
-      emptyConfig: join(fx.dataDir, "knowledge", ".gitconfig-empty"),
+describe("nothing of the store's own sits beside the repositories", () => {
+  test("the store keeps no file or folder under knowledge/ but the repositories", () => {
+    ensureRepo(fx.store(), WORKSPACE);
+    const root = join(fx.dataDir, "knowledge");
+    expect(readdirSync(root)).toEqual(["workspace"]);
+    if (unix) expect(mode(root)).toBe(0o700);
+  });
+
+  /** A first write into a data directory where `prepare` has already put files. */
+  function firstWrite(name: string, prepare: (root: string, script: string) => void) {
+    const { script, marker } = trap(name);
+    const root = join(fx.dataDir, "knowledge");
+    mkdirSync(root, { recursive: true });
+    prepare(root, script);
+    const store = fx.store({ env: { WIZARDINGCODE_MEM_AUTHOR: "Writer" } });
+    const result = writeEntry(store, WORKSPACE, AN_ENTRY, personAuthor(store));
+    expect(result.kind).toBe("written");
+    expect(existsSync(marker)).toBe(false);
+    const repo = openRepo(store, WORKSPACE) as Repo;
+    expect(realGit(repo.path, "rev-list", "--count", "HEAD").trim()).toBe("2");
+    return repo;
+  }
+
+  test("a hook someone left in a folder beside the repositories never runs", () => {
+    firstWrite("beside-hook", (root, script) => {
+      mkdirSync(join(root, ".no-hooks"));
+      writeFileSync(join(root, ".no-hooks", "pre-commit"), `#!/bin/sh\n${script} < /dev/null\n`);
+      chmodSync(join(root, ".no-hooks", "pre-commit"), 0o755);
     });
-    expect(statSync(paths.template).isDirectory()).toBe(true);
-    expect(statSync(paths.noHooks).isDirectory()).toBe(true);
-    expect(readFileSync(paths.emptyConfig, "utf8")).toBe("");
-    if (unix) {
-      expect(mode(join(fx.dataDir, "knowledge"))).toBe(0o700);
-      expect(mode(paths.template)).toBe(0o700);
-      expect(mode(paths.noHooks)).toBe(0o700);
-      expect(mode(paths.emptyConfig)).toBe(0o600);
+  });
+
+  test("a configuration someone left beside the repositories is never read", () => {
+    firstWrite("beside-config", (root, script) => {
+      const attributes = join(fx.dir, "attributes");
+      writeFileSync(attributes, "* filter=x\n");
+      writeFileSync(
+        join(root, ".gitconfig-empty"),
+        `[core]\n\tattributesFile = ${attributes}\n[filter "x"]\n\tclean = ${script}\n`,
+      );
+    });
+  });
+
+  test("a template someone left beside the repositories is never copied", () => {
+    const repo = firstWrite("beside-template", (root, script) => {
+      mkdirSync(join(root, ".template", "info"), { recursive: true });
+      writeFileSync(join(root, ".template", "config"), `[filter "x"]\n\tclean = ${script}\n`);
+      writeFileSync(join(root, ".template", "info", "attributes"), "* filter=x\n");
+    });
+    expect(readFileSync(join(repo.path, ".git", "config"), "utf8")).not.toContain("filter");
+    expect(existsSync(join(repo.path, ".git", "info", "attributes"))).toBe(false);
+  });
+
+  test("a hook in the repository's own hooks folder never runs", () => {
+    const store = fx.store();
+    const repo = ensureRepo(store, WORKSPACE);
+    const { script, marker } = trap("own-hook");
+    mkdirSync(join(repo.path, ".git", "hooks"), { recursive: true });
+    for (const name of ["pre-commit", "post-commit", "reference-transaction"]) {
+      writeFileSync(join(repo.path, ".git", "hooks", name), `#!/bin/sh\n${script} < /dev/null\n`);
+      chmodSync(join(repo.path, ".git", "hooks", name), 0o755);
     }
+    commitFile(store, repo, "entries/a.md", "one\n");
+    expect(realGit(repo.path, "rev-list", "--count", "HEAD").trim()).toBe("2");
+    expect(existsSync(marker)).toBe(false);
   });
 });
 
@@ -433,6 +477,18 @@ describe("a repository's own git configuration", () => {
     expect(codeOf(() => checkRepoConfig(repo.path))).toBeNull();
   });
 
+  test("a new repository keeps the formats the store reads, whatever git defaults to", () => {
+    // A git whose own defaults are the other formats: its settings come ahead of the store's.
+    const later = stubGit(join(fx.dir, "later-git"), {
+      prepend: ["-c", "init.defaultObjectFormat=sha256", "-c", "init.defaultRefFormat=reftable"],
+    });
+    const store = fx.store({ env: { PATH: fx.pathWith(later) } });
+    const repo = ensureRepo(store, WORKSPACE);
+    expect(readFileSync(join(repo.path, ".git", "config"), "utf8")).not.toContain("extensions");
+    expect(openRepo(store, WORKSPACE)?.id).toBe(repo.id);
+    expect(realGit(repo.path, "rev-list", "--count", "HEAD").trim()).toBe("1");
+  });
+
   test("a configuration that is a link, or too large to be one git init wrote, is refused", () => {
     const store = fx.store();
     const repo = ensureRepo(store, WORKSPACE);
@@ -529,7 +585,7 @@ describe("the runner", () => {
 
     runGit(spy, repo.path, ["status", "--porcelain"], { operation: "test", readOnly: true });
     expect(seen()).toContain("GIT_OPTIONAL_LOCKS=0");
-    expect(seen()).toContain(`GIT_CONFIG_GLOBAL=${join(root, ".gitconfig-empty")}`);
+    expect(seen()).toContain("GIT_CONFIG_GLOBAL=/dev/null");
     expect(seen()).toContain("GIT_CONFIG_NOSYSTEM=1");
     expect(seen()).toContain(`GIT_CEILING_DIRECTORIES=${root}`);
     expect(seen()).toContain("GIT_TERMINAL_PROMPT=0");
@@ -1039,6 +1095,117 @@ describe("an interrupted operation", () => {
     expect(said[0]).not.toContain("entries/b.md");
   });
 
+  /**
+   * What a dropped folder could carry: `entries/sub` a link to a folder of the person's, an
+   * index entry beyond it that `stage` makes, and a record that names the file as written.
+   */
+  function linkedOutside(stage: (repo: Repo) => void): { repo: Repo; victim: string } {
+    const repo = ensureRepo(fx.store(), WORKSPACE);
+    const outside = join(fx.dir, "the-persons-folder");
+    mkdirSync(outside);
+    const victim = join(outside, "victim.txt");
+    writeFileSync(victim, "the person's file\n");
+    // The index is prepared while the folder is a real one, which is then made a link.
+    const sub = join(repo.path, "entries", "sub");
+    mkdirSync(sub);
+    writeFileSync(join(sub, "victim.txt"), "the person's file\n");
+    stage(repo);
+    rmSync(sub, { recursive: true });
+    symlinkSync(outside, sub);
+    writeFileSync(
+      join(repo.path, ".git", "wizardingcode-op.json"),
+      JSON.stringify({
+        operation: "write",
+        writer: person,
+        existed: [],
+        created: ["entries/sub/victim.txt"],
+        written: { "entries/sub/victim.txt": hash("the person's file\n") },
+      }),
+    );
+    return { repo, victim };
+  }
+
+  test("a file reached through a link inside the repository is never removed", () => {
+    const { store, said } = reporting();
+    const { repo, victim } = linkedOutside((made) => {
+      realGit(made.path, "add", "-N", "--", "entries/sub/victim.txt");
+    });
+    expect(openRepo(store, WORKSPACE)?.id).toBe(repo.id);
+    expect(readFileSync(victim, "utf8")).toBe("the person's file\n");
+    expect(readIntent(repo)).toBeNull();
+    expect(existsSync(join(repo.path, ".git", "wizardingcode-op.json"))).toBe(false);
+    expect(said).toHaveLength(1);
+    expect(said[0]).toContain("entries/sub/victim.txt");
+    expect(said[0]).not.toContain("was undone");
+  });
+
+  test("a regular index entry beyond a link does not leave the repository refusing every command", () => {
+    const { store } = reporting();
+    const { repo, victim } = linkedOutside((made) => {
+      realGit(made.path, "add", "--", "entries/sub/victim.txt");
+    });
+    expect(openRepo(store, WORKSPACE)?.id).toBe(repo.id);
+    expect(readFileSync(victim, "utf8")).toBe("the person's file\n");
+    expect(readIntent(repo)).toBeNull();
+    expect(openRepo(store, WORKSPACE)?.id).toBe(repo.id);
+  });
+
+  test("undoing refuses a path whose folder is a link", () => {
+    const store = fx.store();
+    const repo = ensureRepo(store, WORKSPACE);
+    const outside = join(fx.dir, "the-persons-folder");
+    mkdirSync(outside);
+    writeFileSync(join(outside, "victim.txt"), "the person's file\n");
+    symlinkSync(outside, join(repo.path, "entries", "sub"));
+    const call = () =>
+      undoStaged(store, repo, { existed: [], created: ["entries/sub/victim.txt"] }, "write");
+    expect(codeOf(call)).toBe("invalid");
+    expect(thrown(call).message).toContain("entries/sub");
+    expect(existsSync(join(outside, "victim.txt"))).toBe(true);
+  });
+
+  test("a record that is a link, or not a file, is never read", () => {
+    const store = fx.store();
+    const repo = ensureRepo(store, WORKSPACE);
+    const record = join(repo.path, ".git", "wizardingcode-op.json");
+    const elsewhere = join(fx.dir, "elsewhere.json");
+    writeFileSync(
+      elsewhere,
+      JSON.stringify({ operation: "write", writer: person, existed: [], created: [] }),
+    );
+    symlinkSync(elsewhere, record);
+    expect(readIntent(repo)).toBeNull();
+    // Removed like any record the store cannot act on; what it pointed at is untouched.
+    openRepo(store, WORKSPACE);
+    expect(existsSync(record)).toBe(false);
+    expect(existsSync(elsewhere)).toBe(true);
+
+    mkdirSync(record);
+    expect(readIntent(repo)).toBeNull();
+  });
+
+  test("a record the store did not write is removed with its kept bytes, and said", () => {
+    const { store, said } = reporting();
+    const repo = ensureRepo(store, WORKSPACE);
+    const kept = keepBytes(repo, new Map([["entries/a.md", Buffer.from("kept\n")]]));
+    writeFileSync(
+      join(repo.path, ".git", "wizardingcode-op.json"),
+      JSON.stringify({
+        operation: "adopt",
+        writer: person,
+        existed: ["../outside.md"],
+        created: [],
+        keptBytesFile: kept,
+      }),
+    );
+    openRepo(store, WORKSPACE);
+    expect(existsSync(join(repo.path, ".git", "wizardingcode-op.json"))).toBe(false);
+    expect(existsSync(join(repo.path, ".git", kept))).toBe(false);
+    expect(existsSync(join(repo.path, "entries", "a.md"))).toBe(false);
+    expect(said).toHaveLength(1);
+    expect(said[0]).toContain("not one the store wrote");
+  });
+
   test("a record that names a path outside the knowledge folders is not acted on", () => {
     const store = fx.store();
     const repo = ensureRepo(store, WORKSPACE);
@@ -1197,6 +1364,12 @@ describe("a folder that is not the store's own repository", () => {
     refused("config.worktree");
     rmSync(join(gitDir, "config.worktree"));
 
+    // Objects read from another repository on the disk.
+    mkdirSync(join(gitDir, "objects", "info"), { recursive: true });
+    writeFileSync(join(gitDir, "objects", "info", "alternates"), "/somewhere/else/objects\n");
+    refused("alternates");
+    rmSync(join(gitDir, "objects", "info", "alternates"));
+
     writeFileSync(join(gitDir, "config"), `${BASE}[extensions]\n\tworktreeConfig = true\n`);
     refused("worktreeConfig");
 
@@ -1351,6 +1524,19 @@ describe("a folder that is not the store's own repository", () => {
     expect(openRepo(store, WORKSPACE)?.id).toBe(repo.id);
     expect(statusOf(store, repo, [])).toEqual([]);
     expect(existsSync(marker)).toBe(false);
+
+    // A .gitmodules that tells git to look into it, appearing after the repository was
+    // opened: the setting the runner passes gives way to it, the flag statusOf adds does not.
+    writeFileSync(
+      join(repo.path, ".gitmodules"),
+      '[submodule "x"]\n\tpath = entries/sub\n\turl = ./entries/sub\n\tignore = none\n',
+    );
+    const evenLater = new Date(Date.now() + 120_000);
+    utimesSync(join(nested, "f.txt"), evenLater, evenLater);
+    expect(statusOf(store, repo, ["entries"])).toEqual([]);
+    expect(existsSync(marker)).toBe(false);
+    rmSync(join(repo.path, ".gitmodules"));
+
     // The trap is live: git without the store's flag does run it.
     realGit(repo.path, "status", "--porcelain");
     expect(existsSync(marker)).toBe(true);

@@ -485,4 +485,33 @@ describe("knowledge list, rebuild and adopt", () => {
       expect(result.stderr).toContain("Usage: wizardingcode-mem knowledge");
     }
   });
+
+  test("a repository the store refuses does not stop the commands for the others", async () => {
+    const shared = WRITE.map((arg) => (arg === "workspace" ? "shared" : arg));
+    expect((await cli(...WRITE, "--body", "The body.")).exitCode).toBe(0);
+    expect((await cli(...shared, "--body", "The body.")).exitCode).toBe(0);
+    // A setting a person added by hand to the shared repository.
+    const config = join(dataDir, "knowledge", "shared", ".git", "config");
+    writeFileSync(
+      config,
+      `${readFileSync(config, "utf8")}[remote "origin"]\n\turl = https://example.invalid/x.git\n`,
+    );
+
+    for (const command of ["list", "rebuild", "adopt"]) {
+      const result = await cli(command);
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout).toContain("knowledge/workspace");
+      expect(result.stdout).not.toContain("knowledge/shared");
+      expect(result.stderr).toContain("knowledge/shared: ");
+      expect(result.stderr).toContain("remote.origin.url");
+    }
+    // The other scope alone is not touched by it.
+    const scoped = await cli("list", "--scope", "workspace");
+    expect(scoped.exitCode).toBe(0);
+    expect(scoped.stderr).toBe("");
+    // A write to the refused repository is refused, in the same words.
+    const write = await cli(...shared, "--title", "Another one", "--body", "x");
+    expect(write.exitCode).toBe(1);
+    expect(write.stderr).toContain("remote.origin.url");
+  });
 });
