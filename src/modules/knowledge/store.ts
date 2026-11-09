@@ -239,7 +239,8 @@ function checkTarget(store: KnowledgeStore, repo: Repo, slug: string): void {
   requireClean(store, repo, path);
 }
 
-function requireClean(store: KnowledgeStore, repo: Repo, path: string): void {
+/** Refuses a path that is not as the last commit left it: a hand edit is adopted first. */
+export function requireClean(store: KnowledgeStore, repo: Repo, path: string): void {
   if (statusOf(store, repo, [path]).length === 0) return;
   throw new KnowledgeError("dirty", `${path} was changed outside the engine; run ${ADOPT} first`);
 }
@@ -266,7 +267,7 @@ const stale = (current: number, based: number, what: string) =>
 
 // --- The commit and the failure rule -----------------------------------------------------
 
-interface Commit {
+export interface Commit {
   operation: string;
   writer: Writer;
   /** Files written and staged. */
@@ -285,7 +286,7 @@ interface Commit {
  * until the caller has indexed the result. When anything fails, every path is put back to
  * what HEAD holds; when even that fails, the record is left for the next open to act on.
  */
-function commit(store: KnowledgeStore, repo: Repo, change: Commit): void {
+export function commit(store: KnowledgeStore, repo: Repo, change: Commit): void {
   writeIntent(repo, {
     operation: change.operation,
     writer: change.writer,
@@ -327,7 +328,7 @@ function commit(store: KnowledgeStore, repo: Repo, change: Commit): void {
 }
 
 /** Indexes what a commit changed, records the repository's new head, and forgets the intent. */
-function settle(store: KnowledgeStore, repo: Repo, index: () => void): void {
+export function settle(store: KnowledgeStore, repo: Repo, index: () => void): void {
   store.renew?.();
   withWrite(store.db, () => {
     index();
