@@ -5,7 +5,15 @@
 - CTO plan: none
 - Packs: none
 - Checklists: migration-or-restore (1 file)
-- Verdict: **Proven**
+- Verdict: **Not proven**
+
+## Not proven
+
+- code changed since the last gate run
+- gate design-lint not run
+- gate test (plugins/opencode) not run
+- gate e2e not run
+- judgement gate ui-ux not run
 
 ## Spec review
 
@@ -19,7 +27,7 @@ The file: `spec-review/consolidated.md`.
 - K-316 · validated-solution · "Memory quality: knowledge, not records of a session (spec docs/superpowers/specs" · alone · stack node, word knowledge · likely 0.84
 - K-319 · validated-solution · "Record why the drain skips a turn (saved, empty, not-worth, no-title) in turns.l" · alone · stack node, word knowledge, word kind · unlikely 0.2
 - K-311 · validated-solution · "T-4 of 2026-10-15-001-memory-quality-knowledge-not-records-of: AC-5: heuristic j" · alone · stack node, word knowledge · unverified 0.66
-- Learned: not yet
+- Learned: K-335
 
 ## Acceptance criteria
 
@@ -232,6 +240,12 @@ The file: `spec-review/consolidated.md`.
 - D-10: What happens to a proposal once a person decides it: the file is moved to proposals/decided with the decision appended, or the file is deleted and the decision lives only in the commit? → Moved to proposals/decided with the decision (accepted or rejected, by whom, when) appended; the index keeps it after a rebuild and nothing needs git log to answer what was decided. Nothing is deleted from the repository., by the validator (rule: stated-default): counted by policy
 - D-11: What does a write do when its target file was changed outside the engine (a hand edit, uncommitted): refuse and offer knowledge adopt, commit the hand edit as part of its own commit, or discard it? → Refuse, naming the path and the way out: wizardingcode-mem knowledge adopt commits hand edits as the person with the frontmatter normalised (version raised, updated stamped). Sweeping a hand edit into another write's commit credits it to the wrong author; discarding loses a person's work., by the validator (rule: stated-default): counted by policy
 - Debate: none
+
+## Mail
+
+| Message | Thread | At | Direction | With | Type | Priority | Subject | Status | Contracts |
+| :- | :- | :- | :- | :- | :- | :- | :- | :- | :- |
+| M-2026-11-09-001-ai-mem | - | 2026-11-09T14:31:42.500Z | sent | ai-mem | notice | normal | Lane journey/2026-11-08-001-j-knowledge-base-and-team-collab (2026-11-08-003-... | done | - |
 
 ## Roles
 

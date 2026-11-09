@@ -23,7 +23,8 @@
       "subject": "Lane journey/2026-11-08-001-j-knowledge-base-and-team-collab (2026-11-08-003-...",
       "body": "Lane journey/2026-11-08-001-j-knowledge-base-and-team-collab (2026-11-08-003-knowledge-store-entries-as-markdown-with, proven) is proven: commit it, then merge it from the main checkout.",
       "replyTo": null,
-      "status": "sent"
+      "status": "done",
+      "readAt": "2026-11-09T18:29:35.049Z"
     }
   ]
 }

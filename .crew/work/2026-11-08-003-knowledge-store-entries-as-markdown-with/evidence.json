@@ -1161,8 +1161,14 @@
       "fingerprint": "sha256:32ee72e7f60bf48bf63014c64f3f5439b89e3382c88b6c3c1ae54f2cac2ec17c"
     }
   ],
-  "verdict": "proven",
-  "unproven": [],
+  "verdict": "unproven",
+  "unproven": [
+    "code changed since the last gate run",
+    "gate design-lint not run",
+    "gate test (plugins/opencode) not run",
+    "gate e2e not run",
+    "judgement gate ui-ux not run"
+  ],
   "verifications": [
     {
       "what": "knowledge",

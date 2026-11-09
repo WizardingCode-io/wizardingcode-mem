@@ -1,0 +1,11 @@
+# etl lead's validation of 2026-11-09-001-knowledge-for-the-agent-mcp-tools-search: spec
+verdict: validated
+## Returns
+none
+## Notes
+- The data design is as validated in round 2, and the round-3 edits did not touch it. AC-15 is still in `spec.md`. The migration 7 paragraph (`spec.md:89` earlier) is unchanged: searchable `repo_id` and `entry_id`, MATCH deletes, and the cleared `head` and `fingerprint`. So are the visible ids inside the MATCH, the stale mark written only when absent, the 2 s rebuild budget with the triggers firing, and the 30 non-visible repositories in the perf corpus.
+- Compact's orphan prune is also unchanged: `spec.md:142` removes sessions and repositories that no longer exist, in the same `withWrite` as the session delete. AC-11 at `spec.md:177` still words it narrowly ("of the sessions it removes"). AC-15 binds the orphan rule, so this stays a wording note.
+- D-9 is now open as a question for the person (`spec.md:30`, `spec.md:49`). The design stays written for every session start, once per context. For data, both answers use the same table, `knowledge_shown` (session, epoch, repo, entry), and the same pinned query. The only difference is the condition that selects which sessions show pinned entries. Neither answer changes the schema, the index or migration 7, so the data design does not wait on D-9. If the person chooses "first session only", the `knowledge_shown` growth in the ADR (AC-13) shrinks and nothing else moves.
+- AC-16 (`spec.md:174`) moves the rate counter into `meta` as `knowledge.rate:<id>`, shared by the server and the `tool` bridge. This is a small write on the tool path only, never on a hook, and it uses the existing key-value store. I do not return it, but the implementation must read and increment the counter inside one `withWrite`, so two processes cannot both take the 20th slot. The 21st-call, other-agent-id and window-reset cases in AC-16 pin the behaviour.
+- The `knowledge.rate:<id>` keys are bounded by the agent ids in use, so they need no pruning.
+- The superseded AC-8 and AC-14 (`spec.md:173`, `spec.md:179`) are marked, with their replacements AC-16 and AC-17 carrying their clauses. The seven bm25 weights in the plan's constants match the seven-column FTS table.
