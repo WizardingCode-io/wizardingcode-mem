@@ -17,9 +17,12 @@ import {
   KINDS,
   nowIso,
   parseEntry,
+  parseFrontmatter,
   parseProposal,
+  parseTaxonomy,
   renderEntry,
   renderProposal,
+  SLUG,
   STATUSES,
   slugify,
   TITLE_MAX,
@@ -31,6 +34,7 @@ import {
   countOpenAll,
   ensureFresh,
   fileHash,
+  rebuildRepo,
   recordRepoNow,
   taxonomyOrNull,
   upsertEntry,
@@ -41,19 +45,29 @@ import {
   clearIntent,
   commitPaths,
   DECIDED_DIR,
+  dropKept,
   ENTRIES_DIR,
   ensureRepo,
+  keepBytes,
+  MANIFEST_FILE,
   OPEN_DIR,
   openRepo,
+  parseManifest,
+  pathsAtHead,
   readRegularFile,
   removePaths,
   repoFolder,
   requireGit,
+  restoreKept,
   rootOf,
+  runGit,
+  showAtHead,
   stagePaths,
   statusOf,
+  TAXONOMY_FILE,
   taxonomyFor,
   undoStaged,
+  unstage,
   withRepoLeases,
   writeFileAtomic,
   writeIntent,
@@ -709,4 +723,207 @@ export function readEntry(
   if (repo === null) return null;
   ensureFresh(store, repo);
   return readCurrent(repo, slug, taxonomyOrNull(store, repo))?.entry ?? null;
+}
+
+// --- Hand edits: adopt -------------------------------------------------------------------
+
+const ENTRY_FILE = new RegExp(`^${ENTRIES_DIR}/([^/]+)\\.md$`);
+
+function onDisk(repo: Repo, path: string): boolean {
+  try {
+    lstatSync(absolute(repo, path));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The text an entry file a person wrote by hand is committed as: an id when it has none,
+ * the next version, `updated` and the person as author, everything else as they left it.
+ * Null when the file is not an entry even so: it is then committed exactly as it is.
+ */
+function adoptedText(
+  text: string,
+  slug: string,
+  taxonomy: Taxonomy | null,
+  headVersion: number | null,
+  person: PersonWriter,
+  now: string,
+): string | null {
+  const front = parseFrontmatter(text);
+  if ("problem" in front) return null;
+  const asWritten = parseEntry(text, slug, null);
+  const id = UUID.test(asWritten.id) ? asWritten.id : randomUUID();
+  // A file HEAD does not hold starts at 1. One it holds moves forward from the higher of
+  // HEAD's version and the number in the file, whatever the person typed there.
+  const version = headVersion === null ? 1 : Math.max(headVersion, asWritten.version) + 1;
+  const others = front.order
+    .filter((key) => key !== "id" && key !== "version")
+    .flatMap((key) => front.raw.get(key) ?? []);
+  const repaired = parseEntry(
+    `---\nid: ${id}\nversion: ${version}\n${others.join("\n")}\n---\n${front.body}\n`,
+    slug,
+    taxonomy,
+  );
+  if (repaired.problem !== null) return null;
+  return renderEntry({
+    ...repaired,
+    author: authorOf(person),
+    created: repaired.created ?? now,
+    updated: now,
+  });
+}
+
+/**
+ * Commits the changes a person made outside the engine, as the person: files edited or
+ * added in an editor, files deleted, a taxonomy or a manifest changed by hand. Nothing is
+ * skipped or refused, since the person's work must be versioned; a file that is still not
+ * a valid entry is committed as it is and returned with its problem. When the commit
+ * fails, the person's files are put back byte for byte: their work exists nowhere else.
+ */
+export function adopt(
+  store: KnowledgeStore,
+  ref: ScopeRef,
+  person: PersonWriter,
+): { adopted: number; problems: string[] } {
+  requireSchema(store);
+  requireGit(store);
+  if (person.kind !== "person") throw invalid("changes are adopted by a person, never by an agent");
+  const rootFolder = repoFolder(rootOf(ref));
+  return withRepoLeases(store, [rootFolder], () => {
+    const repo = openRepo(store, ref);
+    if (repo === null) {
+      throw new KnowledgeError("missing", `there is no ${ref.scope} knowledge repository yet`);
+    }
+    const run = () => adoptIn(store, repo, person);
+    return repo.relative === rootFolder ? run() : withRepoLeases(store, [repo.relative], run);
+  });
+}
+
+function adoptIn(
+  store: KnowledgeStore,
+  repo: Repo,
+  person: PersonWriter,
+): { adopted: number; problems: string[] } {
+  // Nothing else counts: the `.gitignore` covers what editors and Finder leave behind.
+  const changed = statusOf(store, repo, [
+    ENTRIES_DIR,
+    "proposals",
+    TAXONOMY_FILE,
+    MANIFEST_FILE,
+  ]).map((line) => line.slice(3));
+  if (changed.length === 0) return { adopted: 0, problems: [] };
+
+  const atHead = pathsAtHead(store, repo, changed, "adopt");
+  const present = changed.filter((path) => onDisk(repo, path));
+  const deleted = changed.filter((path) => !present.includes(path) && atHead.has(path));
+  // A file added to the index by hand and then deleted: there is nothing left to commit.
+  const vanished = changed.filter((path) => !present.includes(path) && !atHead.has(path));
+  const paths = [...present, ...deleted];
+
+  const taxonomy = taxonomyOrNull(store, repo);
+  const now = nowIso(store.now());
+  const kept = new Map<string, Uint8Array>();
+  const rewrites: { path: string; text: string }[] = [];
+  for (const path of present) {
+    const slug = ENTRY_FILE.exec(path)?.[1];
+    if (slug === undefined || !SLUG.test(slug)) continue;
+    let bytes: Uint8Array | null;
+    try {
+      bytes = readRegularFile(absolute(repo, path));
+    } catch {
+      // A link or a file over the cap is committed as it is and listed with its problem.
+      continue;
+    }
+    if (bytes === null) continue;
+    kept.set(path, bytes);
+    const head = atHead.has(path) ? showAtHead(store, repo, path) : null;
+    const headVersion = head === null ? null : parseEntry(head, slug, null).version;
+    const text = adoptedText(
+      new TextDecoder().decode(bytes),
+      slug,
+      taxonomy,
+      headVersion,
+      person,
+      now,
+    );
+    if (text !== null) rewrites.push({ path, text });
+  }
+
+  const keptName = keepBytes(repo, kept);
+  writeIntent(repo, {
+    operation: "adopt",
+    writer: person,
+    existed: changed.filter((path) => atHead.has(path)),
+    created: changed.filter((path) => !atHead.has(path)),
+    keptBytesFile: keptName,
+  });
+  const count = paths.length;
+  try {
+    for (const { path, text } of rewrites) writeFileAtomic(absolute(repo, path), text);
+    if (present.length > 0) stagePaths(store, repo, present, "adopt");
+    if (deleted.length > 0) removePaths(store, repo, deleted, "adopt");
+    if (vanished.length > 0) {
+      runGit(store, repo.path, ["rm", "--cached", "-q", "--ignore-unmatch", "--", ...vanished], {
+        operation: "adopt",
+      });
+    }
+    if (count > 0) {
+      commitPaths(
+        store,
+        repo,
+        paths,
+        `knowledge: adopt ${count} ${count === 1 ? "change" : "changes"} made outside the engine\n\n${paths.join("\n")}`,
+        identityOf(person),
+        "adopt",
+      );
+    }
+  } catch (error) {
+    try {
+      // The person's own work: only unstaged, and their bytes written back as they were.
+      unstage(store, repo, changed, "adopt");
+      restoreKept(repo, keptName);
+      clearIntent(repo);
+    } catch {
+      // The intent record stays: the next `openRepo` puts the person's bytes back.
+    }
+    throw error;
+  }
+  rebuildRepo(store, repo);
+  dropKept(repo, keptName);
+  clearIntent(repo);
+  return { adopted: count, problems: problemsOf(store, repo) };
+}
+
+/** Every problem the repository's files still carry, each with its path. */
+function problemsOf(store: KnowledgeStore, repo: Repo): string[] {
+  const rows = store.db
+    .query<{ path: string; problem: string }, [number, number]>(
+      `SELECT path, problem FROM knowledge_entries WHERE repo_id = ? AND problem IS NOT NULL
+       UNION ALL
+       SELECT path, problem FROM knowledge_proposals WHERE repo_id = ? AND problem IS NOT NULL
+       ORDER BY path`,
+    )
+    .all(repo.id, repo.id);
+  const problems = rows.map((row) => `${row.path}: ${row.problem}`);
+  const decode = (path: string) => {
+    try {
+      const bytes = readRegularFile(absolute(repo, path));
+      return bytes === null ? null : new TextDecoder().decode(bytes);
+    } catch (error) {
+      return error instanceof KnowledgeError ? "" : null;
+    }
+  };
+  const taxonomy = decode(TAXONOMY_FILE);
+  if (taxonomy !== null) {
+    const parsed = parseTaxonomy(taxonomy);
+    if ("problem" in parsed) problems.push(`${TAXONOMY_FILE}: ${parsed.problem}`);
+  }
+  const manifest = decode(MANIFEST_FILE);
+  if (manifest !== null) {
+    const parsed = parseManifest(manifest);
+    if ("problem" in parsed) problems.push(`${MANIFEST_FILE}: ${parsed.problem}`);
+  }
+  return problems;
 }

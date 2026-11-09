@@ -1,10 +1,10 @@
 // The index of the knowledge store: rows in the engine's database, rebuilt from the files.
 // The files in the repositories are the truth; nothing here is the only copy of anything.
 import { createHash } from "node:crypto";
-import { readdirSync } from "node:fs";
+import { lstatSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { withWrite } from "../../store/db.ts";
-import { parseEntry, parseProposal, UUID } from "./entry.ts";
+import { parseEntry, parseProposal, UUID, unreadEntry, unreadProposal } from "./entry.ts";
 import { KnowledgeError } from "./errors.ts";
 import {
   DECIDED_DIR,
@@ -12,10 +12,22 @@ import {
   fingerprintOf,
   headOf,
   OPEN_DIR,
+  openRepo,
   readRegularFile,
+  repoPath,
+  statusOf,
   taxonomyFor,
+  withRepoLeases,
 } from "./repo.ts";
-import type { KnowledgeEntry, KnowledgeProposal, KnowledgeStore, Repo, Taxonomy } from "./types.ts";
+import { listRepos } from "./resolve.ts";
+import type {
+  KnowledgeEntry,
+  KnowledgeProposal,
+  KnowledgeStore,
+  Repo,
+  ScopeRef,
+  Taxonomy,
+} from "./types.ts";
 
 /** The SHA-256 of a file's bytes as read, first 16 hex. */
 export function fileHash(bytes: Uint8Array): string {
@@ -279,14 +291,66 @@ export function taxonomyOrNull(store: KnowledgeStore, repo: Repo): Taxonomy | nu
   }
 }
 
-/** The `.md` names of a folder, in order. */
-function markdownNames(repo: Repo, folder: string): string[] {
+/** How many names of one folder are indexed; the rest are counted, printed and warned about. */
+export const FOLDER_CAP = 5000;
+/** A long rebuild extends its leases once per this many files. */
+const RENEW_EVERY = 500;
+const CHANGED_OUTSIDE = "changed outside the engine; run wizardingcode-mem knowledge adopt";
+
+const also = (problem: string | null, more: string) =>
+  problem === null ? more : `${problem}; ${more}`;
+
+/**
+ * The names of a folder to index: the visible ones, in byte order so that two rebuilds
+ * agree, cut at the cap. Only `.md` files are knowledge; `over` counts what the cap left out.
+ */
+function listFolder(repo: Repo, folder: string): { names: string[]; over: number } {
+  let all: string[];
   try {
-    return readdirSync(join(repo.path, ...folder.split("/")))
-      .filter((name) => !name.startsWith(".") && name.endsWith(".md"))
-      .sort();
+    all = readdirSync(join(repo.path, ...folder.split("/")));
   } catch {
-    return [];
+    return { names: [], over: 0 };
+  }
+  const visible = all
+    .filter((name) => !name.startsWith("."))
+    .sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)));
+  return {
+    names: visible.slice(0, FOLDER_CAP).filter((name) => name.endsWith(".md")),
+    over: Math.max(0, visible.length - FOLDER_CAP),
+  };
+}
+
+/**
+ * A listed file's bytes, or why it was not read. A link, a folder or anything else that
+ * is not a regular file is never opened: it is listed with its problem.
+ */
+function readListed(path: string): { bytes: Uint8Array } | { problem: string } | null {
+  let stat: ReturnType<typeof lstatSync>;
+  try {
+    stat = lstatSync(path);
+  } catch {
+    return null;
+  }
+  if (stat.isSymbolicLink()) {
+    return { problem: "a symbolic link; the knowledge store never follows links" };
+  }
+  if (!stat.isFile()) return { problem: "not a regular file" };
+  try {
+    const bytes = readRegularFile(path);
+    return bytes === null ? null : { bytes };
+  } catch (error) {
+    if (error instanceof KnowledgeError) return { problem: error.message };
+    throw error;
+  }
+}
+
+/** The paths git lists as changed; null when git cannot be asked, and the check is skipped. */
+function changedPaths(store: KnowledgeStore, repo: Repo): Set<string> | null {
+  try {
+    return new Set(statusOf(store, repo, [ENTRIES_DIR, "proposals"]).map((line) => line.slice(3)));
+  } catch (error) {
+    if (error instanceof KnowledgeError && error.code === "git") return null;
+    throw error;
   }
 }
 
@@ -299,32 +363,85 @@ export interface RebuildResult {
   dirtyChecked: boolean;
 }
 
-/** Replaces the repository's rows with what its files hold, in one transaction. */
+/**
+ * Replaces the repository's rows with what its files hold, in one transaction. No file
+ * fails it: one that cannot be read, has no usable id, or shares another's id is indexed
+ * under its name with its problem. A file git lists as changed is a draft until adopted.
+ */
 export function rebuildRepo(store: KnowledgeStore, repo: Repo): RebuildResult {
   const taxonomy = taxonomyOrNull(store, repo);
+  const changed = changedPaths(store, repo);
   const decode = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
+  let read = 0;
+  let overCap = 0;
+  const renewed = () => {
+    if (++read % RENEW_EVERY === 0) store.renew?.();
+  };
 
   const entries: { entry: KnowledgeEntry; path: string; hash: string }[] = [];
-  for (const name of markdownNames(repo, ENTRIES_DIR)) {
-    const bytes = readRegularFile(join(repo.path, ENTRIES_DIR, name));
-    if (bytes === null) continue;
+  const entryIds = new Map<string, string>();
+  const listed = listFolder(repo, ENTRIES_DIR);
+  overCap += listed.over;
+  for (const name of listed.names) {
+    const path = `${ENTRIES_DIR}/${name}`;
     const slug = name.slice(0, -".md".length);
-    entries.push({
-      entry: parseEntry(decode(bytes), slug, taxonomy),
-      path: `${ENTRIES_DIR}/${name}`,
-      hash: fileHash(bytes),
-    });
+    const file = readListed(join(repo.path, ENTRIES_DIR, name));
+    if (file === null) continue;
+    renewed();
+    let entry =
+      "problem" in file
+        ? unreadEntry(slug, file.problem)
+        : parseEntry(decode(file.bytes), slug, taxonomy);
+    if (UUID.test(entry.id)) {
+      // Of the files that share an id, the first name in byte order keeps it.
+      const first = entryIds.get(entry.id);
+      if (first === undefined) entryIds.set(entry.id, slug);
+      else {
+        entry = {
+          ...entry,
+          id: `dup:${slug}`,
+          status: "draft",
+          problem: also(
+            entry.problem,
+            `its id is also the id of ${first}; one of them needs its own`,
+          ),
+        };
+      }
+    }
+    if (changed?.has(path)) {
+      entry = { ...entry, status: "draft", problem: also(entry.problem, CHANGED_OUTSIDE) };
+    }
+    entries.push({ entry, path, hash: "problem" in file ? "" : fileHash(file.bytes) });
   }
+
   const proposals: { proposal: KnowledgeProposal; path: string; hash: string }[] = [];
+  const proposalIds = new Set<string>();
+  // The open folder first: of an id under both folders, the open file keeps it.
   for (const folder of [OPEN_DIR, DECIDED_DIR]) {
-    for (const name of markdownNames(repo, folder)) {
-      const bytes = readRegularFile(join(repo.path, ...folder.split("/"), name));
-      if (bytes === null) continue;
-      proposals.push({
-        proposal: parseProposal(decode(bytes), name, taxonomy),
-        path: `${folder}/${name}`,
-        hash: fileHash(bytes),
-      });
+    const names = listFolder(repo, folder);
+    overCap += names.over;
+    for (const name of names.names) {
+      const path = `${folder}/${name}`;
+      const file = readListed(join(repo.path, ...folder.split("/"), name));
+      if (file === null) continue;
+      renewed();
+      let proposal =
+        "problem" in file
+          ? unreadProposal(name, file.problem)
+          : parseProposal(decode(file.bytes), name, taxonomy);
+      if (UUID.test(proposal.id)) {
+        if (proposalIds.has(proposal.id)) {
+          proposal = {
+            ...proposal,
+            id: `dup:${name}`,
+            problem: also(proposal.problem, "its id is also the id of another proposal file"),
+          };
+        } else proposalIds.add(proposal.id);
+      }
+      if (changed?.has(path)) {
+        proposal = { ...proposal, problem: also(proposal.problem, CHANGED_OUTSIDE) };
+      }
+      proposals.push({ proposal, path, hash: "problem" in file ? "" : fileHash(file.bytes) });
     }
   }
 
@@ -336,7 +453,14 @@ export function rebuildRepo(store: KnowledgeStore, repo: Repo): RebuildResult {
     for (const { proposal, path, hash } of proposals) {
       upsertProposal(store, repo.id, proposal, path, hash);
     }
-    recordRepo(store, repo.id, headOf(repo.path), fingerprintOf(repo.path), 0, true);
+    recordRepo(
+      store,
+      repo.id,
+      headOf(repo.path),
+      fingerprintOf(repo.path),
+      overCap,
+      changed !== null,
+    );
   });
   return {
     entries: entries.length,
@@ -345,9 +469,52 @@ export function rebuildRepo(store: KnowledgeStore, repo: Repo): RebuildResult {
     problems:
       entries.filter(({ entry }) => entry.problem !== null).length +
       proposals.filter(({ proposal }) => proposal.problem !== null).length,
-    overCap: 0,
-    dirtyChecked: true,
+    overCap,
+    dirtyChecked: changed !== null,
   };
+}
+
+/**
+ * Rebuilds every repository under the data directory (or every one of a scope), and
+ * forgets the rows of repositories whose folder is gone. A project folder is mapped to its
+ * project through its manifest; a folder no project claims is reported and indexes nothing.
+ */
+export function rebuildAll(
+  store: KnowledgeStore,
+  scope?: ScopeRef["scope"],
+): ReturnType<typeof listRepos> & { results: Map<string, RebuildResult> } {
+  const listed = listRepos(store);
+  const repos = listed.repos.filter((repo) => scope === undefined || repo.ref.scope === scope);
+  const results = new Map<string, RebuildResult>();
+  for (const found of repos) {
+    const repo = openRepo(store, found.ref);
+    if (repo === null) continue;
+    results.set(
+      repo.relative,
+      withRepoLeases(store, [repo.relative], () => rebuildRepo(store, repo)),
+    );
+  }
+  const rows = store.db
+    .query<{ id: number; scope: string; path: string }, []>(
+      "SELECT id, scope, path FROM knowledge_repos",
+    )
+    .all();
+  for (const row of rows) {
+    if (scope !== undefined && row.scope !== scope) continue;
+    let exists = false;
+    try {
+      exists = lstatSync(repoPath(store.dataDir, row.path)).isDirectory();
+    } catch {
+      // The folder is gone.
+    }
+    if (exists) continue;
+    withWrite(store.db, () => {
+      store.db.run("DELETE FROM knowledge_entries WHERE repo_id = ?", [row.id]);
+      store.db.run("DELETE FROM knowledge_proposals WHERE repo_id = ?", [row.id]);
+      store.db.run("DELETE FROM knowledge_repos WHERE id = ?", [row.id]);
+    });
+  }
+  return { ...listed, repos, results };
 }
 
 /** Rebuilds the repository's rows when its HEAD or its fingerprint is not what was indexed. */

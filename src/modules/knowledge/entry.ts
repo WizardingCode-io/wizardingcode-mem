@@ -295,7 +295,8 @@ const ENTRY_KEYS = [
   "supersedes",
 ] as const;
 
-function unreadEntry(slug: string, problem: string): KnowledgeEntry {
+/** The row of a file that could not be read as an entry: listed by its name, with why. */
+export function unreadEntry(slug: string, problem: string): KnowledgeEntry {
   return {
     id: "",
     slug,
@@ -389,7 +390,8 @@ const PROPOSAL_KEYS = [
   "decided_version",
 ] as const;
 
-function unreadProposal(fileName: string, problem: string): KnowledgeProposal {
+/** The row of a file that could not be read as a proposal. */
+export function unreadProposal(fileName: string, problem: string): KnowledgeProposal {
   return {
     id: "",
     entryId: "",

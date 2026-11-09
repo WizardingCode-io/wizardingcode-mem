@@ -49,8 +49,8 @@ export const GIT_MIN_VERSION = [2, 32, 0];
 const STDERR_MAX = 300;
 /** How a killed call is named in its error: `requireGit` tells it from a missing git by it. */
 const TIMED_OUT = "timed out";
-const MANIFEST_FILE = "knowledge.json";
-const TAXONOMY_FILE = "taxonomy.md";
+export const MANIFEST_FILE = "knowledge.json";
+export const TAXONOMY_FILE = "taxonomy.md";
 const INTENT_FILE = "wizardingcode-op.json";
 const GITIGNORE = [".DS_Store", "Thumbs.db", ".obsidian/", "*.swp", "*~", "*.tmp", ".*.md.tmp"];
 export const ENTRIES_DIR = "entries";
@@ -653,8 +653,15 @@ export function unstage(
   runGit(store, repo.path, ["reset", "-q", "--", ...paths], { operation });
 }
 
+/** A file's text as HEAD holds it; null when HEAD does not hold it. */
+export function showAtHead(store: KnowledgeStore, repo: Repo, path: string): string | null {
+  if (!pathsAtHead(store, repo, [path], "adopt").has(path)) return null;
+  return runGit(store, repo.path, ["show", `HEAD:${path}`], { operation: "adopt", readOnly: true })
+    .stdout;
+}
+
 /** The given paths that exist at HEAD. */
-function pathsAtHead(
+export function pathsAtHead(
   store: KnowledgeStore,
   repo: Repo,
   paths: string[],
