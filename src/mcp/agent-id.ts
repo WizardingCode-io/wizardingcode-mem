@@ -3,10 +3,8 @@
 // guarantee needs, and one agent from another for the hourly rate.
 import { AGENT_ID } from "../modules/knowledge/entry.ts";
 
-/** The id when the host's name matches no row. */
-/** The id of a host the handshake does not name: the one fallback, used by the tools too. */
+/** The id when the host's name matches no row: the one fallback, used by the tools too. */
 export const UNKNOWN_AGENT = "mcp";
-const UNKNOWN = UNKNOWN_AGENT;
 
 /** One row per host the product installs into: a prefix of the lower-cased name, and its id. */
 const HOSTS: readonly (readonly [prefix: string, id: string])[] = [
@@ -25,7 +23,7 @@ const HOSTS: readonly (readonly [prefix: string, id: string])[] = [
 /** The agent id for the name a host gives in the `initialize` handshake; `mcp` for any other. */
 export function agentIdFromClient(clientName: string | undefined): string {
   const name = (clientName ?? "").toLowerCase();
-  return HOSTS.find(([prefix]) => name.startsWith(prefix))?.[1] ?? UNKNOWN;
+  return HOSTS.find(([prefix]) => name.startsWith(prefix))?.[1] ?? UNKNOWN_AGENT;
 }
 
 /** The value of `mcp --agent`, when it is a valid agent id; throws otherwise. */

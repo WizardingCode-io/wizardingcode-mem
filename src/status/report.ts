@@ -5,7 +5,7 @@ import { noneSkipped, SKIPPED_KEY, type SkippedBy, skippedText } from "../distil
 import { moduleEnabled } from "../engine/modules.ts";
 import type { HistoryStatus } from "../history/status.ts";
 import { USAGE_KEYS } from "../judge/index.ts";
-import { KNOWLEDGE_MODULE } from "../modules/knowledge/migrations.ts";
+import { KNOWLEDGE_MODULE, KNOWLEDGE_SCHEMA_VERSION } from "../modules/knowledge/migrations.ts";
 import { type Env, loadSettings, publicSettings } from "../settings/settings.ts";
 import { levelOf } from "../sharing/levels.ts";
 import { isDefault, loadPolicy } from "../sharing/policy.ts";
@@ -17,7 +17,7 @@ import {
   shareListText,
   TEAM_DESTINATION,
 } from "../sharing/types.ts";
-import type { Db } from "../store/db.ts";
+import { type Db, moduleSchemaState } from "../store/db.ts";
 import { getMeta } from "../store/meta.ts";
 import { plural } from "../util/text.ts";
 
@@ -187,10 +187,12 @@ const KNOWLEDGE_TABLES = ["knowledge_entries", "knowledge_shown"];
 
 /**
  * The knowledge line's figures, read from the index as it is: no file, no git, no write.
- * Null with no database, and where the knowledge tables do not exist.
+ * Null with no database, where the knowledge tables do not exist, and where the module's
+ * schema is not the one this binary knows (the module's rule: such tables are left alone).
  */
 export function knowledgeStatus(db: Db | null, now: number, on: boolean): KnowledgeStatus | null {
   if (db === null) return null;
+  if (moduleSchemaState(db, KNOWLEDGE_MODULE, KNOWLEDGE_SCHEMA_VERSION) !== "current") return null;
   const tables = db
     .query<{ n: number }, string[]>(
       `SELECT count(*) AS n FROM sqlite_master WHERE type = 'table' AND name IN (${KNOWLEDGE_TABLES.map(() => "?").join(", ")})`,

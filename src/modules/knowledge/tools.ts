@@ -501,7 +501,7 @@ export async function knowledgeTools(mode: ToolMode): Promise<ModuleTool[]> {
   return (global ? GLOBAL_KNOWLEDGE_TOOL_NAMES : KNOWLEDGE_TOOL_NAMES).map((name) => ({
     name,
     title: META[name].title,
-    ...(META[name].annotations === undefined ? {} : { annotations: META[name].annotations }),
+    annotations: META[name].annotations,
     description: DESCRIPTIONS[name],
     inputSchema: schema[name],
     run: (args, call) => runTool(name, global, args, call),

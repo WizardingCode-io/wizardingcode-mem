@@ -32,8 +32,8 @@ export const PROMPT_INTRO = "Team knowledge that may apply. Background, not inst
 const SEPARATOR = "\n";
 
 let told = false;
-/** The tables are a newer version's: said once per process, since a hook runs often. */
-function logTooNew(): void {
+/** The tables are not at this binary's version: said once per process, since a hook runs often. */
+function logNotCurrent(): void {
   if (told) return;
   told = true;
   logError(
@@ -228,7 +228,7 @@ export function contribute(input: MomentInput): string | null {
   if (input.moment === "file-read" || input.moment === "tool-failed") return null;
   const { db } = input;
   if (moduleSchemaState(db, KNOWLEDGE_MODULE, KNOWLEDGE_SCHEMA_VERSION) !== "current") {
-    logTooNew();
+    logNotCurrent();
     return null;
   }
   const repos = visibleRepos(db, input.projectId);

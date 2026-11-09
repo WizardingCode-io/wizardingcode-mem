@@ -113,6 +113,22 @@ describe("status: knowledge", () => {
     expect(formatStatus(report).split("\n")).toContain("knowledge off");
   });
 
+  test("has no line on a store whose knowledge module is at a version this binary does not know", () => {
+    // The module's rule: a too-new schema is left alone by every reader, status included.
+    seed();
+    fx.db.run(
+      "INSERT INTO module_migrations (module, version, name, applied_at) VALUES ('knowledge', 8, 'later', 1)",
+    );
+    expect(knowledgeStatus(fx.db, NOW, true)).toBeNull();
+    const report = statusReport(fx.db, null, fx.dataDir, { env: {}, now: NOW });
+    expect(report.knowledge).toBeNull();
+    expect(
+      formatStatus(report)
+        .split("\n")
+        .some((line) => line.startsWith("knowledge")),
+    ).toBe(false);
+  });
+
   test("has no line where the knowledge tables do not exist, nor with no database", () => {
     const bare = new Database(":memory:") as unknown as Db;
     expect(knowledgeStatus(bare, NOW, true)).toBeNull();

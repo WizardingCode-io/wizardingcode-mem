@@ -133,6 +133,8 @@ export interface CompactReport {
   turns: number;
   sessions: number;
   hookRuns: number;
+  /** The knowledge_shown rows of gone sessions and repositories (0 with no knowledge tables). */
+  knowledgeShown: number;
   bytesBefore: number;
   bytesAfter: number;
 }

@@ -54,7 +54,10 @@ export interface ProposalJudgement {
   duplicate: { ref: string; kind: "entry" | "proposal" } | null;
   /** The entries the draft contradicts: their ids, and their `<scope>/<slug>`. */
   contradicts: { id: string; ref: string }[];
-  /** The judge that answered about the entries, and its version; null with no neighbour. */
+  /**
+   * The judge that answered: the configured one about the entries, the heuristic when only
+   * open proposals were compared; null with no neighbour at all. With its version.
+   */
   judgedBy: JudgeSource | null;
   judgeVersion: string | null;
 }

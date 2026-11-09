@@ -587,24 +587,17 @@ const PROBLEMS_NAMED = 5;
 
 const KNOWLEDGE_OFF = "knowledge is off (WIZARDINGCODE_MODULES)";
 
-/**
- * Whether the modules setting turned off a module this binary has: the built-in modules
- * minus the ones the setting enables. An unknown id in the setting is not logged from here,
- * since `doctor` writes nothing.
- */
+/** Whether the modules setting turned knowledge off (`moduleEnabled`, the engine's one rule). */
 const knowledgeOff = (env: Record<string, string | undefined>, dataDir: string) =>
   !moduleEnabled(KNOWLEDGE_MODULE, env, dataDir);
 
 /**
- * The characters the pinned lines take at session start, newest first, in the block they
- * are shown in (the wrapper and the intro); 0 with no pin.
+ * The characters the pinned lines take at session start, in the block they are shown in
+ * (the wrapper and the intro); 0 with no pin. The order does not change the length.
  */
 function pinnedChars(pins: Hit[]): number {
   if (pins.length === 0) return 0;
-  const lines = [...pins]
-    .sort((a, b) => (b.updated ?? "").localeCompare(a.updated ?? ""))
-    .map(pinnedLine);
-  return pinnedBlock(lines).length;
+  return pinnedBlock(pins.map(pinnedLine)).length;
 }
 
 /**
