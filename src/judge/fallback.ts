@@ -53,6 +53,11 @@ export function withFallback(
         () => primary.consolidate(input),
         () => fallback.consolidate(input),
       ),
+    relate: (input) =>
+      attempt(
+        () => primary.relate(input),
+        () => fallback.relate(input),
+      ),
   };
   const personal = primary.personal?.bind(primary);
   if (personal) {

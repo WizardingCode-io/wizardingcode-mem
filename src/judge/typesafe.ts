@@ -6,18 +6,22 @@ import {
   distillQuestions,
   distillState,
   distillVerdict,
+  ENTRY_WORDING,
   personalQuestions,
   personalState,
   personalVerdict,
 } from "./questions.ts";
 import type {
   ConsolidateInput,
+  ConsolidateTexts,
   ConsolidateVerdict,
   DistillInput,
   DistillVerdict,
   Judge,
   PersonalInput,
   PersonalVerdict,
+  RelateInput,
+  RelateVerdict,
 } from "./types.ts";
 
 export interface TypeSafeJudgeOptions {
@@ -67,6 +71,29 @@ export class TypeSafeJudge implements Judge {
       questions: consolidateQuestions(input),
     });
     return consolidateVerdict(input, answers);
+  }
+
+  /** One request per draft entry: a Score and a Noul per neighbour, in entry wording. */
+  async relate(input: RelateInput): Promise<RelateVerdict> {
+    if (input.neighbours.length === 0) return { source: "typesafe", perNeighbour: [] };
+    const texts: ConsolidateTexts = {
+      draft: { title: input.draft.title, body: input.draft.body, files: [] },
+      neighbours: input.neighbours.map((n) => ({
+        id: n.index,
+        title: n.title,
+        body: n.body,
+        files: [],
+      })),
+    };
+    const answers = await this.ask({
+      state: consolidateState(texts, ENTRY_WORDING),
+      questions: consolidateQuestions(texts, ENTRY_WORDING),
+    });
+    const verdict = consolidateVerdict(texts, answers);
+    return {
+      source: verdict.source,
+      perNeighbour: verdict.perNeighbour.map(({ id, ...rest }) => ({ index: id, ...rest })),
+    };
   }
 
   /** One request per proposed rule, in the background, never on a hook path. */

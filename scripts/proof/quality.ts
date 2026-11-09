@@ -430,6 +430,7 @@ async function measure(): Promise<void> {
       return verdict;
     },
     consolidate: (input) => service.consolidate(input),
+    relate: (input) => heuristicJudge.relate(input),
   };
 
   const outcomes: Outcome[] = [];

@@ -50,6 +50,15 @@ export interface ConsolidateInput {
   neighbours: { id: number; title: string; body: Redacted; files: string[] }[];
 }
 
+/**
+ * The texts a consolidation compares, whatever they are: memory's `ConsolidateInput` is
+ * one, and so are the entries of knowledge's `relate`, with no files.
+ */
+export interface ConsolidateTexts {
+  draft: { title: string; body: string; files: string[] };
+  neighbours: { id: number; title: string; body: string; files: string[] }[];
+}
+
 export interface ConsolidateVerdict {
   perNeighbour: {
     id: number;
@@ -60,6 +69,23 @@ export interface ConsolidateVerdict {
     contradicts: number;
   }[];
   source: JudgeSource;
+}
+
+/** A knowledge draft and its nearest entries; every text is redacted before a judge sees it. */
+export interface RelateInput {
+  draft: { title: Redacted; body: Redacted };
+  neighbours: { index: number; title: Redacted; body: Redacted }[];
+}
+
+/** `consolidate`'s verdict, keyed by each neighbour's `index`. */
+export interface RelateVerdict {
+  source: JudgeSource;
+  perNeighbour: {
+    index: number;
+    relation: "different" | "related" | "same";
+    relationScore: number;
+    contradicts: number;
+  }[];
 }
 
 export interface PersonalInput {
@@ -84,6 +110,8 @@ export interface Judge {
   readonly versions: Partial<Record<JudgeSource, string>>;
   distill(input: DistillInput): Promise<DistillVerdict>;
   consolidate(input: ConsolidateInput): Promise<ConsolidateVerdict>;
+  /** Knowledge's duplicates and contradictions: `consolidate`'s logic, with no files. */
+  relate(input: RelateInput): Promise<RelateVerdict>;
   /** Only judges that can tell have it; without it, a proposed rule stands and the author decides. */
   personal?(input: PersonalInput): Promise<PersonalVerdict>;
 }
