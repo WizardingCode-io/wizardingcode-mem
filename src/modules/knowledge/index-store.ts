@@ -11,7 +11,7 @@ import {
   fingerprintOf,
   hashOf,
   headOf,
-  isDirectory,
+  kindAt,
   OPEN_DIR,
   openRepo,
   readRegularFile,
@@ -589,8 +589,9 @@ export function rebuildAll(
     .all();
   for (const row of rows) {
     if (scope !== undefined && row.scope !== scope) continue;
-    if (isDirectory(repoPath(store.dataDir, row.path))) continue;
-    // The folder is gone.
+    // Only a folder that is not there is gone: one that cannot be looked at refuses the
+    // rebuild (`kindAt`), and its rows stay.
+    if (kindAt(repoPath(store.dataDir, row.path)) === "folder") continue;
     withWrite(store.db, () => {
       store.db.run("DELETE FROM knowledge_entries WHERE repo_id = ?", [row.id]);
       store.db.run("DELETE FROM knowledge_proposals WHERE repo_id = ?", [row.id]);

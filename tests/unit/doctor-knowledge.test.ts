@@ -259,6 +259,21 @@ describe("doctor: knowledge", () => {
     expect(check.detail).not.toContain("abc");
   });
 
+  test("with no database, a link where the project repositories go is still not read through", () => {
+    writeEntry(store, WORKSPACE, change(), person());
+    const outside = join(fx.dir, "outside-projects");
+    mkdirSync(join(outside, "abc", ".git"), { recursive: true });
+    const projects = join(fx.dataDir, "knowledge", "projects");
+    rmSync(projects, { recursive: true, force: true });
+    symlinkSync(outside, projects);
+    const elsewhere = join(fx.dir, "no-database-here");
+    mkdirSync(elsewhere);
+    const check = knowledge({ storeDir: elsewhere });
+    expect(check.status).toBe("warn");
+    expect(check.detail).toContain(projects);
+    expect(check.detail).not.toContain("abc");
+  });
+
   test("with no database, the checks that need it are skipped and said", () => {
     writeEntry(store, WORKSPACE, change(), person());
     const elsewhere = join(fx.dir, "no-database-here");

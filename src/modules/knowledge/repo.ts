@@ -73,19 +73,56 @@ export function knowledgeRoot(dataDir: string): string {
   return join(dataDir, "knowledge");
 }
 
+/** Why a look at the disk failed, when the reason is anything but "not there". */
+function unseen(path: string, error: unknown): KnowledgeError | null {
+  const code = (error as NodeJS.ErrnoException).code;
+  if (code === "ENOENT" || code === "ENOTDIR") return null;
+  return new KnowledgeError(
+    "invalid",
+    `${path} cannot be looked at (${code}); check the permissions of that folder and of the ones above it. The knowledge store never takes what it cannot see for gone`,
+  );
+}
+
 /**
- * Refuses a `knowledge/` or a `knowledge/projects/` that is not a folder itself. Every
- * repository is listed and created under these two: through a link at either, a whole
- * repository, with the person's name in it, would be made in another folder. Checked
- * before anything under them is listed or created.
+ * What is at a path itself, without following a link: a folder, something else, or
+ * nothing. Only "not there" counts as nothing. Any other failure to look (a folder above
+ * that cannot be searched, a disk fault) is a refusal that names its cause: a repository
+ * the store could not see is never taken for one that is gone.
+ */
+export function kindAt(path: string): "folder" | "other" | "absent" {
+  try {
+    return lstatSync(path).isDirectory() ? "folder" : "other";
+  } catch (error) {
+    const refusal = unseen(path, error);
+    if (refusal === null) return "absent";
+    throw refusal;
+  }
+}
+
+/** The names in a folder, none when it is not there; a folder that cannot be listed is a refusal. */
+export function namesIn(folder: string): string[] {
+  try {
+    return readdirSync(folder);
+  } catch (error) {
+    const refusal = unseen(folder, error);
+    if (refusal === null) return [];
+    throw refusal;
+  }
+}
+
+/**
+ * Refuses a `knowledge/` or a `knowledge/projects/` that is not a folder itself, or that
+ * cannot be looked at. Every repository is listed and created under these two: through a
+ * link at either, a whole repository, with the person's name in it, would be made in
+ * another folder. Checked before anything under them is listed or created.
  */
 export function refuseLinkedRoots(dataDir: string): void {
   const root = knowledgeRoot(dataDir);
   for (const folder of [root, join(root, "projects")]) {
-    if (existsOnDisk(folder) && !isDirectory(folder)) {
+    if (kindAt(folder) === "other") {
       throw new KnowledgeError(
         "invalid",
-        `${folder} is not a folder of its own (a link, or a file); the knowledge store keeps its repositories under it and never follows a link out of the data directory. Remove it`,
+        `${folder} is not a folder of its own (a link, or a file); the knowledge store keeps its repositories under it and never follows a link out of the data directory. Remove it; to keep the knowledge on another disk, move or link the data directory itself`,
       );
     }
   }
@@ -137,8 +174,9 @@ export function existsOnDisk(path: string): boolean {
  * or a link (a gitfile names another repository, and every later commit would land
  * there), one whose knowledge folders or own files are links, one with a `.gitmodules`
  * file (the store keeps no repository inside its own), or one whose `.git` holds anything
- * but regular files and folders. Checked before git is run and before anything is
- * written, so nothing is read or written outside the repository.
+ * but regular files and folders (one named socket aside: `refuseLinksInside`). Checked
+ * before git is run and before anything is written, so nothing is read or written
+ * outside the repository.
  */
 export function refuseForeign(repoFolder: string): void {
   /** Whatever is at the path must be what the store keeps there: a folder, or a regular file. */
@@ -184,7 +222,9 @@ const FSMONITOR_SOCKET = "fsmonitor--daemon.ipc";
  * inside the folders of `objects/`: git only reads those or replaces them whole, and
  * listing them on every open costs milliseconds that grow with the history. A folder that
  * cannot be listed is refused too: git goes through it by name all the same, so what it
- * holds would go unchecked. Only a folder that is not there has nothing to check.
+ * holds would go unchecked. Only a folder that is not there has nothing to check. The
+ * one thing let through that is neither a file nor a folder is `FSMONITOR_SOCKET`, at
+ * the top of `.git`.
  */
 function refuseLinksInside(gitDir: string): void {
   const objects = join(gitDir, "objects");
@@ -193,10 +233,11 @@ function refuseLinksInside(gitDir: string): void {
     try {
       entries = readdirSync(folder, { withFileTypes: true });
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "ENOENT") return;
       throw new KnowledgeError(
         "invalid",
-        `${folder} cannot be listed, so the knowledge store cannot check what git would write through; make it readable`,
+        `${folder} cannot be listed (${code}), so the knowledge store cannot check what git would write through`,
       );
     }
     for (const entry of entries) {

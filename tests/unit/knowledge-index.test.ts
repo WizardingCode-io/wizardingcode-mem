@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -439,6 +440,51 @@ describe("rebuildAll", () => {
     });
     return relative;
   }
+
+  test("a folder it cannot look into is refused, and no row is forgotten for it", () => {
+    if (process.platform === "win32" || process.getuid?.() === 0) return;
+    // A project that is not a git repository: its row is the only tie to its folder.
+    const projectId = fx.addProject("path:/work/site");
+    const ref = { scope: "project", projectId } as const;
+    written("In the workspace");
+    written("In the project", {}, ref as unknown as typeof WORKSPACE);
+    const rows = () => ({
+      repos: (
+        fx.db.query("SELECT path FROM knowledge_repos ORDER BY path").all() as { path: string }[]
+      ).length,
+      entries: entryRows().length,
+    });
+    const before = rows();
+    expect(before).toEqual({ repos: 2, entries: 2 });
+    const projects = join(fx.dataDir, "knowledge", "projects");
+
+    // Neither listed nor searched; then listed and not searched.
+    for (const bits of [0o000, 0o600]) {
+      chmodSync(projects, bits);
+      try {
+        expect(codeOf(() => rebuildAll(store))).toBe("invalid");
+        expect(thrown(() => rebuildAll(store)).message).toContain(projects);
+        expect(codeOf(() => openRepo(store, ref))).toBe("invalid");
+      } finally {
+        chmodSync(projects, 0o700);
+      }
+      expect(rows()).toEqual(before);
+    }
+    // The knowledge folder itself.
+    const root = join(fx.dataDir, "knowledge");
+    chmodSync(root, 0o000);
+    try {
+      expect(codeOf(() => rebuildAll(store))).toBe("invalid");
+    } finally {
+      chmodSync(root, 0o700);
+    }
+    expect(rows()).toEqual(before);
+
+    // Readable again, the same rows are rebuilt and the project still finds its folder.
+    expect(rebuildAll(store).results.size).toBe(2);
+    expect(rows()).toEqual(before);
+    expect(openRepo(store, ref)?.ref).toEqual(ref);
+  });
 
   test("maps a project folder through its manifest, reports orphans, forgets folders that are gone", () => {
     const projectId = fx.addProject("gitdir:/x/.git", "path:/x");

@@ -1719,9 +1719,33 @@ describe("a folder that is not the store's own repository", () => {
       );
       expect(codeOf(() => openRepo(store, WORKSPACE))).toBe("invalid");
       expect(thrown(() => openRepo(store, WORKSPACE)).message).toContain("another.ipc");
+
+      // The right name is not enough anywhere but at the top of .git.
+      const deeper = join(repo.path, ".git", "refs", "fsmonitor--daemon.ipc");
+      renameSync(join(repo.path, ".git", "another.ipc"), deeper);
+      expect(codeOf(() => openRepo(store, WORKSPACE))).toBe("invalid");
+      rmSync(deeper);
+      // And at the top, only a socket has it: a link of that name is a link.
+      const named = join(repo.path, ".git", "fsmonitor--daemon.ipc");
+      symlinkSync(join(fx.dir, "the-persons-file"), named);
+      expect(codeOf(() => openRepo(store, WORKSPACE))).toBe("invalid");
+      expect(thrown(() => openRepo(store, WORKSPACE)).message).toContain("a link");
+      rmSync(named);
+      expect(openRepo(store, WORKSPACE)?.id).toBe(repo.id);
     } finally {
       listener.stop(true);
     }
+  });
+
+  test("a data directory that is itself a link is the person's, and works", () => {
+    // What is refused is a link inside the data directory, not the directory itself.
+    const linked = join(fx.dir, "data-by-another-name");
+    symlinkSync(fx.dataDir, linked);
+    const store = fx.store({ dataDir: linked, env: { WIZARDINGCODE_MEM_AUTHOR: "Writer" } });
+    expect(writeEntry(store, WORKSPACE, AN_ENTRY, personAuthor(store)).kind).toBe("written");
+    expect(existsSync(join(fx.dataDir, "knowledge", "workspace", "entries", "an-entry.md"))).toBe(
+      true,
+    );
   });
 
   test("HEAD is followed only to a ref of the repository's own", () => {
@@ -1732,7 +1756,20 @@ describe("a folder that is not the store's own repository", () => {
     expect(real).toMatch(/^[0-9a-f]{40}$/);
     writeFileSync(join(fx.dir, "an-outside-file"), "0123456789abcdef0123456789abcdef01234567\n");
     const climbing = join("..", "..", "..", "..", "an-outside-file");
-    for (const ref of [climbing, `refs/../${climbing}`, "/etc/hosts", "refs/heads/../../config"]) {
+    // A file inside the git directory that holds a hash, and is no ref.
+    writeFileSync(join(repo.path, ".git", "not-a-ref"), `${real}\n`);
+    mkdirSync(join(repo.path, ".git", "refs", "heads", "a:b"), { recursive: true });
+    const refused = [
+      climbing,
+      `refs/../${climbing}`,
+      // Inside the git directory, and not under refs/.
+      "not-a-ref",
+      // What another system reads as a way out, or as a drive.
+      "refs\\heads\\main",
+      "refs/heads/..\\..\\..\\not-a-ref",
+      "refs/heads/a:b",
+    ];
+    for (const ref of refused) {
       writeFileSync(head, `ref: ${ref}\n`);
       expect(headOf(repo.path)).toBeNull();
     }

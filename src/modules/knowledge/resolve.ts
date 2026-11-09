@@ -1,14 +1,16 @@
 // Which folder is which repository. The workspace and the shared repositories have fixed
 // folders. A project's repository is found by its manifest, not by its folder name: a
 // project that gains a remote, or whose index rows were lost, still finds the same folder.
-import { mkdirSync, readdirSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { withWrite } from "../../store/db.ts";
 import { nowIso } from "./entry.ts";
 import { KnowledgeError } from "./errors.ts";
 import {
   existsOnDisk,
   isDirectory,
+  kindAt,
   knowledgeRoot,
+  namesIn,
   projectFolderName,
   readManifest,
   refuseForeign,
@@ -106,16 +108,14 @@ interface ProjectFolder {
 
 /** Every folder under `knowledge/projects/`, in name order, with its manifest when it has one. */
 function projectFolders(store: KnowledgeStore): ProjectFolder[] {
-  let names: string[];
-  try {
-    names = readdirSync(repoPath(store.dataDir, PROJECTS)).sort();
-  } catch {
-    return [];
-  }
-  return names
+  // A folder that cannot be listed, or a name in it that cannot be looked at, refuses the
+  // listing: what is read as "no repository there" has its index rows forgotten.
+  return namesIn(repoPath(store.dataDir, PROJECTS))
+    .sort()
     .filter(
       (name) =>
-        !name.startsWith(".") && isDirectory(repoPath(store.dataDir, `${PROJECTS}/${name}`)),
+        !name.startsWith(".") &&
+        kindAt(repoPath(store.dataDir, `${PROJECTS}/${name}`)) === "folder",
     )
     .map((name) => {
       const relative = `${PROJECTS}/${name}`;
@@ -289,7 +289,7 @@ export function scanRepos(store: KnowledgeStore): {
   for (const scope of ["workspace", "shared"] as const) {
     const relative = repoFolder({ scope });
     const path = repoPath(store.dataDir, relative);
-    if (isDirectory(path)) found.push({ ref: { scope }, path, relative });
+    if (kindAt(path) === "folder") found.push({ ref: { scope }, path, relative });
   }
 
   const folders = projectFolders(store);

@@ -53,17 +53,21 @@ function resolveRef(gitDir: string, commonDir: string, ref: string): string | nu
 /**
  * The commit a git directory's HEAD is on, read from that directory alone: it never walks
  * up to a parent repository. Null before the first commit, or when this is no git directory.
+ * A HEAD that names a ref is followed only to a name under `refs/`: anything else is read
+ * as no commit. (`readGitInfo`, the hooks' reader of a person's own repository, keeps its
+ * own reading of HEAD.)
  */
 export function headOfGitDir(gitDir: string): string | null {
   const head = read(join(gitDir, "HEAD"))?.trim() ?? "";
   const ref = head.match(/^ref:\s*(.+)$/)?.[1];
   if (ref === undefined) return SHA.test(head) ? head : null;
   // A ref is a name under `refs/`. Anything else in HEAD (a path that climbs out of the
-  // git directory, an absolute path) is not followed: it would read another file.
+  // git directory, an absolute path) is not followed: it would read another file. git
+  // itself allows neither `\` nor `:` in a ref's name, and on Windows each is a way out.
   const parts = ref.split("/");
-  if (parts[0] !== "refs" || parts.some((part) => part === "" || part === "." || part === "..")) {
-    return null;
-  }
+  const named = (part: string) =>
+    part !== "" && part !== "." && part !== ".." && !/[\\:]/.test(part);
+  if (parts[0] !== "refs" || !parts.every(named)) return null;
   return resolveRef(gitDir, gitDir, ref);
 }
 
