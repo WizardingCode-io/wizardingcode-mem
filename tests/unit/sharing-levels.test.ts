@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   effectiveLevel,
   epochOf,
+  isHostLedAlias,
   levelKey,
   levelOf,
   policyWith,
@@ -9,12 +10,43 @@ import {
 import type { LevelRow } from "../../src/sharing/types.ts";
 
 const TEAM: ReadonlySet<string> = new Set(["team"]);
-const known = { known: true, disabled: false, aliases: ["remote:x"] };
-const row = { level: "knowledge", boundAlias: "remote:x" };
+const known = { known: true, disabled: false, aliases: ["remote:x.example/x"] };
+const row = { level: "knowledge", boundAlias: "remote:x.example/x" };
 
 describe("levelKey", () => {
   test("names a project and a destination", () => {
     expect(levelKey(3, "team")).toBe("3@team");
+  });
+});
+
+describe("isHostLedAlias", () => {
+  test("a remote whose first segment is a host name, with a port or without", () => {
+    for (const alias of [
+      "remote:github.com/acme/site",
+      "remote:gitlab.example.org/a/b",
+      "remote:git.example.com:8443/a/b",
+      "remote:my-host.internal/repo",
+    ]) {
+      expect(isHostLedAlias(alias)).toBe(true);
+    }
+  });
+
+  test("never a local path, a file origin, a host without a dot, or another kind of alias", () => {
+    for (const alias of [
+      "remote:/users/someone/repo",
+      "remote:../other",
+      "remote:./here",
+      "remote:c:\\x",
+      "remote:server/repo",
+      "remote:",
+      "remote:/",
+      "remote:.hidden/repo",
+      "remote:a..b/repo",
+      "path:/users/someone/repo",
+      "github.com/acme/site",
+    ]) {
+      expect(isHostLedAlias(alias)).toBe(false);
+    }
   });
 });
 
@@ -85,7 +117,18 @@ describe("effectiveLevel", () => {
       level: "local",
       reason: "unbound-alias",
     });
-    expect(effectiveLevel(row, { ...known, aliases: ["remote:y"] }, "team", TEAM)).toEqual({
+    expect(
+      effectiveLevel(row, { ...known, aliases: ["remote:y.example/y"] }, "team", TEAM),
+    ).toEqual({
+      level: "local",
+      reason: "unbound-alias",
+    });
+  });
+
+  test("a row bound to a path alias the project still has reads local: only a host-led alias binds", () => {
+    const path = { level: "knowledge", boundAlias: "remote:/Users/x/repo" };
+    const project = { ...known, aliases: ["remote:/Users/x/repo", "remote:github.com/x/repo"] };
+    expect(effectiveLevel(path, project, "team", TEAM)).toEqual({
       level: "local",
       reason: "unbound-alias",
     });
@@ -159,7 +202,7 @@ describe("levelOf", () => {
       projectId,
       destination: "team",
       level: "knowledge",
-      boundAlias: "remote:x",
+      boundAlias: "remote:x.example/x",
       reason: "allowed",
       ...over,
     },

@@ -22,6 +22,7 @@ import { writeEntry } from "../../src/modules/knowledge/store.ts";
 import { openStore } from "../../src/modules/knowledge/store-open.ts";
 import type { ScopeRef } from "../../src/modules/knowledge/types.ts";
 import { epochOf } from "../../src/sharing/levels.ts";
+import { loadPolicy } from "../../src/sharing/policy.ts";
 import { applySettingsPatch, counterOf, setLevel } from "../../src/sharing/store.ts";
 import type { Level } from "../../src/sharing/types.ts";
 import { type Db, openDb } from "../../src/store/db.ts";
@@ -591,6 +592,30 @@ describe("wizardingcode-mem ui: the sharing lists in PUT /api/settings", () => {
     expect(withConfirm.status).toBe(200);
     expect(changes()).toHaveLength(3);
     expect(counter()).toBe(3);
+  });
+});
+
+describe("wizardingcode-mem ui: a value with a line break in PUT /api/settings", () => {
+  test("is refused, so it cannot write a sharing line into the env file", async () => {
+    allow({ roots: "workspace" });
+    const before = envFile();
+    const roots = () => withDb((db) => [...loadPolicy(db, dataDir, env).roots]);
+    expect(roots()).toEqual(["workspace"]);
+    const s = await start();
+    for (const key of ["TYPESAFE_API_KEY", "WIZARDINGCODE_MEM_BACKUP_S3_REGION"]) {
+      for (const value of [
+        "x\nWIZARDINGCODE_MEM_SHARE_ROOTS=workspace,shared",
+        "x\rWIZARDINGCODE_MEM_SHARE_ROOTS=workspace,shared",
+      ]) {
+        const response = await saveSettings(s, { [key]: value });
+        expect(response.status).toBe(400);
+        const body = (await response.json()) as { errors: Record<string, string> };
+        expect(body.errors).toEqual({ [key]: "a value on one line" });
+      }
+    }
+    expect(envFile()).toBe(before);
+    expect(roots()).toEqual(["workspace"]);
+    expect(changes()).toHaveLength(1);
   });
 });
 

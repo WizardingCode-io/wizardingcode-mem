@@ -7,7 +7,7 @@ import { parseShareList, type SettingKey, type SharingKey } from "../settings/se
 import { type Db, withWrite } from "../store/db.ts";
 import { getMeta, setMeta } from "../store/meta.ts";
 import { plural } from "../util/text.ts";
-import { DESTINATIONS, effectiveLevel, levelOf } from "./levels.ts";
+import { DESTINATIONS, effectiveLevel, isHostLedAlias, levelOf } from "./levels.ts";
 import { GENERATION_KEY, newGeneration } from "./migrations.ts";
 import {
   isLevel,
@@ -137,12 +137,19 @@ export interface StoredLevel {
   source: ChangeSource;
 }
 
+/** Whether the store holds a table (or a view) of this name, asked of `sqlite_master`. */
+export function hasTable(db: Db, name: string): boolean {
+  return (
+    db.query<unknown, [string]>("SELECT 1 FROM sqlite_master WHERE name = ?").get(name) !== null
+  );
+}
+
 /**
  * Whether the store ever ran the sharing schema, asked of `sqlite_master` by name. The
  * recorded module version cannot say: a store no module ever migrated reads as current.
  */
 export function hasLevelsTable(db: Db): boolean {
-  return db.query("SELECT 1 FROM sqlite_master WHERE name = 'sharing_levels'").get() !== null;
+  return hasTable(db, "sharing_levels");
 }
 
 /**
@@ -225,7 +232,7 @@ export interface SetLevelInput {
   projectId: number;
   destination: string;
   level: Level;
-  source: ChangeSource;
+  source: Extract<ChangeSource, "viewer" | "cli">;
   now: number;
   /** A person agreed to let more leave. Without it a widening is refused. */
   confirm: boolean;
@@ -241,9 +248,6 @@ export interface SetLevelInput {
 export type SetLevelOutcome =
   | { ok: true; old: Level; widened: boolean; boundAlias: string; rebound: boolean }
   | { ok: false; reason: SetLevelRefusal };
-
-/** A project's identity for a team is its git remote: the only alias a level is bound to. */
-const REMOTE_ALIAS = "remote:";
 
 type Bound = { level: string; boundAlias: string };
 
@@ -290,8 +294,9 @@ function aliasToBind(
  * 2. `local` removes the stored row, also one that only reads `local` (a disabled project,
  *    a lost alias): the person chose Nothing, and nothing may bring the level back. It is
  *    refused for nothing else: a project with memory off or no remote can share nothing.
- * 3. Above `local` the project must have memory on (`disabled`) and a remote alias
- *    (`no-remote`), which the level is bound to (`aliasToBind`).
+ * 3. Above `local` the project must have memory on (`disabled`) and a host-led remote
+ *    alias (`isHostLedAlias`; `no-remote` otherwise), which the level is bound to
+ *    (`aliasToBind`).
  * 4. The level in force is what `effectiveLevel` makes of the stored row and the project
  *    now. A later level than that one is a widening, refused without `confirm`
  *    (`needs-confirm`).
@@ -328,7 +333,9 @@ export function setLevel(db: Db, input: SetLevelInput): SetLevelOutcome {
     }
 
     if (project.disabled) return refused("disabled");
-    const remotes = project.aliases.filter((alias) => alias.startsWith(REMOTE_ALIAS));
+    // A project's identity for a team is its git remote on a host: the only alias a level
+    // is bound to.
+    const remotes = project.aliases.filter(isHostLedAlias);
     const boundAlias = aliasToBind(remotes, input.remoteAlias, stored?.boundAlias ?? null);
     if (boundAlias === undefined) return refused("no-remote");
     const widened = widens(inForce.level, level);

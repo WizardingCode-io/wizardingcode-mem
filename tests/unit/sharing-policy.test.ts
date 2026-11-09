@@ -38,7 +38,6 @@ import { setMeta } from "../../src/store/meta.ts";
 
 const ROOTS_KEY = "WIZARDINGCODE_MEM_SHARE_ROOTS";
 const AREAS_KEY = "WIZARDINGCODE_MEM_SHARE_AREAS";
-const NOW = 1000;
 const HAND_EDIT =
   "the sharing settings changed outside the viewer and the CLI; open the Sharing page or run share status to record it";
 
@@ -56,7 +55,7 @@ afterEach(() => {
 const open = () => openDb({ dataDir: dir, busyTimeoutMs: 2000 });
 const openBare = () => openDb({ dataDir: dir, busyTimeoutMs: 2000, moduleSchemas: [] });
 const load = (db: Db | null, env: Record<string, string | undefined> = {}) =>
-  loadPolicy(db, dir, env, NOW);
+  loadPolicy(db, dir, env);
 const writeEnv = (...lines: string[]) => writeFileSync(join(dir, "env"), `${lines.join("\n")}\n`);
 
 /** A project row known by the given aliases. Returns its id. */

@@ -8,7 +8,26 @@ import { isLevel, type Level, type Reason, type SharingPolicy, TEAM_DESTINATION 
  * these, and a level stored for any other reads `local`: a destination a later version
  * adds starts with every project at Nothing.
  */
+/** The prefix of an alias taken from a git remote. */
+const REMOTE_ALIAS = "remote:";
+
 export const DESTINATIONS: ReadonlySet<string> = new Set([TEAM_DESTINATION]);
+
+/** A host name of dotted labels (letters, digits, hyphens), with a port or without. */
+const HOST = /^[a-z0-9-]+(\.[a-z0-9-]+)+(:\d+)?$/i;
+
+/**
+ * Whether an alias names a project for a team: a `remote:` alias whose normalized remote
+ * begins with a host name, as `remote:github.com/acme/site` does. A remote that is a local
+ * path or a `file://` origin (`normalizeRemote` leaves those as the path) names a folder on
+ * this machine, never a project a team shares, so a level is never bound to it.
+ */
+export function isHostLedAlias(alias: string): boolean {
+  if (!alias.startsWith(REMOTE_ALIAS)) return false;
+  const remote = alias.slice(REMOTE_ALIAS.length);
+  const slash = remote.indexOf("/");
+  return HOST.test(slash === -1 ? remote : remote.slice(0, slash));
+}
 
 /** The key of one project's level for one destination in `SharingPolicy.levels`. */
 export function levelKey(projectId: number, destination: string): string {
@@ -34,7 +53,11 @@ export function effectiveLevel(
   if (!project.known) return local("no-project");
   if (row === null || row.level === "local") return local("level-local");
   if (project.disabled) return local("disabled");
-  if (!project.aliases.includes(row.boundAlias)) return local("unbound-alias");
+  // A row bound to an alias the project lost, or to one that is not host-led (written before
+  // the rule), is a level with no name a team knows the project by.
+  if (!project.aliases.includes(row.boundAlias) || !isHostLedAlias(row.boundAlias)) {
+    return local("unbound-alias");
+  }
   if (!isLevel(row.level)) return local("level-local");
   return { level: row.level, reason: "allowed" };
 }

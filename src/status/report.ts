@@ -184,7 +184,7 @@ function sharingStatus(
   env: Env,
   now: number,
 ): SharingStatus {
-  const policy = loadPolicy(db, dataDir, env, now);
+  const policy = loadPolicy(db, dataDir, env);
   const projectId = project?.id;
   const report = wouldLeave(db, dataDir, env, policy, {
     now,

@@ -32,6 +32,7 @@ import {
   saveSettings,
   validatePatch,
 } from "../settings/settings.ts";
+import { sharingRefusal } from "../sharing/in-force.ts";
 import { loadPolicy } from "../sharing/policy.ts";
 import { applySettingsPatch, NeedsConfirm } from "../sharing/store.ts";
 import { statusReport } from "../status/report.ts";
@@ -69,7 +70,6 @@ import {
   setMemoryStatus,
   setProjectSharing,
   sharingPreview,
-  sharingRefusal,
   sharingView,
   updateMemory,
 } from "./api.ts";
@@ -310,7 +310,7 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
     // Each project is listed with what it shares: the policy is loaded for that, and only
     // loaded. What is pending in it is recorded by the Sharing page's own route.
     if (path === "/api/overview" && request.method === "GET") {
-      const projects = listProjects(db, loadPolicy(db, options.dataDir, env, now()));
+      const projects = listProjects(db, loadPolicy(db, options.dataDir, env));
       return json({ version: pkg.version, dataDir: options.dataDir, storeDir, projects });
     }
     // Backups: the target the settings name, what is there, a copy now, and the way back.
@@ -433,7 +433,7 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
         // A patch with a sharing list is written by the store's one path, which logs the
         // change. It is given the request's own `confirm`, so a wider list is refused there,
         // under the write lock, unless the request itself says yes.
-        const closed = sharingRefusal(loadPolicy(db, options.dataDir, env, now()));
+        const closed = sharingRefusal(loadPolicy(db, options.dataDir, env));
         if (closed !== null) return problem(409, closed);
         const confirmed = confirm === true;
         try {

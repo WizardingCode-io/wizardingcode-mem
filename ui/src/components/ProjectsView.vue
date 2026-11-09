@@ -6,7 +6,7 @@
 // Link / Reject, its confirmed links with Unlink, a way to link one by hand, and what it
 // shares with the team's server.
 import { computed, reactive, ref } from "vue";
-import { api, LEVEL_LABELS, LEVELS, type Level, type LinkKind, type Project } from "../api";
+import { api, LEVEL_LABELS, LEVELS, type Level, type LinkKind, type Project, widens } from "../api";
 import { compact, day, hue } from "../format";
 import { projectGroups, projectLinks, projectPlace, signalParts, visibleFrom } from "../links";
 import { loadLinks, loadOverview, openCross, reload, state } from "../viewer";
@@ -116,10 +116,13 @@ async function linkByHand() {
 const sharingBusy = ref(false);
 const widening = ref<{ id: number; name: string; level: Level; description: string } | null>(null);
 const sharingLocked = computed(() => !selected.value || !selected.value.remote || selected.value.disabled);
+const LEVEL_ITEMS = LEVELS.map((level) => ({ label: LEVEL_LABELS[level], value: level }));
+/** Whatever failed, the person reads one plain sentence: no message, no path. */
+const notChanged = () => toast.add({ title: "Not changed", description: "The level could not be saved.", color: "error" });
 async function chooseLevel(level: Level) {
   const p = selected.value;
   if (!p || level === p.sharing) return;
-  if (LEVELS.indexOf(level) < LEVELS.indexOf(p.sharing)) {
+  if (!widens(p.sharing, level)) {
     await setLevel(p.id, level, false);
     return;
   }
@@ -134,8 +137,8 @@ async function chooseLevel(level: Level) {
       level,
       description: `${count(own.entries, "knowledge entry", "knowledge entries")} and ${count(own.memories, "memory", "memories")} of ${p.name} would leave for your team's server once one is configured. Nothing is sent now.`,
     };
-  } catch (error) {
-    toast.add({ title: "Not changed", description: error instanceof Error ? error.message : String(error), color: "error" });
+  } catch {
+    notChanged();
   } finally {
     sharingBusy.value = false;
   }
@@ -146,8 +149,8 @@ async function setLevel(id: number, level: Level, confirm: boolean) {
     const changed = await api.setProjectSharing(id, level, confirm);
     await loadOverview();
     toast.add({ title: "Sharing changed", description: `${LEVEL_LABELS[changed.old]} → ${LEVEL_LABELS[changed.level]}`, color: "success" });
-  } catch (error) {
-    toast.add({ title: "Not changed", description: error instanceof Error ? error.message : String(error), color: "error" });
+  } catch {
+    notChanged();
   } finally {
     sharingBusy.value = false;
     widening.value = null;
@@ -287,18 +290,16 @@ const RELATION_TONE = {
 
         <section aria-label="Sharing" class="flex flex-col gap-2 border-t border-(--line) pt-3">
           <div class="flex h-5 items-center gap-2"><h3 class="m-0 text-sm font-semibold">Sharing</h3><span class="wz-meta">{{ LEVEL_LABELS[selected.sharing] }}</span></div>
-          <div class="wz-segmented w-full" role="group" aria-label="What this project shares">
-            <button
-              v-for="level in LEVELS"
-              :key="level"
-              type="button"
-              class="min-w-0 flex-1 truncate px-1.5! disabled:cursor-default! disabled:opacity-50"
-              :title="LEVEL_LABELS[level]"
-              :aria-pressed="selected.sharing === level"
-              :disabled="sharingLocked || sharingBusy"
-              @click="chooseLevel(level)"
-            >{{ LEVEL_LABELS[level] }}</button>
-          </div>
+          <URadioGroup
+            :model-value="selected.sharing"
+            :items="LEVEL_ITEMS"
+            value-key="value"
+            size="sm"
+            legend="What this project shares"
+            :disabled="sharingLocked || sharingBusy"
+            :ui="{ legend: 'sr-only', fieldset: 'gap-0', item: 'h-8 items-center' }"
+            @update:model-value="(level) => chooseLevel(level as Level)"
+          />
           <p v-if="!selected.remote" class="m-0 text-xs leading-4 text-(--ink)">This project has no git remote. A team can only match projects by their remote.</p>
           <p v-if="selected.disabled" class="m-0 text-xs leading-4 text-(--ink)">Memory is off for this project.</p>
           <p class="m-0 text-xs leading-4 text-(--ink-muted)">Memories have no area: Knowledge and memories sends every active memory of this project that is not stale, branch-bound, imported or one of your rules.</p>

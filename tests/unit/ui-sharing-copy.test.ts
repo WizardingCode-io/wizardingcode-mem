@@ -117,6 +117,42 @@ describe("the Sharing page", () => {
   });
 });
 
+describe("what the Sharing page and the dock say when something fails", () => {
+  /** The dock's sharing code: from its comment to the next part of the script. */
+  const dockScript = (() => {
+    const start = projects.indexOf("// What the project shares");
+    const end = projects.indexOf("const RELATION_TONE", start);
+    return start === -1 || end === -1 ? "" : projects.slice(start, end);
+  })();
+  /** The dock's Sharing section, as the template has it. */
+  const dockSection = (() => {
+    const start = projects.indexOf('<section aria-label="Sharing"');
+    const end = projects.indexOf("</section>", start);
+    return start === -1 || end === -1 ? "" : projects.slice(start, end);
+  })();
+
+  test("a plain sentence, never the error's message or a path", () => {
+    expect(sharing).toContain('title: "Sharing not saved"');
+    expect(sharing).toContain("The settings file could not be written.");
+    expect(sharing).toContain("Sharing could not be loaded.");
+    expect(sharing).not.toContain("error.message");
+    expect(sharing).not.toContain("console.");
+    expect(dockScript).toContain('title: "Not changed"');
+    expect(dockScript).toContain("The level could not be saved.");
+    expect(dockScript).not.toContain("error.message");
+    expect(dockScript).not.toContain("console.");
+  });
+
+  test("the dock's level control shows its three labels whole", () => {
+    expect(dockSection).toContain("LEVEL_LABELS");
+    expect(dockSection).not.toContain("truncate");
+  });
+
+  test("Save is disabled while nothing changed", () => {
+    expect(sharing).toMatch(/label="Save"[^>]*:disabled="[^"]*!changed/);
+  });
+});
+
 describe("Across projects", () => {
   test("a row that shares says so in a pill", () => {
     expect(projects).toMatch(/p\.sharing !== ["']local["']/);

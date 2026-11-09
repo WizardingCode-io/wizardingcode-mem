@@ -4,17 +4,18 @@
 // nothing runs on a hook.
 import { KnowledgeError } from "../modules/knowledge/errors.ts";
 import { ensureFresh } from "../modules/knowledge/index-store.ts";
+import { KNOWLEDGE_MODULE, KNOWLEDGE_SCHEMA_VERSION } from "../modules/knowledge/migrations.ts";
 import { openRepo, withRepoLeases } from "../modules/knowledge/repo.ts";
 import { openStore } from "../modules/knowledge/store-open.ts";
 import type { KnowledgeStore, Repo, ScopeRef } from "../modules/knowledge/types.ts";
 import type { Env } from "../settings/settings.ts";
-import type { Db } from "../store/db.ts";
+import { type Db, moduleSchemaState } from "../store/db.ts";
 import { logError } from "../util/log.ts";
 import { redactForSend } from "./edge.ts";
 import { memoryHash } from "./hash.ts";
-import { epochOf, levelKey, levelOf } from "./levels.ts";
+import { epochOf, isHostLedAlias, levelKey, levelOf } from "./levels.ts";
 import { areasInForce, decide, knownAreas } from "./policy.ts";
-import { generationOf, hasLevelsTable } from "./store.ts";
+import { generationOf, hasLevelsTable, hasTable } from "./store.ts";
 import {
   type EntryItem,
   entryUid,
@@ -28,8 +29,6 @@ import {
   type SharingPolicy,
   TEAM_DESTINATION,
 } from "./types.ts";
-
-export { memoryHash };
 
 /** How many entries, and how many memories, a list names; the rest are counted. */
 export const LIST_CAP = 500;
@@ -83,11 +82,15 @@ type ListedMemory = MemoryItem & { id: number };
 
 const sortedOnce = <T extends string>(list: readonly T[]): T[] => [...new Set(list)].sort();
 
-function tableExists(db: Db, name: string): boolean {
+/**
+ * Whether the knowledge tables may be read here: they exist, and their module's schema is
+ * the one this version reads. The knowledge module owns its tables; on a store whose module
+ * is behind or ahead, no entry is read and none is counted.
+ */
+function knowledgeReadable(db: Db): boolean {
   return (
-    db
-      .query<unknown, [string]>("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?")
-      .get(name) !== null
+    moduleSchemaState(db, KNOWLEDGE_MODULE, KNOWLEDGE_SCHEMA_VERSION) === "current" &&
+    hasTable(db, "knowledge_repos")
   );
 }
 
@@ -166,12 +169,18 @@ const rootOf = (scope: EntryItem["scope"]): Root => (scope === "shared" ? "share
  */
 function entryAliases(db: Db): Map<number, string> {
   type Named = { projectId: number; alias: string };
-  const first = db
+  // Only a host-led alias names a project to a team (ADR 0025): a path alias never does, not
+  // as the first by name and not as the alias a row was bound to before the rule.
+  const first = new Map<number, string>();
+  const remotes = db
     .query<Named, []>(
-      `SELECT project_id AS projectId, MIN(alias) AS alias FROM project_aliases
-        WHERE alias LIKE 'remote:%' GROUP BY project_id`,
+      `SELECT project_id AS projectId, alias FROM project_aliases
+        WHERE alias LIKE 'remote:%' ORDER BY alias`,
     )
     .all();
+  for (const { projectId, alias } of remotes) {
+    if (!first.has(projectId) && isHostLedAlias(alias)) first.set(projectId, alias);
+  }
   const bound = hasLevelsTable(db)
     ? db
         .query<Named, [string]>(
@@ -179,9 +188,13 @@ function entryAliases(db: Db): Map<number, string> {
             WHERE destination = ?`,
         )
         .all(TEAM_DESTINATION)
+        .filter(({ alias }) => isHostLedAlias(alias))
     : [];
   // Listed last, the alias a level is bound to replaces the project's first.
-  return new Map([...first, ...bound].map(({ projectId, alias }) => [projectId, alias]));
+  return new Map([
+    ...first,
+    ...bound.map(({ projectId, alias }): [number, string] => [projectId, alias]),
+  ]);
 }
 
 interface EntryRow {
@@ -208,7 +221,7 @@ function readEntries(
   db: Db,
   only: { projectId?: number | null; scope?: string; slug?: string },
 ): ListedEntry[] {
-  if (!tableExists(db, "knowledge_repos")) return [];
+  if (!knowledgeReadable(db)) return [];
   const rows = db
     .query<EntryRow, [number | null, string | null, string | null]>(
       `SELECT r.scope, r.project_id AS projectId, e.id, e.slug, e.title, e.area, e.status,
@@ -273,7 +286,7 @@ export function findEntry(db: Db, ref: string, projectId: number | null): EntryI
  */
 export function areaTotals(db: Db): Record<Root, Record<string, number>> {
   const totals: Record<Root, Record<string, number>> = { workspace: {}, shared: {} };
-  if (!tableExists(db, "knowledge_repos")) return totals;
+  if (!knowledgeReadable(db)) return totals;
   const rows = db
     .query<{ scope: EntryItem["scope"]; area: string; n: number }, []>(
       `SELECT r.scope, e.area, count(*) AS n
@@ -418,7 +431,7 @@ export function ledgerRecords(
   kind: "memory" | "entry",
 ): Map<string, LedgerRecord[]> {
   const records = new Map<string, LedgerRecord[]>();
-  if (!tableExists(db, "sharing_ledger")) return records;
+  if (!hasTable(db, "sharing_ledger")) return records;
   const rows = db
     .query<LedgerRecord & { uid: string }, [string, string]>(
       `SELECT item_uid AS uid, destination, direction, version, hash, withdrawn_at AS withdrawnAt
@@ -504,7 +517,7 @@ function refreshRepos(
   policy: SharingPolicy,
   options: WouldLeaveOptions,
 ): void {
-  if (!tableExists(db, "knowledge_repos")) return;
+  if (!knowledgeReadable(db)) return;
   const store = openStore({ db, dataDir, env, now: () => options.now });
   const refresh = options.refresh ?? ((repo: Repo) => refreshIndex(store, repo));
   const projects = projectsAt(policy, options.projectId, (level) => level !== "local");

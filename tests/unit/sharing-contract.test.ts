@@ -1,6 +1,6 @@
 // The contract a sync is built against (ADR 0025): what the predicate reads, what leaves
 // with an item, how a memory is hashed, the reasons, redaction at the edge, and the keys
-// and uids. A field added to one of the four shapes fails here until the lists, and the
+// and uids. A field added to one of the six shapes fails here until the lists, and the
 // ADR with them, change too.
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
@@ -8,9 +8,13 @@ import { redactForSend } from "../../src/sharing/edge.ts";
 import { memoryHash } from "../../src/sharing/hash.ts";
 import { levelKey } from "../../src/sharing/levels.ts";
 import {
+  DECISION_KEYS,
+  type Decision,
   ENTRY_ITEM_KEYS,
   type EntryItem,
   entryUid,
+  LEDGER_RECORD_KEYS,
+  type LedgerRecord,
   MEMORY_HASH_FIELDS,
   MEMORY_ITEM_KEYS,
   type MemoryItem,
@@ -138,6 +142,32 @@ describe("what leaves with an item", () => {
       "updatedAt",
       "version",
     ]);
+  });
+});
+
+describe("what the ledger records and what the predicate answers", () => {
+  test("a ledger record is these five fields and nothing else", () => {
+    const sample: LedgerRecord = {
+      destination: "team",
+      direction: "sent",
+      version: 1,
+      hash: "h",
+      withdrawnAt: null,
+    };
+    expect(keysOf(sample)).toEqual([...LEDGER_RECORD_KEYS]);
+    expect(LEDGER_RECORD_KEYS).toEqual([
+      "destination",
+      "direction",
+      "hash",
+      "version",
+      "withdrawnAt",
+    ]);
+  });
+
+  test("a decision is these three fields and nothing else", () => {
+    const sample: Decision = { answer: "keep", reason: "level-local", epoch: 0 };
+    expect(keysOf(sample)).toEqual([...DECISION_KEYS]);
+    expect(DECISION_KEYS).toEqual(["answer", "epoch", "reason"]);
   });
 });
 

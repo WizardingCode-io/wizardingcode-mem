@@ -378,6 +378,9 @@ function asString(value: unknown): string | null {
   return null;
 }
 
+/** Every value is one line of the env file: a line break would write a second key. */
+const ONE_LINE = "a value on one line";
+
 export function validatePatch(patch: Patch): Validated {
   const changes: Partial<Record<SettingKey, string | null>> = {};
   const errors: Partial<Record<string, string>> = {};
@@ -395,6 +398,10 @@ export function validatePatch(patch: Patch): Validated {
     const text = asString(value);
     if (text === null) {
       errors[key] = "a text value, a number or null";
+      continue;
+    }
+    if (/[\r\n]/.test(text)) {
+      errors[key] = ONE_LINE;
       continue;
     }
     const problem = RULES[settingKey](text);

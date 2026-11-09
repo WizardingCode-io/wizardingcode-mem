@@ -1,7 +1,8 @@
 import { findProject, remoteAliasOf } from "../../core/project.ts";
 import { type SharingKey, validatePatch } from "../../settings/settings.ts";
+import { policyInForce, sharingRefusal } from "../../sharing/in-force.ts";
 import { levelKey, levelOf } from "../../sharing/levels.ts";
-import { decide, INERT_PROBLEM, loadPolicy } from "../../sharing/policy.ts";
+import { decide, INERT_PROBLEM } from "../../sharing/policy.ts";
 import {
   findEntry,
   findMemory,
@@ -15,8 +16,6 @@ import {
   generationOf,
   lastChange,
   previewSettingsPatch,
-  reconcileLevels,
-  reconcileSettings,
   setLevel,
   setLevelMessage,
 } from "../../sharing/store.ts";
@@ -106,24 +105,10 @@ function requireYes(question: string, argv: string[]): void {
   );
 }
 
-/**
- * The policy a subcommand acts under: loaded, then what was pending recorded (a hand edit
- * of the env file, a level its project can no longer hold), then loaded again. Under a
- * policy that could not be loaded nothing is recorded: the tables may be a newer version's.
- */
-function policyInForce(db: Db, dataDir: string, now: number): SharingPolicy {
-  const loaded = loadPolicy(db, dataDir, process.env, now);
-  if (loaded.closed) return loaded;
-  reconcileSettings(db, dataDir, now);
-  reconcileLevels(db, now);
-  return loadPolicy(db, dataDir, process.env, now);
-}
-
 /** Nothing is changed under a policy that could not be loaded; the person is told why. */
 function requireLoaded(policy: SharingPolicy): void {
-  if (!policy.closed) return;
-  const why = policy.problems[0] ?? "the sharing policy could not be loaded";
-  throw new Refusal(`${why}; nothing was changed`);
+  const refusal = sharingRefusal(policy);
+  if (refusal !== null) throw new Refusal(refusal);
 }
 
 // --- project ------------------------------------------------------------------------------
@@ -331,7 +316,7 @@ export async function run(argv: string[]): Promise<number> {
     const { dataDir, storeDir } = resolvePaths();
     db = openDb({ dataDir: storeDir, busyTimeoutMs: 5000 });
     const now = Date.now();
-    act({ db, dataDir, now, policy: policyInForce(db, dataDir, now) });
+    act({ db, dataDir, now, policy: policyInForce(db, dataDir, process.env, now) });
     return 0;
   } catch (error) {
     if (error instanceof UsageError) {

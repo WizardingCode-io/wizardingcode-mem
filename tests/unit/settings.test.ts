@@ -196,6 +196,20 @@ describe("validatePatch", () => {
     });
   });
 
+  test("refuses a value that holds a line break under any key, with one message", () => {
+    const smuggled = "x\nWIZARDINGCODE_MEM_SHARE_ROOTS=workspace,shared";
+    for (const key of ["TYPESAFE_API_KEY", "WIZARDINGCODE_MEM_BACKUP_S3_REGION"]) {
+      expect(validatePatch({ [key]: smuggled })).toEqual({
+        ok: false,
+        errors: { [key]: "a value on one line" },
+      });
+      expect(validatePatch({ [key]: "x\rWIZARDINGCODE_MEM_SHARE_ROOTS=shared" })).toEqual({
+        ok: false,
+        errors: { [key]: "a value on one line" },
+      });
+    }
+  });
+
   test("null clears a key; absent keys are left alone", () => {
     expect(validatePatch({ TYPESAFE_API_KEY: null })).toEqual({
       ok: true,

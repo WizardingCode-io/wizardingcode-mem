@@ -263,7 +263,7 @@ describe("with knowledge in the workspace, the shared repository and two project
     closeFixture(fx);
   });
 
-  const policy = () => loadPolicy(fx.db, fx.dataDir, fx.env, NOW);
+  const policy = () => loadPolicy(fx.db, fx.dataDir, fx.env);
   const leaves = (
     options: Partial<Parameters<typeof wouldLeave>[4]> = {},
     under: SharingPolicy = policy(),
@@ -282,6 +282,24 @@ describe("with knowledge in the workspace, the shared repository and two project
     if (found === undefined) throw new Error(`no entry ${slug}`);
     return found;
   };
+
+  test("with the knowledge module behind or ahead, no entry is read and nothing throws", () => {
+    expect(leaves().counts.entries).toBeGreaterThan(0);
+    for (const version of [5, 99]) {
+      fx.db.run(
+        `UPDATE module_migrations SET version = ? WHERE module = ?
+            AND version = (SELECT max(version) FROM module_migrations WHERE module = ?)`,
+        [version, KNOWLEDGE_MODULE, KNOWLEDGE_MODULE],
+      );
+      const report = leaves();
+      expect(report.counts.entries).toBe(0);
+      expect(report.perRoot.workspace).toEqual({ entries: 0, areaTotals: {} });
+      expect(report.perRoot.shared).toEqual({ entries: 0, areaTotals: {} });
+      expect(areaTotals(fx.db)).toEqual({ workspace: {}, shared: {} });
+      expect(entryItems(fx.db)).toEqual([]);
+      expect(findEntry(fx.db, "workspace/sales-one", null)).toBeNull();
+    }
+  });
 
   /** One memory `all` sends, and one of each kind it leaves behind. */
   function sixMemories(projectId: number): { sent: number; all: number[] } {
@@ -345,6 +363,30 @@ describe("with knowledge in the workspace, the shared repository and two project
       const [nameless] = entryItems(fx.db, B);
       expect(nameless?.uid.startsWith("project::")).toBe(true);
       expect(leaves().counts.entries).toBe(6);
+    });
+
+    test("a path alias never names a project's entries, bound or first by name", () => {
+      // The path sorts before any host, so the first alias by name would be it.
+      fx.db.run("INSERT OR IGNORE INTO project_aliases (alias, project_id) VALUES (?, ?)", [
+        B_REMOTE,
+        B,
+      ]);
+      fx.db.run("INSERT OR IGNORE INTO project_aliases (alias, project_id) VALUES (?, ?)", [
+        "remote:/Users/x/gears",
+        B,
+      ]);
+      const [gears] = entryItems(fx.db, B);
+      expect(gears?.uid.startsWith(`project:${B_REMOTE}:`)).toBe(true);
+      // A row bound to a path alias, written before the host-led rule, names nothing either.
+      fx.db.run(
+        `INSERT INTO sharing_levels (project_id, destination, level, bound_alias, set_at, source)
+          VALUES (?, 'team', 'knowledge', 'remote:/Users/x/gears', 1, 'cli')`,
+        [B],
+      );
+      const [bound] = entryItems(fx.db, B);
+      expect(bound?.uid.startsWith(`project:${B_REMOTE}:`)).toBe(true);
+      fx.db.run("DELETE FROM sharing_levels WHERE project_id = ?", [B]);
+      fx.db.run("DELETE FROM project_aliases WHERE alias = ?", ["remote:/Users/x/gears"]);
     });
 
     test("a project at all sends the memories decide sends, and no other", () => {
@@ -746,7 +788,7 @@ describe("with a project that shares its memories", () => {
     closeFixture(fx);
   });
 
-  const policy = () => loadPolicy(fx.db, fx.dataDir, fx.env, NOW);
+  const policy = () => loadPolicy(fx.db, fx.dataDir, fx.env);
   const generation = () => generationOf(fx.db) as string;
   const uidOf = (id: number | undefined) => `${generation()}:${id}`;
 
@@ -871,7 +913,7 @@ describe("a store without the tables", () => {
     const widgets = addProject(db, A_REMOTE);
     share(db, widgets, "all");
     const id = memory(db, widgets, "Deploys need the staging flag");
-    const report = wouldLeave(db, dir, {}, loadPolicy(db, dir, {}, NOW), {
+    const report = wouldLeave(db, dir, {}, loadPolicy(db, dir, {}), {
       now: NOW,
       fresh: true,
       list: true,
@@ -898,13 +940,13 @@ describe("a store without the tables", () => {
     const db = openDb({ dataDir: dir, busyTimeoutMs: 2000, moduleSchemas: knowledgeOnly });
     expect(ledgerRecords(db, "team", "memory").size).toBe(0);
     expect(entryItems(db)).toEqual([]);
-    const report = wouldLeave(db, dir, {}, loadPolicy(db, dir, {}, NOW), { now: NOW, list: true });
+    const report = wouldLeave(db, dir, {}, loadPolicy(db, dir, {}), { now: NOW, list: true });
     expect(report).toEqual(NOTHING);
     db.close();
   });
 
   test("with no database nothing leaves", () => {
-    const policy = loadPolicy(null, dir, {}, NOW);
+    const policy = loadPolicy(null, dir, {});
     expect(wouldLeave(null, dir, {}, policy, { now: NOW, fresh: true, list: true })).toEqual(
       NOTHING,
     );

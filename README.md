@@ -434,7 +434,7 @@ What is sent is the text of the turn being judged, and only that. If the service
 
 ### Sharing
 
-Nothing is sent anywhere today: there is no team server yet. The sharing policy says in advance what may leave this machine once one is configured, and by default nothing may. You make three choices:
+Nothing is sent anywhere today: there is no team server yet. The sharing policy says in advance what may leave this machine once one is configured, and by default nothing may; until then nothing is sent, whatever you choose. You make three choices:
 
 - **Each project's level**: Nothing, Knowledge, or Knowledge and memories. Set it in the viewer (Across projects, then the project's Sharing section) or with `wizardingcode-mem share project <local|knowledge|all>` in the project's folder. A project needs a git remote to be set above Nothing, because a team matches projects by their remote. Knowledge and memories sends every active memory of the project that is not stale, branch-bound, imported or one of your rules.
 - **The roots**: whether the workspace's knowledge and the shared repository's knowledge may leave. `WIZARDINGCODE_MEM_SHARE_ROOTS`, a comma list of `workspace` and `shared`, or `none`.

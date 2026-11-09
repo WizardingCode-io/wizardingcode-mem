@@ -5,7 +5,7 @@
 import { computed, onMounted, reactive, ref } from "vue";
 import { api, buildSharingPatch, LEVEL_LABELS, type Level, type Root, type SettingKey, type SettingsPatch, type SharingView } from "../../api";
 import { ago } from "../../format";
-import { fromEnvironment, saveSettings, setting, settingsState } from "../../settings";
+import { fromEnvironment, saveSettings, setting } from "../../settings";
 import { openCross, state } from "../../viewer";
 import Confirm from "../Confirm.vue";
 import Card from "./Card.vue";
@@ -22,11 +22,14 @@ const STATEMENTS =
   "Knowledge leaves only when its root or project is allowed to leave and its area is allowed. Memories have no area: a project set to Knowledge and memories sends every active memory of its own that is not stale, branch-bound, imported or one of your rules. New areas start private. Lowering a level recalls nothing already sent; the next sync withdraws it. This page governs the team server only; TypeSafe judgements are governed by your key, under Judge.";
 
 const view = ref<SharingView | null>(null);
-const loadError = ref<string | null>(null);
+/** The page could not be read; the viewer says so in a plain sentence, never the error. */
+const loadFailed = ref(false);
 const roots = reactive<Record<Root, boolean>>({ workspace: false, shared: false });
 const areas = reactive<Record<string, boolean>>({});
-/** Inert ids the person removed: the next save leaves them out of the list. */
+/** Inert ids the person removed: hidden, and Save offered, though every save drops them. */
 const removed = ref<string[]>([]);
+/** The patch the page made when it was last loaded: Save is offered once it differs. */
+const loadedPatch = ref("");
 
 const sourceOf = (key: SettingKey) => setting(key)?.source ?? "default";
 const lockedRoots = computed(() => fromEnvironment(ROOTS_KEY));
@@ -45,16 +48,17 @@ function reset(next: SharingView) {
     }
   }
   removed.value = [];
+  loadedPatch.value = JSON.stringify(currentPatch());
 }
 
 async function load() {
   try {
     const next = await api.sharing();
     view.value = next;
-    loadError.value = null;
+    loadFailed.value = false;
     reset(next);
-  } catch (error) {
-    loadError.value = error instanceof Error ? error.message : String(error);
+  } catch {
+    loadFailed.value = true;
   }
 }
 onMounted(load);
@@ -89,6 +93,9 @@ const pending = ref<SettingsPatch | null>(null);
 const leaving = ref(0);
 const previewing = ref(false);
 const saving = ref(false);
+
+/** Whether Save would change anything: a switch moved, or an inert id was removed. */
+const changed = computed(() => removed.value.length > 0 || JSON.stringify(currentPatch()) !== loadedPatch.value);
 
 const listOf = (text: string | undefined) => (text === undefined || text === "none" ? [] : text.split(","));
 
@@ -126,8 +133,8 @@ async function save() {
     leaving.value = report.counts.entries;
     pending.value = patch;
     asking.value = true;
-  } catch (error) {
-    notSaved(error);
+  } catch {
+    notSaved();
   } finally {
     previewing.value = false;
   }
@@ -146,8 +153,9 @@ async function confirmShare() {
   pending.value = null;
 }
 
-function notSaved(error: unknown) {
-  toast.add({ title: "Sharing not saved", description: error instanceof Error ? error.message : String(error), color: "error" });
+/** Whatever failed, the person reads one plain sentence: no message, no path. */
+function notSaved() {
+  toast.add({ title: "Sharing not saved", description: "The settings file could not be written.", color: "error" });
 }
 
 async function commit(patch: SettingsPatch, confirmed: boolean) {
@@ -155,13 +163,13 @@ async function commit(patch: SettingsPatch, confirmed: boolean) {
   try {
     const taken = confirmed ? await saveSettings(patch, { confirm: true }) : await saveSettings(patch);
     if (!taken) {
-      notSaved(new Error(Object.values(settingsState.errors).join(" · ")));
+      notSaved();
       return;
     }
     toast.add({ title: "Sharing saved", color: "success" });
     await load();
-  } catch (error) {
-    notSaved(error);
+  } catch {
+    notSaved();
   } finally {
     saving.value = false;
   }
@@ -170,22 +178,22 @@ async function commit(patch: SettingsPatch, confirmed: boolean) {
 
 <template>
   <Card id="sharing" title="Sharing" description="What may leave this machine for your team's server. Nothing leaves until you choose it here, and nothing is sent until a team server is configured.">
-    <p v-if="view === null && loadError === null" class="m-0 text-[13px] text-(--ink-muted)">Loading…</p>
-    <p v-else-if="view === null" class="m-0 text-[13px] text-(--ink-muted)">{{ loadError }}</p>
+    <p v-if="view === null && !loadFailed" class="m-0 text-[13px] text-(--ink-muted)">Loading…</p>
+    <p v-else-if="view === null" class="m-0 text-[13px] text-(--ink-muted)">Sharing could not be loaded.</p>
     <div v-else class="flex flex-col">
       <UAlert v-if="view.problems.length" class="mb-4" color="warning" variant="soft" icon="i-lucide-triangle-alert" :description="view.problems.join(' · ')" />
       <div class="flex flex-col gap-4">
         <div v-for="r in ROOT_ROWS" :key="r.root" class="flex flex-col gap-2">
           <div class="flex items-start gap-3">
             <USwitch v-model="roots[r.root]" class="min-w-0 flex-1" :disabled="lockedRoots" :label="r.label" :description="lockedRoots ? `${r.help} ${LOCKED}` : r.help" />
-            <span class="wz-mono flex-none text-(--ink-muted)">{{ entries(view.report.perRoot[r.root].entries) }}</span>
+            <span class="wz-mono flex-none text-(--ink-muted)">{{ entries(view.report.perRoot[r.root].entries) }} would leave</span>
           </div>
           <div class="flex flex-col gap-1.5 pl-11">
             <p v-if="view.taxonomies[r.root] === null" class="m-0 text-xs leading-4 text-(--ink-muted)">No taxonomy yet: write a knowledge entry first.</p>
             <template v-else>
               <div v-for="a in view.taxonomies[r.root] ?? []" :key="a.id" class="flex items-center gap-3">
                 <USwitch v-model="areas[`${r.root}:${a.id}`]" size="sm" class="min-w-0 flex-1" :disabled="lockedAreas" :label="a.label" />
-                <span class="wz-mono flex-none text-(--ink-muted)">{{ entries(totalOf(r.root, a.id)) }}</span>
+                <span class="wz-mono flex-none text-(--ink-muted)">{{ totalOf(r.root, a.id).toLocaleString("en-GB") }} in the area</span>
               </div>
             </template>
             <div v-for="id in inertOf(r.root)" :key="id" class="flex h-6 items-center gap-3">
@@ -197,7 +205,7 @@ async function commit(patch: SettingsPatch, confirmed: boolean) {
         </div>
       </div>
       <div class="mt-4 flex flex-wrap items-center gap-2">
-        <UButton color="primary" label="Save" :loading="saving || previewing" :disabled="lockedRoots && lockedAreas" @click="save" />
+        <UButton color="primary" label="Save" :loading="saving || previewing" :disabled="!changed || (lockedRoots && lockedAreas)" @click="save" />
       </div>
       <div class="wz-block flex flex-col gap-2 text-xs leading-4 text-(--ink-muted)">
         <p class="m-0">{{ STATEMENTS }}</p>

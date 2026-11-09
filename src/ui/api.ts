@@ -6,14 +6,13 @@ import { refreshMemoryVector } from "../embed/vectors.ts";
 import { explicitMatch } from "../retrieve/query.ts";
 import { fuseRanks, SEMANTIC_POOL, semanticCandidates } from "../retrieve/semantic.ts";
 import type { Env } from "../settings/settings.ts";
+import { policyInForce, sharingRefusal } from "../sharing/in-force.ts";
 import { levelOf } from "../sharing/levels.ts";
 import { knownAreas, loadPolicy } from "../sharing/policy.ts";
 import { type PolicyChange, type Report, withChange, wouldLeave } from "../sharing/report.ts";
 import {
   type ChangeRow,
   lastChange,
-  reconcileLevels,
-  reconcileSettings,
   type SetLevelRefusal,
   setLevel,
   setLevelMessage,
@@ -899,29 +898,6 @@ const refused = <Status extends number>(status: Status, error: string): Answer<S
 });
 
 /**
- * Why nothing about sharing may be changed now: the problem of a policy that could not be
- * loaded, as the answer to whoever asked for the change; null under a policy that loaded.
- * A change made under such a policy would be written into tables this binary may not know.
- */
-export function sharingRefusal(policy: SharingPolicy): string | null {
-  if (!policy.closed) return null;
-  return `${policy.problems[0] ?? "the sharing policy could not be loaded"}; nothing was changed`;
-}
-
-/**
- * The policy in force once what was pending is on record: a hand edit of the env file, a
- * level its project can no longer hold. Loaded, reconciled, loaded again. Under a policy
- * that could not be loaded nothing is recorded, for the reason `sharingRefusal` gives.
- */
-function policyInForce(db: Db, dataDir: string, env: Env, now: number): SharingPolicy {
-  const loaded = loadPolicy(db, dataDir, env, now);
-  if (loaded.closed) return loaded;
-  reconcileSettings(db, dataDir, now);
-  reconcileLevels(db, now);
-  return loadPolicy(db, dataDir, env, now);
-}
-
-/**
  * What the Sharing page shows: the policy in force (`policyInForce`, so this is where the
  * viewer records what was pending), each root's taxonomy, how many projects are at each
  * level, and what would leave, counted after the index is brought up to date with the
@@ -975,7 +951,7 @@ export function sharingPreview(
     return refused(400, "body must be an object");
   }
   const { level, roots, areas } = body as Record<string, unknown>;
-  const policy = loadPolicy(db, dataDir, env, now);
+  const policy = loadPolicy(db, dataDir, env);
   const change: PolicyChange = {};
   if (level !== undefined) {
     if (level === null || typeof level !== "object") {
@@ -1032,7 +1008,7 @@ export function setProjectSharing(
   confirm: boolean,
   now: number,
 ): Answer<200 | 400 | 404 | 409> {
-  const policy = loadPolicy(db, dataDir, env, now);
+  const policy = loadPolicy(db, dataDir, env);
   const closed = sharingRefusal(policy);
   if (closed !== null) return refused(409, closed);
   if (!policy.projects.has(projectId)) return refused(404, NO_PROJECT);

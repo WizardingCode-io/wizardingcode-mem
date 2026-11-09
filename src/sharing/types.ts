@@ -255,6 +255,20 @@ export interface Decision {
   epoch: number;
 }
 
+export const LEDGER_RECORD_KEYS = keysOf<LedgerRecord>({
+  destination: true,
+  direction: true,
+  hash: true,
+  version: true,
+  withdrawnAt: true,
+});
+
+export const DECISION_KEYS = keysOf<Decision>({
+  answer: true,
+  epoch: true,
+  reason: true,
+});
+
 /**
  * One project's level for one destination, as it reads now. `reason` is `allowed` for a
  * level in force, or what made a stored level read `local`: `disabled`, `unbound-alias`,

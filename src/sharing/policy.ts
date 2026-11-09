@@ -270,9 +270,8 @@ export function resetSharingLog(): void {
  * database there is no project and no level, and the settings are read alone. It never
  * throws: a failure to read anything gives a closed policy, under which nothing leaves,
  * logged once per process, since every reader would otherwise log the same failure.
- * `_now` is the caller's clock, which every reader of the policy passes; no step reads it.
  */
-export function loadPolicy(db: Db | null, dataDir: string, env: Env, _now: number): SharingPolicy {
+export function loadPolicy(db: Db | null, dataDir: string, env: Env): SharingPolicy {
   try {
     return readPolicy(db, dataDir, env);
   } catch (error) {

@@ -3,11 +3,11 @@ import type { HistoryOffer, HistoryProgress, HistoryStatus, PastSearch } from ".
 import type { LinkKind, LinksList, LinksOffer, LinkView, RulesList } from "./links";
 import type { ModuleInfo } from "./modules";
 import type { SemanticStatus } from "./semantic";
-import type { Level, Root } from "../../src/sharing/types.ts";
+import type { Level, Reason, Root } from "../../src/sharing/types.ts";
 
 // The levels, their labels and the Sharing page's patch are the engine's own, shared as
 // `modules.ts` shares the memory module's views: one rule, read by the server and the page.
-export { LEVEL_LABELS, LEVELS, type Level, type Root } from "../../src/sharing/types.ts";
+export { LEVEL_LABELS, LEVELS, type Level, type Root, widens } from "../../src/sharing/types.ts";
 export { buildSharingPatch } from "../../src/sharing/patch.ts";
 export type { SemanticStatus } from "./semantic";
 export type { ModuleInfo, ModuleViewInfo } from "./modules";
@@ -28,7 +28,7 @@ export interface Project {
   /** What it shares with the team's server, as the policy reads now. */
   sharing: Level;
   /** `allowed` for a level in force, else what makes it share nothing. */
-  sharingReason: string;
+  sharingReason: Reason;
   /** It has a git remote, the one name a team can match it by. */
   remote: boolean;
   /** Memory is off for it. */

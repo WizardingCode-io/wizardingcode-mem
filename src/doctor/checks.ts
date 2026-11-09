@@ -862,7 +862,7 @@ function knowledge(context: DoctorContext, db: Db | null): Check {
 // --- Sharing --------------------------------------------------------------------------
 
 /** How many projects stand at a level for the team, as the policy reads them now. */
-function projectsAt(policy: SharingPolicy, level: Level): number {
+function countAtLevel(policy: SharingPolicy, level: Level): number {
   return [...policy.levels.values()].filter(
     (row) => row.destination === TEAM_DESTINATION && row.level === level,
   ).length;
@@ -871,37 +871,30 @@ function projectsAt(policy: SharingPolicy, level: Level): number {
 /**
  * What may leave this machine, or every problem the policy's loader raised: an emptied
  * list, an ignored environment value, a level that no longer holds, an inert area id, a hand
- * edit nobody recorded, a level this version does not know, a newer sharing schema. It only
- * looks: nothing is reconciled here. Its own try, not `readingDb`'s: at the current schema a
- * store may still lack the sharing tables, which is every default and not an older schema.
- * Sharing chosen with no team server configured is no warning: there is nothing to fix.
+ * edit nobody recorded, a level this version does not know, a newer sharing schema, a load
+ * that failed. It only looks: nothing is reconciled here. `loadPolicy` never throws: a store
+ * without the sharing tables reads every default, and a failure reads as a closed policy
+ * with its problem. Sharing chosen with no team server configured is no warning: there is
+ * nothing to fix.
  */
 function sharing(context: DoctorContext, db: Db | null): Check {
   const name = "sharing";
   if (db === null) return { name, status: "skip", detail: "no database yet" };
-  try {
-    const policy = loadPolicy(db, context.dataDir, context.env ?? process.env, context.now);
-    if (policy.problems.length > 0) {
-      return { name, status: "warn", detail: policy.problems.join(" · ") };
-    }
-    if (isDefault(policy)) {
-      return { name, status: "ok", detail: "nothing leaves this machine (every default)" };
-    }
-    const detail = [
-      `roots: ${shareListText([...policy.roots].sort())}`,
-      plural(policy.areas.size, "allowed area"),
-      `knowledge: ${plural(projectsAt(policy, "knowledge"), "project")}`,
-      `knowledge and memories: ${plural(projectsAt(policy, "all"), "project")}`,
-      `epoch ${policy.epoch}`,
-    ].join(" · ");
-    return { name, status: "ok", detail };
-  } catch (error) {
-    return {
-      name,
-      status: "warn",
-      detail: `could not be checked: ${error instanceof Error ? error.message : String(error)}`,
-    };
+  const policy = loadPolicy(db, context.dataDir, context.env ?? process.env);
+  if (policy.problems.length > 0) {
+    return { name, status: "warn", detail: policy.problems.join(" · ") };
   }
+  if (isDefault(policy)) {
+    return { name, status: "ok", detail: "nothing leaves this machine (every default)" };
+  }
+  const detail = [
+    `roots: ${shareListText([...policy.roots].sort())}`,
+    plural(policy.areas.size, "allowed area"),
+    `knowledge: ${plural(countAtLevel(policy, "knowledge"), "project")}`,
+    `knowledge and memories: ${plural(countAtLevel(policy, "all"), "project")}`,
+    `epoch ${policy.epoch}`,
+  ].join(" · ");
+  return { name, status: "ok", detail };
 }
 
 /** Looks, and changes nothing: no directory, database or setting is created or altered. */

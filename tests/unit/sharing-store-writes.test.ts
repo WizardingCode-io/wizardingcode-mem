@@ -10,7 +10,6 @@ import { levelOf } from "../../src/sharing/levels.ts";
 import { loadPolicy } from "../../src/sharing/policy.ts";
 import {
   applySettingsPatch,
-  type ChangeSource,
   counterOf,
   levelRows,
   previewLevel,
@@ -18,6 +17,7 @@ import {
   recentChanges,
   reconcileLevels,
   reconcileSettings,
+  type SetLevelInput,
   setLevel,
   settingsSeen,
 } from "../../src/sharing/store.ts";
@@ -61,7 +61,7 @@ const project = (name: string, ...remotes: string[]): number => {
 interface Over {
   confirm?: boolean;
   remoteAlias?: string | null;
-  source?: ChangeSource;
+  source?: SetLevelInput["source"];
   now?: number;
   destination?: string;
 }
@@ -78,7 +78,7 @@ const set = (projectId: number, level: Level, over: Over = {}) =>
     ...over,
   });
 
-const policy = (env: Record<string, string | undefined> = {}) => loadPolicy(db, dir, env, NOW);
+const policy = (env: Record<string, string | undefined> = {}) => loadPolicy(db, dir, env);
 const changes = () =>
   recentChanges(db, 50)
     .reverse()
@@ -417,6 +417,36 @@ describe("setLevel: the alias a level is bound to", () => {
       ok: false,
       reason: "no-remote",
     });
+  });
+
+  test("only a host-led remote: a project whose remotes are local paths is refused", () => {
+    const local = project(
+      "local",
+      "remote:/users/someone/repo",
+      "remote:../other",
+      "remote:c:\\x",
+      "remote:server/repo",
+    );
+    for (const given of [undefined, "remote:/users/someone/repo"]) {
+      expect(set(local, "knowledge", { remoteAlias: given })).toEqual({
+        ok: false,
+        reason: "no-remote",
+      });
+    }
+    expect(levelRows(db)).toEqual([]);
+    expect(changes()).toEqual([]);
+    expect(counterOf(db)).toBe(0);
+  });
+
+  test("a host-led remote beside a path remote is the one bound, also when the path is given", () => {
+    const widgets = project("widgets", "remote:/users/someone/repo", X);
+    expect(set(widgets, "knowledge", { remoteAlias: "remote:/users/someone/repo" })).toMatchObject({
+      ok: true,
+      boundAlias: X,
+    });
+    expect(levelRows(db)[0]?.boundAlias).toBe(X);
+    set(widgets, "local");
+    expect(set(widgets, "all")).toMatchObject({ ok: true, boundAlias: X });
   });
 
   test("a change of level keeps the alias the level is bound to", () => {
