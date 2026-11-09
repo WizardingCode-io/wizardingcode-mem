@@ -8,7 +8,7 @@ import { inert } from "../../retrieve/render.ts";
 import { type Db, moduleSchemaState, withWrite } from "../../store/db.ts";
 import { logError } from "../../util/log.ts";
 import { clip } from "../../util/text.ts";
-import { type Hit, searchEntries, shownKey } from "./index-store.ts";
+import { type Hit, pinnedEntries, searchEntries, shownKey } from "./index-store.ts";
 import { KNOWLEDGE_MODULE, KNOWLEDGE_SCHEMA_VERSION } from "./migrations.ts";
 import {
   CANDIDATES,
@@ -102,6 +102,45 @@ function firstParagraph(body: string): string {
 const wrapped = (intro: string, lines: string[]) =>
   [WRAPPER_OPEN, intro, ...lines, WRAPPER_CLOSE].join(SEPARATOR);
 
+/** The session-start block around its lines; `doctor` measures the pins with it too. */
+export const pinnedBlock = (lines: string[]) => wrapped(INTRO, lines);
+
+/** The last line when some pinned entries were left out. */
+export const pinnedCountLine = (left: number) =>
+  `- +${left} pinned entries not shown; knowledge_search lists them`;
+
+/**
+ * Whether a session start shows the pinned entries at all. D-9, as the person confirmed
+ * it on 2026-11-09: at every session start, once per context, so a project the store
+ * already knew, a start that was lost and an entry pinned later all reach the agent. The
+ * other answer (a project's first session only) would change this body alone.
+ */
+export function showsPins(_input: Pick<MomentInput, "db" | "projectId" | "sessionId">): boolean {
+  return true;
+}
+
+/**
+ * The pinned entries, newest first, in the session-start block within `budgetChars`. A
+ * line is added only when the block still fits with it and with the count line for the
+ * entries that would then remain; one that does not fit is left out and the next tried.
+ * When some are left out the last line counts them. Empty text when no line fits.
+ */
+export function renderPinned(pins: Hit[], budgetChars: number): { text: string; shown: Hit[] } {
+  const shown: Hit[] = [];
+  const lines: string[] = [];
+  for (const pin of pins) {
+    const line = pinnedLine(pin);
+    const left = pins.length - shown.length - 1;
+    const tail = left > 0 ? [pinnedCountLine(left)] : [];
+    if (pinnedBlock([...lines, line, ...tail]).length > budgetChars) continue;
+    lines.push(line);
+    shown.push(pin);
+  }
+  if (shown.length === 0) return { text: "", shown };
+  const left = pins.length - shown.length;
+  return { text: pinnedBlock(left > 0 ? [...lines, pinnedCountLine(left)] : lines), shown };
+}
+
 /**
  * A prompt's entries, best first, at most `MAX_PER_PROMPT`: each its line and, under it,
  * its first paragraph indented by two spaces. An entry is added only when the whole text
@@ -157,6 +196,36 @@ function forPrompt(input: MomentInput, prompt: string, repoIds: number[]): strin
 }
 
 /**
+ * The pinned entries this context has not been shown, rendered within the budget and
+ * recorded as shown with `event: session-start`: one write transaction, like a prompt's.
+ */
+function forSessionStart(input: MomentInput, repoIds: number[]): string | null {
+  if (!showsPins(input)) return null;
+  const { db, sessionId, epoch, now, budgetChars } = input;
+  return withWrite(db, () => {
+    const shown = alreadyShown(db, sessionId, epoch);
+    const pins = pinnedEntries(db, repoIds).filter(
+      (pin) => !shown.has(shownKey(pin.repoId, pin.id)),
+    );
+    const rendered = renderPinned(pins, budgetChars);
+    if (rendered.shown.length === 0) return null;
+    recordShown(
+      db,
+      rendered.shown.map((pin) => ({
+        sessionId,
+        epoch,
+        repoId: pin.repoId,
+        entryId: pin.id,
+        event: "session-start" as const,
+        rule: null,
+        at: now,
+      })),
+    );
+    return rendered.text;
+  });
+}
+
+/**
  * Knowledge's text for a moment, or null. Silent first: on a file read and a failed tool;
  * on tables a newer version wrote (logged once per process); with no repository the
  * project sees. Those cost two reads at most. A write lock that cannot be taken in the
@@ -171,16 +240,9 @@ export function contribute(input: MomentInput): string | null {
   }
   const repos = visibleRepos(db, input.projectId);
   if (repos.length === 0) return null;
-  if (input.moment === "session-start") {
-    // The pinned entries come with task 13 of the plan, once the person has confirmed
-    // D-9 (whether every session start shows them or only a project's first).
-    return null;
-  }
+  const repoIds = repos.map((repo) => repo.id);
+  if (input.moment === "session-start") return forSessionStart(input, repoIds);
   const prompt = input.prompt;
   if (prompt === null || isFromTheHost(prompt)) return null;
-  return forPrompt(
-    input,
-    prompt,
-    repos.map((repo) => repo.id),
-  );
+  return forPrompt(input, prompt, repoIds);
 }

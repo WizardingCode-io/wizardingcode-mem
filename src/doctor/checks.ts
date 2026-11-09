@@ -23,7 +23,7 @@ import { QWEN } from "../install/qwen.ts";
 import { Breaker } from "../judge/breaker.ts";
 import { keyFingerprint } from "../judge/key.ts";
 import { personAuthor } from "../modules/knowledge/author.ts";
-import { INTRO, pinnedLine, WRAPPER_CLOSE, WRAPPER_OPEN } from "../modules/knowledge/contribute.ts";
+import { pinnedBlock, pinnedLine } from "../modules/knowledge/contribute.ts";
 import { KnowledgeError } from "../modules/knowledge/errors.ts";
 import { FOLDER_CAP, ftsCount, type Hit, readRepoFiles } from "../modules/knowledge/index-store.ts";
 import { KNOWLEDGE_MODULE, KNOWLEDGE_SCHEMA_VERSION } from "../modules/knowledge/migrations.ts";
@@ -608,7 +608,7 @@ function pinnedChars(pins: Hit[]): number {
   const lines = [...pins]
     .sort((a, b) => (b.updated ?? "").localeCompare(a.updated ?? ""))
     .map(pinnedLine);
-  return [WRAPPER_OPEN, INTRO, ...lines, WRAPPER_CLOSE].join("\n").length;
+  return pinnedBlock(lines).length;
 }
 
 /**

@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { claudeCode } from "../../src/adapters/claude-code/adapter.ts";
 import type { AgentAdapter, HookInput } from "../../src/adapters/types.ts";
@@ -10,7 +10,9 @@ import type { HookEvent } from "../../src/core/types.ts";
 import type { EngineModule, MomentInput } from "../../src/engine/module.ts";
 import { handleHook } from "../../src/hooks/handle.ts";
 import { personAuthor } from "../../src/modules/knowledge/author.ts";
+import * as contributeModule from "../../src/modules/knowledge/contribute.ts";
 import {
+  INTRO,
   PROMPT_INTRO,
   renderRelevant,
   resetKnowledgeLog,
@@ -39,7 +41,7 @@ import { realGit } from "../helpers/stub-git.ts";
 
 // The knowledge module on the hook path: what a prompt is shown, recorded once per context,
 // within its share; the silence that leaves memory's text as it was; no file read on a hook.
-// The session-start pins are task 13's, after the person confirms D-9.
+// At every session start, the pinned entries (D-9 as the person confirmed it on 2026-11-09).
 
 const WORKSPACE = { scope: "workspace" } as const;
 const NOW = Date.UTC(2026, 10, 9, 8, 0, 0);
@@ -524,6 +526,179 @@ describe("the probe", () => {
     const injected = UNRELATED.filter((text) => block(prompt(text)) !== null);
     expect(injected.filter((text) => text !== LEAK)).toEqual([]);
     expect(injected.length).toBeLessThanOrEqual(1);
+  });
+});
+
+describe("session start", () => {
+  const SESSION_START_SHARE = 840;
+  const start = (sessionId: string, extra: Partial<HookInput> = {}) =>
+    hook("session-start", { sessionId, source: "startup", ...extra });
+  /** The same start with memory alone, in a session of its own. */
+  const startAlone = () =>
+    hook("session-start", { sessionId: `alone-${++sessions}`, source: "startup" }, [memory]);
+
+  /** Two pinned workspace entries and one pinned shared entry. */
+  function threePins(): void {
+    write(WORKSPACE, { slug: "ledger-sync", title: "Ledger sync", pinned: true });
+    write(WORKSPACE, {
+      slug: "pricing-rules",
+      kind: "strategy",
+      area: "sales",
+      title: "Pricing rules for agencies",
+      body: "Agencies get the volume ladder, never a flat discount.",
+      pinned: true,
+    });
+    write(
+      { scope: "shared" },
+      {
+        slug: "brand-voice",
+        kind: "strategy",
+        area: "marketing",
+        title: "Brand voice",
+        body: "Plain words, short sentences, no superlatives.",
+        pinned: true,
+      },
+    );
+  }
+  const THREE_LINES = [
+    "- shared/brand-voice · strategy · marketing · Brand voice",
+    "- workspace/ledger-sync · knowledge · code · Ledger sync",
+    "- workspace/pricing-rules · strategy · sales · Pricing rules for agencies",
+  ];
+  const pinLines = (text: string | null) =>
+    (text ?? "")
+      .split("\n")
+      .filter((line) => line.startsWith("- "))
+      .sort();
+
+  test("with no pinned entry it shows nothing of knowledge", () => {
+    write(WORKSPACE, { slug: "ledger-sync" });
+    const output = start("s1");
+    expect(block(output)).toBeNull();
+    expect(output).toBe(startAlone());
+    expect(shownRows()).toEqual([]);
+  });
+
+  test("a project's first start shows the three lines after memory's brief, under the intro", () => {
+    threePins();
+    const output = start("s1");
+    const shown = block(output);
+    expect(shown).not.toBeNull();
+    const lines = (shown ?? "").split("\n");
+    expect(lines[0]).toBe(WRAPPER_OPEN);
+    expect(lines[1]).toBe(INTRO);
+    expect(lines.at(-1)).toBe(WRAPPER_CLOSE);
+    expect(lines).toHaveLength(6);
+    expect(pinLines(shown)).toEqual(THREE_LINES);
+    expect(output).toBe(`${startAlone()}\n\n${shown}`);
+    expect(output.indexOf(WRAPPER_OPEN)).toBeGreaterThan(0);
+    const rows = shownRows();
+    expect(rows).toHaveLength(3);
+    for (const row of rows) {
+      expect(row.event).toBe("session-start");
+      expect(row.rule).toBeNull();
+    }
+  });
+
+  test("the next prompt in the context shows none of them; a clear start shows them again", () => {
+    threePins();
+    expect(pinLines(block(start("s1")))).toEqual(THREE_LINES);
+    expect(
+      block(
+        hook("prompt", {
+          sessionId: "s1",
+          prompt: "should the ledger sync use backoff for the webhook gateway",
+        }),
+      ),
+    ).toBeNull();
+    // In a fresh context the same prompt brings the entry: the start is what hid it.
+    expect(
+      entryLines(block(prompt("should the ledger sync use backoff for the webhook gateway"))),
+    ).toEqual(["workspace/ledger-sync"]);
+    expect(pinLines(block(start("s1", { source: "clear" })))).toEqual(THREE_LINES);
+  });
+
+  test("four pins with 200-character titles: as many as fit, a count line, at most 840", () => {
+    for (const slug of ["pin-a", "pin-b", "pin-c", "pin-d"]) {
+      const title = `Pinned ${slug} ${"w".repeat(187)}`;
+      expect(title).toHaveLength(200);
+      write(WORKSPACE, { slug, title, pinned: true });
+    }
+    const shown = block(start("s1")) ?? "";
+    expect(shown.length).toBeLessThanOrEqual(SESSION_START_SHARE);
+    // Two 239-character lines and the count line: 785; a third line would make it 1,025.
+    expect(shown).toHaveLength(785);
+    const lines = shown.split("\n").filter((line) => line.startsWith("- "));
+    const entries = lines.filter((line) => line.includes(" · "));
+    expect(entries).toHaveLength(2);
+    expect(lines.at(-1)).toBe(
+      `- +${4 - entries.length} pinned entries not shown; knowledge_search lists them`,
+    );
+    expect(shown.split("\n").at(-2)).toBe(lines.at(-1));
+    expect(shownRows()).toHaveLength(entries.length);
+  });
+
+  test("a project's own pinned entry is shown in that project and not in another", () => {
+    write({ scope: "project", projectId }, { slug: "ours", title: "Ours", pinned: true });
+    const elsewhere = join(fx.dir, "elsewhere");
+    mkdirSync(elsewhere);
+    resolveProject(fx.db, elsewhere, NOW);
+    write(WORKSPACE, { slug: "everyone", title: "Everyone", pinned: true });
+    expect(entryLines(block(start("here"))).sort()).toEqual(["project/ours", "workspace/everyone"]);
+    expect(entryLines(block(start("there", { cwd: elsewhere })))).toEqual(["workspace/everyone"]);
+  });
+
+  test("a workspace whose taxonomy file is unreadable still shows its pinned lines", () => {
+    threePins();
+    const repo = ensureRepo(store, WORKSPACE);
+    const taxonomy = join(repo.path, "taxonomy.md");
+    rmSync(taxonomy, { force: true });
+    mkdirSync(taxonomy);
+    expect(pinLines(block(start("s1")))).toEqual(THREE_LINES);
+  });
+
+  test("with the knowledge folder renamed away, a session start shows the same lines", () => {
+    threePins();
+    const before = block(start("s1"));
+    expect(pinLines(before)).toEqual(THREE_LINES);
+    renameSync(join(fx.dataDir, "knowledge"), join(fx.dir, "moved-away"));
+    expect(block(start("s2"))).toBe(before);
+  });
+
+  test("every session start shows them: a second session, and a project with earlier sessions", () => {
+    // Sessions of the project before any pin existed.
+    expect(block(start("earlier-1"))).toBeNull();
+    expect(block(start("earlier-2"))).toBeNull();
+    threePins();
+    expect(pinLines(block(start("s1")))).toEqual(THREE_LINES);
+    expect(pinLines(block(start("s2")))).toEqual(THREE_LINES);
+    const session = (agentSessionId: string) =>
+      touchSession(fx.db, {
+        agent: "claude-code",
+        agentSessionId,
+        projectId,
+        cwd: project,
+        branch: null,
+        now: NOW,
+      });
+    for (const id of ["s2", "s3"]) {
+      const row = session(id);
+      const input: MomentInput = {
+        db: fx.db,
+        moment: "session-start",
+        projectId,
+        branch: null,
+        root: project,
+        sessionId: row.id,
+        epoch: row.contextEpoch,
+        prompt: null,
+        path: null,
+        error: null,
+        now: NOW,
+        budgetChars: SESSION_START_SHARE,
+      };
+      expect(contributeModule.showsPins(input)).toBe(true);
+    }
   });
 });
 
