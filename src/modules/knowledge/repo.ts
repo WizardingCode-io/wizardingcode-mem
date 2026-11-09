@@ -47,6 +47,8 @@ export const KNOWLEDGE_LEASE_MS = 60000;
 export const GIT_MIN_VERSION = [2, 32, 0];
 
 const STDERR_MAX = 300;
+/** How a killed call is named in its error: `requireGit` tells it from a missing git by it. */
+const TIMED_OUT = "timed out";
 const MANIFEST_FILE = "knowledge.json";
 const TAXONOMY_FILE = "taxonomy.md";
 const INTENT_FILE = "wizardingcode-op.json";
@@ -279,7 +281,7 @@ export function runGit(
   } catch (error) {
     return fail(error instanceof Error ? error.message : String(error));
   }
-  if (result.exitedDueToTimeout === true) return fail(`timed out after ${timeout} ms`);
+  if (result.exitedDueToTimeout === true) return fail(`${TIMED_OUT} after ${timeout} ms`);
   if (result.exitCode !== 0) {
     const lookup = args[0] === "config" && args.includes("--global");
     if (lookup && result.exitCode === 1) return { stdout: "", exitCode: 1 };
@@ -312,6 +314,8 @@ export function requireGit(store: KnowledgeStore): number[] {
     found = parseGitVersion(answer.stdout);
   } catch (error) {
     if (!(error instanceof KnowledgeError)) throw error;
+    // A git that hangs is not a missing git: the person is told what happened.
+    if (error.message.includes(TIMED_OUT)) throw error;
   }
   if (found === null || older(found, GIT_MIN_VERSION)) {
     throw new KnowledgeError(
