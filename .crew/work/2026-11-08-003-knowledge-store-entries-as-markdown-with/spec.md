@@ -1,0 +1,332 @@
+# The knowledge store: entries, repositories, index, versions, proposals
+
+Part 1 of the knowledge module (journey 2026-11-08-001). Sources: the user's brief of 2026-11-08 (`.claude/worktrees/knowledge-and-team/.crew/work/2026-11-08-003-implementar-a-feature-de-colaboracao-alg/brief.md` in the main checkout, questions Q-1 to Q-4); `concepts_brief.md` in this folder (the concept after the six brainstorm reviewers, whose answers are `spec-review/brainstorm-goldfish-*.md`); the decisions D-1 to D-11 in `work.json` (`decisions`), summarised in the Decisions table below, which is the binding text for the ADR; the plan is `plan.md` in this folder.
+
+## Problem
+
+The WizardingCode team wants what it has learned on purpose (strategies, personas, patterns, how the team works) kept in one place that its coding agents can use, that keeps every change with its author, and that reaches a new project on its first day. Today those are Obsidian notes that no agent is given or pointed at, that nothing versions when an agent would change them, and that reach no new project. wizardingcode-mem records today only what happened in sessions: observed, local, shown to the agent as background it may doubt, never as a rule to follow. There is no place in it for knowledge written on purpose, kept under version control, with an author on every change, where an agent's change reaches an entry only after a person accepts it. Success is visible when the team's first entries exist in the repositories and the first agent proposal has been decided by a person, both shown by `wizardingcode-mem knowledge list` and, from part 3, in the viewer.
+
+## Goals
+
+- A second storage in the engine, for knowledge: Markdown files with frontmatter, one git repository per scope under the data directory, an index in the engine's SQLite database that is rebuilt from the files.
+- Every write is one commit with its author, a person or an agent; a write on a stale version is refused, never applied over the other; a file changed outside the engine is never swept into another write's commit.
+- An agent's write is a proposal file until a person accepts it; acceptance and rejection are commits by the person, and the decided proposal stays in the repository.
+- A taxonomy of areas with immutable ids and renamable labels, starting with nine, in the workspace and the shared repositories, enforced on every write through the engine.
+- Tables a module owns, versioned apart from the core schema (the module migration namespace ADR 0019 ruling F2 put off until a module needed it; knowledge is the first), so module tables never move the core schema version.
+- A way for a person to write without the viewer: `wizardingcode-mem knowledge write|accept|reject|area|rebuild|adopt|list`; a `knowledge` line in `doctor`.
+- ADR 0024, a draft the later parts complete; a Knowledge section in the README.
+
+## Non-Goals
+
+- No context for the agent (no `contribute`), no MCP tool, no viewer view, no hook work: parts 2 and 3.
+- No sharing, no sync, no server: parts 4 to 6.
+- No semantic judgement (cataloguing, duplicates, contradictions): part 2, through the `Judge` interface.
+- No full-text index and no search command: part 2 adds them where the search is.
+- No import from Obsidian or from memory (ADR 0020's promotion is not rebuilt here); whether the author's user rules (ADR 0018) become knowledge is part 2's question.
+- The engine never deletes an entry itself: `archived` is the end state (`adopt` records a deletion a person made by hand, which is not a deletion through the engine). No rename of an entry: the id, not the slug, is the identity, so a later part can add a rename without a format change.
+- No backup of the repositories by `wizardingcode-mem backup`, which copies the database (said plainly in Risks, the README and the ADR); no archiving of decided proposals (a later part).
+- No Windows line endings on write (read is tolerant), no links between entries beyond `supersedes`, no attachments, no rename of the binary.
+
+## Open Questions
+
+None. The eleven decisions below were answered on 2026-11-08 by the crew's validator under the rule `stated-default` (the session had no person present; `.crew/policy.json` sets `unattendedDecisions` to `validator`), each with the answer the table shows; none waits for the user, and the design that rests on them is final for this part.
+
+## Decisions
+
+| Id | Question | Answer taken | Clause of the recorded answer superseded by a later decision |
+| :- | :- | :- | :- |
+| D-1 | Where a project's repository lives | Under the data directory, never inside the project's folder. | |
+| D-2 | How every change is versioned | A git repository per scope, one commit per write, the version number as the stale check. | |
+| D-3 | What an agent's proposal is | A file in the repository, committed by the agent; accept writes the entry in a commit by the person naming the agent. | "rejecting removes the file in a commit": by D-10, the file moves to `proposals/decided/`. |
+| D-4 | The file layout | Flat: `entries/<slug>.md`; the area and the rest in the frontmatter. | |
+| D-5 | Statuses and deletion | `active`, `draft`, `archived`; no deletion through the engine. | |
+| D-6 | The taxonomy file | `taxonomy.md`, the same format as every entry, in the repository. | "renaming an area rewrites … every entry": by D-9, a rename changes a label and no entry. |
+| D-7 | The person's author name | The author setting, else the global git name, else `you`. | |
+| D-8 | An entry's identity | An immutable id (a UUID); `version` a local counter beside a content hash. | |
+| D-9 | The taxonomy across repositories | Immutable area ids with renamable labels; a taxonomy in the workspace and another in the shared repository. | |
+| D-10 | A decided proposal | Moved to `proposals/decided/` with the decision appended, never deleted. | |
+| D-11 | A hand edit on a write's target | Refused; `knowledge adopt` commits hand edits as the person. | |
+
+## Cost and time
+
+- **Effort.** Four to six hours of one journey session, the gates and the reviewers included, for the nine phases of `plan.md` (26 tasks, test first): a YAML-subset parser, an isolated git runner, the module migration namespace, the store, three groups of commands, a doctor check, the ADR and the README section. The basis: the withdrawn module of ADR 0020, of a similar size (a parser, an index, tools, proposals), was built and measured in one day of sessions; this part has fewer surfaces (no tools, no composer) and more tests.
+- **Duration.** One night.
+- **Midway checks.** Phase C green (the repositories exist and git runs isolated: AC-2, AC-8, AC-9, AC-13, AC-15) and Phase D green (the store writes, proposes, adopts and recovers: AC-4, AC-5, AC-7's store half, AC-16, AC-18). An overrun is seen at one of these boundaries and the part is split there, the later phases becoming their own item.
+
+## Critical User Journeys
+
+1. **A person writes an entry.** Given the data directory and no knowledge repository, when the person runs `wizardingcode-mem knowledge write --scope workspace --title "Discovery call script" --kind strategy --area sales --context "agency clients" --subject "discovery call" --body-file script.md`, then `<data dir>/knowledge/workspace/` is a git repository with `knowledge.json`, `taxonomy.md` with the nine areas, `.gitignore`, `entries/discovery-call-script.md` at version 1 with an `id`, two commits (the repository's own, then the entry's) authored by the person, and the index holds the entry with its hash.
+2. **A person edits an entry.** Given an entry at version 3, when the person runs `knowledge write` for the same slug with `--base 3`, then the file is at version 4 with `updated` stamped, one more commit, and the index row matches; when another write arrives with `--base 3`, then it is refused with both versions named and nothing changes.
+3. **A hand edit.** Given an entry edited in an editor and not committed, when a write targets it, then the write is refused naming the path and `knowledge adopt`; when the person runs `wizardingcode-mem knowledge adopt`, then the hand edit is committed as the person with the version raised and `updated` stamped, and the next write proceeds.
+4. **An agent proposes.** Given an entry at version 2, when an agent (`agent:claude-code`) writes it through the store, then the entry is unchanged, `proposals/open/<id>.md` holds the full proposed entry with `entry`, `base_version: 2`, `base_hash` and `proposed_by`, committed with the agent as author, and the index lists the open proposal.
+5. **A person accepts or rejects.** Given that proposal, when the person runs `knowledge accept --scope workspace <id>`, then the entry is at version 3 with the proposal's content, the file is now `proposals/decided/<id>.md` with `decision: accepted`, and one commit authored by the person names the agent; when the person runs `knowledge reject --scope workspace <id>` instead, then only the proposal moves, with `decision: rejected`, in a commit by the person. Given the entry moved to version 3 before the accept, then the accept is refused as stale, naming versions 2 and 3, and the proposal stays open.
+6. **The taxonomy changes.** Given the nine areas, when the person runs `knowledge area add legal "Legal"`, then `taxonomy.md` lists ten in one commit; when the person runs `knowledge area rename people "Team"`, then only `taxonomy.md` changes, in one commit, and every entry with `area: people` is untouched; when the person runs `knowledge area remove sales` while an entry or an open proposal in any local repository carries it, then the removal is refused naming it.
+7. **The index is rebuilt.** Given repositories with entries and proposals and a database whose knowledge rows were deleted, when `wizardingcode-mem knowledge rebuild` runs, then the rows are back, equal to the ones before, each repository's recorded head equals its HEAD, and a project repository is mapped to its project through its manifest.
+8. **Nothing else changes.** Given memory alone and no knowledge entries, when the hooks and the MCP server run, then the pinned snapshots (`tests/unit/hook-snapshots.test.ts`, `tests/unit/mcp-tools-list.test.ts`) are byte for byte the same.
+
+## Design
+
+### The entry file
+
+`entries/<slug>.md`, UTF-8, LF, frontmatter between `---` lines, then the body in Markdown:
+
+```markdown
+---
+id: 7d0c2b8e-4f0a-4c2e-9a0b-1b2c3d4e5f60
+title: "Discovery call script for agency clients"
+kind: strategy
+area: sales
+context: "agency clients"
+subject: "discovery call"
+status: active
+author: "André"
+version: 3
+created: 2026-11-08T23:10:00.000Z
+updated: 2026-11-09T08:00:00.000Z
+---
+The body.
+```
+
+- `id`: a UUID (`crypto.randomUUID()`), written at creation by the store, never changed; the entry's identity in its repository and across machines (D-8). A caller never sets an id.
+- `title`: one line, 1 to 200 characters.
+- `kind`: `knowledge`, `strategy`, `persona`, `pattern`.
+- `area`: an area id of the repository's root taxonomy (the root is defined under The repositories).
+- `context`, `subject`: one line each, free text, at most 120 characters; may be empty.
+- `status`: `active`, `draft`, `archived` (D-5).
+- `author`: a person's name (1 to 80 characters, no newline, never starting with `agent:`), or `agent:<id>` where `<id>` matches `^[a-z0-9][a-z0-9-]*$` and is the host agent's id (`AgentId` in `src/core/types.ts`: `claude-code`, `codex`, …).
+- `version`: a whole number from 1, raised by one at each write (D-8: a local counter beside the content hash).
+- `created`, `updated`: ISO 8601 timestamps in UTC with milliseconds.
+- `supersedes` (optional): the `id` of an entry this one replaces; reserved for part 2.
+- The slug: `^[a-z0-9][a-z0-9-]*$`, at most 80 characters, never a Windows-reserved name (`con`, `prn`, `aux`, `nul`, `com1`…`com9`, `lpt1`…`lpt9`); unique per repository (slugs are lower case, so a case-insensitive file system cannot collide); no operation renames an entry in this part. A caller's slug is checked against the rule and refused when it fails, never normalised. When the caller gives none it is derived from the title by `slugify`: NFKD, combining marks removed, lower case, every run of characters outside `a-z0-9` becomes one `-`, leading and trailing `-` removed; a result over 80 characters is cut at 80 and then at the last `-` when that falls past the 40th character; an empty result becomes `entry`; a reserved name gets `-entry` appended (`con` becomes `con-entry`).
+
+The frontmatter is a small YAML subset read and written by the module's own parser (no dependency): `key: value` lines; plain scalars; double-quoted strings with `\"` and `\\`; whole numbers; block lists whose items are `- scalar` or `- key: value`; a line whose first non-blank character is `#` is a comment (there are no end-of-line comments); CRLF and a BOM are tolerated on read. Unknown keys are kept, in order, after the known ones, when an entry is rewritten. Two checks can fail a file, and both end the same way. A parse failure: no closing `---`, a line that is neither `key: value`, a list item nor a comment, a file over 256 KiB (not parsed at all). A validation failure: an unknown `kind` or `status`, a `version` that is not a whole number from 1, a missing or empty `title`, a missing or malformed `id`, an `area` outside the taxonomy. Either way the file is indexed from its name with `problem` set and `status` forced to `draft`: it is listed, never counted active; its row holds `kind: knowledge`, an empty `area` and `author`, `version: 0` and an empty body when nothing better could be parsed.
+
+### The repositories
+
+Under the data directory (`defaultDataDir()`; not the store directory, which may be an external disk for the database):
+
+| Scope | Path (relative to the data directory) | Holds |
+| :- | :- | :- |
+| workspace | `knowledge/workspace/` | `knowledge.json`, `taxonomy.md`, `.gitignore`, `entries/`, `proposals/open/`, `proposals/decided/` |
+| project | `knowledge/projects/<folder>/` | `knowledge.json`, `.gitignore`, `entries/`, `proposals/open/`, `proposals/decided/` |
+| shared | `knowledge/shared/` | `knowledge.json`, `taxonomy.md`, `.gitignore`, `entries/`, `proposals/open/`, `proposals/decided/` |
+
+**The root of a repository** is the repository whose `taxonomy.md` it reads: the workspace repository is the root of itself and of every project repository; the shared repository is its own root (D-9). In the functions below a `root` is a `ScopeRef` of the workspace or the shared scope.
+
+**The fingerprint of a repository** is `<entry count>:<open count>:<decided count>:<newest folder mtime ms>` over its three folders: three directory listings and three `stat` calls, no per-file `stat`. It changes when a file is added, removed or renamed; an in-place hand edit changes neither it nor HEAD, and is caught by the next write's dirty check, by `adopt`, `rebuild` and `doctor`.
+
+`knowledge.json` is the repository's manifest: `{"format": 1, "scope": "project", "project": {"aliases": ["remote:github.com/x/y", "gitdir:/…"]}, "createdAt": "<ISO>"}` (`project` only at project scope). It is JSON because the engine writes and reads it; a person can still edit it, and `adopt` records that. `.gitignore` lists `.DS_Store`, `Thumbs.db`, `.obsidian/`, `*.swp`, `*~`, `*.tmp` and `.*.md.tmp`.
+
+A project's repository is found by its manifest, not by its folder name (D-1 refined by the brainstorm reviewers): `resolveRepo` reads `knowledge_repos` for the project, then scans `knowledge/projects/*/knowledge.json` for a manifest whose `remote:` or `gitdir:` aliases intersect the project's current aliases (`project_aliases`; `path:` aliases never match, since a folder can be reused by another repository), and adopts it (the row is written, the manifest's aliases extended). A project matching two manifests takes the one matched by `remote:`, else (both by `remote:`, or neither) the newest by `createdAt`; the other is printed by `rebuild` and warned by `doctor`. A manifest already mapped to another project is never taken by a second one (the row's `UNIQUE (path)` holds) and is printed and warned the same way. Only when none exists is a folder created: `<folder>` is the first 16 hex characters of the SHA-256 of the project's `remote:` alias when it has one, else of the project's `key` (the `projects.key` column, the strongest alias when the project was first seen, `src/core/project.ts`); a folder already taken by another project gets `-2`, `-3`. A project that gains a remote later therefore keeps its repository. A repository never sits inside a project's own folder (D-1).
+
+A repository is created on first write by `ensureRepo`: `git init` with an empty template folder (`knowledge/.template/`, created empty), `init.defaultBranch=main`; `knowledge.json`, `.gitignore`, `taxonomy.md` (workspace and shared) and the folders are written and committed as `knowledge: repository (format 1)`, always authored by the person (`personAuthor`), whatever writer triggered the creation, so HEAD exists after `ensureRepo` returns. Creating a project repository creates its root first when the root does not exist, under the root's lease (see The lease). Folders are created with mode 0700.
+
+### git
+
+Every git call goes through one runner, `Bun.spawnSync` with a timeout of 15 s (`GIT_TIMEOUT_MS`, or the store's `gitTimeoutMs`; the process is killed past it), never on a hook path, taking its environment (`PATH` included) from the store object's `env`, given when the store is opened, never from `process.env` directly:
+
+- `git --git-dir <repo>/.git --work-tree <repo> -c commit.gpgsign=false -c core.hooksPath=<data dir>/knowledge/.no-hooks -c core.autocrlf=false -c init.defaultBranch=main -c user.useConfigOnly=false -c core.fsmonitor=false -c core.untrackedCache=false -c core.pager=cat -c diff.external= -c core.sshCommand= <args>` (`init` is the one call without `--git-dir`, since the folder does not exist yet; it takes `--template=<data dir>/knowledge/.template`; `config --global user.name` and `--version` run with no repository, the data directory as cwd). A `-c` value wins over the repository's own `.git/config`, so a local `core.fsmonitor`, `core.hooksPath`, `diff.external` or `core.sshCommand` never runs either.
+- Environment: `PATH`, `GIT_CONFIG_GLOBAL=<data dir>/knowledge/.gitconfig-empty` (an empty file, portable where `/dev/null` is not), `GIT_CONFIG_NOSYSTEM=1`, `GIT_CEILING_DIRECTORIES=<data dir>/knowledge`, `GIT_TERMINAL_PROMPT=0`, `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME`, `GIT_COMMITTER_EMAIL` set to the writer; `HOME` is not passed; a read-only call (`status`, `config`, `--version`) also sets `GIT_OPTIONAL_LOCKS=0`, so `doctor`, `list` and `rebuild` take no index lock. Nothing of the person's git setup (hooks, templates, signing, fsmonitor, filters, includes) runs here, and a data directory inside a parent git tree is never committed into. The one exception is the author lookup: `git config --global user.name` is allowed the user's configuration (`HOME` and `XDG_CONFIG_HOME` passed, `GIT_CONFIG_GLOBAL` and `GIT_CONFIG_NOSYSTEM` dropped), one call cached per process by `HOME`; an exit of 1 there means "no name" and is not an error.
+- `openRepo`, the one way every operation (a write, an accept, a reject, an adopt, a rebuild, a taxonomy change, `doctor`) obtains a repository handle, checks that `<repo>/.git` is a directory, finishes or reverts an interrupted operation (see The failure rule), and reads `<repo>/.git/config` as text (no process): a configuration that carries an `include` or `includeIf` section, a `filter` section, or a `hooksPath`, `fsmonitor` or `sshCommand` key is refused with code `invalid` naming the key, since a folder dropped under `knowledge/projects/` by a person or a later sync could carry one (a `filter` with a `clean` or `smudge` command would run on add or restore; with the global and system configuration excluded, a `.gitattributes` filter then names no driver and runs nothing). `ensureRepo` writes the repository's config itself and sets none of them.
+- `requireGit`: git 2.32 or newer is required (`GIT_CONFIG_GLOBAL`); `git --version` is parsed once per process (cached by `PATH`); an older or missing git refuses writes before any folder is created: "git 2.32 or newer is needed to version knowledge; found <version or nothing>".
+- A non-zero exit becomes a `KnowledgeError` with code `git` whose message is `git <subcommand> in <repository path> failed: <stderr clipped to 300 characters>`; the error is logged with `logError` under `knowledge.<operation>` (the operation named by the caller: `write`, `accept`, `reject`, `adopt`, `taxonomy`, `rebuild`), into the store's data directory.
+- `headOf(repoPath)` reads the repository's HEAD without a process through the ref resolver `src/core/git.ts` already has (loose refs and `packed-refs`), after checking that `<repoPath>/.git` is a directory; it never walks up to a parent repository.
+
+### The lease
+
+Writes to one repository are serialised by the engine's leases (`claimLease` and `releaseLease`, `src/store/meta.ts`): key `knowledge.lease:<path relative to the data directory>`, owner `<pid>-<uuid>`, 60 s. An operation that touches several repositories takes their leases in a fixed order, the root first and then each repository by path, so an operation never holds some leases while another holds the rest. The leases are renewed (`claimLease` by the same owner extends them) by the runner before every git call, before every index transaction, and once per 500 files parsed in a rebuild, for every lease the operation holds; a renewal that fails aborts the operation before that step; with each git call bounded at 15 s and no other step longer, a lease is never lost under a live operation. A lease held by another live process refuses the operation with code `locked`, "another write to this repository is in progress; try again"; a lease whose owner process is gone is taken over at once. `anyLeaseActive` also queries `meta` for keys starting with `knowledge.lease:` that hold, so a store move or a restore waits for a write.
+
+### Versioning and the write
+
+`writeEntry(store, ref, change, writer)`; `ref` is `{scope: "workspace"}`, `{scope: "shared"}` or `{scope: "project", projectId}`; `writer` is `{kind: "person", name, source}` or `{kind: "agent", id}`; `change` is `{slug?, title, kind, area, context, subject, status?, body, baseVersion?, supersedes?}`. An entry is addressed by its slug; its `id` is the store's: a new UUID at creation, or the proposal's `entry` at an accept. `baseVersion` absent or 0 means a new entry.
+
+**The failure rule.** Every write stages only the paths it changed (`git add -- <paths>`) and commits only them (`git commit --only -- <paths>`). Before its first change to the working tree it writes an intent record to `<repo>/.git/wizardingcode-op.json` (the operation, the writer, the paths that exist at HEAD, the paths it creates, the proposal id, and for an adopt the name of the file under `.git/` holding the bytes it kept), and removes it after the commit. When the commit fails, the index row and the recorded head are not touched, the error is logged, and the operation is refused with code `git`; the working tree is put back according to who produced the change. A person's write, an accept and a reject produced their change themselves, so every staged path that existed at HEAD is restored from HEAD with `git restore --source=HEAD --staged --worktree -- <paths>`, and a path that did not exist at HEAD is removed from the index with `git rm --cached -q -- <path>` and deleted from the disk; `git status --porcelain` of those paths is then empty. (A plain `git checkout -- <path>` would restore the content just staged, not HEAD's.) An adopt stages the person's own uncommitted work, which exists nowhere else: on a failed commit it only unstages its paths (`git reset -q -- <paths>`) and writes back the bytes it kept before rewriting `version`, `updated` and `author`, so the hand edits and the files the person added are on disk byte for byte as the person left them. An operation interrupted before its commit (a killed process, a lost power) leaves its intent record behind: the next `openRepo` reverts it by the same rules and reports it, so `adopt` never attributes an interrupted engine write to the person and a proposal stays open.
+
+A person's write:
+
+1. Refuse when the knowledge module's recorded schema version is newer than this binary's (`ModuleSchemaTooNewError`, a `KnowledgeError` with code `too-new`); `requireGit`.
+2. Shape checks on the change (the fields' patterns and lengths; a bad field is refused with the field named, code `invalid`).
+3. Take the leases: the root's, then the repository's.
+4. `ensureRepo` (the root first when missing), then `openRepo`; `ensureFresh` on the root and on the repository; validate `area` against the root taxonomy (code `invalid`), under the leases, so a concurrent `removeArea` cannot slip between the check and the commit.
+5. Check the target: `lstat` of `entries/<slug>.md` must be a regular file or nothing (a symlink or another kind is refused, code `invalid`, naming the link); a file the index holds with a problem (under `file:` or `dup:`) is refused, code `invalid`, naming the problem and the way out (fix the file by hand, then `knowledge adopt`); then `git status --porcelain -- entries/<slug>.md` non-empty: refused, code `dirty`, naming the path and `wizardingcode-mem knowledge adopt` (D-11).
+6. Read the current file. New entry: refused if the file exists, code `exists`, "entries/<slug>.md exists at version N; write with base version N to change it". Existing entry: refused if `baseVersion !== current.version`, code `stale`, "stale: the entry is at version N, the write was based on M"; nothing changes.
+7. Render the new text: `id` kept (or a new UUID), `version` = current + 1 (or 1), `updated` = now, `created` kept (or now), `author` = the writer's name, unknown keys kept.
+8. Write the intent record; write to `entries/.<slug>.md.tmp`, then rename over `entries/<slug>.md`; the temp file is removed in a `finally` when the rename did not happen.
+9. Stage and commit the path, message `knowledge: create|update <slug> (v<n>)`, author and committer the writer; on failure, the failure rule.
+10. Index the file (one row per slug: any row with that slug is deleted before the upsert by `(repo_id, id)`, so a problem row and a later good row never collide) with its hash and path, and record the repository's head and fingerprint; remove the intent record.
+11. Release the leases (in `finally`).
+
+The writer is the author (D-7): a person is the `WIZARDINGCODE_MEM_AUTHOR` setting (1 to 80 characters, no newline, not starting with `agent:`; `loadSettings` drops an invalid value to null the way it drops a bad number), else the global git `user.name` as above, else `you`; `personAuthor` returns the name with its source (`setting`, `git`, `default`) so `doctor` can tell the fallback from a person named `you`. An agent is `agent:<id>`. Commit e-mails are `<slug of the name>.<first 8 hex of the name's SHA-256>@people.wizardingcode.invalid` for a person (two names share an address only when their slugs and the first 32 bits of their hashes both collide) and `<id>@agents.wizardingcode.invalid` for an agent: the `.invalid` domain is reserved and never routes.
+
+The guarantee this part gives is that an agent's change reaches an entry only after a person accepts it, for every write made through the engine. The store cannot tell whether its caller is a person or an agent, so the entry point decides which writer it passes: the MCP tools of part 2 always pass the host's agent id, never a tool argument; the viewer (part 3) and the CLI pass the person. An agent with shell access to the data directory can write the files directly; such an edit is a hand edit the next write refuses and `adopt` attributes to the person. The ADR says so.
+
+### Proposals
+
+An agent's `writeEntry` never touches the entry (D-3). After steps 1 to 5 (the shape checks on the text after redaction, see below) it:
+
+- checks the target: `base_version` is the target file's current version at propose time (0 and `base_hash` empty for a new entry); when the agent gave a `baseVersion` that differs, the propose is refused as `stale`; a new slug that exists is refused as `exists`; an update always takes the caller's slug, and a new entry's slug comes from the redacted title;
+- checks the quota against the index refreshed in step 4: at most 5 open proposals for one target (by entry id for an existing entry, by slug for a new one) and 200 open in the repository; more is refused, code `quota`, "there are already 5 open proposals for <slug>; a person decides them first" or "the repository has 200 open proposals waiting for a person";
+- passes the title, context, subject and body through `redact` (`src/core/redact.ts`, with the store's `env`) before the shape checks, since a proposal enters a history the engine never rewrites and a session's text may carry a secret such as an API key (a person's write is deliberate and stays verbatim); the limits apply to the redacted text, and an over-long result is refused as `invalid` naming the field; a caller's slug that `redact` would change is refused as `invalid`;
+- writes `proposals/open/<proposal id>.md` (the id a UUID):
+
+```markdown
+---
+id: 3f2a9c6e-7b1d-4e0f-8a2b-9c1d2e3f4a5b
+entry: 7d0c2b8e-4f0a-4c2e-9a0b-1b2c3d4e5f60
+slug: discovery-call-script-for-agency-clients
+base_version: 2
+base_hash: 9f1c2d3e4a5b6c7d
+proposed_by: agent:claude-code
+proposed_at: 2026-11-09T08:10:00.000Z
+title: "Discovery call script for agency clients"
+kind: strategy
+area: sales
+context: "agency clients"
+subject: "discovery call"
+status: active
+---
+The proposed body.
+```
+
+`entry` is the target's id, or a new UUID for a new entry; `base_version` is 0 for a new entry and `base_hash` is then empty. The file is committed by the agent as `knowledge: propose <proposal id> for <slug>` and indexed in `knowledge_proposals` with state `open`. `base_hash` is recorded for the merge view (part 3) and the sync (part 6); nothing compares it in this part.
+
+`acceptProposal(store, ref, proposalId, person)`:
+
+1. The proposal id must match the UUID pattern before any path is built (code `invalid`).
+2. Under the leases (root, then repository), `openRepo` and `ensureFresh`; the proposal must be open and its file clean (`git status --porcelain -- proposals/open/<id>.md` empty, else code `dirty` naming `knowledge adopt`).
+3. The `entry` id read from the file must match the UUID pattern (code `invalid`; a hand-edited proposal can carry any string); an `entry` id that already belongs to another slug in the repository is refused as `invalid` naming that slug.
+4. The proposal's fields are validated as steps 2 and 4 validate a change (a failing one is refused as `invalid` naming the field, and the proposal stays open).
+5. The entry is written through steps 5 to 8 of a person's write with `baseVersion` = `base_version`: a target that moved is refused as `stale` naming both versions, and the proposal stays open; `base_version` 0 is a new entry, refused as `exists` when the slug now exists, with "a proposal for a new entry <slug>, but the entry now exists at version N; a person decides between them".
+6. The proposal file is rewritten with `decision: accepted`, `decided_by`, `decided_at`, `decided_version` appended under `proposals/decided/<id>.md` and removed from `proposals/open/`.
+7. One commit by the person over the three paths: `knowledge: accept <proposal id> into <slug> (v<n>)` with a second paragraph `Proposed by agent:<id>.`; on failure, the failure rule (the proposal is back under `open/` unchanged and the entry as it was).
+8. The index updates the entry and the proposal's state.
+
+`rejectProposal(store, ref, proposalId, person)`: steps 1 to 3 the same; the file gains `decision: rejected`, `decided_by`, `decided_at`, moves to `proposals/decided/`, one commit `knowledge: reject <proposal id>` (D-10). Nothing is deleted from the repository.
+
+### Hand edits: `adopt`
+
+`adopt(store, ref, person)`: under the leases, `git status --porcelain -- entries proposals taxonomy.md knowledge.json` lists the changes made outside the engine (nothing else counts: the `.gitignore` covers editors' and Finder's files). For each changed or added entry file: its bytes are kept under `.git/` and named in the intent record; it is parsed; a file with no `id` gets one (a note written in an editor is the common case); `version` is raised by one (or set to 1), `updated` stamped, `author` set to the person, everything else kept; it is rewritten and staged. A file that still fails parsing or validation (broken frontmatter, unknown kind, an area outside the taxonomy) is staged as the person left it and indexed with its problem as a draft, and adopt prints the problem; nothing is skipped or refused, since the person's work must be versioned. An entry file the person deleted is staged with `git rm`: adopt records the deletion the person made; the engine itself deletes nothing. Proposal files, `taxonomy.md` and `knowledge.json` changed by hand are staged as they are, parsed, and their problems printed. One commit by the person: `knowledge: adopt <n> changes made outside the engine` listing the paths in the body. Then the repository is re-indexed. A repository with nothing to adopt is reported as clean. On a failed commit the failure rule's adopt case applies: the person's work is never restored from HEAD.
+
+### The taxonomy
+
+`taxonomy.md` in the workspace and the shared repositories (D-9); a project repository reads its root's:
+
+```markdown
+---
+version: 1
+updated: 2026-11-08T23:10:00.000Z
+areas:
+  - code: Code
+  - management: Management
+  - marketing: Marketing
+  - sales: Sales
+  - video: Video
+  - design: Design
+  - operations: Operations
+  - finance: Finance
+  - people: People
+---
+```
+
+An area id is `^[a-z0-9][a-z0-9-]*$`, at most 40 characters, immutable; a label is 1 to 60 characters. Each operation is a person's write that first refuses while `taxonomy.md` has uncommitted changes (code `dirty`, naming `knowledge adopt`), raises the taxonomy's `version` and commits `taxonomy.md` alone. `addArea(store, root, id, label, person)` appends in one commit (`knowledge: taxonomy add <id>`; an id already present is `exists`, a bad id or label `invalid`); `renameArea(store, root, id, label, person)` changes the label in one commit and touches no entry; `removeArea(store, root, id, person)` takes the root's lease and then the lease of every local repository that reads this root, in path order (so no write runs in any of them until the removal is committed), renews all of them before each repository's `ensureFresh`, and is refused while an entry or an open proposal in any of them carries the id (the slug or the proposal id named), otherwise removes it in one commit. An agent cannot change the taxonomy in this part. A hand removal of an area still used by entries makes those entries drafts with a problem, which `adopt` and `doctor` print.
+
+### The index
+
+Module-owned tables, applied by `openDb` after the core migrations in a pass of their own, recorded in `module_migrations(module TEXT, version INTEGER, name TEXT, applied_at INTEGER, PRIMARY KEY (module, version))`; `PRAGMA user_version` stays 7.
+
+- A module's migrations are `Migration` values (`version`, `name`, `sql`, `run`), whose type moves to the leaf `src/store/migration.ts` so that `src/store/db.ts` and the modules import it without a cycle; they are listed in `src/engine/module-schemas.ts` as `MODULE_SCHEMAS: ModuleSchema[]` (`{module, migrations}`), a file that imports each module's migration list and no module code, so a hook loads no module to open the database. It is the one list `openDb` reads (`OpenOptions.moduleSchemas` replaces it in tests); the store importing this engine file is intended, since every opener, hooks included, must create every module's tables without being told. `EngineModule` gains no field for it. No knowledge `EngineModule` joins `BUILT_IN` in this part: the tests that rely on `knowledge` being an unknown module id (`tests/integration/fixture-module.test.ts`, `tests/integration/ui-modules.test.ts`, `tests/unit/modules-setting.test.ts`, `tests/unit/mcp-tools-list.test.ts`) stay as they are.
+- One upgrade runner serves the core and the modules: the second connection, `BEGIN IMMEDIATE`, a second lookup under the lock, the backup first, the migrations applied in order, the rollback on error, parameterised by how the current version is looked up (`PRAGMA user_version` for the core; the module's newest row for a module) and how a version is recorded. The module pass runs even when the core version is current: one query of `module_migrations` (the table may not exist yet) finds nothing pending on every open after the first migration; with work, the runner creates `module_migrations` if missing, adds the columns `name` (default `''`) and `applied_at` (default `0`) when the table has the withdrawn module's two columns `(module, version)` (`PRAGMA table_info`), takes a backup (`backup()`, with the core `user_version` in the file name, as restore and pruning expect) only when a module already had a recorded version, and applies and records each pending migration. A module's tables are created whether the module is on or not (ADR 0020 K8, kept), so turning it on later never migrates on a hook.
+- The first open after an upgrade creates the tables, and that open is usually a hook: a one-time DDL under the write lock, the same as a core migration; on a store that ran the withdrawn module that open also takes a backup copy of the database once, as a core migration does. The ADR says so.
+- A recorded module version newer than the binary's list is left alone by `openDb` (memory keeps working); `moduleSchemaState(db, module, latest)` answers `current`, `behind` or `too-new` (`current` when the table is missing and the module has no migrations recorded); the knowledge store refuses to read or write with `ModuleSchemaTooNewError`, and `doctor` names it.
+- An older binary (0.6.0) opens the database (`user_version` is 7) and ignores the tables. No table here has a foreign key or a trigger on a core table; `knowledge_repos.project_id` is a plain integer, so a core migration that rebuilds `projects` never cascades here.
+
+Knowledge's first migration is **version 6**, `knowledge_store`: versions 1 to 5 of the module id `knowledge` belong to the withdrawn module (ADR 0020), whose rows a store that ran it still holds (the author's own development store among them); the migration begins by dropping what those created where present (`knowledge_fts`, `knowledge_entries`, `knowledge_state`, `knowledge_shown`, `knowledge_proposals`, `promoted_memories`, the indexes `injections_memory_shown` and `injections_memory_contexts`), then creates:
+
+- `knowledge_repos(id INTEGER PRIMARY KEY, scope TEXT NOT NULL CHECK (scope IN ('workspace','project','shared')), project_id INTEGER NOT NULL DEFAULT 0, path TEXT NOT NULL UNIQUE, head TEXT, fingerprint TEXT, over_cap INTEGER NOT NULL DEFAULT 0, dirty_checked INTEGER NOT NULL DEFAULT 1, indexed_at INTEGER NOT NULL, UNIQUE (scope, project_id))`: `path` relative to the data directory; `project_id` 0 for workspace and shared; `over_cap` the number of files left out of the index by the folder caps; `dirty_checked` 0 when the last rebuild skipped the dirty check for want of git.
+- `knowledge_entries(repo_id INTEGER NOT NULL REFERENCES knowledge_repos(id) ON DELETE CASCADE, id TEXT NOT NULL, slug TEXT NOT NULL, path TEXT NOT NULL, title TEXT NOT NULL, kind TEXT NOT NULL, area TEXT NOT NULL, context TEXT NOT NULL DEFAULT '', subject TEXT NOT NULL DEFAULT '', status TEXT NOT NULL, author TEXT NOT NULL, version INTEGER NOT NULL, created TEXT, updated TEXT, supersedes TEXT, body TEXT NOT NULL, problem TEXT, hash TEXT NOT NULL, PRIMARY KEY (repo_id, id), UNIQUE (repo_id, slug))`.
+- `knowledge_proposals(repo_id INTEGER NOT NULL REFERENCES knowledge_repos(id) ON DELETE CASCADE, id TEXT NOT NULL, path TEXT NOT NULL, state TEXT NOT NULL CHECK (state IN ('open','accepted','rejected')), entry_id TEXT NOT NULL, slug TEXT NOT NULL, base_version INTEGER NOT NULL, base_hash TEXT NOT NULL DEFAULT '', proposed_by TEXT NOT NULL, proposed_at TEXT, decided_by TEXT, decided_at TEXT, decided_version INTEGER, title TEXT NOT NULL, kind TEXT NOT NULL, area TEXT NOT NULL, context TEXT NOT NULL DEFAULT '', subject TEXT NOT NULL DEFAULT '', status TEXT NOT NULL, body TEXT NOT NULL DEFAULT '', problem TEXT, hash TEXT NOT NULL, PRIMARY KEY (repo_id, id))`, with an index on `(repo_id, state, entry_id)` and one on `(repo_id, state, slug)`. A decided proposal is indexed without its body (the file keeps it), so the database grows by a row of about half a kilobyte per decision (5,000 decisions are a few megabytes), not a document.
+
+`hash` is the SHA-256 (first 16 hex) of the file's bytes as read.
+
+`rebuildRepo(store, repo)` lists `entries/`, `proposals/open/` and `proposals/decided/`: visible names only (not starting with a dot), in byte order, each `lstat`ed, a symlink or a non-regular file listed with a problem and never opened, a regular file opened with `O_NOFOLLOW` as the second guard, the first 5,000 names of each folder (the rest counted in `over_cap`, printed by `rebuild` and warned by `doctor`), 256 KiB each; parses each against the root taxonomy; marks a file `git status --porcelain` lists as changed with the problem "changed outside the engine; run knowledge adopt" (when git is missing the dirty check is skipped, `dirty_checked` is 0, and `rebuild` and `doctor` say so); and replaces the repository's rows in one `withWrite` transaction, recording head and fingerprint. Among entry files sharing an `id`, the first name in byte order keeps the id and the others are indexed with a problem under `dup:<slug>`; an entry whose `id` is missing or malformed is indexed under `file:<slug>`; among proposal files sharing an `id`, the open one before the decided one and then the first name in byte order keeps it and the others go under `dup:<file name>`, a missing or malformed one under `file:<file name>`; so two rebuilds agree and one bad file never fails the transaction. `rebuildAll(store, scope?)` walks `knowledge/`, maps each project folder to its project through the manifest's aliases, prints an unmapped folder as an orphan and indexes nothing for it (it has no `knowledge_repos` row), rebuilds each repository, and deletes the rows of folders that are gone. `ensureFresh(store, repo)` compares the recorded head and fingerprint with the repository's and rebuilds when either differs; every write calls it under its leases, and later parts call it before a read. A write indexes the one or two files it changed. `readEntry(store, ref, slug)` parses the file after `ensureFresh` and returns null when it is missing.
+
+### Commands
+
+`wizardingcode-mem knowledge <sub>`, each opening the database with `openDb` on `resolvePaths().storeDir` and a 5,000 ms busy timeout (as `compact` does) and the store on the data directory; the person is the writer:
+
+- `write --scope workspace|shared|project --title <text> --kind <kind> --area <id> [--context <text>] [--subject <text>] [--slug <slug>] [--base <n>] [--status <status>] (--body-file <path> | --body <text> | body on stdin)`: `--scope`, `--title`, `--kind` and `--area` are required (exit 64 without them); `--scope project` is the project of the current directory (`resolveProject`); prints `written <slug> (v<n>)`.
+- `accept --scope <scope> <proposal id>` and `reject --scope <scope> <proposal id>`: `--scope` required; print `accepted <id> into <slug> (v<n>)` or `rejected <id>`.
+- `area add <id> <label>`, `area rename <id> <label>`, `area remove <id>` (`--scope workspace|shared`, default workspace): print `taxonomy v<n>`.
+- `rebuild [--scope workspace|shared|project]`: every repository without `--scope` (`project` means every project repository), printing per repository `<path>: <n> entries, <m> proposals (<k> open)[, <p> problems][, <q> files over the cap][, dirty check skipped: git missing]`, `orphan <path>` where a project folder maps to no project, `ambiguous <path>` for a manifest a project matched but did not take, and `shared: no repository` when absent.
+- `adopt [--scope …]`: every repository without `--scope`; prints `<path>: adopted <n> changes` or `<path>: clean`, then each problem found.
+- `list [--scope …]`: every repository without `--scope`; after `ensureFresh`, each repository's entries as `<slug>  <kind>  <area>  <status>  v<n>  <author>` and its proposals as `<state>  <id>  <slug>  by <proposed_by>`.
+- Counts are rendered by one shared helper (`plural` in `src/util/text.ts`, replacing the copies in `status`, `doctor` and `compact`): `1 change`, `2 changes`; `1 entry`, `2 entries`.
+- Exit codes: 0 on success; 1 on a `KnowledgeError` or another failure, its message on stderr prefixed `wizardingcode-mem:`; 64 (`EXIT_USAGE`) for an unknown subcommand or bad arguments, with the usage.
+
+### Doctor
+
+A `knowledge` check after `backups`. It opens the database read-only (`openExisting`, the connection `doctor` already holds) for four things only: `moduleSchemaState`, `knowledge_repos.over_cap`, the project aliases that map manifests, and the author setting; it reads the folders, the manifests, `.git` and the entry files by hand, and when git is present it runs one `git status --porcelain` per repository (optional locks off). It contains its own errors: an unreadable manifest or folder is a `warn` with the message, never a thrown error out of `runChecks`. `skip` with no `knowledge/` folder; `warn` naming the cause when git is missing or older than 2.32, when a repository folder has no `.git`, when `.git/index.lock` is older than 60 s, when the recorded module schema is newer than this binary's, when `git status` lists changes (`<n> changed outside the engine; run knowledge adopt`), when entries have problems (the first five slugs), when a project matches two manifests or a manifest is claimed by two projects, when a folder holds more than 4,000 files (`entries/ holds 4001 files; the index keeps 5000`) or `over_cap` is recorded, or when the author is the default (`personAuthor` source `default`: "no author configured: set WIZARDINGCODE_MEM_AUTHOR or a git user.name"); `ok` with the counts of repositories, entries, drafts and open proposals, counted by parsing the files. With no database, the module state, the alias and the author checks are skipped and said.
+
+### Alternatives rejected
+
+- **Files inside each project at `.wizardingcode/knowledge/`** (ADR 0020). Rejected: the engine's commits would land in the user's repositories, a project's knowledge would leave with the project's push whatever the sharing policy says, and workspace and shared have no project to live in (D-1).
+- **An own version log beside the files** instead of git. Rejected: a second history to keep right, nothing a person can inspect with git, and the brief calls for a versioned repository (D-2).
+- **A content hash alone, no version counter.** Rejected: the user asked for versions, and a counter is what a person reads; the hash is kept beside it for the merge view and the sync (D-8).
+- **Proposals as database rows only.** Rejected: the index is rebuilt from the files, so a proposal kept only in the database is lost (D-3).
+- **Proposals as git branches.** Rejected for this part: listing and deciding them needs `git log` and merges on every read; a file is listed by the index.
+- **Deleting decided proposals.** Rejected: the index should answer what was decided without spawning git (D-10).
+- **Folders by area.** Rejected: a rename would move files (D-4).
+- **Area rename by rewriting entries.** Rejected: one commit cannot span repositories and a rename should not touch content; ids are immutable, labels change (D-9).
+- **Deletion of entries.** Rejected: memory never deletes either; `archived` is the end state (D-5).
+- **A JSON taxonomy.** Rejected: one format for the people-facing files (D-6); the manifest is JSON because the engine writes and reads it.
+- **A lock file in the repository.** Rejected: an age-only lock can be stolen from a live writer, and a lock file in the tree is an untracked file every status would list as a change; the engine's leases know whether the owner is alive, are renewed before each step, and never enter the tree.
+- **Holding the SQLite write lock through the git commit.** Rejected: the hooks would wait on a process spawn.
+- **Reusing module versions 1 to 5.** Rejected: stores that ran the withdrawn module hold those rows for other tables.
+- **Sweeping a hand edit into the next write's commit.** Rejected: it credits the edit to the wrong author (D-11).
+- **A `migrations` field on `EngineModule`.** Rejected: `openDb` cannot load module code on the hook path, so a second declaration would have no reader and would drift from the leaf list.
+
+## Acceptance criteria
+
+- AC-1 (behavior): `parseEntry` reads a well-formed entry into its fields and body and `renderEntry` round-trips every field and the unknown keys; each malformed case (no closing `---`, a line that is neither `key: value`, a list item nor a comment, unknown `kind` or `status`, `version` not a whole number from 1, missing title, missing or malformed `id`, `area` outside a given taxonomy) gives `problem` with `status: draft`; `parseTaxonomy` reads `- id: Label` items; `slugify` and the slug rule behave as specified.
+- AC-2 (behavior): the first write at each scope creates its repository under `<data dir>/knowledge/` with `knowledge.json`, the folders, `taxonomy.md` with the nine areas at workspace and shared scope, and an initial commit; a project's folder comes from its `remote:` alias when it has one, and a project that gains a remote after its repository exists is mapped to the same repository through the manifest; the commit's author and committer are the writer with the `.invalid` e-mail; with a global git configuration whose `core.hooksPath` names a hook that writes a marker, and a data directory inside a parent git repository, the hook does not run and the parent repository receives no commit.
+- AC-3 (behavior): `openDb` applies the knowledge module's migration 6 after the core ones and records `('knowledge', 6, 'knowledge_store')` in `module_migrations`; `user_version` stays at the core's latest; a second open applies nothing; a database holding the withdrawn module's rows 1 to 5 and tables gets them dropped and migration 6 applied; a recorded module version 7 makes the store's functions throw `ModuleSchemaTooNewError` while `openDb` succeeds; `openExisting` opens the database.
+- AC-4 (behavior): a person's `writeEntry` with no base creates the file at version 1 with an `id`, `created` and `updated` stamped, the author's name, one commit `knowledge: create <slug> (v1)` by path, and the index row with the file's hash and the repository's head; a write with the current base version gives version + 1 and one more commit; a write with a stale base version is refused naming both versions, and the file text, the commit count and the row are unchanged; a new entry whose slug exists is refused; an `area` outside the taxonomy is refused; a target file changed outside the engine refuses the write naming `knowledge adopt`; a git failure after the rename leaves the file as it was.
+- AC-5 (behavior): an agent's `writeEntry` leaves the entry unchanged and writes `proposals/open/<id>.md` with `entry`, `slug`, `base_version`, `base_hash` and `proposed_by`, committed with the agent as author, and the index has the open row; `acceptProposal` writes the entry at version + 1 with the proposal's content, moves the file to `proposals/decided/` with `decision: accepted`, makes one commit by the person whose message contains `Proposed by agent:claude-code`, and the index shows the entry and the accepted row; `rejectProposal` moves the file with `decision: rejected` in a commit by the person; accepting a proposal whose target moved is refused naming both versions and leaves it open; a sixth open proposal for one entry is refused.
+- AC-6 (behavior): `readTaxonomy` of a fresh workspace repository gives the nine areas with labels; `addArea` appends in one commit; `renameArea` changes the label in one commit and no entry file; `removeArea` is refused while an entry in the workspace or a project repository carries the id and succeeds otherwise; a project repository validates against the workspace taxonomy and the shared repository against its own.
+- AC-7 (behavior): `wizardingcode-mem knowledge rebuild` recreates every repository's rows from the files: after the knowledge rows are deleted, the rebuilt rows equal the earlier ones (without `indexed_at`), each repository's recorded head equals its HEAD, and a project repository is mapped to its project through its manifest; a file changed by hand is indexed with the problem naming `knowledge adopt`; `knowledge adopt` commits it as the person with the version raised and `updated` stamped, after which `rebuild` shows no problem; `knowledge list` prints the entries and proposals; an unknown subcommand exits 64.
+- AC-8 (behavior): a write with no `git` on PATH is refused with a message naming git and leaves no file behind; a write while another live process holds the repository's lease is refused; a lease whose owner process is gone is taken over and the write proceeds; a git call that does not return within the timeout is killed and the write refused.
+- AC-9 (behavior): the person's author name is the author setting when set, else the global git `user.name`, else `you`; a setting starting with `agent:` is refused by the settings validation; an agent id outside `^[a-z0-9][a-z0-9-]*$` is refused; the e-mails are derived from the name and the id at the `.invalid` domain.
+- AC-10 (behavior): `doctor` prints a `knowledge` line: `skip` with no repository; `warn` naming the cause for a missing or old git, a folder without `.git`, a stale `.git/index.lock`, changes outside the engine, entries with problems and no author configured; `ok` with the counts otherwise.
+- AC-11 (preserve): the hook snapshots (`tests/unit/hook-snapshots.test.ts`) and the MCP tool list snapshots (`tests/unit/mcp-tools-list.test.ts`) keep passing unchanged.
+- AC-12 (observed): `docs/adr/0024-knowledge-module.md` records D-1 to D-11 as rulings, the file formats, the repositories and the manifest, git's isolation, the index and the migration namespace with the version 6 rule, the guarantee's boundary and what the later parts add, marked as a draft.
+- AC-13 (behavior): the knowledge folders under the data directory are created with mode 0700; a symlinked entry file is listed with a problem and never read or written (a write targeting it is refused with code `invalid`); a refused git call is logged under the log key `knowledge.<operation>` with the repository path and git's stderr clipped.
+- AC-14: superseded by AC-18 (its text stays in the item's record only).
+- AC-15 (behavior): `acceptProposal` and `rejectProposal` refuse a proposal id or an entry id outside the UUID pattern (such as `../x` or `a/b`) before any path is built; an agent's title, context, subject and body are passed through `redact` before the proposal is written, so a token-shaped string is stored redacted; a repository whose local `.git/config` sets `core.fsmonitor` to a marker-writing command never runs it and is refused for an `include`, `includeIf`, `hooksPath`, `fsmonitor` or `sshCommand` key.
+- AC-16 (behavior): a store whose `module_migrations` has the withdrawn module's two columns gains `name` and `applied_at` and migrates to version 6; two orphan project folders are reported and index nothing; an entry or a proposal with a missing, malformed or duplicated id is indexed under `dup:` or `file:` with a problem and the rebuild transaction succeeds.
+- AC-17 (behavior): a project write before any workspace write creates the workspace repository first and validates against its taxonomy; `removeArea` refreshes every repository that reads the taxonomy first and is refused while an open proposal carries the area, naming the proposal.
+- AC-18 (behavior, replaces AC-14): when the commit of a person's write, an accept or a reject fails, every path it staged is restored from HEAD, a file that did not exist at HEAD is removed, and the index row and the recorded head are unchanged, so after a failed accept the proposal is still under `proposals/open` unchanged and the entry as it was; when the commit of an adopt fails, its paths are unstaged and the person's hand-edited and hand-added files are on disk byte for byte as the person left them, with the rows unchanged; a caller cannot set an entry's id, and accepting a proposal whose entry id already belongs to another slug is refused naming that slug.
+- AC-19 (behavior): the behaviours the spec review found untested hold: a repository whose local `.git/config` carries a `filter` section is refused; the 201st open proposal in a repository is refused with the repository quota's message; accepting a new-entry proposal whose slug now exists is refused saying a person decides between them; an agent's caller slug that `redact` would change is refused; a project matching two manifests makes `doctor` warn and `rebuild` print it; files past a folder's cap are counted in `over_cap` and printed by `rebuild`; a lease renewal that fails aborts the operation before its next git call; a `KnowledgeError` exits the command with 1 and its message on stderr; a store move is refused while a knowledge lease is held.
+
+## Risks and rollback
+
+- **git absent or old.** Writes refuse before any folder is created, with the message quoted under git; `doctor` warns; nothing is half-written. Reads (`list`, `rebuild`) work without git except the dirty check, which is then skipped and said on the command's standard output and in `doctor`'s line.
+- **A hung git process.** Killed at 15 s; the leases are released in `finally`; a lease of a dead process is taken over at once; a live operation renews its leases before every step, so they are never stolen mid-write.
+- **An interrupted operation** (a killed process, a lost power between the rename and the commit). The intent record under `.git/` names what was under way; the next `openRepo` reverts it and reports it; the person's own hand edits are never touched by that revert.
+- **Two writers.** The leases serialise writes per repository; a loser is refused, never queued, and told to retry.
+- **A stale `.git/index.lock`** from a killed git blocks later commits; `doctor` names it; the person removes it.
+- **A corrupt repository** (a person edited `.git`, a disk error). `rebuild` reads the working tree; `doctor` warns; the person repairs with git. The index is never the only copy.
+- **The index stale.** After a hand edit, a `git` operation by hand, a database restore from a backup (which swaps the database only) or an interrupted rebuild: `ensureFresh` compares head and fingerprint before a read; `rebuild` repairs; a dirty file is a problem until adopted.
+- **The repositories are not in the database backup.** `wizardingcode-mem backup` copies the database; the files under `<data dir>/knowledge/` are the truth and are backed up by the person like any folder, or by the team server's copy once part 6 syncs the shared scope. The README and the ADR say so.
+- **Growth.** Decided proposals are never deleted (D-10) and are bounded only by the 5,000-file cap per folder; `doctor` warns at 4,000 so the person acts before; archiving decided proposals is a later part's work, named in the ADR.
+- **Rollback of this part.** Remove the code; the database keeps `module_migrations` and the knowledge tables, which 0.6.0 ignores (the core version is unchanged); the repositories stay as plain git repositories a person can read or delete; no cleanup command is provided, and upgrading again takes the rows, the repositories and the open proposals as they are.
+- **Personal data.** The author's name is in commits inside the person's own data directory; nothing leaves the machine in this part.
+- **An agent with shell access** can write the files directly, outside the proposal flow; such an edit is a hand edit the next write refuses and `adopt` attributes to the person. The guarantee is for writes through the engine.
+- **The withdrawn module's stores.** Migration 6 drops its tables and indexes where present (objection O-1 in `objections.json`, advisory: that index of project-folder knowledge is lost on such a store); a backup is taken first.
+
+## Non-Functional Requirements
+
+- **Hook path.** No code of this part runs in `handleHook`; the module pass in `openDb` costs one query on a migrated database; the first open after the upgrade creates three tables once under the write lock, as a core migration would.
+- **Rollout and rollback.** The upgrade is the first open after installing the binary, usually a hook, which creates the module tables once; the rollback is described under Risks and rollback: the tables and the repositories stay, 0.6.0 ignores them.
+- **Write latency.** Not yet measured. A write is three to eleven git calls (`status`, `add`, `commit`; plus `init`, `add`, `commit` for each of up to two repositories created; plus `--version` once per process and `config --global user.name` once per process); the gate's store tests record the wall time per operation on the gate machine, with the git version named, in the report. The store blocks its own process for these calls (at most 15 s per call on a hung git); a hook never calls it; part 2's MCP server runs one write per tool call and measures this cost before accepting it; an asynchronous runner is a later change if that measure asks for it.
+- **Read freshness.** `ensureFresh` costs three directory listings, three `stat` calls and one ref lookup; part 2 measures the read it adds to.
+- **Security.** The person's git hooks, templates, signing, filters and includes never run in these repositories; a parent git tree never receives a commit (`GIT_CEILING_DIRECTORIES`, explicit `--git-dir`); no caller-supplied name inside a repository carries a separator or a dot (slugs, area ids and UUIDs are validated, never normalised); symlinked files are not followed on read (`lstat`, then `O_NOFOLLOW`) and refused on write; file reads are capped; the data directory's folders are 0700; an agent's text is redacted before it enters the history.

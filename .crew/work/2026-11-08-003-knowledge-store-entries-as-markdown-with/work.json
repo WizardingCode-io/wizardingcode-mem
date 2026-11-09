@@ -1,0 +1,756 @@
+{
+  "id": "2026-11-08-003-knowledge-store-entries-as-markdown-with",
+  "title": "Knowledge store: entries as Markdown with frontmatter (kind knowledge, strategy,",
+  "input": "Knowledge store: entries as Markdown with frontmatter (kind knowledge, strategy, persona or pattern; area, context, subject; title, status, author, version), one git repository per scope (workspace, project, shared) under the data directory, the index as the knowledge module's own tables rebuilt from the files, the taxonomy (nine starting areas, editable) as a file in the workspace repository, every write a commit with its author (person or agent), an agent's write a proposal until a person accepts it; ADR 0024 draft.",
+  "type": "feature",
+  "route": "full",
+  "routeReasons": [
+    "risk areas: data-migration",
+    "personal data in lines not read for risk (test or excluded): email (tests/preload.ts), email (tests/unit/knowledge-author.test.ts), email (tests/unit/knowledge-index.test.ts), email (tests/unit/knowledge-repo.test.ts), email (tests/unit/knowledge-store.test.ts)",
+    "the change's lines name personal data: email (src/modules/knowledge/author.ts) and 2 more"
+  ],
+  "riskAreas": [
+    "data-migration",
+    "auth",
+    "personal-data"
+  ],
+  "phase": "learn",
+  "awaiting": "role",
+  "criteria": [
+    {
+      "id": "AC-1",
+      "kind": "behavior",
+      "text": "parseEntry reads a well-formed entry into its fields and body and renderEntry round-trips every field and the unknown keys; each malformed case (no closing ---, a line that is neither key: value, a list item nor a comment, unknown kind or status, version not a whole number from 1, missing title, missing or malformed id, area outside a given taxonomy) gives problem with status draft; parseTaxonomy reads '- id: Label' items; slugify and the slug rule behave as specified."
+    },
+    {
+      "id": "AC-2",
+      "kind": "behavior",
+      "text": "The first write at each scope creates its repository under <data dir>/knowledge/ with knowledge.json, the folders, taxonomy.md with the nine areas at workspace and shared scope, and an initial commit; a project's folder comes from its remote alias when it has one, and a project that gains a remote after its repository exists is mapped to the same repository through the manifest; the commit's author and committer are the writer with the .invalid e-mail; with a global git configuration whose core.hooksPath names a hook that writes a marker, and a data directory inside a parent git repository, the hook does not run and the parent repository receives no commit."
+    },
+    {
+      "id": "AC-3",
+      "kind": "behavior",
+      "text": "openDb applies the knowledge module's migration 6 after the core ones and records ('knowledge', 6, 'knowledge_store') in module_migrations; user_version stays at the core's latest; a second open applies nothing; a database holding the archived module's rows 1 to 5 and tables gets them dropped and migration 6 applied; a recorded module version 7 makes the store's functions throw ModuleSchemaTooNewError while openDb succeeds; openExisting opens the database."
+    },
+    {
+      "id": "AC-4",
+      "kind": "behavior",
+      "text": "A person's writeEntry with no base creates the file at version 1 with an id, created and updated stamped, the author's name, one commit 'knowledge: create <slug> (v1)' by path, and the index row with the file's hash and the repository's head; a write with the current base version gives version + 1 and one more commit; a write with a stale base version is refused naming both versions, and the file text, the commit count and the row are unchanged; a new entry whose slug exists is refused; an area outside the taxonomy is refused; a target file changed outside the engine refuses the write naming knowledge adopt; a git failure after the rename leaves the file as it was."
+    },
+    {
+      "id": "AC-5",
+      "kind": "behavior",
+      "text": "An agent's writeEntry leaves the entry unchanged and writes proposals/open/<id>.md with entry, slug, base_version, base_hash and proposed_by, committed with the agent as author, and the index has the open row; acceptProposal writes the entry at version + 1 with the proposal's content, moves the file to proposals/decided/ with decision accepted, makes one commit by the person whose message contains 'Proposed by agent:claude-code', and the index shows the entry and the accepted row; rejectProposal moves the file with decision rejected in a commit by the person; accepting a proposal whose target moved is refused naming both versions and leaves it open; a sixth open proposal for one entry is refused."
+    },
+    {
+      "id": "AC-6",
+      "kind": "behavior",
+      "text": "readTaxonomy of a fresh workspace repository gives the nine areas with labels; addArea appends in one commit; renameArea changes the label in one commit and no entry file; removeArea is refused while an entry in the workspace or a project repository carries the id and succeeds otherwise; a project repository validates against the workspace taxonomy and the shared repository against its own."
+    },
+    {
+      "id": "AC-7",
+      "kind": "behavior",
+      "text": "wizardingcode-mem knowledge rebuild recreates every repository's rows from the files: after the knowledge rows are deleted, the rebuilt rows equal the earlier ones (without indexed_at), each repository's recorded head equals its HEAD, and a project repository is mapped to its project through its manifest; a file changed by hand is indexed with the problem naming knowledge adopt; knowledge adopt commits it as the person with the version raised and updated stamped, after which rebuild shows no problem; knowledge list prints the entries and proposals; an unknown subcommand exits 64."
+    },
+    {
+      "id": "AC-8",
+      "kind": "behavior",
+      "text": "A write with no git on PATH is refused with a message naming git and leaves no file behind; a write while another live process holds the repository's lease is refused; a lease whose owner process is gone is taken over and the write proceeds; a git call that does not return within the timeout is killed and the write refused."
+    },
+    {
+      "id": "AC-9",
+      "kind": "behavior",
+      "text": "The person's author name is the author setting when set, else the global git user.name, else you; a setting starting with 'agent:' is refused by the settings validation; an agent id outside ^[a-z0-9][a-z0-9-]*$ is refused; the e-mails are derived from the name and the id at the .invalid domain."
+    },
+    {
+      "id": "AC-10",
+      "kind": "behavior",
+      "text": "doctor prints a knowledge line: skip with no repository; warn naming the cause for a missing or old git, a folder without .git, a stale .git/index.lock, changes outside the engine, entries with problems and no author configured; ok with the counts otherwise."
+    },
+    {
+      "id": "AC-11",
+      "kind": "preserve",
+      "text": "The hook snapshots (tests/unit/hook-snapshots.test.ts) and the MCP tool list snapshots (tests/unit/mcp-tools-list.test.ts) keep passing unchanged."
+    },
+    {
+      "id": "AC-12",
+      "kind": "observed",
+      "text": "docs/adr/0024-knowledge-module.md records D-1 to D-11 as rulings, the file formats, the repositories and the manifest, git's isolation, the index and the migration namespace with the version 6 rule, the guarantee's boundary and what the later parts add, marked as a draft."
+    },
+    {
+      "id": "AC-13",
+      "kind": "behavior",
+      "text": "The knowledge folders under the data directory are created with mode 0700; a symlinked entry file is listed with a problem and never read or written; a refused git call is logged under a knowledge scope with the repository path and git's stderr clipped."
+    },
+    {
+      "id": "AC-14",
+      "kind": "behavior",
+      "text": "When the commit of a person's write, an accept, a reject or an adopt fails, every path it staged is restored from HEAD, a file that did not exist at HEAD is removed, and the index row and the recorded head are unchanged, so after a failed accept the proposal is still under proposals/open unchanged and the entry as it was; a caller cannot set an entry's id, and accepting a proposal whose entry id already belongs to another slug is refused naming that slug.",
+      "supersededBy": {
+        "id": "AC-18",
+        "at": "2026-11-08T23:36:18.529Z"
+      }
+    },
+    {
+      "id": "AC-15",
+      "kind": "behavior",
+      "text": "acceptProposal and rejectProposal refuse a proposal id or an entry id outside the UUID pattern (such as ../x or a/b) before any path is built; an agent's title, context, subject and body are passed through redact before the proposal is written, so a token-shaped string is stored redacted; a repository whose local .git/config sets core.fsmonitor to a marker-writing command never runs it and is refused for an include, includeIf, hooksPath, fsmonitor or sshCommand key."
+    },
+    {
+      "id": "AC-16",
+      "kind": "behavior",
+      "text": "A store whose module_migrations has the withdrawn module's two columns gains name and applied_at and migrates to version 6; two orphan project folders are reported and index nothing; an entry or a proposal with a missing, malformed or duplicated id is indexed under dup: or file: with a problem and the rebuild transaction succeeds."
+    },
+    {
+      "id": "AC-17",
+      "kind": "behavior",
+      "text": "A project write before any workspace write creates the workspace repository first and validates against its taxonomy; removeArea refreshes every repository that reads the taxonomy first and is refused while an open proposal carries the area, naming the proposal."
+    },
+    {
+      "id": "AC-18",
+      "kind": "behavior",
+      "text": "When the commit of a person's write, an accept or a reject fails, every path it staged is restored from HEAD, a file that did not exist at HEAD is removed, and the index row and the recorded head are unchanged, so after a failed accept the proposal is still under proposals/open unchanged and the entry as it was; when the commit of an adopt fails, its paths are unstaged and the person's hand-edited and hand-added files are on disk byte for byte as the person left them, with the rows unchanged; a caller cannot set an entry's id, and accepting a proposal whose entry id already belongs to another slug is refused naming that slug."
+    },
+    {
+      "id": "AC-19",
+      "kind": "behavior",
+      "text": "The behaviours the spec review found untested hold: a repository whose local .git/config carries a filter section is refused; the 201st open proposal in a repository is refused with the repository quota's message; accepting a new-entry proposal whose slug now exists is refused saying a person decides between them; an agent's caller slug that redact would change is refused; a project matching two manifests makes doctor warn and rebuild print it; files past a folder's cap are counted in over_cap and printed by rebuild; a lease renewal that fails aborts the operation before its next git call; a KnowledgeError exits the command with 1 and its message on stderr; a store move is refused while a knowledge lease is held."
+    }
+  ],
+  "approvals": [
+    {
+      "what": "spec",
+      "at": "2026-11-09T09:34:06.179Z",
+      "by": "user",
+      "relayed": true
+    }
+  ],
+  "skips": [],
+  "baseCommit": "62780aac6e5f4bf1eaefd449ee3c523815b3acd4",
+  "createdAt": "2026-11-08T23:06:14.238Z",
+  "updatedAt": "2026-11-09T14:31:42.486Z",
+  "specReview": true,
+  "kind": "feature",
+  "kindFrom": "answer",
+  "knowledge": {
+    "readAt": "2026-11-08T23:06:14.250Z",
+    "listed": [
+      "K-316",
+      "K-319",
+      "K-311"
+    ]
+  },
+  "priority": "high",
+  "seats": [
+    {
+      "role": "researcher",
+      "team": "researchers",
+      "kind": "debate",
+      "reason": "full route"
+    },
+    {
+      "role": "review-code-quality",
+      "team": "backend",
+      "kind": "gate",
+      "gate": "code-quality",
+      "reason": "full route"
+    },
+    {
+      "role": "review-test-quality",
+      "team": "qa",
+      "kind": "gate",
+      "gate": "test-quality",
+      "reason": "full route"
+    },
+    {
+      "role": "review-security",
+      "team": "security",
+      "kind": "gate",
+      "gate": "security",
+      "reason": "full route"
+    },
+    {
+      "role": "review-risk",
+      "team": "architects",
+      "kind": "gate",
+      "gate": "risk",
+      "reason": "full route"
+    },
+    {
+      "role": "review-architecture",
+      "team": "architects",
+      "kind": "gate",
+      "gate": "architecture",
+      "reason": "full route"
+    },
+    {
+      "role": "review-data",
+      "team": "etl",
+      "kind": "gate",
+      "gate": "data",
+      "reason": "risk area data-migration"
+    },
+    {
+      "role": "lead-qa",
+      "team": "qa",
+      "kind": "lead",
+      "reason": "full route"
+    },
+    {
+      "role": "lead-security",
+      "team": "security",
+      "kind": "lead",
+      "reason": "full route"
+    },
+    {
+      "role": "lead-architects",
+      "team": "architects",
+      "kind": "lead",
+      "reason": "full route"
+    },
+    {
+      "role": "lead-etl",
+      "team": "etl",
+      "kind": "lead",
+      "reason": "risk area data-migration"
+    },
+    {
+      "role": "judge",
+      "team": null,
+      "kind": "debate",
+      "reason": "a gate is planned"
+    }
+  ],
+  "primaryTeam": "backend",
+  "runtimes": [
+    "claude"
+  ],
+  "phaseAt": {
+    "understand": "2026-11-08T23:08:11.963Z",
+    "specify": "2026-11-08T23:20:21.955Z",
+    "conclave": "2026-11-08T23:25:15.618Z",
+    "plan": "2026-11-08T23:37:07.259Z",
+    "spec-review": "2026-11-08T23:37:12.838Z",
+    "build": "2026-11-09T09:34:10.764Z",
+    "gate": "2026-11-09T10:45:43.819Z",
+    "deliver": "2026-11-09T14:31:31.031Z",
+    "learn": "2026-11-09T14:31:38.090Z"
+  },
+  "decisions": [
+    {
+      "id": "D-1",
+      "question": "Where does a project's knowledge repository live: under the data directory (knowledge/projects/<key>), or inside the project's own folder (.wizardingcode/knowledge, as the archived module did)?",
+      "default": "Under the data directory. The engine's commits stay out of the user's repositories, a project's knowledge never leaves with the project's own push, and the sharing policy alone decides what leaves the machine.",
+      "answer": "Under the data directory. The engine's commits stay out of the user's repositories, a project's knowledge never leaves with the project's own push, and the sharing policy alone decides what leaves the machine.",
+      "at": "2026-11-08T23:29:08.318Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    },
+    {
+      "id": "D-2",
+      "question": "How is every change versioned: a git repository per scope with one commit per write (the git binary spawned, never on a hook), or an own version log kept beside the files?",
+      "default": "A git repository per scope, one commit per write, authored as the person or the agent; the frontmatter's version number is the check against a stale write. Git is what the brief and the 2026-10-10 target call a versioned repository, it is on every machine this product serves, and an own log would be a second history to keep right.",
+      "answer": "A git repository per scope, one commit per write, authored as the person or the agent; the frontmatter's version number is the check against a stale write. Git is what the brief and the 2026-10-10 target call a versioned repository, it is on every machine this product serves, and an own log would be a second history to keep right.",
+      "at": "2026-11-08T23:29:31.133Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    },
+    {
+      "id": "D-3",
+      "question": "What is an agent's proposal: a file in the scope's repository (proposals/<id>.md, committed by the agent, so a rebuild of the index finds it), or a row in the database only?",
+      "default": "A file in the scope's repository, committed with the agent as author. The database is an index rebuilt from the files, so a proposal kept only there would be lost by a rebuild; accepting moves the content into the entry in a commit by the person naming the agent, rejecting removes the file in a commit; nothing is ever lost from the history.",
+      "answer": "A file in the scope's repository, committed with the agent as author. The database is an index rebuilt from the files, so a proposal kept only there would be lost by a rebuild; accepting moves the content into the entry in a commit by the person naming the agent, rejecting removes the file in a commit; nothing is ever lost from the history.",
+      "at": "2026-11-08T23:29:33.027Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    },
+    {
+      "id": "D-4",
+      "question": "How are the files laid out in a scope's repository: flat (entries/<slug>.md, the area and the rest in the frontmatter), or in folders by area (<area>/<slug>.md)?",
+      "default": "Flat, entries/<slug>.md. Renaming an area then changes frontmatter lines and no paths, the slug alone names an entry in its scope, and browsing by area, context and subject is the viewer's and the index's work, not the file tree's.",
+      "answer": "Flat, entries/<slug>.md. Renaming an area then changes frontmatter lines and no paths, the slug alone names an entry in its scope, and browsing by area, context and subject is the viewer's and the index's work, not the file tree's.",
+      "at": "2026-11-08T23:29:34.722Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    },
+    {
+      "id": "D-5",
+      "question": "What may an entry's status be, and can an entry be deleted: active, draft and archived with no deletion, or deletion allowed?",
+      "default": "active, draft and archived; no deletion through the engine. Memory never deletes either (archived, never deleted), the history keeps every version, and an archived entry is never shown to an agent.",
+      "answer": "active, draft and archived; no deletion through the engine. Memory never deletes either (archived, never deleted), the history keeps every version, and an archived entry is never shown to an agent.",
+      "at": "2026-11-08T23:29:36.217Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    },
+    {
+      "id": "D-6",
+      "question": "What is the taxonomy file: taxonomy.md in the workspace repository with the areas as a frontmatter list of slugs (code, management, marketing, sales, video, design, operations, finance, people), or a JSON file?",
+      "default": "taxonomy.md with the areas as a frontmatter list, the same format as every entry, versioned in the same repository. Renaming an area rewrites the taxonomy and every entry that carries it in one commit; removing one is refused while an entry carries it.",
+      "answer": "taxonomy.md with the areas as a frontmatter list, the same format as every entry, versioned in the same repository. Renaming an area rewrites the taxonomy and every entry that carries it in one commit; removing one is refused while an entry carries it.",
+      "at": "2026-11-08T23:29:37.926Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    },
+    {
+      "id": "D-7",
+      "question": "Who is the person named as author of a write: a knowledge author setting in the data directory's env file, the machine's git identity, or always a fixed word?",
+      "default": "The author setting when set, otherwise the machine's global git user.name, otherwise the word you. Nothing new is asked of the person to start, and the team server part replaces this with the member's identity.",
+      "answer": "The author setting when set, otherwise the machine's global git user.name, otherwise the word you. Nothing new is asked of the person to start, and the team server part replaces this with the member's identity.",
+      "at": "2026-11-08T23:29:39.483Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    },
+    {
+      "id": "D-8",
+      "question": "What identifies an entry across renames, machines and a sync: the slug alone, or an immutable id written at creation, with version as a counter beside a content hash?",
+      "default": "An immutable id (a UUID) on every entry and proposal, written at creation and never changed; the index keys on it and the slug is a name. The version stays the counter a person reads and the local stale check; the index records each file's content hash and a proposal its base hash, for the later merge view and sync. A slug alone turns a rename into a delete and an add and two machines' same slug into a conflict nothing can see.",
+      "answer": "An immutable id (a UUID) on every entry and proposal, written at creation and never changed; the index keys on it and the slug is a name. The version stays the counter a person reads and the local stale check; the index records each file's content hash and a proposal its base hash, for the later merge view and sync. A slug alone turns a rename into a delete and an add and two machines' same slug into a conflict nothing can see.",
+      "at": "2026-11-08T23:29:41.586Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    },
+    {
+      "id": "D-9",
+      "question": "How does the taxonomy work across repositories: areas with an immutable id and a renamable label, a taxonomy in the workspace and another in the shared repository (projects use the workspace's), or one workspace taxonomy with renames rewriting every entry?",
+      "default": "Immutable ids with renamable labels, and a taxonomy file in each root repository (workspace, shared). A rename then changes one line in one file and no entry; one commit cannot span repositories; and a shared entry is validated against the taxonomy that travels with it, not against one person's.",
+      "answer": "Immutable ids with renamable labels, and a taxonomy file in each root repository (workspace, shared). A rename then changes one line in one file and no entry; one commit cannot span repositories; and a shared entry is validated against the taxonomy that travels with it, not against one person's.",
+      "at": "2026-11-08T23:29:43.331Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    },
+    {
+      "id": "D-10",
+      "question": "What happens to a proposal once a person decides it: the file is moved to proposals/decided with the decision appended, or the file is deleted and the decision lives only in the commit?",
+      "default": "Moved to proposals/decided with the decision (accepted or rejected, by whom, when) appended; the index keeps it after a rebuild and nothing needs git log to answer what was decided. Nothing is deleted from the repository.",
+      "answer": "Moved to proposals/decided with the decision (accepted or rejected, by whom, when) appended; the index keeps it after a rebuild and nothing needs git log to answer what was decided. Nothing is deleted from the repository.",
+      "at": "2026-11-08T23:29:45.054Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    },
+    {
+      "id": "D-11",
+      "question": "What does a write do when its target file was changed outside the engine (a hand edit, uncommitted): refuse and offer knowledge adopt, commit the hand edit as part of its own commit, or discard it?",
+      "default": "Refuse, naming the path and the way out: wizardingcode-mem knowledge adopt commits hand edits as the person with the frontmatter normalised (version raised, updated stamped). Sweeping a hand edit into another write's commit credits it to the wrong author; discarding loses a person's work.",
+      "answer": "Refuse, naming the path and the way out: wizardingcode-mem knowledge adopt commits hand edits as the person with the frontmatter normalised (version raised, updated stamped). Sweeping a hand edit into another write's commit credits it to the wrong author; discarding loses a person's work.",
+      "at": "2026-11-08T23:29:46.932Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    }
+  ],
+  "checklists": [
+    {
+      "kind": "migration-or-restore",
+      "paths": [
+        "/Users/andreagroferreira/.local/share/wizardingcode-developer-crew/skills/crew/checklists/migration-or-restore.md"
+      ],
+      "at": "2026-11-08T23:24:49.636Z"
+    }
+  ],
+  "knowledgeFiles": [],
+  "knowledgeLabels": [],
+  "validations": [
+    {
+      "what": "spec",
+      "by": "lead-qa",
+      "verdict": "returned",
+      "returns": 3,
+      "round": 1,
+      "file": "conclave/lead-qa.md",
+      "hash": "sha256:a3826f3a9142c7f9fa1ce579bb7b59d12061d5649a08c92e5d75b23547dd0f8b",
+      "fileHash": "sha256:e815eac6437a5f14dc8230d6febae837bce77c92fb4925dbc61945e3122c836f",
+      "at": "2026-11-08T23:33:54.355Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-architects",
+      "verdict": "returned",
+      "returns": 4,
+      "round": 1,
+      "file": "conclave/lead-architects.md",
+      "hash": "sha256:a3826f3a9142c7f9fa1ce579bb7b59d12061d5649a08c92e5d75b23547dd0f8b",
+      "fileHash": "sha256:51c6cd0031b3c34dd6b4836a485a889235d26d8e95e0b6cd9debedd504691877",
+      "at": "2026-11-08T23:33:57.069Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-etl",
+      "verdict": "returned",
+      "returns": 3,
+      "round": 1,
+      "file": "conclave/lead-etl.md",
+      "hash": "sha256:a3826f3a9142c7f9fa1ce579bb7b59d12061d5649a08c92e5d75b23547dd0f8b",
+      "fileHash": "sha256:6a0045d969a8c588f8c4003c6b62dfbbd6b6cbaa7704b4aa27432ea413785ca8",
+      "at": "2026-11-08T23:33:58.360Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-security",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-security-reply.md",
+      "hash": "sha256:bc51a0c760ba7bcc43cf6c3f84f7efbc7577d3a3313641f0a47e34baeaac69fa",
+      "fileHash": "sha256:291def959bb726303d485349f39ac5a10bfb0059163f24cf09b1db9076eb8b46",
+      "at": "2026-11-08T23:36:09.598Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-etl",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 2,
+      "file": "conclave/lead-etl-reply.md",
+      "hash": "sha256:bc51a0c760ba7bcc43cf6c3f84f7efbc7577d3a3313641f0a47e34baeaac69fa",
+      "fileHash": "sha256:47f7d6a00d21b008e6c7ce2f3871471bf918a68b2f9e2b0839ff1e6c801bd020",
+      "at": "2026-11-08T23:36:10.961Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-qa",
+      "verdict": "returned",
+      "returns": 1,
+      "round": 2,
+      "file": "conclave/lead-qa-reply.md",
+      "hash": "sha256:bc51a0c760ba7bcc43cf6c3f84f7efbc7577d3a3313641f0a47e34baeaac69fa",
+      "fileHash": "sha256:3ff241a1c74ad5ce0e0f9534fd232fc9fb213c01aac8839beb9e5088902920b9",
+      "at": "2026-11-08T23:36:12.539Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-architects",
+      "verdict": "returned",
+      "returns": 1,
+      "round": 2,
+      "file": "conclave/lead-architects-reply.md",
+      "hash": "sha256:bc51a0c760ba7bcc43cf6c3f84f7efbc7577d3a3313641f0a47e34baeaac69fa",
+      "fileHash": "sha256:faf3acaa1c405e2a0104813ebd0272312f7137c5c68fd0521159dbaa7556edf6",
+      "at": "2026-11-08T23:36:13.848Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-qa",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 2,
+      "file": "conclave/lead-qa-reply.md",
+      "hash": "sha256:bc51a0c760ba7bcc43cf6c3f84f7efbc7577d3a3313641f0a47e34baeaac69fa",
+      "fileHash": "sha256:1387be8a36fb016230176ab7a2a5d4d7e22210c8d37f7d05b3e59effba18dbb0",
+      "at": "2026-11-08T23:36:50.477Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-architects",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 2,
+      "file": "conclave/lead-architects-reply.md",
+      "hash": "sha256:bc51a0c760ba7bcc43cf6c3f84f7efbc7577d3a3313641f0a47e34baeaac69fa",
+      "fileHash": "sha256:1b5758623dc29107aca728a0dcdb5c08f121a776d5e48d3c4b55d781f645bd0b",
+      "at": "2026-11-08T23:37:06.340Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-qa",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-qa.delivery.md",
+      "hash": "sha256:32ee72e7f60bf48bf63014c64f3f5439b89e3382c88b6c3c1ae54f2cac2ec17c",
+      "fileHash": "sha256:5bbd9b3dbfef0090764c6448e9c57efb10835b167bce6104963be317c2f005a5",
+      "at": "2026-11-09T14:29:01.203Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-security",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-security.delivery.md",
+      "hash": "sha256:32ee72e7f60bf48bf63014c64f3f5439b89e3382c88b6c3c1ae54f2cac2ec17c",
+      "fileHash": "sha256:6e0156fdafc3f0991dfffefe5408400faf076a7d748681e30c97870e3711b0df",
+      "at": "2026-11-09T14:29:01.487Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-architects",
+      "verdict": "returned",
+      "returns": 1,
+      "round": 1,
+      "file": "conclave/lead-architects.delivery.md",
+      "hash": "sha256:32ee72e7f60bf48bf63014c64f3f5439b89e3382c88b6c3c1ae54f2cac2ec17c",
+      "fileHash": "sha256:56d5d6f383b94dd07aa004ef0d41661cc98a0e693be896f3a33b262627af126f",
+      "at": "2026-11-09T14:29:01.776Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-etl",
+      "verdict": "returned",
+      "returns": 1,
+      "round": 1,
+      "file": "conclave/lead-etl.delivery.md",
+      "hash": "sha256:32ee72e7f60bf48bf63014c64f3f5439b89e3382c88b6c3c1ae54f2cac2ec17c",
+      "fileHash": "sha256:2358696cb66b9d495df16b41dd3bf90ceba58572af2d87f1ce20e9193641a8f0",
+      "at": "2026-11-09T14:29:02.061Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-architects",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-architects.delivery-reply.md",
+      "hash": "sha256:32ee72e7f60bf48bf63014c64f3f5439b89e3382c88b6c3c1ae54f2cac2ec17c",
+      "fileHash": "sha256:11920c1ee67c54277f619d7d2870ff50a0c8ebd07831a0119f544d508ca9ece6",
+      "at": "2026-11-09T14:31:30.075Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-etl",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-etl.delivery-reply.md",
+      "hash": "sha256:32ee72e7f60bf48bf63014c64f3f5439b89e3382c88b6c3c1ae54f2cac2ec17c",
+      "fileHash": "sha256:cccf433908b40f0ee16bc608bffd5dfb61c15f98a1e736ffaeb228d1441053ce",
+      "at": "2026-11-09T14:31:30.357Z"
+    }
+  ],
+  "rounds": {
+    "judgement": 9,
+    "validation": 2,
+    "judgementCode": "sha256:32ee72e7f60bf48bf63014c64f3f5439b89e3382c88b6c3c1ae54f2cac2ec17c"
+  },
+  "pauses": [
+    {
+      "at": "2026-11-09T10:54:26.802Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-09T10:56:54.393Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-09T10:57:56.444Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-09T10:58:19.550Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-09T10:58:35.623Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-09T10:59:46.428Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-09T11:27:44.695Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-09T12:08:40.889Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-09T12:10:23.094Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-09T12:12:08.895Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-09T12:36:48.738Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-09T12:38:30.779Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-09T12:39:48.814Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-09T12:40:11.300Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-09T12:56:48.730Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-09T12:58:17.433Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-09T12:59:37.988Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-09T13:05:05.142Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-09T13:17:30.989Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-09T13:18:55.631Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-09T13:19:11.369Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-09T13:20:11.607Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-09T13:20:41.859Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-09T13:21:58.496Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-09T13:31:08.786Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-09T13:32:18.568Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-09T13:38:47.259Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-09T14:05:13.916Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-09T14:09:59.544Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-09T14:22:11.464Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-09T14:24:21.895Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    }
+  ],
+  "continued": [
+    {
+      "what": "judgement",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-09T12:18:35.482Z",
+      "standing": true
+    },
+    {
+      "what": "judgement",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-09T12:43:36.613Z",
+      "standing": true
+    },
+    {
+      "what": "judgement",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-09T13:06:03.515Z",
+      "standing": true
+    },
+    {
+      "what": "judgement",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-09T13:23:00.553Z",
+      "standing": true
+    },
+    {
+      "what": "judgement",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-09T13:39:13.410Z",
+      "standing": true
+    },
+    {
+      "what": "judgement",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-09T14:10:30.473Z",
+      "standing": true
+    },
+    {
+      "what": "judgement",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-09T14:25:31.999Z",
+      "standing": true
+    }
+  ],
+  "learned": {
+    "at": "2026-11-09T14:31:42.486Z",
+    "entries": [
+      "K-335"
+    ],
+    "confirmed": []
+  }
+}

@@ -1,0 +1,1387 @@
+commit d390b5f08c5316e3901b2864a8ae0b45ece56c06
+Author: André Agro Ferreira <35269365+andreagroferreira@users.noreply.github.com>
+Date:   Mon Nov 9 12:33:02 2026 +0000
+
+    Knowledge: the third judgement round's defects
+    
+    The store keeps no folder or file of its own beside the repositories for git to
+    be pointed at; a path is followed only through real folders; the lease rule of
+    openRepo's steps lives in one place. A refused repository no longer stops list,
+    rebuild and adopt for the others.
+    
+    Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+
+diff --git a/CLAUDE.md b/CLAUDE.md
+index 83c0ada..fa35309 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -14,7 +14,7 @@ Brand conventions: products, plugins and skills are called `wizardingcode-<thing
+ - Measured decisions and departures from the design: `docs/adr/` (read the latest before touching the schema or retrieval)
+ - One engine with modules (ADR 0019): `src/engine/` is the contract (`module.ts`), the composer and budgets (`compose.ts`, `budget.ts`) and the enabled set (`modules.ts`); `src/modules/memory/` is the one module shipped. Hooks, the MCP server and the viewer's rail ask the modules, never memory by name. `WIZARDINGCODE_MODULES` (comma list, default `memory`) only adds modules: memory is always on (the API refuses a list without it), and stopping it for a project stays the per-project "memory off". `src/core/project.ts` and the links store are the engine's: every module uses the same project ids.
+ - `ui.json` (the running viewer's state) lives at the brand level, `~/.wizardingcode/ui.json` (honouring `WIZARDINGCODE_HOME`); the old file in the data directory is migrated once. A new module's rail icons must be listed in `ui/vite.config.ts`, since icons are bundled at build time.
+-- The knowledge store (ADR 0024, a draft: the store only, not yet an `EngineModule` in `BUILT_IN`, so no hook, tool or view reads it): `src/modules/knowledge/`. The truth is Markdown files with frontmatter in one git repository per scope under the data directory (`<data dir>/knowledge/workspace`, `shared`, `projects/<folder>`; `entry.ts` is the formats, `repo.ts` the repositories and the one git runner `runGit`, `resolve.ts` the mapping of a project to its repository through its manifest, `store.ts` the writes, proposals and `adopt`, `taxonomy.ts` the areas, `index-store.ts` the index rebuilt from the files, `schema.ts` the leaf with `requireSchema`, which everything that reads or writes the tables calls). Every git call goes through `runGit`, never on a hook path, and never with the person's git configuration; `openRepo` is the one way to a repository, and before git runs it refuses a folder the store did not make (`refuseForeign`) and a `.git/config` that holds anything but the settings `git init` writes (`checkRepoConfig`, an allow list: add to `ALLOWED_SETTINGS` only what the store itself writes); `statusOf` never looks into a nested repository. An interrupted operation is put back by its intent record, path by path, only where a file is still as the engine left it, and a record is read only when every path in it is the store's own (`ownPath`). An agent's write is a proposal until a person accepts it; the entry point passes the writer, never the caller. A module's tables are versioned apart from the core schema in `module_migrations`: `src/store/migration.ts` is the `Migration` type, `src/engine/module-schemas.ts` the one list `openDb` reads (it imports migration lists, never module code), and `user_version` stays 7. Knowledge starts at module version 6 (1 to 5 were the withdrawn module's). `wizardingcode-mem knowledge write | accept | reject | area | rebuild | adopt | list` is the store from a shell; `doctor` has a `knowledge` line. `wizardingcode-mem backup` does not copy the repositories. In tests, `tests/helpers/knowledge.ts` gives a data directory, a throwaway home and stores whose environment the test controls, and `tests/helpers/stub-git.ts` a git that fails or stalls on demand.
++- The knowledge store (ADR 0024, a draft: the store only, not yet an `EngineModule` in `BUILT_IN`, so no hook, tool or view reads it): `src/modules/knowledge/`. The truth is Markdown files with frontmatter in one git repository per scope under the data directory (`<data dir>/knowledge/workspace`, `shared`, `projects/<folder>`; `entry.ts` is the formats, `repo.ts` the repositories and the one git runner `runGit`, `resolve.ts` the mapping of a project to its repository through its manifest, `store.ts` the writes, proposals and `adopt`, `taxonomy.ts` the areas, `index-store.ts` the index rebuilt from the files, `schema.ts` the leaf with `requireSchema`, which everything that reads or writes the tables calls). Every git call goes through `runGit`, never on a hook path, and never with the person's git configuration; `openRepo` is the one way to a repository, and before git runs it refuses a folder the store did not make (`refuseForeign`) and a `.git/config` that holds anything but the settings `git init` writes (`checkRepoConfig`, an allow list: add to `ALLOWED_SETTINGS` only what the store itself writes); `statusOf` never looks into a nested repository. The store keeps no file of its own under `knowledge/` beside the repositories: git gets `/dev/null` as its global configuration, the repository's own `.git/config` (a file) as its hooks path, and no template. `doctor` is the one reader that does not go through `openRepo`, which writes: it reads by hand under the same two guards. An interrupted operation is put back by its intent record, path by path, only where a file is still as the engine left it; a record is read only when every path in it is the store's own (`ownPath`), and a path is followed only through real folders (`reachedByFolders`). An agent's write is a proposal until a person accepts it; the entry point passes the writer, never the caller. A module's tables are versioned apart from the core schema in `module_migrations`: `src/store/migration.ts` is the `Migration` type, `src/engine/module-schemas.ts` the one list `openDb` reads (it imports migration lists, never module code), and `user_version` stays 7. Knowledge starts at module version 6 (1 to 5 were the withdrawn module's). `wizardingcode-mem knowledge write | accept | reject | area | rebuild | adopt | list` is the store from a shell; `doctor` has a `knowledge` line. `wizardingcode-mem backup` does not copy the repositories. In tests, `tests/helpers/knowledge.ts` gives a data directory, a throwaway home and stores whose environment the test controls, and `tests/helpers/stub-git.ts` a git that fails or stalls on demand.
+ 
+ ## Commands
+ 
+diff --git a/docs/adr/0024-knowledge-module.md b/docs/adr/0024-knowledge-module.md
+index 0b44c67..b2e3a92 100644
+--- a/docs/adr/0024-knowledge-module.md
++++ b/docs/adr/0024-knowledge-module.md
+@@ -66,7 +66,7 @@ A proposal is `proposals/open/<proposal id>.md`: the proposed entry's fields and
+ 
+ Each repository holds `knowledge.json` (its manifest), `.gitignore`, `entries/`, `proposals/open/` and `proposals/decided/`; the workspace and the shared ones also hold `taxonomy.md`. A repository is created at its first write, with one commit by the person whatever writer triggered it. Creating a project's repository creates the workspace's first, so the taxonomy exists to check against. Folders are created with mode 0700.
+ 
+-The manifest is `{"format": 1, "scope": …, "project": {"aliases": […]}, "createdAt": …}`. A project's repository is found by its manifest, not by its folder name: by the row the index holds for the project, else by a manifest whose `remote:` or `gitdir:` aliases are among the project's. A `path:` alias never matches, since a folder can be reused by another repository. A project that gains a remote therefore keeps its repository, and its manifest learns the new alias at the project's next write, in a commit of `knowledge.json` alone by the person. That commit is made under the repository's own lease; while another process holds the lease, the alias waits for the next write. When no manifest matches, a folder is created, named with 16 hex characters of the SHA-256 of the project's remote alias, or of its key when it has no remote.
++The manifest is `{"format": 1, "scope": …, "project": {"aliases": […]}, "createdAt": …}`. A project's repository is found by its manifest, not by its folder name: by the row the index holds for the project, else by a manifest whose `remote:` or `gitdir:` aliases are among the project's. A `path:` alias never matches, since a folder can be reused by another repository. A project that gains a remote therefore keeps its repository, and its manifest learns the new alias at the project's next write, in a commit of `knowledge.json` alone by the person. That commit is made under the repository's own lease, with a record like any write's: one that stops midway is put back at the next open, never left for `adopt` to credit to the person. While another process holds the lease, the alias waits for the next write. When no manifest matches, a folder is created, named with 16 hex characters of the SHA-256 of the project's remote alias, or of its key when it has no remote.
+ 
+ A project that matches two manifests takes the one matched by a remote, else the newest. A manifest already mapped to one project is never taken by a second. `knowledge rebuild` prints both cases and `doctor` warns about them.
+ 
+@@ -75,13 +75,16 @@ A project that matches two manifests takes the one matched by a remote, else the
+ Every git call goes through one runner (`runGit`): a synchronous process killed after 15 seconds, never on a hook path, with a command line and an environment built in one place.
+ 
+ - `--git-dir` and `--work-tree` are always explicit, and `GIT_CEILING_DIRECTORIES` is the knowledge folder: a data directory inside a parent git tree never commits into the parent.
+-- `GIT_CONFIG_GLOBAL` points at an empty file, `GIT_CONFIG_NOSYSTEM=1`, and `HOME` is not passed. `-c` settings turn off signing, hooks, fsmonitor, the untracked cache, the pager, external diff and the ssh command. Nothing of the person's git setup runs here. The one exception is the lookup of the person's global `user.name`.
++- `GIT_CONFIG_GLOBAL` is `/dev/null`, git's own name for no configuration file, `GIT_CONFIG_NOSYSTEM=1`, and `HOME` is not passed. `-c` settings turn off signing, fsmonitor, the untracked cache, the pager, external diff and the ssh command. Nothing of the person's git setup runs here. The one exception is the lookup of the person's global `user.name`.
++- No hook runs. `core.hooksPath` is the repository's own `.git/config`, which is a file: nothing can be inside a file, so git finds no hook there, on any system. `git init` is given an empty template name, so it copies no template.
++- The store keeps no file or folder of its own beside the repositories for git to be pointed at. An earlier version kept an empty hooks folder, an empty template and an empty configuration file under `knowledge/`, and whoever could drop a file there could fill them: a hook, a template's configuration and a filter each ran a program.
+ - A repository's own `.git/config` is read as text before git is run in it, and it may hold only the settings `git init` writes: `repositoryformatversion`, `filemode`, `bare`, `logallrefupdates`, `ignorecase`, `precomposeunicode` and `symlinks`, all under `core`. Any other setting is refused by its name, since a folder dropped under `knowledge/` could carry a configuration that runs a program (a filter, a hooks path, a diff driver) or reads another file (an include). The rule lists what is allowed because a list of what is refused would have to name every such setting, and the first two versions of this check, which listed refusals, each missed some.
+ - Each line of that file is read by git's own grammar: several section headers may share a line, a key may follow them, and a carriage return alone does not end a line. A line the store cannot read that way is refused, never skipped. Every line is read, also one that continues the value before it, so the store reads more lines as settings than git does, never fewer. The file itself must be a regular file of at most 256 KiB: a link, which git would follow to another file, is refused, and so is a larger file.
+-- git also reads a repository's configuration from the directory a `.git/commondir` file names, and from `.git/config.worktree` when `extensions.worktreeConfig` is set. Both files are refused, so the one file read is the one git reads.
++- git also reads a repository's configuration from the directory a `.git/commondir` file names, and from `.git/config.worktree` when `extensions.worktreeConfig` is set. Both files are refused, so the one file read is the one git reads. A `.git/objects/info/alternates` file, which has git read objects from another repository on the disk, is refused with them.
+ - A new repository is created with the object and ref formats the store reads (`init.defaultObjectFormat=sha1`, `init.defaultRefFormat=files`). git writes other formats to `.git/config` as extensions, which the rule above refuses.
+ - A folder the store did not make is refused before git runs and before anything is written: a repository folder that is a link, a `.git` that is a file or a link (a gitfile names another repository, and every commit would land there), an `entries` or `proposals` folder that is a link, a link where the store keeps `knowledge.json`, `taxonomy.md` or `.gitignore`, and a `.gitmodules` file.
+-- git never runs in a repository nested inside a knowledge repository. `git status` is always given `--ignore-submodules=all`, which wins over every setting. Without it, git runs a second `git status` inside the nested repository, under that repository's own configuration, which the store never checked. `adopt` refuses a folder that is a git repository of its own, and names it.
++- git never runs in a repository nested inside a knowledge repository. `git status` is always given `--ignore-submodules=all`, which wins over every setting. Without it, git runs a second `git status` inside the nested repository, under that repository's own configuration, which the store never checked. Every git call also carries `diff.ignoreSubmodules=all` and `submodule.recurse=false` as a second layer; a `.gitmodules` setting overrides those two, and only the flag wins over it. `adopt` refuses a folder that is a git repository of its own, and names it.
++- A path is followed only through folders. Where a folder on the way to a file, inside the repository, is a link, the file beyond it is another folder's: the store does not read it as its own, restore it or remove it, whatever a record says.
+ - Paths are passed to git as literal paths (`GIT_LITERAL_PATHSPECS`): a file a person named with `*` or `[` never matches another.
+ - git 2.32 or newer is required (`GIT_CONFIG_GLOBAL`). With no git, or an older one, writes are refused before any folder is created. Reading (`list`, `rebuild`) works without git, except the check for hand edits, which is then skipped and said.
+ 
+@@ -97,7 +100,7 @@ Before its first change to the working tree an operation writes an intent record
+ 
+ A process that died before its commit leaves the record behind, and the next open of the repository acts on it, each path by itself. A path that is clean against HEAD needs nothing: its commit landed, or the operation never reached it. Of the others, only a path that is still as the engine left it is put back. A path that is not as the engine left it may be the person's work: it is taken out of the index and left for `adopt`, never restored from HEAD and never deleted. A record that does not say what was written puts nothing back. The revert is skipped while another process holds the repository's lease, since that operation is running, not interrupted. What the revert did is written to the log and, from the command line, to standard error.
+ 
+-The record sits in a folder that may have been dropped there, so it is acted on only when it is one the store could have written: a known operation, and no path but the manifest, the taxonomy and files under `entries/` and `proposals/`. A record that names any other path (`.git/config`, for one) is removed and nothing is done. Without this rule, the revert would write where the record says, after the configuration was checked.
++The record sits in a folder that may have been dropped there, so it is acted on only when it is one the store could have written: a known operation, and no path but the manifest, the taxonomy and files under `entries/` and `proposals/`. A record that names any other path (`.git/config`, for one) is removed with the kept bytes it names, nothing is put back, and the person is told. Without this rule, the revert would write where the record says, after the configuration was checked. The record and the kept bytes are read as regular files, never through a link.
+ 
+ ## Proposals and the quota
+ 
+@@ -111,7 +114,7 @@ Accepting requires an id that is a UUID (before any path is built), a proposal t
+ 
+ `wizardingcode-mem knowledge adopt` commits what a person changed outside the engine, as the person, in one commit that lists the paths. An entry file edited or added by hand gets an id when it has none, the next version (1 for a new file; otherwise one past the higher of HEAD's version and the number in the file), `updated` and the person as author; everything else stays as they left it. A file that is still not a valid entry is committed exactly as it is and returned with its problem. A file the person deleted is recorded as deleted. `taxonomy.md`, `knowledge.json` and proposal files are committed as they are.
+ 
+-Before rewriting anything, adopt keeps the bytes of the entry files under `.git/`. When the commit fails, its paths are only unstaged and the bytes are written back: the person's work exists nowhere else, so it is never restored from HEAD. An adopt that was interrupted gives the kept bytes back at the next open, and only for a file the person did not go on editing: a later edit wins over the older bytes. Kept bytes are written back only to a file directly under `entries/`. The adopt's record says what it leaves at every path, a removal included, so an interrupted adopt is undone path by path.
++Before rewriting anything, adopt writes its record and then keeps the bytes of the entry files under `.git/`, under the name the record gives, so that no kept bytes are left without a record to remove them. When the commit fails, its paths are only unstaged and the bytes are written back: the person's work exists nowhere else, so it is never restored from HEAD. An adopt that was interrupted gives the kept bytes back at the next open, and only for a file the person did not go on editing: a later edit wins over the older bytes. Kept bytes are written back only to a file directly under `entries/`. The adopt's record says what it leaves at every path, a removal included, so an interrupted adopt is undone path by path.
+ 
+ ## The taxonomy
+ 
+@@ -126,7 +129,7 @@ A module's tables are versioned apart from the core schema, in `module_migration
+ - A recorded module version newer than the binary's is left alone by `openDb`, so memory keeps working. The knowledge store refuses to read or write (`ModuleSchemaTooNewError`), a rebuild and a listing included since both write rows, and `doctor` names it.
+ - No knowledge table has a foreign key or a trigger on a core table.
+ 
+-Knowledge's first migration is **version 6**. Versions 1 to 5 of the module id `knowledge` belong to the withdrawn module of ADR 0020, and a store that ran it still holds those rows, for other tables. Migration 6 drops what the withdrawn module created where present, after a backup, and widens the two-column `module_migrations` table that module left. The index of project-folder knowledge such a store held is lost; no released version ever created it.
++Knowledge's first migration is **version 6**. Versions 1 to 5 of the module id `knowledge` belong to the withdrawn module of ADR 0020, and a store that ran it still holds those rows, for other tables. Migration 6 drops what the withdrawn module created where present, after a backup, and widens the two-column `module_migrations` table that module left. It also deletes the three rows that module's promotion pass kept in the core table `meta`, which nothing reads now. The index of project-folder knowledge such a store held is lost; no released version ever created it.
+ 
+ The tables are `knowledge_repos` (one row per repository: its path, HEAD, a fingerprint of its folders, the files the cap left out), `knowledge_entries` and `knowledge_proposals`. A rebuild lists the three folders in byte order, never follows a link, reads at most 5,000 names per folder and 256 KiB per file, and replaces the repository's rows in one transaction. No file fails it: one with no usable id is indexed under `file:<name>`, one that shares another's id under `dup:<name>`, and the first name in byte order keeps the id. For a proposal the name carries its folder (`file:open/<file>`, `dup:decided/<file>`), since the same file name can sit under both; a file under `proposals/decided/` that says nothing of its decision is listed with that problem. A file git lists as changed is a draft with a problem until adopted.
+ 
+@@ -166,7 +169,8 @@ Decided proposals are never deleted, and each folder is indexed up to 5,000 name
+ - Only `.md` files in the three folders are knowledge. Other files there are ignored by the index, and committed as they are by `adopt`.
+ - An entry is not renamed and not moved between repositories in this part.
+ - A file a person adds by hand while a write is under way is recorded in the fingerprint without being read. The window opens when the write has checked the folders and closes when it has indexed its commit: the time of its git calls, about 50 ms on the machine measured below. The file is still listed by git as untracked, so `doctor` reports it and `adopt` commits and indexes it.
+-- A knowledge repository's `.git/config` holds only what `git init` writes. A setting a person adds there (a remote, a local user name) makes every command on that repository refuse it, naming the setting, until the person removes it.
++- A knowledge repository's `.git/config` holds only what `git init` writes. A setting a person adds there (a remote, a local user name) makes every command on that repository refuse it, naming the setting, until the person removes it. `list`, `rebuild` and `adopt` go on with the other repositories, say the refused one on standard error and exit with 1. A refused workspace repository still stops every project's write, since a project's areas are checked against the workspace's taxonomy.
++- `/dev/null` as the global configuration, a file as the hooks path and an empty template name were run on macOS with git 2.54.0. They were not run on Windows, where the binary is also built.
+ - The two format settings were run with git 2.54.0, where they leave `.git/config` as `git init` writes it by default. With the other formats named, the same git writes `extensions.objectformat` and `extensions.refstorage`. No git that defaults to those formats existed to run them against.
+ - A module migration that fails makes `openDb` fail, so memory stops until the cause is fixed, over a module no hook reads in this part. Containing the failure would need a rule for not repeating the attempt, and its backup, on every open; that is not built.
+ - On a store that ran the withdrawn module, the one backup taken before migration 6 drops its tables is kept among the two most recent upgrade backups, and two later upgrades rotate it away.
+@@ -194,4 +198,4 @@ Not measured: a repository of thousands of entries, a slow or network disk, Linu
+ - **Knowledge for the agent**: the module in the composer, the tools to search, read and propose, the judgements of duplicates and contradictions through the `Judge` interface, the full-text index, and the reversal of ADR 0019's note of 2026-10-13 in that ADR's text.
+ - **The viewer**: the Knowledge and Personas views, deciding proposals, editing the taxonomy.
+ - **The sharing policy** (ADR 0025, not written yet): what may leave the machine, per project and per area.
+-- **The team server and the sync** (ADR 0026, not written yet): members, devices, the server's copy of what is shared, and the author's name replaced by the member's.
++- **The team server and the sync** (ADR 0026, not written yet): members, devices, the server's copy of what is shared, and the author's name replaced by the member's. If the sync writes a setting into a repository's `.git/config` (a remote, a branch), it adds that setting to the list of allowed ones in the same release: a binary without it refuses the repository.
+diff --git a/src/cli/commands/knowledge.ts b/src/cli/commands/knowledge.ts
+index 5826de6..af51ad2 100644
+--- a/src/cli/commands/knowledge.ts
++++ b/src/cli/commands/knowledge.ts
+@@ -209,14 +209,31 @@ function rebuildLine(relative: string, result: RebuildResult): string {
+   return `${relative}: ${parts.join(", ")}`;
+ }
+ 
+-function rebuild(store: KnowledgeStore, argv: string[]): void {
++/**
++ * The repositories the store refused during a command, each said on standard error. One
++ * of them does not stop the command for the others; the command then exits with 1.
++ */
++type Refused = string[];
++
++function refuse(refused: Refused, relative: string, message: string): void {
++  refused.push(relative);
++  process.stderr.write(`wizardingcode-mem: ${relative}: ${message}\n`);
++}
++
++/** Whether an error is the store refusing one repository, rather than a fault. */
++const isRefusal = (error: unknown): error is KnowledgeError =>
++  error instanceof KnowledgeError && error.code === "invalid";
++
++function rebuild(store: KnowledgeStore, argv: string[], refused: Refused): void {
+   const { flags, rest } = parse(argv, ["--scope"]);
+   if (rest.length > 0) throw new UsageError(`unexpected argument ${rest[0]}`);
+   const scope = scopeOf(flags);
+   const all = rebuildAll(store, scope);
+   for (const [relative, result] of all.results) out(rebuildLine(relative, result));
++  for (const [relative, message] of all.refused) refuse(refused, relative, message);
+   for (const repo of all.repos) {
+-    if (!all.results.has(repo.relative)) out(`${repo.relative}: not a repository`);
++    if (all.results.has(repo.relative) || all.refused.has(repo.relative)) continue;
++    out(`${repo.relative}: not a repository`);
+   }
+   if (all.repos.length === 0) out(nothing(scope));
+   if (scope !== undefined && scope !== "project") return;
+@@ -229,38 +246,51 @@ function rebuild(store: KnowledgeStore, argv: string[]): void {
+   for (const path of unclear) out(`ambiguous ${path}`);
+ }
+ 
+-/** The repositories of a scope that are repositories, opened. */
+-function opened(store: KnowledgeStore, scope: Scope | undefined): Repo[] {
+-  return listRepos(store)
+-    .repos.filter((repo) => scope === undefined || repo.ref.scope === scope)
+-    .map((repo) => openRepo(store, repo.ref))
+-    .filter((repo): repo is Repo => repo !== null);
++/** The repositories of a scope that are repositories, opened; one the store refuses is said. */
++function opened(store: KnowledgeStore, scope: Scope | undefined, refused: Refused): Repo[] {
++  const repos: Repo[] = [];
++  for (const found of listRepos(store).repos) {
++    if (scope !== undefined && found.ref.scope !== scope) continue;
++    try {
++      const repo = openRepo(store, found.ref);
++      if (repo !== null) repos.push(repo);
++    } catch (error) {
++      if (!isRefusal(error)) throw error;
++      refuse(refused, found.relative, error.message);
++    }
++  }
++  return repos;
+ }
+ 
+-function adoptAll(store: KnowledgeStore, argv: string[]): void {
++function adoptAll(store: KnowledgeStore, argv: string[], refused: Refused): void {
+   const { flags, rest } = parse(argv, ["--scope"]);
+   if (rest.length > 0) throw new UsageError(`unexpected argument ${rest[0]}`);
+   const scope = scopeOf(flags);
+-  const repos = opened(store, scope);
+-  if (repos.length === 0) out(nothing(scope));
++  const repos = opened(store, scope, refused);
++  if (repos.length === 0 && refused.length === 0) out(nothing(scope));
+   const person = personAuthor(store);
+   for (const repo of repos) {
+-    const result = adopt(store, repo.ref, person);
+-    out(
+-      result.adopted === 0
+-        ? `${repo.relative}: clean`
+-        : `${repo.relative}: adopted ${plural(result.adopted, "change")}`,
+-    );
+-    for (const problem of result.problems) out(`  ${problem}`);
++    try {
++      const result = adopt(store, repo.ref, person);
++      out(
++        result.adopted === 0
++          ? `${repo.relative}: clean`
++          : `${repo.relative}: adopted ${plural(result.adopted, "change")}`,
++      );
++      for (const problem of result.problems) out(`  ${problem}`);
++    } catch (error) {
++      if (!isRefusal(error)) throw error;
++      refuse(refused, repo.relative, error.message);
++    }
+   }
+ }
+ 
+-function list(store: KnowledgeStore, argv: string[]): void {
++function list(store: KnowledgeStore, argv: string[], refused: Refused): void {
+   const { flags, rest } = parse(argv, ["--scope"]);
+   if (rest.length > 0) throw new UsageError(`unexpected argument ${rest[0]}`);
+   const scope = scopeOf(flags);
+-  const repos = opened(store, scope);
+-  if (repos.length === 0) out(nothing(scope));
++  const repos = opened(store, scope, refused);
++  if (repos.length === 0 && refused.length === 0) out(nothing(scope));
+   for (const repo of repos) {
+     try {
+       withRepoLeases(store, [repo.relative], () => ensureFresh(store, repo));
+@@ -305,13 +335,14 @@ export async function run(argv: string[]): Promise<number> {
+       // What the store did on its own, such as undoing an interrupted write, is said here.
+       report: (message) => process.stderr.write(`wizardingcode-mem: ${message}\n`),
+     });
++    const refused: Refused = [];
+     if (command === "write") await write(store, rest);
+     else if (command === "accept" || command === "reject") decide(store, rest, command);
+     else if (command === "area") area(store, rest);
+-    else if (command === "rebuild") rebuild(store, rest);
+-    else if (command === "adopt") adoptAll(store, rest);
+-    else list(store, rest);
+-    return 0;
++    else if (command === "rebuild") rebuild(store, rest, refused);
++    else if (command === "adopt") adoptAll(store, rest, refused);
++    else list(store, rest, refused);
++    return refused.length > 0 ? 1 : 0;
+   } catch (error) {
+     if (error instanceof UsageError) {
+       process.stderr.write(`wizardingcode-mem: ${error.message}\n\n${USAGE}`);
+diff --git a/src/modules/knowledge/index-store.ts b/src/modules/knowledge/index-store.ts
+index 29bf49d..b53c5c9 100644
+--- a/src/modules/knowledge/index-store.ts
++++ b/src/modules/knowledge/index-store.ts
+@@ -11,6 +11,7 @@ import {
+   fingerprintOf,
+   hashOf,
+   headOf,
++  isDirectory,
+   OPEN_DIR,
+   openRepo,
+   readRegularFile,
+@@ -541,18 +542,28 @@ export function rebuildRepo(store: KnowledgeStore, repo: Repo): RebuildResult {
+ export function rebuildAll(
+   store: KnowledgeStore,
+   scope?: ScopeRef["scope"],
+-): ReturnType<typeof listRepos> & { results: Map<string, RebuildResult> } {
++): ReturnType<typeof listRepos> & {
++  results: Map<string, RebuildResult>;
++  /** The repositories the store refused, each with why: the others are rebuilt all the same. */
++  refused: Map<string, string>;
++} {
+   requireSchema(store);
+   const listed = listRepos(store);
+   const repos = listed.repos.filter((repo) => scope === undefined || repo.ref.scope === scope);
+   const results = new Map<string, RebuildResult>();
++  const refused = new Map<string, string>();
+   for (const found of repos) {
+-    const repo = openRepo(store, found.ref);
+-    if (repo === null) continue;
+-    results.set(
+-      repo.relative,
+-      withRepoLeases(store, [repo.relative], () => rebuildRepo(store, repo)),
+-    );
++    try {
++      const repo = openRepo(store, found.ref);
++      if (repo === null) continue;
++      results.set(
++        repo.relative,
++        withRepoLeases(store, [repo.relative], () => rebuildRepo(store, repo)),
++      );
++    } catch (error) {
++      if (!(error instanceof KnowledgeError && error.code === "invalid")) throw error;
++      refused.set(found.relative, error.message);
++    }
+   }
+   const rows = store.db
+     .query<{ id: number; scope: string; path: string }, []>(
+@@ -561,20 +572,15 @@ export function rebuildAll(
+     .all();
+   for (const row of rows) {
+     if (scope !== undefined && row.scope !== scope) continue;
+-    let exists = false;
+-    try {
+-      exists = lstatSync(repoPath(store.dataDir, row.path)).isDirectory();
+-    } catch {
+-      // The folder is gone.
+-    }
+-    if (exists) continue;
++    if (isDirectory(repoPath(store.dataDir, row.path))) continue;
++    // The folder is gone.
+     withWrite(store.db, () => {
+       store.db.run("DELETE FROM knowledge_entries WHERE repo_id = ?", [row.id]);
+       store.db.run("DELETE FROM knowledge_proposals WHERE repo_id = ?", [row.id]);
+       store.db.run("DELETE FROM knowledge_repos WHERE id = ?", [row.id]);
+     });
+   }
+-  return { ...listed, repos, results };
++  return { ...listed, repos, results, refused };
+ }
+ 
+ /** Rebuilds the repository's rows when its HEAD or its fingerprint is not what was indexed. */
+diff --git a/src/modules/knowledge/migrations/0006_knowledge_store.sql b/src/modules/knowledge/migrations/0006_knowledge_store.sql
+index 82c9da1..90262d2 100644
+--- a/src/modules/knowledge/migrations/0006_knowledge_store.sql
++++ b/src/modules/knowledge/migrations/0006_knowledge_store.sql
+@@ -14,6 +14,10 @@ DROP TABLE IF EXISTS promoted_memories;
+ -- pass. No core query uses them: memory reads `injections` as it did before that module.
+ DROP INDEX IF EXISTS injections_memory_shown;
+ DROP INDEX IF EXISTS injections_memory_contexts;
++-- Three rows its promotion pass kept in the core table `meta`: a cursor, a list and a
++-- lease. Nothing reads them now, and the new leases are named `knowledge.lease:<path>`.
++DELETE FROM meta
++ WHERE key IN ('knowledge.promote.cursor', 'knowledge.not-standing', 'knowledge.promote.lease');
+ 
+ -- One row per repository. `path` is relative to the data directory. `project_id` is 0 for
+ -- the workspace and the shared repositories, and a plain integer for a project: no foreign
+diff --git a/src/modules/knowledge/repo.ts b/src/modules/knowledge/repo.ts
+index 516a888..7459cbb 100644
+--- a/src/modules/knowledge/repo.ts
++++ b/src/modules/knowledge/repo.ts
+@@ -14,7 +14,6 @@ import {
+   mkdirSync,
+   openSync,
+   readdirSync,
+-  readFileSync,
+   readSync,
+   renameSync,
+   rmSync,
+@@ -55,6 +54,17 @@ export const ENTRIES_DIR = "entries";
+ export const OPEN_DIR = "proposals/open";
+ export const DECIDED_DIR = "proposals/decided";
+ const FOLDERS = [ENTRIES_DIR, OPEN_DIR, DECIDED_DIR];
++/** What the store keeps in a repository's folder, and what each is when it is there. */
++const OWN_LAYOUT: [name: string, kind: "folder" | "file"][] = [
++  [".git", "folder"],
++  [ENTRIES_DIR, "folder"],
++  ["proposals", "folder"],
++  [OPEN_DIR, "folder"],
++  [DECIDED_DIR, "folder"],
++  [MANIFEST_FILE, "file"],
++  [TAXONOMY_FILE, "file"],
++  [".gitignore", "file"],
++];
+ 
+ // --- Where things are ---------------------------------------------------------------
+ 
+@@ -62,29 +72,6 @@ export function knowledgeRoot(dataDir: string): string {
+   return join(dataDir, "knowledge");
+ }
+ 
+-/** What git is pointed at instead of the person's templates, hooks and configuration. */
+-export function supportPaths(dataDir: string): {
+-  template: string;
+-  noHooks: string;
+-  emptyConfig: string;
+-} {
+-  const root = knowledgeRoot(dataDir);
+-  return {
+-    template: join(root, ".template"),
+-    noHooks: join(root, ".no-hooks"),
+-    emptyConfig: join(root, ".gitconfig-empty"),
+-  };
+-}
+-
+-export function ensureSupportFolders(dataDir: string): void {
+-  const paths = supportPaths(dataDir);
+-  mkdirSync(knowledgeRoot(dataDir), { recursive: true, mode: 0o700 });
+-  mkdirSync(paths.template, { recursive: true, mode: 0o700 });
+-  mkdirSync(paths.noHooks, { recursive: true, mode: 0o700 });
+-  // An empty file is portable where `/dev/null` is not.
+-  if (!existsSync(paths.emptyConfig)) writeFileSync(paths.emptyConfig, "", { mode: 0o600 });
+-}
+-
+ /** A repository's path relative to the data directory, with forward slashes. */
+ export function repoFolder(ref: ScopeRef, projectFolder?: string): string {
+   if (ref.scope !== "project") return `knowledge/${ref.scope}`;
+@@ -134,43 +121,26 @@ export function existsOnDisk(path: string): boolean {
+  * before anything is written, so nothing is read or written outside the repository.
+  */
+ export function refuseForeign(repoFolder: string): void {
+-  const refuse = (path: string, what: string): never => {
++  /** Whatever is at the path must be what the store keeps there: a folder, or a regular file. */
++  const mustBe = (path: string, wanted: "folder" | "file"): void => {
++    let found: ReturnType<typeof lstatSync>;
++    try {
++      found = lstatSync(path);
++    } catch {
++      return;
++    }
++    if (wanted === "folder" ? found.isDirectory() : found.isFile()) return;
++    const what = found.isSymbolicLink() ? "a link" : `not a ${wanted}`;
+     throw new KnowledgeError(
+       "invalid",
+       `${path} is ${what}; the knowledge store never follows one out of its own repository`,
+     );
+   };
+-  const kind = (path: string) => {
+-    try {
+-      return lstatSync(path);
+-    } catch {
+-      return null;
+-    }
+-  };
+-  const folder = kind(repoFolder);
+-  if (folder === null) return;
+-  if (!folder.isDirectory())
+-    refuse(repoFolder, folder.isSymbolicLink() ? "a link" : "not a folder");
+-  const git = kind(join(repoFolder, ".git"));
+-  if (git !== null && !git.isDirectory()) {
+-    refuse(join(repoFolder, ".git"), git.isSymbolicLink() ? "a link" : "a file, not a folder");
+-  }
+-  for (const inner of [ENTRIES_DIR, "proposals", OPEN_DIR, DECIDED_DIR]) {
+-    const path = join(repoFolder, ...inner.split("/"));
+-    const found = kind(path);
+-    if (found !== null && !found.isDirectory()) {
+-      refuse(path, found.isSymbolicLink() ? "a link" : "not a folder");
+-    }
+-  }
+-  for (const name of [MANIFEST_FILE, TAXONOMY_FILE, ".gitignore"]) {
+-    const path = join(repoFolder, name);
+-    const found = kind(path);
+-    if (found !== null && !found.isFile()) {
+-      refuse(path, found.isSymbolicLink() ? "a link" : "not a regular file");
+-    }
+-  }
++  if (!existsOnDisk(repoFolder)) return;
++  mustBe(repoFolder, "folder");
++  for (const [name, wanted] of OWN_LAYOUT) mustBe(join(repoFolder, ...name.split("/")), wanted);
+   const modules = join(repoFolder, ".gitmodules");
+-  if (kind(modules) !== null) {
++  if (existsOnDisk(modules)) {
+     throw new KnowledgeError(
+       "invalid",
+       `${modules} names repositories nested in this one, and the knowledge store keeps none; remove it`,
+@@ -183,7 +153,7 @@ export function refuseForeign(repoFolder: string): void {
+  * link as the second guard. Null when there is no file; a `KnowledgeError` for anything
+  * that is not a regular file, or one over the cap.
+  */
+-export function readRegularFile(path: string): Uint8Array | null {
++export function readRegularFile(path: string, max = ENTRY_MAX_BYTES): Uint8Array | null {
+   let stat: ReturnType<typeof lstatSync>;
+   try {
+     stat = lstatSync(path);
+@@ -199,8 +169,11 @@ export function readRegularFile(path: string): Uint8Array | null {
+   }
+   try {
+     const size = fstatSync(fd).size;
+-    if (size > ENTRY_MAX_BYTES) {
+-      throw new KnowledgeError("invalid", `${path} is over 256 KiB, the cap for one file`);
++    if (size > max) {
++      throw new KnowledgeError(
++        "invalid",
++        `${path} is over ${max / 1024} KiB, the cap for one file`,
++      );
+     }
+     const bytes = new Uint8Array(size);
+     let read = 0;
+@@ -281,7 +254,7 @@ export function gitEnv(
+     if (store.env.HOME !== undefined) env.HOME = store.env.HOME;
+     if (store.env.XDG_CONFIG_HOME !== undefined) env.XDG_CONFIG_HOME = store.env.XDG_CONFIG_HOME;
+   } else {
+-    env.GIT_CONFIG_GLOBAL = supportPaths(store.dataDir).emptyConfig;
++    env.GIT_CONFIG_GLOBAL = NO_CONFIG;
+     env.GIT_CONFIG_NOSYSTEM = "1";
+   }
+   if (options.readOnly === true) env.GIT_OPTIONAL_LOCKS = "0";
+@@ -294,11 +267,20 @@ export function gitEnv(
+   return env;
+ }
+ 
+-/** A `-c` value wins over the repository's own `.git/config`, so a local setting never runs either. */
+-function configArgs(dataDir: string): string[] {
++/**
++ * git's own name for no configuration file, on every system: it reads `/dev/null` as an
++ * empty file, and maps the name to the null device where there is no such path.
++ */
++const NO_CONFIG = "/dev/null";
++
++/**
++ * A `-c` value wins over the repository's own `.git/config`, so a local setting never runs
++ * either. The store keeps no folder or file of its own for git to be pointed at: one that
++ * sat beside the repositories could be filled by whoever can drop a file there.
++ */
++function configArgs(repo: string | null): string[] {
+   const settings = [
+     "commit.gpgsign=false",
+-    `core.hooksPath=${supportPaths(dataDir).noHooks}`,
+     "core.autocrlf=false",
+     "init.defaultBranch=main",
+     "user.useConfigOnly=false",
+@@ -307,7 +289,8 @@ function configArgs(dataDir: string): string[] {
+     "core.pager=cat",
+     "diff.external=",
+     "core.sshCommand=",
+-    // git never looks into a repository nested in this one.
++    // A second layer under the flag `statusOf` passes. A `.gitmodules` setting overrides
++    // these two, and only that flag wins over it.
+     "diff.ignoreSubmodules=all",
+     "submodule.recurse=false",
+     // A new repository keeps the formats the store reads, whatever a later git defaults
+@@ -315,6 +298,10 @@ function configArgs(dataDir: string): string[] {
+     "init.defaultObjectFormat=sha1",
+     "init.defaultRefFormat=files",
+   ];
++  // Hooks are looked for inside the repository's own configuration file. Nothing can be
++  // inside a file, so git finds no hook, on any system. A call with no repository yet
++  // (`init`, `--version`) runs none.
++  if (repo !== null) settings.push(`core.hooksPath=${join(repo, ".git", "config")}`);
+   return settings.flatMap((setting) => ["-c", setting]);
+ }
+ 
+@@ -347,7 +334,7 @@ export function runGit(
+   const cwd = repo ?? store.dataDir;
+   let result: ReturnType<typeof Bun.spawnSync>;
+   try {
+-    result = Bun.spawnSync([git, ...location, ...configArgs(store.dataDir), ...args], {
++    result = Bun.spawnSync([git, ...location, ...configArgs(repo), ...args], {
+       ...(existsSync(cwd) ? { cwd } : {}),
+       env: gitEnv(store, options),
+       stdin: "ignore",
+@@ -440,12 +427,18 @@ const ALLOWED_SETTINGS = new Set([
+   "core.precomposeunicode",
+   "core.symlinks",
+ ]);
+-/** Files under `.git/` that make git read a configuration other than `.git/config`. */
+-const REFUSED_FILES = ["commondir", "config.worktree"];
++/** Files under `.git/` that make git read from somewhere other than this repository. */
++const REFUSED_FILES: [file: string, what: string][] = [
++  ["commondir", "its configuration"],
++  ["config.worktree", "its configuration"],
++  ["objects/info/alternates", "objects"],
++];
++const ONLY_INIT = "a knowledge repository carries only the settings git init writes";
+ 
+ // The tokens of one configuration line, as git's parser takes them: white space, any
+-// number of section headers, then at most one key. git's white space is these six
+-// characters; a carriage return alone does not end a line.
++// number of section headers, then at most one key. git's white space is six characters:
++// the five here, and the line feed the line split has already taken. A carriage return
++// alone does not end a line.
+ const CONFIG_SPACE = /^[ \t\v\f\r]+/;
+ const CONFIG_HEADER = /^\[([A-Za-z0-9.-]+)(?:[ \t\v\f\r]+"((?:[^"\\]|\\.)*)")?\]/;
+ const CONFIG_KEY = /^([A-Za-z][A-Za-z0-9-]*)[ \t]*(?:=|$)/;
+@@ -460,22 +453,18 @@ const SHOWN_MAX = 40;
+  * store cannot read that way is refused, never skipped. git reads a repository's
+  * configuration from `.git/config`, from the directory a `commondir` file names, and from
+  * `config.worktree` when the worktree extension is on: the last two are refused outright,
+- * so the one file read here is the one git reads.
++ * so the one file read here is the one git reads. An `alternates` file, which has git
++ * read objects from another repository on the disk, is refused with them.
+  */
+ export function checkRepoConfig(repo: string): void {
+   const gitDir = join(repo, ".git");
+   const file = join(gitDir, "config");
+-  const refuse = (name: string): never => {
+-    throw new KnowledgeError(
+-      "invalid",
+-      `the repository's own git configuration sets ${name}, and a knowledge repository carries only the settings git init writes; remove it from ${file}`,
+-    );
+-  };
+-  for (const name of REFUSED_FILES) {
+-    if (existsOnDisk(join(gitDir, name))) {
++  for (const [name, what] of REFUSED_FILES) {
++    const path = join(gitDir, ...name.split("/"));
++    if (existsOnDisk(path)) {
+       throw new KnowledgeError(
+         "invalid",
+-        `${join(gitDir, name)} makes git read its configuration from somewhere else, which the knowledge store never allows; remove it`,
++        `${path} makes git read ${what} from somewhere else, which the knowledge store never allows; remove it`,
+       );
+     }
+   }
+@@ -514,11 +503,14 @@ export function checkRepoConfig(repo: string): void {
+       if (key === undefined || section === null) {
+         throw new KnowledgeError(
+           "invalid",
+-          `line ${index + 1} of ${file} is not one the knowledge store reads the way git does, and a knowledge repository carries only the settings git init writes; remove the line`,
++          `line ${index + 1} of ${file} is not one the knowledge store reads the way git does, and ${ONLY_INIT}; remove the line`,
+         );
+       }
+       if (!ALLOWED_SETTINGS.has(`${section.name}.${key.toLowerCase()}`)) {
+-        refuse(`${section.shown}.${key}`);
++        throw new KnowledgeError(
++          "invalid",
++          `the repository's own git configuration sets ${section.shown}.${key}, and ${ONLY_INIT}; remove it from ${file}`,
++        );
+       }
+       // The rest of the line is the key's value.
+       break;
+@@ -570,8 +562,10 @@ export function readManifest(repo: string): Manifest | null {
+   return "problem" in manifest ? null : manifest;
+ }
+ 
++const manifestText = (manifest: Manifest) => `${JSON.stringify(manifest, null, 2)}\n`;
++
+ export function writeManifest(repo: string, manifest: Manifest): void {
+-  writeFileAtomic(join(repo, MANIFEST_FILE), `${JSON.stringify(manifest, null, 2)}\n`);
++  writeFileAtomic(join(repo, MANIFEST_FILE), manifestText(manifest));
+ }
+ 
+ /**
+@@ -598,13 +592,10 @@ export function taxonomyFor(store: KnowledgeStore, ref: ScopeRef): Taxonomy | nu
+ 
+ /** Writes what a new repository holds and makes its first commit, always as the person. */
+ function createRepository(store: KnowledgeStore, repo: Repo): void {
+-  ensureSupportFolders(store.dataDir);
+   mkdirSync(repo.path, { recursive: true, mode: 0o700 });
+   if (!isDirectory(join(repo.path, ".git"))) {
+-    const template = supportPaths(store.dataDir).template;
+-    runGit(store, null, ["init", "-q", `--template=${template}`, repo.path], {
+-      operation: "write",
+-    });
++    // An empty template name copies no template: no hook, no attributes, no configuration.
++    runGit(store, null, ["init", "-q", "--template=", repo.path], { operation: "write" });
+   }
+   // The manifest is already there: `resolveRepo` writes it with the folder.
+   const paths = [MANIFEST_FILE, ".gitignore"];
+@@ -660,7 +651,18 @@ function learnAliases(store: KnowledgeStore, repo: Repo): void {
+     const found = unlearned();
+     if (found === null || statusOf(store, repo, [MANIFEST_FILE]).length > 0) return;
+     const { manifest, known, gained } = found;
+-    writeManifest(repo.path, { ...manifest, project: { aliases: [...known, ...gained] } });
++    const next: Manifest = { ...manifest, project: { aliases: [...known, ...gained] } };
++    const person = personAuthor(store);
++    // The record first, as for any write: a process that dies here leaves a manifest the
++    // next open puts back, not one that waits for `adopt`.
++    writeIntent(repo, {
++      operation: "write",
++      writer: person,
++      existed: [MANIFEST_FILE],
++      created: [],
++      written: { [MANIFEST_FILE]: hashOf(Buffer.from(manifestText(next))) },
++    });
++    writeManifest(repo.path, next);
+     try {
+       stagePaths(store, repo, [MANIFEST_FILE], "write");
+       commitPaths(
+@@ -668,25 +670,19 @@ function learnAliases(store: KnowledgeStore, repo: Repo): void {
+         repo,
+         [MANIFEST_FILE],
+         `knowledge: manifest learns ${gained.length === 1 ? "an alias" : `${gained.length} aliases`} of its project`,
+-        identityOf(personAuthor(store)),
++        identityOf(person),
+         "write",
+       );
+     } catch (error) {
++      // When even this fails, the record stays for the next open.
+       undoStaged(store, repo, { existed: [MANIFEST_FILE], created: [] }, "write");
++      clearIntent(repo);
+       throw error;
+     }
++    clearIntent(repo);
+   };
+-  if (holds(store, repo.relative)) {
+-    learn();
+-    return;
+-  }
+-  // The commit is made under the repository's own lease. While another process holds
+-  // it, the aliases wait for the next write.
+-  try {
+-    withRepoLeases(store, [repo.relative], learn);
+-  } catch (error) {
+-    if (!(error instanceof KnowledgeError && error.code === "locked")) throw error;
+-  }
++  // While another process holds the repository, the aliases wait for the next write.
++  underOwnLease(store, repo, learn);
+ }
+ 
+ /**
+@@ -826,10 +822,18 @@ export function undoStaged(
+   paths: { existed: string[]; created: string[] },
+   operation: string,
+ ): void {
+-  const foreign = [...paths.existed, ...paths.created].find((path) => !ownPath(path));
++  const all = [...paths.existed, ...paths.created];
++  const foreign = all.find((path) => !ownPath(path));
+   if (foreign !== undefined) {
+     throw new KnowledgeError("invalid", `${foreign} is not a path the knowledge store writes`);
+   }
++  const linked = all.find((path) => !reachedByFolders(repo.path, path));
++  if (linked !== undefined) {
++    throw new KnowledgeError(
++      "invalid",
++      `${linked} is reached through a link, and the knowledge store never follows one out of its own repository`,
++    );
++  }
+   if (paths.existed.length > 0) {
+     runGit(
+       store,
+@@ -849,9 +853,10 @@ export function undoStaged(
+ /**
+  * Whether a path is one the store writes or adopts: the manifest, the taxonomy, or a file
+  * under `entries/` or `proposals/`. Nothing else is restored, removed or written back by
+- * name: not a path that climbs out of the repository, and nothing under `.git`.
++ * name: not a path that climbs out of the repository, and nothing under `.git`. This reads
++ * the path's text only; `reachedByFolders` reads what is on the disk.
+  */
+-export function ownPath(path: string): boolean {
++function ownPath(path: string): boolean {
+   if (path === MANIFEST_FILE || path === TAXONOMY_FILE) return true;
+   const parts = path.split("/");
+   if (parts.length < 2 || (parts[0] !== ENTRIES_DIR && parts[0] !== "proposals")) return false;
+@@ -860,6 +865,21 @@ export function ownPath(path: string): boolean {
+   );
+ }
+ 
++/**
++ * Whether every folder on the way to a path, inside the repository, is a folder itself.
++ * A link among them leads out of the repository, and what lies beyond it is not the
++ * store's to read, write or remove, whatever the path says. A folder that is not there
++ * leads nowhere.
++ */
++function reachedByFolders(repoPath: string, path: string): boolean {
++  let folder = repoPath;
++  for (const part of path.split("/").slice(0, -1)) {
++    folder = join(folder, part);
++    if (existsOnDisk(folder) && !isDirectory(folder)) return false;
++  }
++  return true;
++}
++
+ /** Takes paths out of the index and leaves the files as they are: for a person's own work. */
+ export function unstage(
+   store: KnowledgeStore,
+@@ -952,41 +972,68 @@ export function writeIntent(repo: Repo, intent: Intent): void {
+ const KEPT_NAME = /^wizardingcode-kept-[0-9a-f-]+\.json$/;
+ 
+ /**
+- * The record an operation left, or null when there is none the store can act on. The
+- * record sits in a folder that may have been dropped here, so it is taken only when it is
+- * one the store could have written: a known operation, and no path but the store's own.
+- * A record that names `.git/config` would otherwise have the revert write there.
++ * A record and a kept-bytes file are read as regular files, never through a link, and no
++ * larger than this: an adopt of thousands of files writes a long record, not an endless one.
+  */
+-export function readIntent(repo: Repo): Intent | null {
++const RECORD_MAX_BYTES = 64 * 1024 * 1024;
++
++const isPlain = (value: unknown): value is Record<string, unknown> =>
++  typeof value === "object" && value !== null && !Array.isArray(value);
++
++/**
++ * What is at the record's path: nothing, a record the store can act on, or one it cannot,
++ * with the kept-bytes file it names when the name is one the store gives. The record sits
++ * in a folder that may have been dropped here, so it is acted on only when it is one the
++ * store could have written: a known operation, and no path but the store's own. A record
++ * that names `.git/config` would otherwise have the revert write there.
++ */
++function readRecord(repo: Repo): { present: boolean; intent: Intent | null; kept?: string } {
++  const file = intentPath(repo);
++  if (!existsOnDisk(file)) return { present: false, intent: null };
+   let raw: unknown;
+   try {
+-    raw = JSON.parse(readFileSync(intentPath(repo), "utf8"));
++    const bytes = readRegularFile(file, RECORD_MAX_BYTES);
++    raw = bytes === null ? null : JSON.parse(new TextDecoder().decode(bytes));
+   } catch {
+-    return null;
++    return { present: true, intent: null };
+   }
+-  const plain = (value: unknown): value is Record<string, unknown> =>
+-    typeof value === "object" && value !== null && !Array.isArray(value);
++  if (!isPlain(raw)) return { present: true, intent: null };
++  const { operation, existed, created, written, keptBytesFile } = raw;
++  const named = typeof keptBytesFile === "string" && KEPT_NAME.test(keptBytesFile);
++  const rejected = { present: true, intent: null, ...(named ? { kept: keptBytesFile } : {}) };
+   const ownPaths = (value: unknown): value is string[] =>
+     Array.isArray(value) && value.every((item) => typeof item === "string" && ownPath(item));
+-  if (!plain(raw)) return null;
+-  const { operation, existed, created, written, keptBytesFile } = raw;
+   const operations: readonly unknown[] = INTENT_OPERATIONS;
+-  if (!operations.includes(operation)) return null;
+-  if (!ownPaths(existed) || !ownPaths(created)) return null;
+-  if (written !== undefined && !(plain(written) && ownPaths(Object.keys(written)))) return null;
+-  if (keptBytesFile !== undefined) {
+-    if (typeof keptBytesFile !== "string" || !KEPT_NAME.test(keptBytesFile)) return null;
++  if (!operations.includes(operation)) return rejected;
++  if (!ownPaths(existed) || !ownPaths(created)) return rejected;
++  if (written !== undefined && !(isPlain(written) && ownPaths(Object.keys(written)))) {
++    return rejected;
+   }
+-  return raw as unknown as Intent;
++  if (keptBytesFile !== undefined && !named) return rejected;
++  return { ...rejected, intent: raw as unknown as Intent };
+ }
+ 
++/** The record an operation left, or null when there is none the store can act on. */
++export function readIntent(repo: Repo): Intent | null {
++  return readRecord(repo).intent;
++}
++
++/** Removes whatever is at the record's path, also a folder or a link someone left there. */
+ export function clearIntent(repo: Repo): void {
+-  rmSync(intentPath(repo), { force: true });
++  rmSync(intentPath(repo), { force: true, recursive: true });
+ }
+ 
+-/** Keeps files' bytes under `.git/` for an adopt; returns the name the intent records. */
+-export function keepBytes(repo: Repo, files: Map<string, Uint8Array>): string {
+-  const name = `wizardingcode-kept-${randomUUID()}.json`;
++/** A new name for an adopt's kept bytes, under `.git/`. */
++export function keptFileName(): string {
++  return `wizardingcode-kept-${randomUUID()}.json`;
++}
++
++/** Keeps files' bytes under `.git/` for an adopt, under the name the intent records. */
++export function keepBytes(
++  repo: Repo,
++  files: Map<string, Uint8Array>,
++  name = keptFileName(),
++): string {
+   const kept: Record<string, string> = {};
+   for (const [path, bytes] of files) kept[path] = Buffer.from(bytes).toString("base64");
+   writeFileAtomic(join(repo.path, ".git", name), JSON.stringify(kept));
+@@ -1004,15 +1051,16 @@ export function restoreKept(repo: Repo, name: string | undefined, only?: Set<str
+   const file = join(repo.path, ".git", name);
+   let kept: unknown;
+   try {
+-    kept = JSON.parse(readFileSync(file, "utf8"));
++    const bytes = readRegularFile(file, RECORD_MAX_BYTES);
++    kept = bytes === null ? null : JSON.parse(new TextDecoder().decode(bytes));
+   } catch {
+     return;
+   }
+-  for (const [path, encoded] of Object.entries((kept ?? {}) as Record<string, unknown>)) {
++  for (const [path, encoded] of Object.entries(isPlain(kept) ? kept : {})) {
+     if (only !== undefined && !only.has(path)) continue;
+     const parts = path.split("/");
+     if (parts.length !== 2 || parts[0] !== ENTRIES_DIR || !ownPath(path)) continue;
+-    if (typeof encoded !== "string") continue;
++    if (typeof encoded !== "string" || !reachedByFolders(repo.path, path)) continue;
+     mkdirSync(join(repo.path, ENTRIES_DIR), { recursive: true, mode: 0o700 });
+     writeFileAtomic(join(repo.path, ...parts), Buffer.from(encoded, "base64"));
+   }
+@@ -1026,6 +1074,8 @@ export function dropKept(repo: Repo, name: string | undefined): void {
+ 
+ /** What is at a path now, as the intent record names it: a hash, null for nothing, or unknown. */
+ function stateOf(repo: Repo, path: string): string | null | undefined {
++  // Beyond a link is another folder's file: never read as the engine's, so never put back.
++  if (!reachedByFolders(repo.path, path)) return undefined;
+   try {
+     const bytes = readRegularFile(join(repo.path, ...path.split("/")));
+     return bytes === null ? null : hashOf(bytes);
+@@ -1054,10 +1104,21 @@ function report(store: KnowledgeStore, operation: string, message: string): void
+  * interrupted, it is running.
+  */
+ function revertInterrupted(store: KnowledgeStore, repo: Repo): void {
+-  const intent = readIntent(repo);
++  const record = readRecord(repo);
++  if (!record.present) return;
++  const intent = record.intent;
+   if (intent === null) {
+-    // A record nobody can read names no paths; it cannot be acted on, only removed.
+-    if (existsSync(intentPath(repo)) && !leaseHeldElsewhere(store, repo)) clearIntent(repo);
++    // A record the store did not write names no path it may touch: it is removed, with
++    // the kept bytes it names, nothing is put back, and the person is told.
++    underOwnLease(store, repo, () => {
++      dropKept(repo, record.kept);
++      clearIntent(repo);
++      report(
++        store,
++        "revert",
++        `a record of an interrupted operation in ${repo.relative} was not one the store wrote; it was removed and nothing was put back`,
++      );
++    });
+     return;
+   }
+   const revert = () => {
+@@ -1103,15 +1164,7 @@ function revertInterrupted(store: KnowledgeStore, repo: Repo): void {
+       );
+     }
+   };
+-  if (holds(store, repo.relative)) {
+-    revert();
+-    return;
+-  }
+-  try {
+-    withRepoLeases(store, [repo.relative], revert);
+-  } catch (error) {
+-    if (!(error instanceof KnowledgeError && error.code === "locked")) throw error;
+-  }
++  underOwnLease(store, repo, revert);
+ }
+ 
+ // --- The leases ---------------------------------------------------------------------
+@@ -1123,18 +1176,6 @@ export function leaseKey(relative: string): string {
+ /** The repositories each store's running operation holds, so a nested step knows what it has. */
+ const held = new WeakMap<KnowledgeStore, Map<string, string>>();
+ 
+-const holds = (store: KnowledgeStore, relative: string) => held.get(store)?.has(relative) === true;
+-
+-function leaseHeldElsewhere(store: KnowledgeStore, repo: Repo): boolean {
+-  if (holds(store, repo.relative)) return false;
+-  // Claiming and releasing tells a live owner from a stale row without reading the lease.
+-  const probe = `${process.pid}-${randomUUID()}`;
+-  const key = leaseKey(repo.relative);
+-  if (!claimLease(store.db, key, probe, store.now(), KNOWLEDGE_LEASE_MS)) return true;
+-  releaseLease(store.db, key, probe);
+-  return false;
+-}
+-
+ /**
+  * Runs `fn` holding the lease of each repository, claimed in the given order: the root
+  * first, then each repository by path, so that no two operations hold part of the same
+@@ -1175,3 +1216,21 @@ export function withRepoLeases<T>(store: KnowledgeStore, relatives: string[], fn
+     }
+   }
+ }
++
++/**
++ * Runs a step of `openRepo` under the repository's own lease, which the running operation
++ * may hold already. While another process holds it the step is not run: that process is
++ * working there, and the step waits for a later open. Only that refusal is let pass: a
++ * `locked` raised once the step has started is a lease lost midway, and is thrown.
++ */
++function underOwnLease(store: KnowledgeStore, repo: Repo, step: () => void): void {
++  let started = false;
++  try {
++    withRepoLeases(store, [repo.relative], () => {
++      started = true;
++      step();
++    });
++  } catch (error) {
++    if (started || !(error instanceof KnowledgeError && error.code === "locked")) throw error;
++  }
++}
+diff --git a/src/modules/knowledge/store.ts b/src/modules/knowledge/store.ts
+index 1aabdd1..9e92634 100644
+--- a/src/modules/knowledge/store.ts
++++ b/src/modules/knowledge/store.ts
+@@ -53,6 +53,7 @@ import {
+   headOf,
+   type IntentOperation,
+   keepBytes,
++  keptFileName,
+   MANIFEST_FILE,
+   OPEN_DIR,
+   openRepo,
+@@ -878,7 +879,7 @@ function adoptIn(
+     if (text !== null) rewrites.push({ path, text });
+   }
+ 
+-  const keptName = keepBytes(repo, kept);
++  const keptName = keptFileName();
+   // What adopt leaves at each path: nothing where the file is gone, an entry's rewrite,
+   // and otherwise the person's bytes untouched. A file that cannot be read as a regular
+   // file has no line here, and an interrupted adopt leaves it as it finds it.
+@@ -901,6 +902,8 @@ function adoptIn(
+     written,
+     keptBytesFile: keptName,
+   });
++  // After the record that names them: kept bytes no record names would never be removed.
++  keepBytes(repo, kept, keptName);
+   const count = paths.length;
+   try {
+     for (const { path, text } of rewrites) writeFileAtomic(absolute(repo, path), text);
+diff --git a/tests/helpers/stub-git.ts b/tests/helpers/stub-git.ts
+index 621a7c0..88be5b2 100644
+--- a/tests/helpers/stub-git.ts
++++ b/tests/helpers/stub-git.ts
+@@ -13,6 +13,8 @@ export interface StubBehaviour {
+   version?: string;
+   /** The script writes its environment here on every call. */
+   dumpEnvTo?: string;
++  /** Arguments put ahead of the caller's on every call that reaches the real git. */
++  prepend?: string[];
+ }
+ 
+ const REAL_GIT = Bun.which("git");
+@@ -66,7 +68,8 @@ export function stubGit(dir: string, behaviour: StubBehaviour): string {
+       "fi",
+     );
+   }
+-  lines.push(`exec ${quoted(REAL_GIT)} "$@"`);
++  const prepended = (behaviour.prepend ?? []).map((arg) => `${quoted(arg)} `).join("");
++  lines.push(`exec ${quoted(REAL_GIT)} ${prepended}"$@"`);
+   const script = join(dir, "git");
+   writeFileSync(script, `${lines.join("\n")}\n`);
+   chmodSync(script, 0o755);
+diff --git a/tests/integration/knowledge-cli.test.ts b/tests/integration/knowledge-cli.test.ts
+index 948f8e5..841af4e 100644
+--- a/tests/integration/knowledge-cli.test.ts
++++ b/tests/integration/knowledge-cli.test.ts
+@@ -485,4 +485,33 @@ describe("knowledge list, rebuild and adopt", () => {
+       expect(result.stderr).toContain("Usage: wizardingcode-mem knowledge");
+     }
+   });
++
++  test("a repository the store refuses does not stop the commands for the others", async () => {
++    const shared = WRITE.map((arg) => (arg === "workspace" ? "shared" : arg));
++    expect((await cli(...WRITE, "--body", "The body.")).exitCode).toBe(0);
++    expect((await cli(...shared, "--body", "The body.")).exitCode).toBe(0);
++    // A setting a person added by hand to the shared repository.
++    const config = join(dataDir, "knowledge", "shared", ".git", "config");
++    writeFileSync(
++      config,
++      `${readFileSync(config, "utf8")}[remote "origin"]\n\turl = https://example.invalid/x.git\n`,
++    );
++
++    for (const command of ["list", "rebuild", "adopt"]) {
++      const result = await cli(command);
++      expect(result.exitCode).toBe(1);
++      expect(result.stdout).toContain("knowledge/workspace");
++      expect(result.stdout).not.toContain("knowledge/shared");
++      expect(result.stderr).toContain("knowledge/shared: ");
++      expect(result.stderr).toContain("remote.origin.url");
++    }
++    // The other scope alone is not touched by it.
++    const scoped = await cli("list", "--scope", "workspace");
++    expect(scoped.exitCode).toBe(0);
++    expect(scoped.stderr).toBe("");
++    // A write to the refused repository is refused, in the same words.
++    const write = await cli(...shared, "--title", "Another one", "--body", "x");
++    expect(write.exitCode).toBe(1);
++    expect(write.stderr).toContain("remote.origin.url");
++  });
+ });
+diff --git a/tests/unit/knowledge-repo.test.ts b/tests/unit/knowledge-repo.test.ts
+index 55a5e17..3210475 100644
+--- a/tests/unit/knowledge-repo.test.ts
++++ b/tests/unit/knowledge-repo.test.ts
+@@ -20,7 +20,6 @@ import {
+   clearIntent,
+   commitPaths,
+   ensureRepo,
+-  ensureSupportFolders,
+   fingerprintOf,
+   GIT_MIN_VERSION,
+   GIT_TIMEOUT_MS,
+@@ -45,7 +44,6 @@ import {
+   runGit,
+   stagePaths,
+   statusOf,
+-  supportPaths,
+   taxonomyFor,
+   undoStaged,
+   unstage,
+@@ -150,24 +148,70 @@ describe("names and versions", () => {
+   });
+ });
+ 
+-describe("the support folders", () => {
+-  test("an empty template, a folder with no hooks and an empty configuration", () => {
+-    ensureSupportFolders(fx.dataDir);
+-    const paths = supportPaths(fx.dataDir);
+-    expect(paths).toEqual({
+-      template: join(fx.dataDir, "knowledge", ".template"),
+-      noHooks: join(fx.dataDir, "knowledge", ".no-hooks"),
+-      emptyConfig: join(fx.dataDir, "knowledge", ".gitconfig-empty"),
++describe("nothing of the store's own sits beside the repositories", () => {
++  test("the store keeps no file or folder under knowledge/ but the repositories", () => {
++    ensureRepo(fx.store(), WORKSPACE);
++    const root = join(fx.dataDir, "knowledge");
++    expect(readdirSync(root)).toEqual(["workspace"]);
++    if (unix) expect(mode(root)).toBe(0o700);
++  });
++
++  /** A first write into a data directory where `prepare` has already put files. */
++  function firstWrite(name: string, prepare: (root: string, script: string) => void) {
++    const { script, marker } = trap(name);
++    const root = join(fx.dataDir, "knowledge");
++    mkdirSync(root, { recursive: true });
++    prepare(root, script);
++    const store = fx.store({ env: { WIZARDINGCODE_MEM_AUTHOR: "Writer" } });
++    const result = writeEntry(store, WORKSPACE, AN_ENTRY, personAuthor(store));
++    expect(result.kind).toBe("written");
++    expect(existsSync(marker)).toBe(false);
++    const repo = openRepo(store, WORKSPACE) as Repo;
++    expect(realGit(repo.path, "rev-list", "--count", "HEAD").trim()).toBe("2");
++    return repo;
++  }
++
++  test("a hook someone left in a folder beside the repositories never runs", () => {
++    firstWrite("beside-hook", (root, script) => {
++      mkdirSync(join(root, ".no-hooks"));
++      writeFileSync(join(root, ".no-hooks", "pre-commit"), `#!/bin/sh\n${script} < /dev/null\n`);
++      chmodSync(join(root, ".no-hooks", "pre-commit"), 0o755);
++    });
++  });
++
++  test("a configuration someone left beside the repositories is never read", () => {
++    firstWrite("beside-config", (root, script) => {
++      const attributes = join(fx.dir, "attributes");
++      writeFileSync(attributes, "* filter=x\n");
++      writeFileSync(
++        join(root, ".gitconfig-empty"),
++        `[core]\n\tattributesFile = ${attributes}\n[filter "x"]\n\tclean = ${script}\n`,
++      );
++    });
++  });
++
++  test("a template someone left beside the repositories is never copied", () => {
++    const repo = firstWrite("beside-template", (root, script) => {
++      mkdirSync(join(root, ".template", "info"), { recursive: true });
++      writeFileSync(join(root, ".template", "config"), `[filter "x"]\n\tclean = ${script}\n`);
++      writeFileSync(join(root, ".template", "info", "attributes"), "* filter=x\n");
+     });
+-    expect(statSync(paths.template).isDirectory()).toBe(true);
+-    expect(statSync(paths.noHooks).isDirectory()).toBe(true);
+-    expect(readFileSync(paths.emptyConfig, "utf8")).toBe("");
+-    if (unix) {
+-      expect(mode(join(fx.dataDir, "knowledge"))).toBe(0o700);
+-      expect(mode(paths.template)).toBe(0o700);
+-      expect(mode(paths.noHooks)).toBe(0o700);
+-      expect(mode(paths.emptyConfig)).toBe(0o600);
++    expect(readFileSync(join(repo.path, ".git", "config"), "utf8")).not.toContain("filter");
++    expect(existsSync(join(repo.path, ".git", "info", "attributes"))).toBe(false);
++  });
++
++  test("a hook in the repository's own hooks folder never runs", () => {
++    const store = fx.store();
++    const repo = ensureRepo(store, WORKSPACE);
++    const { script, marker } = trap("own-hook");
++    mkdirSync(join(repo.path, ".git", "hooks"), { recursive: true });
++    for (const name of ["pre-commit", "post-commit", "reference-transaction"]) {
++      writeFileSync(join(repo.path, ".git", "hooks", name), `#!/bin/sh\n${script} < /dev/null\n`);
++      chmodSync(join(repo.path, ".git", "hooks", name), 0o755);
+     }
++    commitFile(store, repo, "entries/a.md", "one\n");
++    expect(realGit(repo.path, "rev-list", "--count", "HEAD").trim()).toBe("2");
++    expect(existsSync(marker)).toBe(false);
+   });
+ });
+ 
+@@ -433,6 +477,18 @@ describe("a repository's own git configuration", () => {
+     expect(codeOf(() => checkRepoConfig(repo.path))).toBeNull();
+   });
+ 
++  test("a new repository keeps the formats the store reads, whatever git defaults to", () => {
++    // A git whose own defaults are the other formats: its settings come ahead of the store's.
++    const later = stubGit(join(fx.dir, "later-git"), {
++      prepend: ["-c", "init.defaultObjectFormat=sha256", "-c", "init.defaultRefFormat=reftable"],
++    });
++    const store = fx.store({ env: { PATH: fx.pathWith(later) } });
++    const repo = ensureRepo(store, WORKSPACE);
++    expect(readFileSync(join(repo.path, ".git", "config"), "utf8")).not.toContain("extensions");
++    expect(openRepo(store, WORKSPACE)?.id).toBe(repo.id);
++    expect(realGit(repo.path, "rev-list", "--count", "HEAD").trim()).toBe("1");
++  });
++
+   test("a configuration that is a link, or too large to be one git init wrote, is refused", () => {
+     const store = fx.store();
+     const repo = ensureRepo(store, WORKSPACE);
+@@ -529,7 +585,7 @@ describe("the runner", () => {
+ 
+     runGit(spy, repo.path, ["status", "--porcelain"], { operation: "test", readOnly: true });
+     expect(seen()).toContain("GIT_OPTIONAL_LOCKS=0");
+-    expect(seen()).toContain(`GIT_CONFIG_GLOBAL=${join(root, ".gitconfig-empty")}`);
++    expect(seen()).toContain("GIT_CONFIG_GLOBAL=/dev/null");
+     expect(seen()).toContain("GIT_CONFIG_NOSYSTEM=1");
+     expect(seen()).toContain(`GIT_CEILING_DIRECTORIES=${root}`);
+     expect(seen()).toContain("GIT_TERMINAL_PROMPT=0");
+@@ -1039,6 +1095,117 @@ describe("an interrupted operation", () => {
+     expect(said[0]).not.toContain("entries/b.md");
+   });
+ 
++  /**
++   * What a dropped folder could carry: `entries/sub` a link to a folder of the person's, an
++   * index entry beyond it that `stage` makes, and a record that names the file as written.
++   */
++  function linkedOutside(stage: (repo: Repo) => void): { repo: Repo; victim: string } {
++    const repo = ensureRepo(fx.store(), WORKSPACE);
++    const outside = join(fx.dir, "the-persons-folder");
++    mkdirSync(outside);
++    const victim = join(outside, "victim.txt");
++    writeFileSync(victim, "the person's file\n");
++    // The index is prepared while the folder is a real one, which is then made a link.
++    const sub = join(repo.path, "entries", "sub");
++    mkdirSync(sub);
++    writeFileSync(join(sub, "victim.txt"), "the person's file\n");
++    stage(repo);
++    rmSync(sub, { recursive: true });
++    symlinkSync(outside, sub);
++    writeFileSync(
++      join(repo.path, ".git", "wizardingcode-op.json"),
++      JSON.stringify({
++        operation: "write",
++        writer: person,
++        existed: [],
++        created: ["entries/sub/victim.txt"],
++        written: { "entries/sub/victim.txt": hash("the person's file\n") },
++      }),
++    );
++    return { repo, victim };
++  }
++
++  test("a file reached through a link inside the repository is never removed", () => {
++    const { store, said } = reporting();
++    const { repo, victim } = linkedOutside((made) => {
++      realGit(made.path, "add", "-N", "--", "entries/sub/victim.txt");
++    });
++    expect(openRepo(store, WORKSPACE)?.id).toBe(repo.id);
++    expect(readFileSync(victim, "utf8")).toBe("the person's file\n");
++    expect(readIntent(repo)).toBeNull();
++    expect(existsSync(join(repo.path, ".git", "wizardingcode-op.json"))).toBe(false);
++    expect(said).toHaveLength(1);
++    expect(said[0]).toContain("entries/sub/victim.txt");
++    expect(said[0]).not.toContain("was undone");
++  });
++
++  test("a regular index entry beyond a link does not leave the repository refusing every command", () => {
++    const { store } = reporting();
++    const { repo, victim } = linkedOutside((made) => {
++      realGit(made.path, "add", "--", "entries/sub/victim.txt");
++    });
++    expect(openRepo(store, WORKSPACE)?.id).toBe(repo.id);
++    expect(readFileSync(victim, "utf8")).toBe("the person's file\n");
++    expect(readIntent(repo)).toBeNull();
++    expect(openRepo(store, WORKSPACE)?.id).toBe(repo.id);
++  });
++
++  test("undoing refuses a path whose folder is a link", () => {
++    const store = fx.store();
++    const repo = ensureRepo(store, WORKSPACE);
++    const outside = join(fx.dir, "the-persons-folder");
++    mkdirSync(outside);
++    writeFileSync(join(outside, "victim.txt"), "the person's file\n");
++    symlinkSync(outside, join(repo.path, "entries", "sub"));
++    const call = () =>
++      undoStaged(store, repo, { existed: [], created: ["entries/sub/victim.txt"] }, "write");
++    expect(codeOf(call)).toBe("invalid");
++    expect(thrown(call).message).toContain("entries/sub");
++    expect(existsSync(join(outside, "victim.txt"))).toBe(true);
++  });
++
++  test("a record that is a link, or not a file, is never read", () => {
++    const store = fx.store();
++    const repo = ensureRepo(store, WORKSPACE);
++    const record = join(repo.path, ".git", "wizardingcode-op.json");
++    const elsewhere = join(fx.dir, "elsewhere.json");
++    writeFileSync(
++      elsewhere,
++      JSON.stringify({ operation: "write", writer: person, existed: [], created: [] }),
++    );
++    symlinkSync(elsewhere, record);
++    expect(readIntent(repo)).toBeNull();
++    // Removed like any record the store cannot act on; what it pointed at is untouched.
++    openRepo(store, WORKSPACE);
++    expect(existsSync(record)).toBe(false);
++    expect(existsSync(elsewhere)).toBe(true);
++
++    mkdirSync(record);
++    expect(readIntent(repo)).toBeNull();
++  });
++
++  test("a record the store did not write is removed with its kept bytes, and said", () => {
++    const { store, said } = reporting();
++    const repo = ensureRepo(store, WORKSPACE);
++    const kept = keepBytes(repo, new Map([["entries/a.md", Buffer.from("kept\n")]]));
++    writeFileSync(
++      join(repo.path, ".git", "wizardingcode-op.json"),
++      JSON.stringify({
++        operation: "adopt",
++        writer: person,
++        existed: ["../outside.md"],
++        created: [],
++        keptBytesFile: kept,
++      }),
++    );
++    openRepo(store, WORKSPACE);
++    expect(existsSync(join(repo.path, ".git", "wizardingcode-op.json"))).toBe(false);
++    expect(existsSync(join(repo.path, ".git", kept))).toBe(false);
++    expect(existsSync(join(repo.path, "entries", "a.md"))).toBe(false);
++    expect(said).toHaveLength(1);
++    expect(said[0]).toContain("not one the store wrote");
++  });
++
+   test("a record that names a path outside the knowledge folders is not acted on", () => {
+     const store = fx.store();
+     const repo = ensureRepo(store, WORKSPACE);
+@@ -1197,6 +1364,12 @@ describe("a folder that is not the store's own repository", () => {
+     refused("config.worktree");
+     rmSync(join(gitDir, "config.worktree"));
+ 
++    // Objects read from another repository on the disk.
++    mkdirSync(join(gitDir, "objects", "info"), { recursive: true });
++    writeFileSync(join(gitDir, "objects", "info", "alternates"), "/somewhere/else/objects\n");
++    refused("alternates");
++    rmSync(join(gitDir, "objects", "info", "alternates"));
++
+     writeFileSync(join(gitDir, "config"), `${BASE}[extensions]\n\tworktreeConfig = true\n`);
+     refused("worktreeConfig");
+ 
+@@ -1351,6 +1524,19 @@ describe("a folder that is not the store's own repository", () => {
+     expect(openRepo(store, WORKSPACE)?.id).toBe(repo.id);
+     expect(statusOf(store, repo, [])).toEqual([]);
+     expect(existsSync(marker)).toBe(false);
++
++    // A .gitmodules that tells git to look into it, appearing after the repository was
++    // opened: the setting the runner passes gives way to it, the flag statusOf adds does not.
++    writeFileSync(
++      join(repo.path, ".gitmodules"),
++      '[submodule "x"]\n\tpath = entries/sub\n\turl = ./entries/sub\n\tignore = none\n',
++    );
++    const evenLater = new Date(Date.now() + 120_000);
++    utimesSync(join(nested, "f.txt"), evenLater, evenLater);
++    expect(statusOf(store, repo, ["entries"])).toEqual([]);
++    expect(existsSync(marker)).toBe(false);
++    rmSync(join(repo.path, ".gitmodules"));
++
+     // The trap is live: git without the store's flag does run it.
+     realGit(repo.path, "status", "--porcelain");
+     expect(existsSync(marker)).toBe(true);
+diff --git a/tests/unit/knowledge-resolve.test.ts b/tests/unit/knowledge-resolve.test.ts
+index 8bb1f32..8736ae6 100644
+--- a/tests/unit/knowledge-resolve.test.ts
++++ b/tests/unit/knowledge-resolve.test.ts
+@@ -14,7 +14,7 @@ import { listRepos, resolveRepo } from "../../src/modules/knowledge/resolve.ts";
+ import type { Manifest } from "../../src/modules/knowledge/types.ts";
+ import { setMeta } from "../../src/store/meta.ts";
+ import { codeOf, type Fixture, knowledgeFixture } from "../helpers/knowledge.ts";
+-import { realGit } from "../helpers/stub-git.ts";
++import { realGit, stubGit } from "../helpers/stub-git.ts";
+ 
+ const person = { kind: "person", name: "you", source: "default" } as const;
+ 
+@@ -164,6 +164,38 @@ describe("resolveRepo", () => {
+     expect(readManifest(first.path)?.project?.aliases).toContain("remote:github.com/x/y");
+   });
+ 
++  test("a manifest change that stopped midway is put back, never left for adopt", () => {
++    const store = fx.store({ env: { WIZARDINGCODE_MEM_AUTHOR: "Writer" } });
++    const id = fx.addProject("gitdir:/x/.git", "path:/x");
++    const first = ensureRepo(store, project(id));
++    const commits = () => Number(realGit(first.path, "rev-list", "--count", "HEAD").trim());
++    fx.db.run(
++      "INSERT INTO project_aliases (alias, project_id) VALUES ('remote:github.com/x/y', ?)",
++      [id],
++    );
++    // The commit fails, and so does the first attempt to put the manifest back.
++    const broken = fx.store({
++      env: {
++        WIZARDINGCODE_MEM_AUTHOR: "Writer",
++        PATH: fx.pathWith(
++          stubGit(join(fx.dir, "stopping-git"), {
++            fail: "commit",
++            failOnce: "restore",
++            stderr: "fatal: boom",
++          }),
++        ),
++      },
++    });
++    expect(codeOf(() => ensureRepo(broken, project(id)))).toBe("git");
++    expect(realGit(first.path, "status", "--porcelain").trim()).toBe("M  knowledge.json");
++
++    // The next write puts the engine's own change back, then makes it again in a commit.
++    ensureRepo(store, project(id));
++    expect(realGit(first.path, "status", "--porcelain")).toBe("");
++    expect(commits()).toBe(2);
++    expect(readManifest(first.path)?.project?.aliases).toContain("remote:github.com/x/y");
++  });
++
+   test("a manifest the person is editing is left to them", () => {
+     const store = fx.store();
+     const id = fx.addProject("gitdir:/x/.git", "path:/x");
+diff --git a/tests/unit/module-migrations.test.ts b/tests/unit/module-migrations.test.ts
+index d16ffae..89ff2ae 100644
+--- a/tests/unit/module-migrations.test.ts
++++ b/tests/unit/module-migrations.test.ts
+@@ -156,6 +156,10 @@ describe("the knowledge module's schema", () => {
+       CREATE INDEX injections_memory_shown ON injections(memory_id, at);
+       CREATE INDEX injections_memory_contexts ON injections(memory_id, session_id, context_epoch);
+       INSERT INTO knowledge_entries (project_id, slug, title) VALUES (1, 'old', 'An old entry');
++      -- What its promotion pass kept in the core table meta, beside a row that is not its own.
++      INSERT INTO meta (key, value) VALUES
++        ('knowledge.promote.cursor', '{}'), ('knowledge.not-standing', '[]'),
++        ('knowledge.promote.lease', '{"owner":"1-x","until":1}'), ('kept.by.the.core', 'yes');
+     `);
+     // The fixture is the withdrawn shape in use: the trigger filled the full-text table.
+     expect(old.query<{ n: number }, []>("SELECT count(*) AS n FROM knowledge_fts").get()?.n).toBe(
+@@ -195,6 +199,15 @@ describe("the knowledge module's schema", () => {
+         .map((row) => row.name)
+         .filter((name) => name.startsWith("knowledge_")),
+     ).toEqual([]);
++    // Its three rows in meta are gone, and no other row with them.
++    expect(
++      db
++        .query<{ key: string }, []>(
++          "SELECT key FROM meta WHERE key LIKE 'knowledge.%' OR key = 'kept.by.the.core' ORDER BY key",
++        )
++        .all()
++        .map((row) => row.key),
++    ).toEqual(["kept.by.the.core"]);
+     db.run(
+       "INSERT INTO knowledge_repos (scope, project_id, path, indexed_at) VALUES ('workspace', 0, 'knowledge/workspace', 0)",
+     );

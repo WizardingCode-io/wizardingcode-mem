@@ -1,0 +1,296 @@
+From c5fa3d2e76b3f0710df044b932785ac40c03eb86 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Andr=C3=A9=20Agro=20Ferreira?=
+ <35269365+andreagroferreira@users.noreply.github.com>
+Date: Mon, 9 Nov 2026 14:19:11 +0000
+Subject: [PATCH] Knowledge: the eighth judgement round's defects
+
+Two rules of the last round had no test: a repository that has commits is not given a new manifest, and doctor lists a link or a file at a fixed scope's name with and without a database. Both are held now. rebuild refuses, forgetting nothing, where the data directory has no knowledge folder at all and the index holds repositories: the rows are another data directory's until the person says otherwise. The root's taxonomy is no longer read through a link at the root's name. The rule on asking the disk is worded for the places that keep it, and the limits it leaves are stated in ADR 0024.
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+---
+ CLAUDE.md                            |  2 +-
+ docs/adr/0024-knowledge-module.md    |  9 ++++-
+ src/modules/knowledge/index-store.ts | 33 ++++++++++++-----
+ src/modules/knowledge/repo.ts        | 24 +++++++++----
+ tests/unit/doctor-knowledge.test.ts  | 31 ++++++++++++++++
+ tests/unit/knowledge-index.test.ts   | 53 ++++++++++++++++++++++++++++
+ tests/unit/knowledge-resolve.test.ts |  2 ++
+ 7 files changed, 138 insertions(+), 16 deletions(-)
+
+diff --git a/CLAUDE.md b/CLAUDE.md
+index af704df..388b371 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -14,7 +14,7 @@ Brand conventions: products, plugins and skills are called `wizardingcode-<thing
+ - Measured decisions and departures from the design: `docs/adr/` (read the latest before touching the schema or retrieval)
+ - One engine with modules (ADR 0019): `src/engine/` is the contract (`module.ts`), the composer and budgets (`compose.ts`, `budget.ts`) and the enabled set (`modules.ts`); `src/modules/memory/` is the one module shipped. Hooks, the MCP server and the viewer's rail ask the modules, never memory by name. `WIZARDINGCODE_MODULES` (comma list, default `memory`) only adds modules: memory is always on (the API refuses a list without it), and stopping it for a project stays the per-project "memory off". `src/core/project.ts` and the links store are the engine's: every module uses the same project ids.
+ - `ui.json` (the running viewer's state) lives at the brand level, `~/.wizardingcode/ui.json` (honouring `WIZARDINGCODE_HOME`); the old file in the data directory is migrated once. A new module's rail icons must be listed in `ui/vite.config.ts`, since icons are bundled at build time.
+-- The knowledge store (ADR 0024, a draft: the store only, not yet an `EngineModule` in `BUILT_IN`, so no hook, tool or view reads it): `src/modules/knowledge/`. The truth is Markdown files with frontmatter in one git repository per scope under the data directory (`<data dir>/knowledge/workspace`, `shared`, `projects/<folder>`; `entry.ts` is the formats, `repo.ts` the repositories and the one git runner `runGit`, `resolve.ts` the mapping of a project to its repository through its manifest, `store.ts` the writes, proposals and `adopt`, `taxonomy.ts` the areas, `index-store.ts` the index rebuilt from the files, `schema.ts` the leaf with `requireSchema`, which everything that reads or writes the tables calls). Every git call goes through `runGit`, never on a hook path, and never with the person's git configuration; `openRepo` is the one way to a repository, and before git runs it refuses a folder the store did not make (`refuseForeign`: one whose `.git` holds anything but regular files and folders included; `refuseLinkedRoots` for `knowledge/` and `knowledge/projects/` themselves) and a `.git/config` that holds anything but the settings `git init` writes (`checkRepoConfig`, an allow list: add to `ALLOWED_SETTINGS` only what the store itself writes); `statusOf` never looks into a nested repository. The store keeps no file of its own under `knowledge/` beside the repositories: git gets `/dev/null` as its global configuration, the repository's own `.git/config` (a file) as its hooks path, and no template. `doctor` is the one reader that does not go through `openRepo`, which writes: it reads by hand under the same guards (`refuseLinkedRoots`, `refuseForeign`, `checkRepoConfig`), each of which it must be given when `openRepo` gains one. Only a name with nothing at it is gone: wherever the answer decides whether a repository, or a file of one, is there, the disk is asked with `lookAt`, `kindAt` and `namesIn` (`repo.ts`), for which anything that cannot be looked at is a refusal, never "not there"; `doctor` lists the folders with the same three. A link or a file where a repository's folder was is refused by name and its index rows stay, and a project's row names its folder while anything is at that name (`matchProject` in `resolve.ts`), so no state of the disk gives a project a second folder. An interrupted operation is put back by its intent record, path by path, only where a file is still as the engine left it; a record is read only when every path in it is the store's own (`ownPath`), and a path is followed only through real folders (`reachedByFolders`). Three rules live in one place each: the write of the engine's own text, with its record and its undo, in `commitChange` (`repo.ts`; `adopt` keeps its own frame in `store.ts`, since it gives a person's bytes back instead of restoring from HEAD); a step of `openRepo` under the repository's lease in `underOwnLease` (`repo.ts`); a command over several repositories, where one the store refuses is set aside, in `inEachRepo` (`index-store.ts`, with `isRefusal` in `errors.ts`). An agent's write is a proposal until a person accepts it; the entry point passes the writer, never the caller. A module's tables are versioned apart from the core schema in `module_migrations`: `src/store/migration.ts` is the `Migration` type, `src/engine/module-schemas.ts` the one list `openDb` reads (it imports migration lists, never module code), and `user_version` stays 7. Knowledge starts at module version 6 (1 to 5 were the withdrawn module's). `wizardingcode-mem knowledge write | accept | reject | area | rebuild | adopt | list` is the store from a shell; `doctor` has a `knowledge` line. `wizardingcode-mem backup` does not copy the repositories. In tests, `tests/helpers/knowledge.ts` gives a data directory, a throwaway home and stores whose environment the test controls, and `tests/helpers/stub-git.ts` a git that fails or stalls on demand.
++- The knowledge store (ADR 0024, a draft: the store only, not yet an `EngineModule` in `BUILT_IN`, so no hook, tool or view reads it): `src/modules/knowledge/`. The truth is Markdown files with frontmatter in one git repository per scope under the data directory (`<data dir>/knowledge/workspace`, `shared`, `projects/<folder>`; `entry.ts` is the formats, `repo.ts` the repositories and the one git runner `runGit`, `resolve.ts` the mapping of a project to its repository through its manifest, `store.ts` the writes, proposals and `adopt`, `taxonomy.ts` the areas, `index-store.ts` the index rebuilt from the files, `schema.ts` the leaf with `requireSchema`, which everything that reads or writes the tables calls). Every git call goes through `runGit`, never on a hook path, and never with the person's git configuration; `openRepo` is the one way to a repository, and before git runs it refuses a folder the store did not make (`refuseForeign`: one whose `.git` holds anything but regular files and folders included; `refuseLinkedRoots` for `knowledge/` and `knowledge/projects/` themselves) and a `.git/config` that holds anything but the settings `git init` writes (`checkRepoConfig`, an allow list: add to `ALLOWED_SETTINGS` only what the store itself writes); `statusOf` never looks into a nested repository. The store keeps no file of its own under `knowledge/` beside the repositories: git gets `/dev/null` as its global configuration, the repository's own `.git/config` (a file) as its hooks path, and no template. `doctor` is the one reader that does not go through `openRepo`, which writes: it reads by hand under the same guards (`refuseLinkedRoots`, `refuseForeign`, `checkRepoConfig`), each of which it must be given when `openRepo` gains one. Only a name with nothing at it is gone: the places that decide whether a repository is there, or which entry and proposal files it holds (the two roots, a repository's name, its `entries/` and `proposals/` folders and the names in them), ask the disk with `lookAt`, `kindAt` and `namesIn` (`repo.ts`), for which anything that cannot be looked at is a refusal, never "not there"; `doctor` lists the folders with the same three. The older `isDirectory` and `existsOnDisk` read any failure to look as "no" and are used only inside a repository, behind one of those refusals: never decide a repository's presence with them. A link or a file where a repository's folder was is refused by name and its index rows stay, and a project's row names its folder while anything is at that name (`matchProject` in `resolve.ts`), so no state of the disk gives a project a second folder. The index belongs to one data directory: `rebuild` refuses, forgetting nothing, where there is no `knowledge/` folder and the index holds repositories. An interrupted operation is put back by its intent record, path by path, only where a file is still as the engine left it; a record is read only when every path in it is the store's own (`ownPath`), and a path is followed only through real folders (`reachedByFolders`). Three rules live in one place each: the write of the engine's own text, with its record and its undo, in `commitChange` (`repo.ts`; `adopt` keeps its own frame in `store.ts`, since it gives a person's bytes back instead of restoring from HEAD); a step of `openRepo` under the repository's lease in `underOwnLease` (`repo.ts`); a command over several repositories, where one the store refuses is set aside, in `inEachRepo` (`index-store.ts`, with `isRefusal` in `errors.ts`). An agent's write is a proposal until a person accepts it; the entry point passes the writer, never the caller. A module's tables are versioned apart from the core schema in `module_migrations`: `src/store/migration.ts` is the `Migration` type, `src/engine/module-schemas.ts` the one list `openDb` reads (it imports migration lists, never module code), and `user_version` stays 7. Knowledge starts at module version 6 (1 to 5 were the withdrawn module's). `wizardingcode-mem knowledge write | accept | reject | area | rebuild | adopt | list` is the store from a shell; `doctor` has a `knowledge` line. `wizardingcode-mem backup` does not copy the repositories. In tests, `tests/helpers/knowledge.ts` gives a data directory, a throwaway home and stores whose environment the test controls, and `tests/helpers/stub-git.ts` a git that fails or stalls on demand.
+ 
+ ## Commands
+ 
+diff --git a/docs/adr/0024-knowledge-module.md b/docs/adr/0024-knowledge-module.md
+index a43fefb..086b0b9 100644
+--- a/docs/adr/0024-knowledge-module.md
++++ b/docs/adr/0024-knowledge-module.md
+@@ -85,10 +85,13 @@ Every git call goes through one runner (`runGit`): a synchronous process killed
+ - A folder the store did not make is refused before git runs and before anything is written: a repository folder that is a link, a `.git` that is a file or a link (a gitfile names another repository, and every commit would land there), an `entries` or `proposals` folder that is a link, a link where the store keeps `knowledge.json`, `taxonomy.md` or `.gitignore`, and a `.gitmodules` file.
+ - A `.git` that holds anything but regular files and folders is refused. git writes inside it: its commit message and a line of its log in place, objects and branches into its folders. Through a link there, git wrote into a file of the person's, and through linked `refs` and `objects` folders it committed into another repository. Every entry is read with its kind, at every depth, except the files inside the folders of `objects/`, which git only reads or replaces whole. A folder there that cannot be listed is refused as well, since git goes through it by name all the same and what it holds would go unchecked. One thing other than a file or a folder is let through: the socket `fsmonitor--daemon.ipc` at the top of `.git`, which a person's own git leaves there while its file monitor runs, and which the store's git never uses.
+ - `knowledge/` and `knowledge/projects/` must be folders themselves. Every repository is listed and created under them, and through a link at either a project's whole repository, with the person's name in it, was created in another folder. Both are checked before anything under them is listed or created. The data directory itself may be a link: that is the way to keep the knowledge on another disk. `WIZARDINGCODE_MEM_DATA_DIR`, which moves this product's data directory, and `WIZARDINGCODE_HOME`, which moves the brand's whole home, do it too, but each must then be set in the environment of every agent, since the settings file cannot hold what locates it (ADR 0010). The store directory of ADR 0010 does not carry the knowledge: only the database follows it, and the repositories stay under the data directory (D-1).
+-- Only a name with nothing at it is gone. Three things are never read as "no repository there", or as "no file there":
++- Only a name with nothing at it is gone. Where the store decides whether a repository is there, or which entry and proposal files it holds, four things are never read as nothing:
+   - What cannot be looked at. `knowledge/`, `knowledge/projects/`, a repository's folder, and a repository's `entries/` and `proposals/` folders: where one of them cannot be listed, or a name in it cannot be looked at (its permission bits are off, the disk fails), the command is refused with the path and the error's code named. For the two folders at the top the whole command is refused; for a repository, that repository is set aside by name and the others are done.
+   - A link or a file put where a repository's folder was. It is refused by name where the repository is opened, and `rebuild`, `list` and `adopt` set it aside. A write never makes a second folder beside it.
+   - A project's folder that no longer reads as the store left it: its manifest gone, or unreadable. The name the project's row holds is the project's while anything is at it.
++  - A data directory with no `knowledge/` folder at all, while the index holds repositories. The rows were written under another data directory that shares the database, or the folder was removed whole, and the store cannot tell which: `rebuild` refuses and says both. An empty `knowledge/` folder made by hand is the person's word that the repositories are gone, and `rebuild` then forgets them.
++
++  Inside a repository that has passed these checks, the store's older reads (`isDirectory`, `existsOnDisk`) still take any failure to look for "not there"; each sits behind one of the refusals above, and none decides whether a repository is there. The root's taxonomy is not read through a link either: with a link or a file at the workspace's or the shared repository's name, a project's rebuild and `doctor` check its entries against no taxonomy, and the root is refused by name in the same run.
+ 
+   In each case the index rows stay as they were. Before these rules, `rebuild` forgot the rows of a repository it could not see, or whose folder a link had replaced, and a write gave the project a second, empty folder. For a project that is not a git repository the row is the only tie to its folder, so the folder put back was never the project's again. `doctor` lists the folders by the same rules, with and without a database, and does not count a repository the store refuses among the ones it read.
+ - The store reads a repository's HEAD without git, and follows it only to a name under `refs/` that has no `..`, `\` or `:` in it. A HEAD that names a path out of the git directory is read as no commit.
+@@ -177,6 +180,10 @@ Decided proposals are never deleted, and each folder is indexed up to 5,000 name
+ ## Known limits
+ 
+ - A project that is not a git repository is known by its folder path alone. A manifest is never matched by a path, so when the index rows of such a project are lost (a database restored from an older copy, a new database), its repository is reported as an orphan by `rebuild` and is not re-attached.
++- The index belongs to one data directory: its rows name folders by their path under it. One database shared by two data directories (`WIZARDINGCODE_MEM_STORE_DIR` set for both) is not supported for knowledge. `rebuild` refuses in the one case it can see, a data directory with no `knowledge/` folder; where the second data directory has a `knowledge/` folder of its own, `rebuild` there forgets the rows of the first one's repositories, and a write there gives a project a folder under the second. The files of the first are never touched, and a project that is not a git repository then finds its folder again only as an orphan (the limit above).
++- A project's folder that is still there and holds no repository (emptied by hand, or its `.git` deleted) keeps its rows as they were last indexed: `rebuild` prints `not a repository` for it and exits 0, `doctor` warns, and the next write makes the repository again in the same folder and replaces the rows. Nothing reads the index in this part; a part that does must not show those rows as current.
++- A name under `knowledge/projects/` that is not a folder and does not start with a dot (a file an operating system or a tool leaves there) is reported: an orphan in `rebuild`, a warning in `doctor`, until it is removed. It blocks nothing.
++- The workspace's and the shared repository's manifest, when missing, is written back by the next write even into a repository that has commits, and is left uncommitted for `adopt`; a project's is written only into a folder with no commit. The difference has no reason of its own: the line for the two fixed scopes is older than the rule, and was left as it was.
+ - Only `.md` files in the three folders are knowledge. Other files there are ignored by the index, and committed as they are by `adopt`.
+ - An entry is not renamed and not moved between repositories in this part.
+ - A file a person adds by hand while a write is under way is recorded in the fingerprint without being read. The window opens when the write has checked the folders and closes when it has indexed its commit: the time of its git calls, about 40 ms on the machine measured below. The file is still listed by git as untracked, so `doctor` reports it and `adopt` commits and indexes it.
+diff --git a/src/modules/knowledge/index-store.ts b/src/modules/knowledge/index-store.ts
+index 6daa6fc..6a1aa73 100644
+--- a/src/modules/knowledge/index-store.ts
++++ b/src/modules/knowledge/index-store.ts
+@@ -11,6 +11,7 @@ import {
+   hashOf,
+   headOf,
+   kindAt,
++  knowledgeRoot,
+   lookAt,
+   namesIn,
+   OPEN_DIR,
+@@ -572,23 +573,39 @@ export function inEachRepo<T>(
+  * forgets the rows of repositories whose folder is gone: the ones with nothing at their
+  * name. A link or a file put where a folder was is set aside by name, and its rows stay.
+  * A project folder is mapped to its project by its row, else through its manifest; a
+- * folder no project claims is reported and indexes nothing.
++ * folder no project claims is reported and indexes nothing. Refused, with nothing
++ * forgotten, when the data directory has no knowledge folder at all and the index holds
++ * repositories: the rows are another data directory's until the person says otherwise.
+  */
+ export function rebuildAll(
+   store: KnowledgeStore,
+   scope?: ScopeRef["scope"],
+ ): InEachRepo<RebuildResult> {
+   requireSchema(store);
++  const held = () =>
++    store.db
++      .query<{ id: number; scope: string; path: string }, []>(
++        "SELECT id, scope, path FROM knowledge_repos",
++      )
++      .all()
++      .filter((row) => scope === undefined || row.scope === scope);
++  // No knowledge folder at all under this data directory, and repositories in the index:
++  // they were written under another data directory that shares this database, or the
++  // folder was removed whole, and the store cannot tell which. Read as "every repository
++  // is gone", the first would forget the rows of repositories that are all still on the
++  // disk. So the person says which: an empty folder made by hand means they are gone.
++  const root = knowledgeRoot(store.dataDir);
++  const known = held().length;
++  if (known > 0 && kindAt(root) === "absent") {
++    throw new KnowledgeError(
++      "invalid",
++      `${root} is not there, and the index holds ${known === 1 ? "a repository" : `${known} repositories`} under it; nothing was forgotten. If the knowledge is under another data directory (WIZARDINGCODE_MEM_DATA_DIR, WIZARDINGCODE_HOME), run rebuild under that one. If the folder was removed on purpose, make it again, empty, and run rebuild once more`,
++    );
++  }
+   const all = inEachRepo(store, scope, (repo) =>
+     withRepoLeases(store, [repo.relative], () => rebuildRepo(store, repo)),
+   );
+-  const rows = store.db
+-    .query<{ id: number; scope: string; path: string }, []>(
+-      "SELECT id, scope, path FROM knowledge_repos",
+-    )
+-    .all();
+-  for (const row of rows) {
+-    if (scope !== undefined && row.scope !== scope) continue;
++  for (const row of held()) {
+     // Only a name with nothing at it is gone. A folder that cannot be looked at refuses
+     // the rebuild (`kindAt`); a link or a file put where the folder was has been set aside
+     // by name above (`inEachRepo`). The rows of both stay.
+diff --git a/src/modules/knowledge/repo.ts b/src/modules/knowledge/repo.ts
+index 900ef11..1f84957 100644
+--- a/src/modules/knowledge/repo.ts
++++ b/src/modules/knowledge/repo.ts
+@@ -166,8 +166,13 @@ export function rootOf(ref: ScopeRef): RootRef {
+   return ref.scope === "shared" ? { scope: "shared" } : { scope: "workspace" };
+ }
+ 
+-/** Whether a folder is at the path itself: a link to a folder is not one. */
+-export function isDirectory(path: string): boolean {
++/**
++ * Whether a folder is at the path itself: a link to a folder is not one. Any failure to
++ * look reads as "no" here, unlike `kindAt`: it is used only inside a repository, behind
++ * one of the refusals that ask with `kindAt`, `lookAt` or `namesIn`, and never to decide
++ * whether a repository is there.
++ */
++function isDirectory(path: string): boolean {
+   try {
+     return lstatSync(path).isDirectory();
+   } catch {
+@@ -175,7 +180,10 @@ export function isDirectory(path: string): boolean {
+   }
+ }
+ 
+-/** Whether anything is at the path: a file, a folder, or a link, whatever the link points at. */
++/**
++ * Whether anything is at the path: a file, a folder, or a link, whatever the link points
++ * at. Any failure to look reads as "no" here too, under the same limit as `isDirectory`.
++ */
+ export function existsOnDisk(path: string): boolean {
+   try {
+     lstatSync(path);
+@@ -696,12 +704,16 @@ export function writeManifest(repo: string, manifest: Manifest): void {
+ 
+ /**
+  * The taxonomy a repository's areas are checked against: its root's. Null when the root
+- * repository does not exist yet. A taxonomy file that cannot be read is refused: no area
+- * can be checked against it until a person fixes it.
++ * repository does not exist yet, and when a link or a file is at the root's name: the
++ * root is refused by name where it is opened, and its taxonomy is never read through the
++ * link. A taxonomy file that cannot be read is refused: no area can be checked against
++ * it until a person fixes it.
+  */
+ export function taxonomyFor(store: KnowledgeStore, ref: ScopeRef): Taxonomy | null {
+   const root = rootOf(ref);
+-  const file = join(repoPath(store.dataDir, repoFolder(root)), TAXONOMY_FILE);
++  const folder = repoPath(store.dataDir, repoFolder(root));
++  if (kindAt(folder) !== "folder") return null;
++  const file = join(folder, TAXONOMY_FILE);
+   const bytes = readRegularFile(file);
+   if (bytes === null) return null;
+   const taxonomy = parseTaxonomy(new TextDecoder().decode(bytes));
+diff --git a/tests/unit/doctor-knowledge.test.ts b/tests/unit/doctor-knowledge.test.ts
+index 323ffb4..c2c52bd 100644
+--- a/tests/unit/doctor-knowledge.test.ts
++++ b/tests/unit/doctor-knowledge.test.ts
+@@ -333,6 +333,37 @@ describe("doctor: knowledge", () => {
+     }
+   });
+ 
++  test("a link or a file where the workspace's repository was is a warning that names it, with a database and with none", () => {
++    const { elsewhere } = workspaceAndProject();
++    const folder = repoPath(fx.dataDir, "knowledge/workspace");
++    const aside = join(fx.dir, "moved-aside");
++    renameSync(folder, aside);
++    // Behind the link, a taxonomy without the area of the project's entry: read through
++    // the link, it would list that entry among the ones with problems.
++    const taxonomy = join(aside, "taxonomy.md");
++    writeFileSync(
++      taxonomy,
++      readFileSync(taxonomy, "utf8")
++        .split("\n")
++        .filter((line) => !line.includes("sales"))
++        .join("\n"),
++    );
++    for (const [put, said] of [
++      [() => symlinkSync(aside, folder), "is a link"],
++      [() => writeFileSync(folder, "not a folder"), "is not a folder"],
++    ] as const) {
++      put();
++      for (const check of [knowledge(), knowledge({ storeDir: elsewhere })]) {
++        expect(check.status).toBe("warn");
++        expect(check.detail).toContain(`knowledge/workspace: ${folder} ${said}`);
++        // The project's repository is still read, and nothing through the link.
++        expect(check.detail).toContain("1 repository, 1 entry");
++        expect(check.detail).not.toContain("in-the-project");
++      }
++      rmSync(folder, { force: true });
++    }
++  });
++
+   test("an entries folder it cannot read is a warning for that repository, and the others are still checked", () => {
+     if (process.platform === "win32" || process.getuid?.() === 0) return;
+     const { relative, folder, elsewhere } = workspaceAndProject();
+diff --git a/tests/unit/knowledge-index.test.ts b/tests/unit/knowledge-index.test.ts
+index 1c7c43a..a920776 100644
+--- a/tests/unit/knowledge-index.test.ts
++++ b/tests/unit/knowledge-index.test.ts
+@@ -597,6 +597,59 @@ describe("rebuildAll", () => {
+     rmSync(manifest);
+     expect(openRepo(store, ref, { create: person() })?.relative).toBe(relative);
+     expect(state()).toEqual(before);
++    // A repository that has commits is not given a new manifest behind the person's back:
++    // the deletion stays theirs to see, as git shows it.
++    expect(existsSync(manifest)).toBe(false);
++    expect(status(openRepo(store, ref) as Repo)).toEqual([" D knowledge.json"]);
++  });
++
++  test("a data directory with no knowledge folder, and rows in the index, refuses the rebuild and forgets nothing", () => {
++    const { ref, relative, state } = pathOnlyProject();
++    const before = state();
++    // One database and a second data directory with nothing in it: the rows were written
++    // under the first.
++    const other = join(fx.dir, "another-data-directory");
++    mkdirSync(other);
++    const elsewhere = fx.store({ dataDir: other, env: { WIZARDINGCODE_MEM_AUTHOR: "Zoë" } });
++
++    for (const scope of [undefined, "workspace", "project"] as const) {
++      expect(codeOf(() => rebuildAll(elsewhere, scope))).toBe("invalid");
++    }
++    expect(thrown(() => rebuildAll(elsewhere)).message).toContain(join(other, "knowledge"));
++    // A scope the index holds nothing of has nothing to forget, and is not refused.
++    expect(rebuildAll(elsewhere, "shared").results.size).toBe(0);
++    expect(state()).toEqual(before);
++
++    // Under the data directory the knowledge is in, nothing was lost.
++    expect(rebuildAll(store).refused.size).toBe(0);
++    expect(openRepo(store, ref)?.relative).toBe(relative);
++    expect(state()).toEqual(before);
++
++    // An empty knowledge folder made there by hand is the person's word that they are gone.
++    mkdirSync(join(other, "knowledge"));
++    expect(rebuildAll(elsewhere).results.size).toBe(0);
++    expect(state()).toEqual({ rows: [], entries: 0, folders: before.folders });
++  });
++
++  test("a project's rebuild never reads the taxonomy through a link at the workspace's name", () => {
++    const { relative } = pathOnlyProject();
++    const folder = repoPath(fx.dataDir, "knowledge/workspace");
++    const aside = join(fx.dir, "moved-aside");
++    renameSync(folder, aside);
++    // Behind the link, a taxonomy without the area of the project's entry: read through
++    // the link, it would mark that entry with a problem.
++    const taxonomy = join(aside, "taxonomy.md");
++    const without = readFileSync(taxonomy, "utf8")
++      .split("\n")
++      .filter((line) => !line.includes("sales"))
++      .join("\n");
++    expect("problem" in parseTaxonomy(without)).toBe(false);
++    writeFileSync(taxonomy, without);
++    symlinkSync(aside, folder);
++
++    const all = rebuildAll(store);
++    expect([...all.refused.keys()]).toEqual(["knowledge/workspace"]);
++    expect(all.results.get(relative)).toMatchObject({ entries: 1, problems: 0 });
+   });
+ 
+   test("an entries folder that cannot be read refuses the rebuild, and its rows stay", () => {
+diff --git a/tests/unit/knowledge-resolve.test.ts b/tests/unit/knowledge-resolve.test.ts
+index 9edfef7..ad61945 100644
+--- a/tests/unit/knowledge-resolve.test.ts
++++ b/tests/unit/knowledge-resolve.test.ts
+@@ -308,6 +308,8 @@ describe("resolveRepo", () => {
+     expect(resolveRepo(store, project(id), {})?.relative).toBe(first.relative);
+     expect(resolveRepo(store, project(id), { create: person })?.relative).toBe(first.relative);
+     expect(listRepos(store).orphans).toEqual([]);
++    // The repository has commits: no new manifest is written into it behind the person's back.
++    expect(existsSync(join(first.path, "knowledge.json"))).toBe(false);
+ 
+     // Emptied by hand: no repository to read, and a write makes it again in the same folder.
+     rmSync(first.path, { recursive: true });
+-- 
+2.54.0 (Apple Git-157)
+

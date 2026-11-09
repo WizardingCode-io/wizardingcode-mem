@@ -1,0 +1,637 @@
+commit 82251a062624ee3b09b4e34c22e333e1b513f6b7
+Author: André Agro Ferreira <35269365+andreagroferreira@users.noreply.github.com>
+Date:   Mon Nov 9 13:14:15 2026 +0000
+
+    Knowledge: the fifth judgement round's defects
+    
+    A folder of .git that cannot be listed refuses the repository; knowledge/ and
+    knowledge/projects/ must be folders themselves; HEAD is followed only to a name
+    under refs/. The socket a person's own git leaves in .git is let through.
+    
+    Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+
+diff --git a/CLAUDE.md b/CLAUDE.md
+index 4793eeb..5799756 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -14,7 +14,7 @@ Brand conventions: products, plugins and skills are called `wizardingcode-<thing
+ - Measured decisions and departures from the design: `docs/adr/` (read the latest before touching the schema or retrieval)
+ - One engine with modules (ADR 0019): `src/engine/` is the contract (`module.ts`), the composer and budgets (`compose.ts`, `budget.ts`) and the enabled set (`modules.ts`); `src/modules/memory/` is the one module shipped. Hooks, the MCP server and the viewer's rail ask the modules, never memory by name. `WIZARDINGCODE_MODULES` (comma list, default `memory`) only adds modules: memory is always on (the API refuses a list without it), and stopping it for a project stays the per-project "memory off". `src/core/project.ts` and the links store are the engine's: every module uses the same project ids.
+ - `ui.json` (the running viewer's state) lives at the brand level, `~/.wizardingcode/ui.json` (honouring `WIZARDINGCODE_HOME`); the old file in the data directory is migrated once. A new module's rail icons must be listed in `ui/vite.config.ts`, since icons are bundled at build time.
+-- The knowledge store (ADR 0024, a draft: the store only, not yet an `EngineModule` in `BUILT_IN`, so no hook, tool or view reads it): `src/modules/knowledge/`. The truth is Markdown files with frontmatter in one git repository per scope under the data directory (`<data dir>/knowledge/workspace`, `shared`, `projects/<folder>`; `entry.ts` is the formats, `repo.ts` the repositories and the one git runner `runGit`, `resolve.ts` the mapping of a project to its repository through its manifest, `store.ts` the writes, proposals and `adopt`, `taxonomy.ts` the areas, `index-store.ts` the index rebuilt from the files, `schema.ts` the leaf with `requireSchema`, which everything that reads or writes the tables calls). Every git call goes through `runGit`, never on a hook path, and never with the person's git configuration; `openRepo` is the one way to a repository, and before git runs it refuses a folder the store did not make (`refuseForeign`: a link anywhere inside its `.git` included) and a `.git/config` that holds anything but the settings `git init` writes (`checkRepoConfig`, an allow list: add to `ALLOWED_SETTINGS` only what the store itself writes); `statusOf` never looks into a nested repository. The store keeps no file of its own under `knowledge/` beside the repositories: git gets `/dev/null` as its global configuration, the repository's own `.git/config` (a file) as its hooks path, and no template. `doctor` is the one reader that does not go through `openRepo`, which writes: it reads by hand under the same two guards. An interrupted operation is put back by its intent record, path by path, only where a file is still as the engine left it; a record is read only when every path in it is the store's own (`ownPath`), and a path is followed only through real folders (`reachedByFolders`). Three rules live in one place each: the write, its record and its undo in `commitChange`; a step of `openRepo` under the repository's lease in `underOwnLease`; a command over several repositories, where one the store refuses is set aside, in `inEachRepo` (with `isRefusal`). An agent's write is a proposal until a person accepts it; the entry point passes the writer, never the caller. A module's tables are versioned apart from the core schema in `module_migrations`: `src/store/migration.ts` is the `Migration` type, `src/engine/module-schemas.ts` the one list `openDb` reads (it imports migration lists, never module code), and `user_version` stays 7. Knowledge starts at module version 6 (1 to 5 were the withdrawn module's). `wizardingcode-mem knowledge write | accept | reject | area | rebuild | adopt | list` is the store from a shell; `doctor` has a `knowledge` line. `wizardingcode-mem backup` does not copy the repositories. In tests, `tests/helpers/knowledge.ts` gives a data directory, a throwaway home and stores whose environment the test controls, and `tests/helpers/stub-git.ts` a git that fails or stalls on demand.
++- The knowledge store (ADR 0024, a draft: the store only, not yet an `EngineModule` in `BUILT_IN`, so no hook, tool or view reads it): `src/modules/knowledge/`. The truth is Markdown files with frontmatter in one git repository per scope under the data directory (`<data dir>/knowledge/workspace`, `shared`, `projects/<folder>`; `entry.ts` is the formats, `repo.ts` the repositories and the one git runner `runGit`, `resolve.ts` the mapping of a project to its repository through its manifest, `store.ts` the writes, proposals and `adopt`, `taxonomy.ts` the areas, `index-store.ts` the index rebuilt from the files, `schema.ts` the leaf with `requireSchema`, which everything that reads or writes the tables calls). Every git call goes through `runGit`, never on a hook path, and never with the person's git configuration; `openRepo` is the one way to a repository, and before git runs it refuses a folder the store did not make (`refuseForeign`: one whose `.git` holds anything but regular files and folders included; `refuseLinkedRoots` for `knowledge/` and `knowledge/projects/` themselves) and a `.git/config` that holds anything but the settings `git init` writes (`checkRepoConfig`, an allow list: add to `ALLOWED_SETTINGS` only what the store itself writes); `statusOf` never looks into a nested repository. The store keeps no file of its own under `knowledge/` beside the repositories: git gets `/dev/null` as its global configuration, the repository's own `.git/config` (a file) as its hooks path, and no template. `doctor` is the one reader that does not go through `openRepo`, which writes: it reads by hand under the same two guards. An interrupted operation is put back by its intent record, path by path, only where a file is still as the engine left it; a record is read only when every path in it is the store's own (`ownPath`), and a path is followed only through real folders (`reachedByFolders`). Three rules live in one place each: the write of the engine's own text, with its record and its undo, in `commitChange` (`repo.ts`; `adopt` keeps its own frame in `store.ts`, since it gives a person's bytes back instead of restoring from HEAD); a step of `openRepo` under the repository's lease in `underOwnLease` (`repo.ts`); a command over several repositories, where one the store refuses is set aside, in `inEachRepo` (`index-store.ts`, with `isRefusal` in `errors.ts`). An agent's write is a proposal until a person accepts it; the entry point passes the writer, never the caller. A module's tables are versioned apart from the core schema in `module_migrations`: `src/store/migration.ts` is the `Migration` type, `src/engine/module-schemas.ts` the one list `openDb` reads (it imports migration lists, never module code), and `user_version` stays 7. Knowledge starts at module version 6 (1 to 5 were the withdrawn module's). `wizardingcode-mem knowledge write | accept | reject | area | rebuild | adopt | list` is the store from a shell; `doctor` has a `knowledge` line. `wizardingcode-mem backup` does not copy the repositories. In tests, `tests/helpers/knowledge.ts` gives a data directory, a throwaway home and stores whose environment the test controls, and `tests/helpers/stub-git.ts` a git that fails or stalls on demand.
+ 
+ ## Commands
+ 
+diff --git a/docs/adr/0024-knowledge-module.md b/docs/adr/0024-knowledge-module.md
+index c7ae02d..5623676 100644
+--- a/docs/adr/0024-knowledge-module.md
++++ b/docs/adr/0024-knowledge-module.md
+@@ -83,7 +83,9 @@ Every git call goes through one runner (`runGit`): a synchronous process killed
+ - git also reads a repository's configuration from the directory a `.git/commondir` file names, and from `.git/config.worktree` when `extensions.worktreeConfig` is set. Both files are refused, so the one file read is the one git reads. A `.git/objects/info/alternates` file, which has git read objects from another repository on the disk, is refused with them.
+ - A new repository is created with the object and ref formats the store reads (`init.defaultObjectFormat=sha1`, `init.defaultRefFormat=files`). git writes other formats to `.git/config` as extensions, which the rule above refuses.
+ - A folder the store did not make is refused before git runs and before anything is written: a repository folder that is a link, a `.git` that is a file or a link (a gitfile names another repository, and every commit would land there), an `entries` or `proposals` folder that is a link, a link where the store keeps `knowledge.json`, `taxonomy.md` or `.gitignore`, and a `.gitmodules` file.
+-- A `.git` that holds anything but regular files and folders is refused. git writes inside it: its commit message and a line of its log in place, objects and branches into its folders. Through a link there, git wrote into a file of the person's, and through linked `refs` and `objects` folders it committed into another repository. Every entry is read with its kind, at every depth, except the files inside the object folders, which git only reads or replaces whole.
++- A `.git` that holds anything but regular files and folders is refused. git writes inside it: its commit message and a line of its log in place, objects and branches into its folders. Through a link there, git wrote into a file of the person's, and through linked `refs` and `objects` folders it committed into another repository. Every entry is read with its kind, at every depth, except the files inside the folders of `objects/`, which git only reads or replaces whole. A folder there that cannot be listed is refused as well, since git goes through it by name all the same and what it holds would go unchecked. One thing other than a file or a folder is let through: the socket `fsmonitor--daemon.ipc` at the top of `.git`, which a person's own git leaves there while its file monitor runs, and which the store's git never uses.
++- `knowledge/` and `knowledge/projects/` must be folders themselves. Every repository is listed and created under them, and through a link at either a project's whole repository, with the person's name in it, was created in another folder. Both are checked before anything under them is listed or created.
++- The store reads a repository's HEAD without git, and follows it only to a name under `refs/`. A HEAD that names a path out of the git directory is read as no commit.
+ - git never runs in a repository nested inside a knowledge repository. `git status` is always given `--ignore-submodules=all`, which wins over every setting. Without it, git runs a second `git status` inside the nested repository, under that repository's own configuration, which the store never checked. Every git call also carries `diff.ignoreSubmodules=all` and `submodule.recurse=false` as a second layer; a `.gitmodules` setting overrides those two, and only the flag wins over it. `adopt` refuses a folder that is a git repository of its own, and names it.
+ - A path is followed only through folders. Where a folder on the way to a file, inside the repository, is a link, the file beyond it is another folder's: the store does not read it as its own, restore it or remove it, whatever a record says.
+ - Paths are passed to git as literal paths (`GIT_LITERAL_PATHSPECS`): a file a person named with `*` or `[` never matches another.
+@@ -152,7 +154,9 @@ The only personal data this part holds is the person's author name (the `WIZARDI
+ 
+ **Retention.** As long as the repository's history. The engine never rewrites a commit and never deletes an entry, so a name written once stays until a person removes it. This differs from memory, where `compact` prunes old records.
+ 
+-**Erasure.** There is no command for it in this part. A new name applies to what is written from then on: change the setting. To remove a name already written from one repository, a person rewrites that repository's history with git (the author and committer of its commits, and the `author` and `decided_by` lines in its files), then runs `wizardingcode-mem knowledge rebuild`, which replaces the index rows from the files. Deleting a repository's folder and running `rebuild` removes everything it held, the index rows included. A repository the store refuses is not rebuilt: its rows, the name among them, stay as they were last indexed until it is accepted again or its folder is removed. A command that does this is a later part's work, and is needed before knowledge is shared with a team, where a name leaves the machine.
++**Erasure.** There is no command for it in this part. A new name applies to what is written from then on: change the setting. To remove a name already written from one repository, a person rewrites that repository's history with git (the author and committer of its commits, and the `author` and `decided_by` lines in its files), then runs `wizardingcode-mem knowledge rebuild`, which replaces the index rows from the files. Deleting a repository's folder and running `rebuild` removes everything it held, the index rows included. A command that erases a name is a later part's work, and is needed before knowledge is shared with a team, where a name leaves the machine.
++
++A repository the store refuses is not rebuilt: its rows, the name among them, stay as they were last indexed until it is accepted again or its folder is removed.
+ 
+ `wizardingcode-mem backup` copies the database, and the database now holds the index: the text of entries and the names above go wherever backups are configured to go (a folder, or a bucket).
+ 
+@@ -169,9 +173,12 @@ Decided proposals are never deleted, and each folder is indexed up to 5,000 name
+ - A project that is not a git repository is known by its folder path alone. A manifest is never matched by a path, so when the index rows of such a project are lost (a database restored from an older copy, a new database), its repository is reported as an orphan by `rebuild` and is not re-attached.
+ - Only `.md` files in the three folders are knowledge. Other files there are ignored by the index, and committed as they are by `adopt`.
+ - An entry is not renamed and not moved between repositories in this part.
+-- A file a person adds by hand while a write is under way is recorded in the fingerprint without being read. The window opens when the write has checked the folders and closes when it has indexed its commit: the time of its git calls, about 50 ms on the machine measured below. The file is still listed by git as untracked, so `doctor` reports it and `adopt` commits and indexes it.
++- A file a person adds by hand while a write is under way is recorded in the fingerprint without being read. The window opens when the write has checked the folders and closes when it has indexed its commit: the time of its git calls, about 40 ms on the machine measured below. The file is still listed by git as untracked, so `doctor` reports it and `adopt` commits and indexes it.
+ - A knowledge repository's `.git/config` holds only what `git init` writes. A setting a person adds there (a remote, a local user name) makes every command on that repository refuse it, naming the setting, until the person removes it. `list`, `rebuild` and `adopt` go on with the other repositories, say the refused one on standard error and exit with 1. A refused workspace repository still stops every project's write, since a project's areas are checked against the workspace's taxonomy.
+ - `/dev/null` as the global configuration, a file as the hooks path and an empty template name were run on macOS with git 2.54.0. They were not run on Windows, where the binary is also built.
++- The files inside the folders of `.git/objects/` are not checked. A linked object or pack there is not a way to write, but it has git read another repository's objects, as an `alternates` file would. Listing those folders on every open was measured at 4 ms with 500 loose objects and 8 ms with 6,700, against 0.3 ms without, and every read would pay it. Nothing leaves the machine in this part. The sync part closes it before it sends a repository's objects anywhere.
++- A person's own git, set up with `core.fsmonitor`, leaves a socket in `.git/` while its daemon runs. That one socket is let through. Anything else a tool leaves there that is neither a file nor a folder makes the store refuse the repository, naming it, until it is removed. Which tools do so was not surveyed.
++- A file that is hard-linked to another is not told from any other file. A hard link to a file outside the repository can only be made by a process of the person's own user on the same disk, which could write that file itself.
+ - The two format settings were run with git 2.54.0, where they leave `.git/config` as `git init` writes it by default. With the other formats named, the same git writes `extensions.objectformat` and `extensions.refstorage`. No git that defaults to those formats existed to run them against.
+ - A module migration that fails makes `openDb` fail, so memory stops until the cause is fixed, over a module no hook reads in this part. Containing the failure would need a rule for not repeating the attempt, and its backup, on every open; that is not built.
+ - On a store that ran the withdrawn module, the one backup taken before migration 6 drops its tables is kept among the two most recent upgrade backups, and two later upgrades rotate it away.
+@@ -184,13 +191,13 @@ Measured on 2026-11-09 on one machine (an Apple silicon Mac, git 2.54.0, a local
+ 
+ | Operation | p50 | p95 |
+ | :- | :- | :- |
+-| The first write, which creates the repository | 92 ms (one run) | |
+-| A person's new entry | 44 ms | 52 ms |
+-| A person's change | 44 ms | 53 ms |
+-| An agent's proposal | 44 ms | 50 ms |
+-| Accepting a proposal | 71 ms | 77 ms |
+-| Reading an entry | 1 ms | 1 ms |
+-| Rebuilding the index of 31 entries and 30 proposals | 15 ms (one run) | |
++| The first write, which creates the repository | 100 ms (one run) | |
++| A person's new entry | 39 ms | 43 ms |
++| A person's change | 39 ms | 44 ms |
++| An agent's proposal | 40 ms | 45 ms |
++| Accepting a proposal | 57 ms | 68 ms |
++| Reading an entry | under 1 ms | 1 ms |
++| Rebuilding the index of 31 entries and 30 proposals | 13 ms (one run) | |
+ 
+ Not measured: a repository of thousands of entries, a slow or network disk, Linux, Windows. The next part runs one write per tool call and measures again before accepting the cost there.
+ 
+diff --git a/src/cli/commands/knowledge.ts b/src/cli/commands/knowledge.ts
+index 2c224ac..f83733d 100644
+--- a/src/cli/commands/knowledge.ts
++++ b/src/cli/commands/knowledge.ts
+@@ -211,32 +211,35 @@ function rebuildLine(relative: string, result: RebuildResult): string {
+ }
+ 
+ /**
+- * The repositories the store refused during a command. One of them does not stop the
+- * command for the others (`inEachRepo`); the command then exits with 1.
++ * Says on standard error each repository the store set aside during a command, and how
++ * many there were. One of them does not stop the command for the others (`inEachRepo`);
++ * a command that set one aside exits with 1.
+  */
+-type Refused = string[];
+-
+-/** Says each refused repository on standard error, and keeps it for the exit code. */
+-function sayRefused(all: InEachRepo<unknown>, refused: Refused): void {
++function sayRefused(all: InEachRepo<unknown>): number {
+   for (const [relative, message] of all.refused) {
+-    refused.push(relative);
+     process.stderr.write(`wizardingcode-mem: ${relative}: ${message}\n`);
+   }
++  return all.refused.size;
++}
++
++/** What to say when no repository was worked in and none was set aside. */
++function sayNothing(all: InEachRepo<unknown>, scope: Scope | undefined): void {
++  if (all.results.size === 0 && all.refused.size === 0) out(nothing(scope));
+ }
+ 
+-function rebuild(store: KnowledgeStore, argv: string[], refused: Refused): void {
++function rebuild(store: KnowledgeStore, argv: string[]): number {
+   const { flags, rest } = parse(argv, ["--scope"]);
+   if (rest.length > 0) throw new UsageError(`unexpected argument ${rest[0]}`);
+   const scope = scopeOf(flags);
+   const all = rebuildAll(store, scope);
+   for (const [relative, result] of all.results) out(rebuildLine(relative, result));
+-  sayRefused(all, refused);
++  const refused = sayRefused(all);
+   for (const repo of all.repos) {
+     if (all.results.has(repo.relative) || all.refused.has(repo.relative)) continue;
+     out(`${repo.relative}: not a repository`);
+   }
+   if (all.repos.length === 0) out(nothing(scope));
+-  if (scope !== undefined && scope !== "project") return;
++  if (scope !== undefined && scope !== "project") return refused;
+   for (const orphan of all.orphans) out(`orphan ${orphan}`);
+   // A manifest a project matched and did not take, or one that belongs to another project.
+   const unclear = new Set([
+@@ -244,27 +247,30 @@ function rebuild(store: KnowledgeStore, argv: string[], refused: Refused): void
+     ...all.claimed.map((claim) => claim.path),
+   ]);
+   for (const path of unclear) out(`ambiguous ${path}`);
++  return refused;
+ }
+ 
+-function adoptAll(store: KnowledgeStore, argv: string[], refused: Refused): void {
++function adoptAll(store: KnowledgeStore, argv: string[]): number {
+   const { flags, rest } = parse(argv, ["--scope"]);
+   if (rest.length > 0) throw new UsageError(`unexpected argument ${rest[0]}`);
+   const scope = scopeOf(flags);
+   const person = personAuthor(store);
+-  const all = inEachRepo(store, scope, (repo) => adopt(store, repo.ref, person));
+-  for (const [relative, result] of all.results) {
++  // Each repository's line is printed as its adopt ends: a fault in a later one stops the
++  // command, and what was adopted before it has been said.
++  const all = inEachRepo(store, scope, (repo) => {
++    const result = adopt(store, repo.ref, person);
+     out(
+       result.adopted === 0
+-        ? `${relative}: clean`
+-        : `${relative}: adopted ${plural(result.adopted, "change")}`,
++        ? `${repo.relative}: clean`
++        : `${repo.relative}: adopted ${plural(result.adopted, "change")}`,
+     );
+     for (const problem of result.problems) out(`  ${problem}`);
+-  }
+-  sayRefused(all, refused);
+-  if (all.results.size === 0 && all.refused.size === 0) out(nothing(scope));
++  });
++  sayNothing(all, scope);
++  return sayRefused(all);
+ }
+ 
+-function list(store: KnowledgeStore, argv: string[], refused: Refused): void {
++function list(store: KnowledgeStore, argv: string[]): number {
+   const { flags, rest } = parse(argv, ["--scope"]);
+   if (rest.length > 0) throw new UsageError(`unexpected argument ${rest[0]}`);
+   const scope = scopeOf(flags);
+@@ -275,24 +281,21 @@ function list(store: KnowledgeStore, argv: string[], refused: Refused): void {
+       // A write is under way: the rows are listed as they stand.
+       if (!(error instanceof KnowledgeError && error.code === "locked")) throw error;
+     }
+-    return { entries: listEntries(store, repo.id), proposals: listProposals(store, repo.id) };
+-  });
+-  for (const [relative, { entries, proposals }] of all.results) {
+-    out(relative);
+-    for (const entry of entries) {
++    out(repo.relative);
++    for (const entry of listEntries(store, repo.id)) {
+       out(
+         `  ${entry.slug}  ${entry.kind}  ${entry.area}  ${entry.status}  v${entry.version}  ${entry.author}`,
+       );
+       if (entry.problem !== null) out(`    problem: ${entry.problem}`);
+     }
+-    for (const proposal of proposals) {
++    for (const proposal of listProposals(store, repo.id)) {
+       const state = proposal.decision ?? "open";
+       out(`  ${state}  ${proposal.id}  ${proposal.slug}  by ${proposal.proposedBy}`);
+       if (proposal.problem !== null) out(`    problem: ${proposal.problem}`);
+     }
+-  }
+-  sayRefused(all, refused);
+-  if (all.results.size === 0 && all.refused.size === 0) out(nothing(scope));
++  });
++  sayNothing(all, scope);
++  return sayRefused(all);
+ }
+ 
+ /**
+@@ -317,14 +320,15 @@ export async function run(argv: string[]): Promise<number> {
+       // What the store did on its own, such as undoing an interrupted write, is said here.
+       report: (message) => process.stderr.write(`wizardingcode-mem: ${message}\n`),
+     });
+-    const refused: Refused = [];
++    // How many repositories the command set aside: none for a command on one repository.
++    let refused = 0;
+     if (command === "write") await write(store, rest);
+     else if (command === "accept" || command === "reject") decide(store, rest, command);
+     else if (command === "area") area(store, rest);
+-    else if (command === "rebuild") rebuild(store, rest, refused);
+-    else if (command === "adopt") adoptAll(store, rest, refused);
+-    else list(store, rest, refused);
+-    return refused.length > 0 ? 1 : 0;
++    else if (command === "rebuild") refused = rebuild(store, rest);
++    else if (command === "adopt") refused = adoptAll(store, rest);
++    else refused = list(store, rest);
++    return refused > 0 ? 1 : 0;
+   } catch (error) {
+     if (error instanceof UsageError) {
+       process.stderr.write(`wizardingcode-mem: ${error.message}\n\n${USAGE}`);
+diff --git a/src/core/git.ts b/src/core/git.ts
+index b5b1730..0423a89 100644
+--- a/src/core/git.ts
++++ b/src/core/git.ts
+@@ -58,6 +58,12 @@ export function headOfGitDir(gitDir: string): string | null {
+   const head = read(join(gitDir, "HEAD"))?.trim() ?? "";
+   const ref = head.match(/^ref:\s*(.+)$/)?.[1];
+   if (ref === undefined) return SHA.test(head) ? head : null;
++  // A ref is a name under `refs/`. Anything else in HEAD (a path that climbs out of the
++  // git directory, an absolute path) is not followed: it would read another file.
++  const parts = ref.split("/");
++  if (parts[0] !== "refs" || parts.some((part) => part === "" || part === "." || part === "..")) {
++    return null;
++  }
+   return resolveRef(gitDir, gitDir, ref);
+ }
+ 
+diff --git a/src/doctor/checks.ts b/src/doctor/checks.ts
+index 8079b01..63461aa 100644
+--- a/src/doctor/checks.ts
++++ b/src/doctor/checks.ts
+@@ -40,6 +40,7 @@ import {
+   parseManifest,
+   readRegularFile,
+   refuseForeign,
++  refuseLinkedRoots,
+   repoPath,
+   runGit,
+   statusOf,
+@@ -605,6 +606,8 @@ function projectFolders(dataDir: string): string[] {
+  */
+ function knowledgeRepositories(context: DoctorContext, db: Db | null): Check {
+   const name = "knowledge";
++  // The module's own rule, before anything under these folders is listed or read.
++  refuseLinkedRoots(context.dataDir);
+   if (!isDirectory(knowledgeRoot(context.dataDir))) {
+     return { name, status: "skip", detail: "no knowledge repository yet" };
+   }
+diff --git a/src/modules/knowledge/errors.ts b/src/modules/knowledge/errors.ts
+index 338dabf..d4c91e8 100644
+--- a/src/modules/knowledge/errors.ts
++++ b/src/modules/knowledge/errors.ts
+@@ -21,9 +21,10 @@ export class KnowledgeError extends Error {
+ }
+ 
+ /**
+- * Whether an error is the store refusing one repository as it stands (code `invalid`),
+- * rather than a fault such as a missing git or a lease held elsewhere. The one place that
+- * says so: a command over several repositories sets a refusal aside and goes on.
++ * Whether an error is the store refusing what it was given as it stands (code `invalid`:
++ * a repository it did not make, or a request it cannot take), rather than a fault such as
++ * a missing git or a lease held elsewhere. The one place that says so: a command over
++ * several repositories sets a refusal aside and goes on.
+  */
+ export const isRefusal = (error: unknown): error is KnowledgeError =>
+   error instanceof KnowledgeError && error.code === "invalid";
+diff --git a/src/modules/knowledge/repo.ts b/src/modules/knowledge/repo.ts
+index ae18ea3..0db8c22 100644
+--- a/src/modules/knowledge/repo.ts
++++ b/src/modules/knowledge/repo.ts
+@@ -73,6 +73,24 @@ export function knowledgeRoot(dataDir: string): string {
+   return join(dataDir, "knowledge");
+ }
+ 
++/**
++ * Refuses a `knowledge/` or a `knowledge/projects/` that is not a folder itself. Every
++ * repository is listed and created under these two: through a link at either, a whole
++ * repository, with the person's name in it, would be made in another folder. Checked
++ * before anything under them is listed or created.
++ */
++export function refuseLinkedRoots(dataDir: string): void {
++  const root = knowledgeRoot(dataDir);
++  for (const folder of [root, join(root, "projects")]) {
++    if (existsOnDisk(folder) && !isDirectory(folder)) {
++      throw new KnowledgeError(
++        "invalid",
++        `${folder} is not a folder of its own (a link, or a file); the knowledge store keeps its repositories under it and never follows a link out of the data directory. Remove it`,
++      );
++    }
++  }
++}
++
+ /** A repository's path relative to the data directory, with forward slashes. */
+ export function repoFolder(ref: ScopeRef, projectFolder?: string): string {
+   if (ref.scope !== "project") return `knowledge/${ref.scope}`;
+@@ -118,9 +136,9 @@ export function existsOnDisk(path: string): boolean {
+  * Refuses a folder the store did not make: one that is a link, one whose `.git` is a file
+  * or a link (a gitfile names another repository, and every later commit would land
+  * there), one whose knowledge folders or own files are links, one with a `.gitmodules`
+- * file (the store keeps no repository inside its own), or one whose `.git` holds a link.
+- * Checked before git is run and before anything is written, so nothing is read or written
+- * outside the repository.
++ * file (the store keeps no repository inside its own), or one whose `.git` holds anything
++ * but regular files and folders. Checked before git is run and before anything is
++ * written, so nothing is read or written outside the repository.
+  */
+ export function refuseForeign(repoFolder: string): void {
+   /** Whatever is at the path must be what the store keeps there: a folder, or a regular file. */
+@@ -152,12 +170,21 @@ export function refuseForeign(repoFolder: string): void {
+   refuseLinksInside(join(repoFolder, ".git"));
+ }
+ 
++/**
++ * The socket a person's own git leaves at the top of `.git` while its file monitor runs.
++ * The store's git never uses it: every call passes `core.fsmonitor=false`.
++ */
++const FSMONITOR_SOCKET = "fsmonitor--daemon.ipc";
++
+ /**
+  * Refuses a `.git` that holds anything but regular files and folders. git writes inside
+  * it: its commit message and a line of its log in place, objects and branches into its
+  * folders. Through a link there, git would write into another file, or commit into
+  * another repository. Every entry is read with its kind, at every depth, except the files
+- * inside the object folders, which git only reads or replaces whole.
++ * inside the folders of `objects/`: git only reads those or replaces them whole, and
++ * listing them on every open costs milliseconds that grow with the history. A folder that
++ * cannot be listed is refused too: git goes through it by name all the same, so what it
++ * holds would go unchecked. Only a folder that is not there has nothing to check.
+  */
+ function refuseLinksInside(gitDir: string): void {
+   const objects = join(gitDir, "objects");
+@@ -165,14 +192,20 @@ function refuseLinksInside(gitDir: string): void {
+     let entries: Dirent[];
+     try {
+       entries = readdirSync(folder, { withFileTypes: true });
+-    } catch {
+-      return;
++    } catch (error) {
++      if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
++      throw new KnowledgeError(
++        "invalid",
++        `${folder} cannot be listed, so the knowledge store cannot check what git would write through; make it readable`,
++      );
+     }
+     for (const entry of entries) {
+       const path = join(folder, entry.name);
+       if (entry.isDirectory()) {
+         if (folder !== objects) walk(path);
+-      } else if (!entry.isFile()) {
++      } else if (entry.isFile()) continue;
++      else if (folder === gitDir && entry.name === FSMONITOR_SOCKET && entry.isSocket()) continue;
++      else {
+         throw new KnowledgeError(
+           "invalid",
+           `${path} is ${entry.isSymbolicLink() ? "a link" : "not a regular file"}, and the knowledge store never lets git write through one; remove it`,
+@@ -1005,11 +1038,13 @@ export interface Change {
+ }
+ 
+ /**
+- * Writes, stages and commits only the given paths: the one place the failure rule lives.
+- * The intent record goes first and is left in place, for the caller to remove once it has
+- * done what follows the commit. When anything fails, every path is put back to what HEAD
+- * holds and the record is removed; when even that fails, the record is left for the next
+- * open to act on. The error thrown is the first one, whatever the undo did.
++ * Writes, stages and commits only the given paths: the failure rule of every write the
++ * engine makes of its own text. The intent record goes first and is left in place, for
++ * the caller to remove once it has done what follows the commit. When anything fails,
++ * every path is put back to what HEAD holds and the record is removed; when even that
++ * fails, the record is left for the next open to act on. The error thrown is the first
++ * one, whatever the undo did. `adopt` alone keeps a frame of its own: what it commits is
++ * a person's work, which is given back byte for byte and never restored from HEAD.
+  */
+ export function commitChange(store: KnowledgeStore, repo: Repo, change: Change): void {
+   // What each path holds once the operation is done: how an interrupted one is told from
+diff --git a/src/modules/knowledge/resolve.ts b/src/modules/knowledge/resolve.ts
+index f377187..1f83da7 100644
+--- a/src/modules/knowledge/resolve.ts
++++ b/src/modules/knowledge/resolve.ts
+@@ -12,6 +12,7 @@ import {
+   projectFolderName,
+   readManifest,
+   refuseForeign,
++  refuseLinkedRoots,
+   repoFolder,
+   repoPath,
+   writeManifest,
+@@ -200,6 +201,7 @@ export function resolveRepo(
+   options: { create?: Writer; folderName?: (aliasOrKey: string) => string },
+ ): Repo | null {
+   requireSchema(store);
++  refuseLinkedRoots(store.dataDir);
+   const create = options.create !== undefined;
+   if (ref.scope !== "project") {
+     const relative = repoFolder(ref);
+@@ -282,6 +284,7 @@ export function scanRepos(store: KnowledgeStore): {
+   ambiguous: { projectId: number; taken: string; others: string[] }[];
+   claimed: { path: string; byProjectId: number; wantedBy: number }[];
+ } {
++  refuseLinkedRoots(store.dataDir);
+   const found: FoundRepo[] = [];
+   for (const scope of ["workspace", "shared"] as const) {
+     const relative = repoFolder({ scope });
+diff --git a/tests/integration/knowledge-cli.test.ts b/tests/integration/knowledge-cli.test.ts
+index 9afc417..fbd3ac0 100644
+--- a/tests/integration/knowledge-cli.test.ts
++++ b/tests/integration/knowledge-cli.test.ts
+@@ -538,6 +538,8 @@ describe("knowledge list, rebuild and adopt", () => {
+     const fault = await cli("adopt");
+     expect(fault.exitCode).toBe(1);
+     expect(fault.stderr).toContain("git");
++    // Said once, as the fault it is: not as a repository set aside.
++    expect(fault.stderr).not.toContain("knowledge/");
+     expect(fault.stdout).toBe("");
+   });
+ 
+diff --git a/tests/unit/doctor-knowledge.test.ts b/tests/unit/doctor-knowledge.test.ts
+index abc584e..8fcc48a 100644
+--- a/tests/unit/doctor-knowledge.test.ts
++++ b/tests/unit/doctor-knowledge.test.ts
+@@ -245,6 +245,20 @@ describe("doctor: knowledge", () => {
+     expect(check.detail).toContain("0 entries");
+   });
+ 
++  test("a link where every project's repository goes is a warning, and nothing is read through it", () => {
++    writeEntry(store, WORKSPACE, change(), person());
++    // A repository of another folder, as the link would reach it.
++    const outside = join(fx.dir, "outside-projects");
++    mkdirSync(join(outside, "abc", ".git"), { recursive: true });
++    const projects = join(fx.dataDir, "knowledge", "projects");
++    rmSync(projects, { recursive: true, force: true });
++    symlinkSync(outside, projects);
++    const check = knowledge();
++    expect(check.status).toBe("warn");
++    expect(check.detail).toContain(projects);
++    expect(check.detail).not.toContain("abc");
++  });
++
+   test("with no database, the checks that need it are skipped and said", () => {
+     writeEntry(store, WORKSPACE, change(), person());
+     const elsewhere = join(fx.dir, "no-database-here");
+diff --git a/tests/unit/knowledge-index.test.ts b/tests/unit/knowledge-index.test.ts
+index 70751fa..481636b 100644
+--- a/tests/unit/knowledge-index.test.ts
++++ b/tests/unit/knowledge-index.test.ts
+@@ -698,6 +698,40 @@ describe("adopt", () => {
+     expect(message.split("\n")).not.toContain("Signed-off-by: someone else");
+     expect(message).toContain("entries/a?Signed-off-by: someone else?");
+     expect(status(repo)).toEqual([""]);
++
++    // Every character a terminal or a log acts on, not the line break alone.
++    writeFileSync(join(repo.path, "entries", "b\tc\x1b[31md\x7fe"), "x\n");
++    expect(adopt(store, WORKSPACE, person()).adopted).toBe(1);
++    expect(realGit(repo.path, "log", "-1", "--format=%B")).toContain("entries/b?c?[31md?e");
++  });
++
++  test("an adopt of large entries that stops midway gives every byte back", () => {
++    // Two entries near the size one file may have: together, kept bytes several times that.
++    const repo = ensureRepo(store, WORKSPACE);
++    const big = (letter: string) => byHand(NOTE, letter.repeat(200 * 1024));
++    writeFileSync(entryFile(repo, "first-big"), big("a"));
++    writeFileSync(entryFile(repo, "second-big"), big("b"));
++    const broken = fx.store({
++      now: () => clock,
++      env: {
++        WIZARDINGCODE_MEM_AUTHOR: "Zoë",
++        PATH: fx.pathWith(
++          stubGit(join(fx.dir, "stopping-big-adopt"), {
++            fail: "commit",
++            failOnce: "reset",
++            stderr: "fatal: boom",
++          }),
++        ),
++      },
++    });
++    expect(codeOf(() => adopt(broken, WORKSPACE, person()))).toBe("git");
++    // The adopt had rewritten both files; the record and the kept bytes are what is left.
++    expect(readFileSync(entryFile(repo, "first-big"), "utf8")).not.toBe(big("a"));
++
++    openRepo(store, WORKSPACE);
++    expect(readFileSync(entryFile(repo, "first-big"), "utf8")).toBe(big("a"));
++    expect(readFileSync(entryFile(repo, "second-big"), "utf8")).toBe(big("b"));
++    expect(readIntent(repo)).toBeNull();
+   });
+ 
+   test("an adopt that stops midway is undone at every path, each said once", () => {
+diff --git a/tests/unit/knowledge-repo.test.ts b/tests/unit/knowledge-repo.test.ts
+index d126863..fbf5cc7 100644
+--- a/tests/unit/knowledge-repo.test.ts
++++ b/tests/unit/knowledge-repo.test.ts
+@@ -52,6 +52,7 @@ import {
+   writeFileAtomic,
+   writeIntent,
+ } from "../../src/modules/knowledge/repo.ts";
++import { listRepos } from "../../src/modules/knowledge/resolve.ts";
+ import { writeEntry } from "../../src/modules/knowledge/store.ts";
+ import type { KnowledgeStore, Repo } from "../../src/modules/knowledge/types.ts";
+ import { DB_FILE } from "../../src/store/db.ts";
+@@ -1654,6 +1655,121 @@ describe("a folder that is not the store's own repository", () => {
+     expect(existsSync(join(repo.path, "entries", "an-entry.md"))).toBe(true);
+   });
+ 
++  test("a repository is refused before git is run in it", () => {
++    const dump = join(fx.dir, "git-was-run.txt");
++    const store = fx.store({
++      env: {
++        WIZARDINGCODE_MEM_AUTHOR: "Writer",
++        PATH: fx.pathWith(stubGit(join(fx.dir, "watched-git"), { dumpEnvTo: dump })),
++      },
++    });
++    const repo = ensureRepo(store, WORKSPACE);
++    rmSync(join(repo.path, ".git", "COMMIT_EDITMSG"));
++    symlinkSync(join(fx.dir, "the-persons-file"), join(repo.path, ".git", "COMMIT_EDITMSG"));
++    // The version of this git is known by now: any call from here on is one in the repository.
++    rmSync(dump);
++
++    const write = () => writeEntry(store, WORKSPACE, AN_ENTRY, personAuthor(store));
++    expect(codeOf(write)).toBe("invalid");
++    expect(existsSync(dump)).toBe(false);
++  });
++
++  test("a folder inside .git that cannot be listed refuses the repository", () => {
++    if (!unix || process.getuid?.() === 0) return;
++    const store = fx.store({ env: { WIZARDINGCODE_MEM_AUTHOR: "Writer" } });
++    const repo = ensureRepo(store, WORKSPACE);
++    const gitDir = join(repo.path, ".git");
++    const victim = join(fx.dir, "the-persons-file");
++    const write = () => writeEntry(store, WORKSPACE, AN_ENTRY, personAuthor(store));
++    /** A link inside a folder that can be searched and not listed, as an archive can carry it. */
++    const refusedWith = (name: string, folder: string, modeBits: number) => {
++      const path = join(gitDir, ...name.split("/"));
++      rmSync(path, { force: true });
++      symlinkSync(victim, path);
++      writeFileSync(victim, "the person's own lines\n");
++      chmodSync(folder, modeBits);
++      try {
++        expect(codeOf(write)).toBe("invalid");
++        expect(thrown(write).message).toContain(folder);
++        expect(readFileSync(victim, "utf8")).toBe("the person's own lines\n");
++      } finally {
++        chmodSync(folder, 0o700);
++      }
++      rmSync(path);
++    };
++    refusedWith("COMMIT_EDITMSG", gitDir, 0o300);
++    refusedWith("logs/HEAD", join(gitDir, "logs"), 0o100);
++    expect(write().kind).toBe("written");
++  });
++
++  test("the socket a person's own git leaves in .git is let through, and no other", async () => {
++    if (!unix) return;
++    const store = fx.store();
++    const repo = ensureRepo(store, WORKSPACE);
++    // A socket's path is short on some systems, so it is made at a short path and moved in.
++    const made = join(fx.dir, "s");
++    const listener = Bun.listen({ unix: made, socket: { data() {} } });
++    try {
++      renameSync(made, join(repo.path, ".git", "fsmonitor--daemon.ipc"));
++      expect(openRepo(store, WORKSPACE)?.id).toBe(repo.id);
++
++      renameSync(
++        join(repo.path, ".git", "fsmonitor--daemon.ipc"),
++        join(repo.path, ".git", "another.ipc"),
++      );
++      expect(codeOf(() => openRepo(store, WORKSPACE))).toBe("invalid");
++      expect(thrown(() => openRepo(store, WORKSPACE)).message).toContain("another.ipc");
++    } finally {
++      listener.stop(true);
++    }
++  });
++
++  test("HEAD is followed only to a ref of the repository's own", () => {
++    const store = fx.store();
++    const repo = ensureRepo(store, WORKSPACE);
++    const head = join(repo.path, ".git", "HEAD");
++    const real = headOf(repo.path);
++    expect(real).toMatch(/^[0-9a-f]{40}$/);
++    writeFileSync(join(fx.dir, "an-outside-file"), "0123456789abcdef0123456789abcdef01234567\n");
++    const climbing = join("..", "..", "..", "..", "an-outside-file");
++    for (const ref of [climbing, `refs/../${climbing}`, "/etc/hosts", "refs/heads/../../config"]) {
++      writeFileSync(head, `ref: ${ref}\n`);
++      expect(headOf(repo.path)).toBeNull();
++    }
++    writeFileSync(head, "ref: refs/heads/main\n");
++    expect(headOf(repo.path)).toBe(real);
++  });
++
++  test("a link where the repositories' folders go is refused, and nothing is made through it", () => {
++    const outside = join(fx.dir, "the-persons-folder");
++    mkdirSync(outside);
++    const store = fx.store({ env: { WIZARDINGCODE_MEM_AUTHOR: "Writer" } });
++    const id = fx.addProject("gitdir:/x/.git", "path:/x");
++    const project = { scope: "project", projectId: id } as const;
++    const write = () => writeEntry(store, project, AN_ENTRY, personAuthor(store));
++
++    // The folder every project's repository goes under.
++    ensureRepo(store, WORKSPACE);
++    const projects = join(fx.dataDir, "knowledge", "projects");
++    symlinkSync(outside, projects);
++    expect(codeOf(write)).toBe("invalid");
++    expect(thrown(write).message).toContain(projects);
++    expect(codeOf(() => listRepos(store))).toBe("invalid");
++    expect(readdirSync(outside)).toEqual([]);
++    rmSync(projects);
++    expect(write().kind).toBe("written");
++
++    // The knowledge folder itself.
++    const root = join(fx.dataDir, "knowledge");
++    renameSync(root, join(fx.dir, "kept-aside"));
++    symlinkSync(outside, root);
++    for (const call of [write, () => ensureRepo(store, WORKSPACE), () => listRepos(store)]) {
++      expect(codeOf(call)).toBe("invalid");
++      expect(thrown(call).message).toContain(root);
++    }
++    expect(readdirSync(outside)).toEqual([]);
++  });
++
+   test("a temporary file name that is already a link is not written through", () => {
+     const outside = join(fx.dir, "victim.txt");
+     writeFileSync(outside, "untouched\n");
