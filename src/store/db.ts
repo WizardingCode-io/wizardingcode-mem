@@ -273,14 +273,19 @@ function migrateModules(db: Db, path: string, dir: string, schemas: readonly Mod
   for (const schema of schemas) {
     for (const migration of schema.migrations) owner.set(migration, schema.module);
   }
-  const pending = (conn: Db): Migration[] => {
+  /** Each schema's own recorded version, and its migrations beyond it, in order. */
+  const pendingBySchema = (conn: Db) => {
     const versions = recordedModuleVersions(conn);
-    return schemas.flatMap((schema) =>
-      [...schema.migrations]
+    return schemas.map((schema) => {
+      const recorded = versions?.get(schema.module) ?? 0;
+      const migrations = [...schema.migrations]
         .sort(byVersion)
-        .filter((migration) => migration.version > (versions?.get(schema.module) ?? 0)),
-    );
+        .filter((migration) => migration.version > recorded);
+      return { recorded, migrations };
+    });
   };
+  const pending = (conn: Db): Migration[] =>
+    pendingBySchema(conn).flatMap((schema) => schema.migrations);
   // How many of this binary's module migrations the database already has.
   const applied = (conn: Db) => total - pending(conn).length;
   if (applied(db) >= total) return;
@@ -295,11 +300,12 @@ function migrateModules(db: Db, path: string, dir: string, schemas: readonly Mod
         `INSERT INTO ${MODULE_MIGRATIONS_TABLE} (module, version, name, applied_at) VALUES (?, ?, ?, ?)`,
         [owner.get(migration) as string, migration.version, migration.name, Date.now()],
       ),
-    // A first module migration on a store has nothing of a module to lose; a later one does.
+    // Decided per schema, by that schema's own recorded version: its first migration has
+    // nothing of its own to lose, whatever other schemas the store holds; a later one does.
     backupVersion: (lock) =>
-      lock.query(`SELECT 1 FROM ${MODULE_MIGRATIONS_TABLE} LIMIT 1`).get() === null
-        ? null
-        : userVersion(lock),
+      pendingBySchema(lock).some((schema) => schema.recorded > 0 && schema.migrations.length > 0)
+        ? userVersion(lock)
+        : null,
   });
 }
 

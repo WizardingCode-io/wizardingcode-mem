@@ -9,6 +9,7 @@ import {
   KNOWLEDGE_MODULE,
   KNOWLEDGE_SCHEMA_VERSION,
 } from "../../src/modules/knowledge/migrations.ts";
+import { SHARING_MIGRATIONS, SHARING_MODULE } from "../../src/sharing/migrations.ts";
 import {
   DB_FILE,
   LATEST_VERSION,
@@ -69,6 +70,7 @@ describe("the knowledge module's schema", () => {
   test("the list the engine reads holds the knowledge migrations", () => {
     expect(MODULE_SCHEMAS).toEqual([
       { module: KNOWLEDGE_MODULE, migrations: KNOWLEDGE_MIGRATIONS },
+      { module: SHARING_MODULE, migrations: SHARING_MIGRATIONS },
     ]);
     expect(KNOWLEDGE_MODULE).toBe("knowledge");
     expect(KNOWLEDGE_SCHEMA_VERSION).toBe(6);
@@ -79,9 +81,11 @@ describe("the knowledge module's schema", () => {
     const db = open();
     expect(userVersion(db)).toBe(LATEST_VERSION);
     const recorded = rows(db);
-    expect(recorded).toHaveLength(1);
+    expect(recorded).toHaveLength(2);
     expect(recorded[0]).toMatchObject({ module: "knowledge", version: 6, name: "knowledge_store" });
     expect(recorded[0]?.applied_at).toBeGreaterThan(0);
+    expect(recorded[1]).toMatchObject({ module: "sharing", version: 1, name: "sharing_policy" });
+    expect(recorded[1]?.applied_at).toBeGreaterThan(0);
     const names = tables(db);
     expect(names).toEqual(
       expect.arrayContaining(["knowledge_repos", "knowledge_entries", "knowledge_proposals"]),
@@ -94,7 +98,19 @@ describe("the knowledge module's schema", () => {
   test("a second open applies nothing and takes no backup", () => {
     open().close();
     const db = open();
-    expect(rows(db)).toHaveLength(1);
+    expect(rows(db)).toHaveLength(2);
+    expect(backups()).toEqual([]);
+    db.close();
+  });
+
+  test("a schema's first migration takes no backup on a store that holds another schema's", () => {
+    open([{ module: KNOWLEDGE_MODULE, migrations: KNOWLEDGE_MIGRATIONS }]).close();
+    expect(backups()).toEqual([]);
+    const db = open();
+    expect(rows(db).map((row) => [row.module, row.version, row.name])).toEqual([
+      ["knowledge", 6, "knowledge_store"],
+      ["sharing", 1, "sharing_policy"],
+    ]);
     expect(backups()).toEqual([]);
     db.close();
   });
@@ -110,7 +126,11 @@ describe("the knowledge module's schema", () => {
     db.close();
     const again = open();
     expect(moduleSchemaState(again, "knowledge", 6)).toBe("too-new");
-    expect(rows(again).map((row) => row.version)).toEqual([6, 7]);
+    expect(rows(again).map((row) => [row.module, row.version])).toEqual([
+      ["knowledge", 6],
+      ["knowledge", 7],
+      ["sharing", 1],
+    ]);
     again.close();
   });
 
@@ -177,6 +197,7 @@ describe("the knowledge module's schema", () => {
         applied_at: 0,
       })),
       expect.objectContaining({ module: "knowledge", version: 6, name: "knowledge_store" }),
+      expect.objectContaining({ module: "sharing", version: 1, name: "sharing_policy" }),
     ]);
     const names = tables(db);
     for (const gone of [
@@ -346,7 +367,7 @@ describe("the knowledge module's schema", () => {
     db?.close();
   });
 
-  test("several processes opening a fresh database at once record the knowledge row once", async () => {
+  test("several processes opening a fresh database at once record each schema's row once", async () => {
     const worker = new URL("../helpers/open-db-worker.ts", import.meta.url).pathname;
     const exits = await Promise.all(
       Array.from({ length: 4 }, async () => {
@@ -365,7 +386,10 @@ describe("the knowledge module's schema", () => {
     expect(exits.map((exit) => exit.stderr)).toEqual(["", "", "", ""]);
     expect(exits.map((exit) => exit.exitCode)).toEqual([0, 0, 0, 0]);
     const db = new Database(join(dir, DB_FILE), { readonly: true });
-    expect(rows(db).map((row) => [row.module, row.version])).toEqual([["knowledge", 6]]);
+    expect(rows(db).map((row) => [row.module, row.version])).toEqual([
+      ["knowledge", 6],
+      ["sharing", 1],
+    ]);
     db.close();
   }, 30_000);
 });

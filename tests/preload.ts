@@ -38,6 +38,9 @@ for (const name of PATH_OVERRIDES) delete process.env[name];
 // Behaviour, not a path, but a shell that exports it would change the module set in every
 // spawned hook, server and viewer.
 delete process.env.WIZARDINGCODE_MODULES;
+// The sharing policy: an exported list would narrow what every test's policy lets leave.
+delete process.env.WIZARDINGCODE_MEM_SHARE_ROOTS;
+delete process.env.WIZARDINGCODE_MEM_SHARE_AREAS;
 // The knowledge store names an author and runs git. A shell that exports these would change
 // every author and every git call in the tests, and a suite started from a git hook would
 // write into the outer repository's index.

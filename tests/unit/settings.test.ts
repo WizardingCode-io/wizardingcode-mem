@@ -34,6 +34,7 @@ describe("loadSettings", () => {
       uiAutoOpen: true,
       storeDir: null,
       modules: null,
+      sharing: { roots: [], areas: [], problems: [] },
       author: null,
       backup: {
         to: null,
@@ -74,6 +75,7 @@ describe("loadSettings", () => {
       uiAutoOpen: false,
       storeDir: "/Volumes/Ext/mem",
       modules: null,
+      sharing: { roots: [], areas: [], problems: [] },
       author: "Zoë",
       backup: {
         to: "s3://bucket/mem",
