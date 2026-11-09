@@ -34,6 +34,7 @@ describe("loadSettings", () => {
       uiAutoOpen: true,
       storeDir: null,
       modules: null,
+      author: null,
       backup: {
         to: null,
         everyHours: 24,
@@ -53,6 +54,7 @@ describe("loadSettings", () => {
           "WIZARDINGCODE_MEM_RETENTION_DAYS=30",
           "WIZARDINGCODE_MEM_UI_AUTO_OPEN=off",
           "WIZARDINGCODE_MEM_STORE_DIR=/Volumes/Ext/mem",
+          "WIZARDINGCODE_MEM_AUTHOR=André",
           "WIZARDINGCODE_MEM_BACKUP_TO=s3://bucket/mem",
           "WIZARDINGCODE_MEM_BACKUP_EVERY_HOURS=6",
           "WIZARDINGCODE_MEM_BACKUP_KEEP=3",
@@ -72,6 +74,7 @@ describe("loadSettings", () => {
       uiAutoOpen: false,
       storeDir: "/Volumes/Ext/mem",
       modules: null,
+      author: "André",
       backup: {
         to: "s3://bucket/mem",
         everyHours: 6,

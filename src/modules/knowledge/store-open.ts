@@ -1,9 +1,7 @@
 import { loadSettings } from "../../settings/settings.ts";
 import type { Db } from "../../store/db.ts";
+import { GIT_TIMEOUT_MS } from "./repo.ts";
 import type { KnowledgeStore } from "./types.ts";
-
-/** How long one git call may run before it is killed. */
-const GIT_TIMEOUT_MS = 15000;
 
 /**
  * The handle every function of the store takes. The environment and the clock are fixed

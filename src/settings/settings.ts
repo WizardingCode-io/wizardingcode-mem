@@ -16,6 +16,7 @@ export const SETTING_KEYS = [
   "WIZARDINGCODE_MEM_UI_AUTO_OPEN",
   "WIZARDINGCODE_MEM_STORE_DIR",
   "WIZARDINGCODE_MODULES",
+  "WIZARDINGCODE_MEM_AUTHOR",
   "WIZARDINGCODE_MEM_BACKUP_TO",
   "WIZARDINGCODE_MEM_BACKUP_EVERY_HOURS",
   "WIZARDINGCODE_MEM_BACKUP_KEEP",
@@ -46,6 +47,8 @@ export interface Settings {
   storeDir: string | null;
   /** The modules on, as the comma list it was given; null means the default (memory). */
   modules: string | null;
+  /** The person's name on the knowledge they write; null falls back to the git name. */
+  author: string | null;
   backup: {
     /** A folder, or `s3://bucket/prefix`. */
     to: string | null;
@@ -109,9 +112,23 @@ function integer(
   return n >= range.min && n <= range.max ? n : fallback;
 }
 
+const AUTHOR_MAX = 80;
+
+/**
+ * Why a text cannot be a person's author name; null when it can. A name starting with
+ * `agent:` is refused: that prefix is how an agent's change is told from a person's.
+ */
+export function authorNameProblem(value: string): string | null {
+  if (value.length === 0 || value.length > AUTHOR_MAX || /[\r\n]/.test(value)) {
+    return `a name of 1 to ${AUTHOR_MAX} characters, on one line`;
+  }
+  return value.startsWith("agent:") ? "a person's name cannot start with agent:" : null;
+}
+
 export function loadSettings(env: Env = process.env, dataDir: string): Settings {
   const raw = rawSettings(env, dataDir);
   const value = (key: SettingKey) => raw[key].value;
+  const author = value("WIZARDINGCODE_MEM_AUTHOR");
   return {
     typesafeKey: value("TYPESAFE_API_KEY"),
     typesafe: onOff(value("WIZARDINGCODE_MEM_TYPESAFE"), true) ? "on" : "off",
@@ -129,6 +146,7 @@ export function loadSettings(env: Env = process.env, dataDir: string): Settings 
     uiAutoOpen: onOff(value("WIZARDINGCODE_MEM_UI_AUTO_OPEN"), DEFAULTS.uiAutoOpen),
     storeDir: value("WIZARDINGCODE_MEM_STORE_DIR"),
     modules: value("WIZARDINGCODE_MODULES"),
+    author: author !== null && authorNameProblem(author) === null ? author : null,
     backup: {
       to: value("WIZARDINGCODE_MEM_BACKUP_TO"),
       everyHours: integer(
@@ -187,6 +205,7 @@ const RULES: Record<SettingKey, (value: string) => string | null> = {
       ? null
       : "memory is always on in this version: list it first, then the modules to add";
   },
+  WIZARDINGCODE_MEM_AUTHOR: authorNameProblem,
   WIZARDINGCODE_MEM_BACKUP_TO: (v) =>
     absolutePath(v) || S3_URL.test(v) ? null : "an absolute folder path or s3://bucket/prefix",
   WIZARDINGCODE_MEM_BACKUP_EVERY_HOURS: (v) =>

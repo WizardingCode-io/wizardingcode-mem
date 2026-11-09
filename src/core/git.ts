@@ -50,6 +50,17 @@ function resolveRef(gitDir: string, commonDir: string, ref: string): string | nu
   return null;
 }
 
+/**
+ * The commit a git directory's HEAD is on, read from that directory alone: it never walks
+ * up to a parent repository. Null before the first commit, or when this is no git directory.
+ */
+export function headOfGitDir(gitDir: string): string | null {
+  const head = read(join(gitDir, "HEAD"))?.trim() ?? "";
+  const ref = head.match(/^ref:\s*(.+)$/)?.[1];
+  if (ref === undefined) return SHA.test(head) ? head : null;
+  return resolveRef(gitDir, gitDir, ref);
+}
+
 function originUrl(commonDir: string): string | null {
   let inOrigin = false;
   for (const raw of read(join(commonDir, "config"))?.split("\n") ?? []) {
