@@ -363,14 +363,21 @@ export interface RebuildResult {
   dirtyChecked: boolean;
 }
 
+/** What a repository's files hold, read and parsed, before git or the database has a say. */
+export interface RepoFiles {
+  entries: { entry: KnowledgeEntry; path: string; hash: string }[];
+  proposals: { proposal: KnowledgeProposal; path: string; hash: string }[];
+  /** Files the folder caps left out. */
+  overCap: number;
+}
+
 /**
- * Replaces the repository's rows with what its files hold, in one transaction. No file
- * fails it: one that cannot be read, has no usable id, or shares another's id is indexed
- * under its name with its problem. A file git lists as changed is a draft until adopted.
+ * Reads a repository's entries and proposals from its files. No file fails it: one that
+ * cannot be read, has no usable id, or shares another's id is listed under its name with
+ * its problem. It touches neither git nor the database, so `doctor` reads the same way.
  */
-export function rebuildRepo(store: KnowledgeStore, repo: Repo): RebuildResult {
+export function readRepoFiles(store: KnowledgeStore, repo: Repo): RepoFiles {
   const taxonomy = taxonomyOrNull(store, repo);
-  const changed = changedPaths(store, repo);
   const decode = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
   let read = 0;
   let overCap = 0;
@@ -408,9 +415,6 @@ export function rebuildRepo(store: KnowledgeStore, repo: Repo): RebuildResult {
         };
       }
     }
-    if (changed?.has(path)) {
-      entry = { ...entry, status: "draft", problem: also(entry.problem, CHANGED_OUTSIDE) };
-    }
     entries.push({ entry, path, hash: "problem" in file ? "" : fileHash(file.bytes) });
   }
 
@@ -438,12 +442,40 @@ export function rebuildRepo(store: KnowledgeStore, repo: Repo): RebuildResult {
           };
         } else proposalIds.add(proposal.id);
       }
-      if (changed?.has(path)) {
-        proposal = { ...proposal, problem: also(proposal.problem, CHANGED_OUTSIDE) };
-      }
       proposals.push({ proposal, path, hash: "problem" in file ? "" : fileHash(file.bytes) });
     }
   }
+  return { entries, proposals, overCap };
+}
+
+/**
+ * Replaces the repository's rows with what its files hold, in one transaction. A file git
+ * lists as changed is a draft with a problem until a person adopts it.
+ */
+export function rebuildRepo(store: KnowledgeStore, repo: Repo): RebuildResult {
+  const changed = changedPaths(store, repo);
+  const files = readRepoFiles(store, repo);
+  const { overCap } = files;
+  const entries = files.entries.map((file) =>
+    changed?.has(file.path)
+      ? {
+          ...file,
+          entry: {
+            ...file.entry,
+            status: "draft",
+            problem: also(file.entry.problem, CHANGED_OUTSIDE),
+          },
+        }
+      : file,
+  );
+  const proposals = files.proposals.map((file) =>
+    changed?.has(file.path)
+      ? {
+          ...file,
+          proposal: { ...file.proposal, problem: also(file.proposal.problem, CHANGED_OUTSIDE) },
+        }
+      : file,
+  );
 
   store.renew?.();
   withWrite(store.db, () => {

@@ -37,7 +37,9 @@ import {
   writeIntent,
 } from "../../src/modules/knowledge/repo.ts";
 import type { KnowledgeStore, Repo } from "../../src/modules/knowledge/types.ts";
+import { DB_FILE } from "../../src/store/db.ts";
 import { anyLeaseActive, getMeta, leaseActive, setMeta } from "../../src/store/meta.ts";
+import { moveStore } from "../../src/store/move.ts";
 import { codeOf, type Fixture, knowledgeFixture, thrown } from "../helpers/knowledge.ts";
 import { realGit, stubGit } from "../helpers/stub-git.ts";
 
@@ -590,6 +592,18 @@ describe("the leases", () => {
       expect(store.renew).not.toBeNull();
     });
     expect(store.renew).toBeNull();
+  });
+
+  test("a store move is refused while a knowledge write holds its lease", async () => {
+    const now = Date.now();
+    const key = leaseKey("knowledge/workspace");
+    setMeta(fx.db, key, JSON.stringify({ owner: `${process.pid}-writer`, until: now + 60_000 }));
+    const move = () =>
+      moveStore({ dataDir: fx.dataDir, from: fx.dataDir, to: join(fx.dir, "moved"), now });
+    expect(await move()).toMatchObject({ ok: false, reason: "busy" });
+    expect(existsSync(join(fx.dataDir, DB_FILE))).toBe(true);
+    fx.db.run("DELETE FROM meta WHERE key = ?", [key]);
+    expect(anyLeaseActive(fx.db, now)).toBe(false);
   });
 
   test("the runner renews before it spawns git", () => {

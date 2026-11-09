@@ -259,10 +259,35 @@ export function listRepos(store: KnowledgeStore): {
   ambiguous: { projectId: number; taken: string; others: string[] }[];
   claimed: { path: string; byProjectId: number; wantedBy: number }[];
 } {
-  const repos: Repo[] = [];
+  const { found, ...rest } = scanRepos(store);
+  return {
+    ...rest,
+    repos: found.map((repo) => ({ ...repo, id: saveRow(store, repo.ref, repo.relative) })),
+  };
+}
+
+/** A repository folder and the scope it belongs to, before it has an index row. */
+export interface FoundRepo {
+  ref: ScopeRef;
+  path: string;
+  relative: string;
+}
+
+/**
+ * What `listRepos` finds, without writing anything: for a caller that holds the database
+ * read-only, such as `doctor`.
+ */
+export function scanRepos(store: KnowledgeStore): {
+  found: FoundRepo[];
+  orphans: string[];
+  ambiguous: { projectId: number; taken: string; others: string[] }[];
+  claimed: { path: string; byProjectId: number; wantedBy: number }[];
+} {
+  const found: FoundRepo[] = [];
   for (const scope of ["workspace", "shared"] as const) {
-    const repo = resolveRepo(store, { scope }, {});
-    if (repo !== null) repos.push(repo);
+    const relative = repoFolder({ scope });
+    const path = repoPath(store.dataDir, relative);
+    if (isDirectory(path)) found.push({ ref: { scope }, path, relative });
   }
 
   const folders = projectFolders(store);
@@ -289,12 +314,15 @@ export function listRepos(store: KnowledgeStore): {
     if (project === null) continue;
     const match = matchProject(store, projectId, project.aliases, folders);
     if (match.taken === null) continue;
-    const repo = resolveRepo(store, { scope: "project", projectId }, {});
-    if (repo === null) continue;
-    repos.push(repo);
-    accounted.add(repo.relative);
+    const relative = match.taken;
+    found.push({
+      ref: { scope: "project", projectId },
+      path: repoPath(store.dataDir, relative),
+      relative,
+    });
+    accounted.add(relative);
     if (match.others.length > 0) {
-      ambiguous.push({ projectId, taken: repo.relative, others: match.others });
+      ambiguous.push({ projectId, taken: relative, others: match.others });
       for (const other of match.others) accounted.add(other);
     }
     for (const claim of match.claimed) claimed.push({ ...claim, wantedBy: projectId });
@@ -302,5 +330,5 @@ export function listRepos(store: KnowledgeStore): {
   const orphans = folders
     .map((folder) => folder.relative)
     .filter((relative) => !accounted.has(relative));
-  return { repos, orphans, ambiguous, claimed };
+  return { found, orphans, ambiguous, claimed };
 }

@@ -1,5 +1,13 @@
 import { Database } from "bun:sqlite";
-import { accessSync, constants, existsSync, readFileSync } from "node:fs";
+import {
+  accessSync,
+  constants,
+  existsSync,
+  lstatSync,
+  readdirSync,
+  readFileSync,
+  statSync,
+} from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { lastBackup } from "../backup/schedule.ts";
 import { semanticStatus } from "../embed/status.ts";
@@ -21,10 +29,40 @@ import { PLUGIN_MARKER } from "../install/opencode-plugin.ts";
 import { QWEN } from "../install/qwen.ts";
 import { Breaker } from "../judge/breaker.ts";
 import { keyFingerprint } from "../judge/key.ts";
+import { personAuthor } from "../modules/knowledge/author.ts";
+import { KnowledgeError } from "../modules/knowledge/errors.ts";
+import { FOLDER_CAP, readRepoFiles } from "../modules/knowledge/index-store.ts";
+import { KNOWLEDGE_MODULE, KNOWLEDGE_SCHEMA_VERSION } from "../modules/knowledge/migrations.ts";
+import {
+  checkRepoConfig,
+  DECIDED_DIR,
+  ENTRIES_DIR,
+  GIT_MIN_VERSION,
+  GIT_TIMEOUT_MS,
+  knowledgeRoot,
+  MANIFEST_FILE,
+  OPEN_DIR,
+  parseGitVersion,
+  parseManifest,
+  repoPath,
+  runGit,
+  statusOf,
+  TAXONOMY_FILE,
+} from "../modules/knowledge/repo.ts";
+import { type FoundRepo, scanRepos } from "../modules/knowledge/resolve.ts";
+import type { KnowledgeStore } from "../modules/knowledge/types.ts";
 import { loadSettings } from "../settings/settings.ts";
 import { hookLatency } from "../status/report.ts";
-import { DB_FILE, type Db, LATEST_VERSION, openExisting, SchemaTooNewError } from "../store/db.ts";
+import {
+  DB_FILE,
+  type Db,
+  LATEST_VERSION,
+  moduleSchemaState,
+  openExisting,
+  SchemaTooNewError,
+} from "../store/db.ts";
 import { inspectTarget } from "../store/move.ts";
+import { plural } from "../util/text.ts";
 
 export interface Check {
   name: string;
@@ -55,6 +93,10 @@ export interface DoctorContext {
   claudeDesktopConfigPath?: string;
   /** SHIBAOX_* variables set in the environment: the names until 0.3.0. */
   legacyVariables?: string[];
+  /** The environment git is run with and the settings are read from; the process's when absent. */
+  env?: Record<string, string | undefined>;
+  /** The installed git's version, for a test; when absent, git is asked. */
+  gitVersion?: () => number[] | null;
 }
 
 // Folders that copy files behind SQLite's back, or cannot lock them properly.
@@ -529,6 +571,267 @@ function readingDb(name: string, db: Db | null, check: () => Check): Check {
 }
 
 /** Looks, and changes nothing: no directory, database or setting is created or altered. */
+// --- Knowledge ------------------------------------------------------------------------
+
+/** A folder past this many files is close to the index's cap: said before files are left out. */
+const FOLDER_WARN = 4000;
+const LOCK_STALE_MS = 60_000;
+const PROBLEMS_NAMED = 5;
+
+function isDirectory(path: string): boolean {
+  try {
+    return lstatSync(path).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+/** The repository folders with no database to map projects by: every folder is taken as it is. */
+function foldersByHand(dataDir: string): FoundRepo[] {
+  const found: FoundRepo[] = [];
+  for (const scope of ["workspace", "shared"] as const) {
+    const relative = `knowledge/${scope}`;
+    const path = repoPath(dataDir, relative);
+    if (isDirectory(path)) found.push({ ref: { scope }, path, relative });
+  }
+  return found;
+}
+
+/** Every folder under `knowledge/projects/`, mapped or not. */
+function projectFolders(dataDir: string): string[] {
+  try {
+    return readdirSync(repoPath(dataDir, "knowledge/projects"))
+      .filter((name) => !name.startsWith("."))
+      .sort()
+      .map((name) => `knowledge/projects/${name}`)
+      .filter((relative) => isDirectory(repoPath(dataDir, relative)));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * The knowledge repositories, read by hand: the folders, the manifests, `.git` and the
+ * files. The database, read-only, answers four things only: the module's schema version,
+ * the files the index left out, the project aliases that map manifests, and the author
+ * setting. With git present, one `git status` per repository, taking no lock.
+ */
+function knowledgeRepositories(context: DoctorContext, db: Db | null): Check {
+  const name = "knowledge";
+  if (!isDirectory(knowledgeRoot(context.dataDir))) {
+    return { name, status: "skip", detail: "no knowledge repository yet" };
+  }
+  const env = context.env ?? process.env;
+  const store: KnowledgeStore = {
+    // Read-only, and only where a database exists: `scanRepos` and nothing that writes.
+    db: db as Db,
+    dataDir: context.dataDir,
+    env,
+    now: () => context.now,
+    settings: loadSettings(env, context.dataDir),
+    gitTimeoutMs: GIT_TIMEOUT_MS,
+    renew: null,
+  };
+  const warnings: string[] = [];
+  const notes: string[] = [];
+
+  let git = context.which("git") !== null;
+  if (!git) {
+    warnings.push("git is not installed: knowledge cannot be written or checked for hand edits");
+  } else {
+    let version: number[] | null = null;
+    try {
+      version =
+        context.gitVersion !== undefined
+          ? context.gitVersion()
+          : parseGitVersion(
+              runGit(store, null, ["--version"], {
+                operation: "doctor",
+                readOnly: true,
+                quiet: true,
+              }).stdout,
+            );
+    } catch (error) {
+      if (!(error instanceof KnowledgeError)) throw error;
+    }
+    const wanted = GIT_MIN_VERSION.join(".").replace(/\.0$/, "");
+    if (version === null) {
+      git = false;
+      warnings.push(`git did not answer: knowledge needs git ${wanted} or newer`);
+    } else if (
+      (version[0] ?? 0) < (GIT_MIN_VERSION[0] ?? 0) ||
+      ((version[0] ?? 0) === (GIT_MIN_VERSION[0] ?? 0) &&
+        (version[1] ?? 0) < (GIT_MIN_VERSION[1] ?? 0))
+    ) {
+      git = false;
+      warnings.push(`git ${version.join(".")} is older than ${wanted}, which knowledge needs`);
+    }
+  }
+
+  // With no database, or one whose knowledge tables do not exist yet, no project can be
+  // mapped: every folder is read as it is.
+  const unmapped = (): FoundRepo[] => [
+    ...foldersByHand(context.dataDir),
+    ...projectFolders(context.dataDir).map((relative) => ({
+      ref: { scope: "project", projectId: 0 } as const,
+      path: repoPath(context.dataDir, relative),
+      relative,
+    })),
+  ];
+  let found: FoundRepo[];
+  if (db === null) {
+    found = unmapped();
+    notes.push("no database: the checks that read it were skipped");
+  } else {
+    let scan: ReturnType<typeof scanRepos>;
+    try {
+      scan = scanRepos(store);
+    } catch {
+      scan = { found: unmapped(), orphans: [], ambiguous: [], claimed: [] };
+    }
+    found = scan.found;
+    for (const entry of scan.ambiguous) {
+      warnings.push(
+        `ambiguous: project ${entry.projectId} matches ${entry.taken} and ${entry.others.join(", ")}`,
+      );
+    }
+    for (const claim of scan.claimed) {
+      warnings.push(
+        `ambiguous: ${claim.path} is claimed by projects ${claim.byProjectId} and ${claim.wantedBy}`,
+      );
+    }
+    if (moduleSchemaState(db, KNOWLEDGE_MODULE, KNOWLEDGE_SCHEMA_VERSION) === "too-new") {
+      warnings.push("the knowledge tables are newer than this wizardingcode-mem; upgrade it");
+    } else {
+      try {
+        const over = db
+          .query<{ path: string; over_cap: number }, []>(
+            "SELECT path, over_cap FROM knowledge_repos WHERE over_cap > 0 ORDER BY path",
+          )
+          .all();
+        for (const row of over) {
+          warnings.push(
+            `${row.path}: ${plural(row.over_cap, "file")} over the cap of ${FOLDER_CAP}`,
+          );
+        }
+      } catch {
+        // The tables are created on the next write; there is nothing recorded to read.
+      }
+    }
+    if (personAuthor(store).source === "default") {
+      warnings.push("no author configured: set WIZARDINGCODE_MEM_AUTHOR or a git user.name");
+    }
+  }
+
+  // A folder under knowledge/ with no repository in it, mapped to a project or not.
+  const folders = new Set([
+    ...found.map((repo) => repo.relative),
+    ...projectFolders(context.dataDir),
+  ]);
+  for (const relative of folders) {
+    if (!isDirectory(join(repoPath(context.dataDir, relative), ".git"))) {
+      warnings.push(`${relative} is not a git repository`);
+    }
+  }
+
+  let entries = 0;
+  let drafts = 0;
+  let open = 0;
+  let repositories = 0;
+  const problems: string[] = [];
+  for (const repo of found) {
+    if (!isDirectory(join(repo.path, ".git"))) continue;
+    repositories++;
+    try {
+      const manifest = parseManifest(readFileSync(join(repo.path, MANIFEST_FILE), "utf8"));
+      if ("problem" in manifest) warnings.push(`${repo.relative}: ${manifest.problem}`);
+    } catch {
+      warnings.push(`${repo.relative}: ${MANIFEST_FILE} is missing`);
+    }
+    try {
+      const age = context.now - statSync(join(repo.path, ".git", "index.lock")).mtimeMs;
+      if (age > LOCK_STALE_MS) {
+        warnings.push(
+          `${repo.relative}: .git/index.lock is ${Math.round(age / 1000)} s old; a git process died there, remove the file`,
+        );
+      }
+    } catch {
+      // No lock: nothing is writing.
+    }
+    for (const folder of [ENTRIES_DIR, OPEN_DIR, DECIDED_DIR]) {
+      try {
+        const count = readdirSync(join(repo.path, ...folder.split("/"))).filter(
+          (file) => !file.startsWith("."),
+        ).length;
+        if (count > FOLDER_WARN) {
+          warnings.push(
+            `${repo.relative}: ${folder}/ holds ${count} files; the index keeps ${FOLDER_CAP}`,
+          );
+        }
+      } catch {
+        // A folder git does not track when empty: a fresh clone may not have it.
+      }
+    }
+
+    const files = readRepoFiles(store, { ...repo, id: 0 });
+    entries += files.entries.length;
+    drafts += files.entries.filter(({ entry }) => entry.status === "draft").length;
+    open += files.proposals.filter(({ path }) => path.startsWith(`${OPEN_DIR}/`)).length;
+    problems.push(
+      ...files.entries.filter(({ entry }) => entry.problem !== null).map(({ entry }) => entry.slug),
+    );
+
+    if (!git) continue;
+    try {
+      // A repository whose own configuration could run a program is never handed to git.
+      checkRepoConfig(repo.path);
+      const changed = statusOf(store, { ...repo, id: 0 }, [
+        ENTRIES_DIR,
+        "proposals",
+        TAXONOMY_FILE,
+        MANIFEST_FILE,
+      ]).length;
+      if (changed > 0) {
+        warnings.push(
+          `${repo.relative}: ${changed} changed outside the engine; run wizardingcode-mem knowledge adopt`,
+        );
+      }
+    } catch (error) {
+      if (!(error instanceof KnowledgeError)) throw error;
+      warnings.push(`${repo.relative}: ${error.message}`);
+    }
+  }
+  if (problems.length > 0) {
+    const more = problems.length - PROBLEMS_NAMED;
+    warnings.push(
+      `${plural(problems.length, "entry has a problem", "entries have problems")}: ${problems
+        .slice(0, PROBLEMS_NAMED)
+        .join(", ")}${more > 0 ? ` and ${more} more` : ""}`,
+    );
+  }
+
+  const counts = [
+    `${plural(repositories, "repository", "repositories")}, ${plural(entries, "entry", "entries")}, ${plural(drafts, "draft")}, ${plural(open, "open proposal")}`,
+    ...notes,
+  ].join("; ");
+  return warnings.length === 0
+    ? { name, status: "ok", detail: counts }
+    : { name, status: "warn", detail: `${warnings.join("; ")} (${counts})` };
+}
+
+/** Contains its own errors: an unreadable folder or manifest is a warning, never a thrown error. */
+function knowledge(context: DoctorContext, db: Db | null): Check {
+  try {
+    return knowledgeRepositories(context, db);
+  } catch (error) {
+    return {
+      name: "knowledge",
+      status: "warn",
+      detail: `could not be checked: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
 export function runChecks(context: DoctorContext): Check[] {
   const { check: databaseCheck, db } = database(context);
   try {
@@ -543,6 +846,7 @@ export function runChecks(context: DoctorContext): Check[] {
       readingDb("TypeSafe", db, () => typeSafe(context, db)),
       readingDb("semantic search", db, () => semanticSearch(context, db)),
       readingDb("backups", db, () => backups(context, db)),
+      knowledge(context, db),
       // Claude Code is the host this started on: its absence is a warning, not a skip.
       hooksHost("Claude Code", CLAUDE_CODE, context.settingsPath, null, context),
       hooksHost("Codex", CODEX, context.codexHooksPath, "codex", context),
