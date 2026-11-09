@@ -1,5 +1,15 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { identityOf, personAuthor } from "../../src/modules/knowledge/author.ts";
 import { DEFAULT_AREAS } from "../../src/modules/knowledge/entry.ts";
@@ -12,8 +22,10 @@ import {
   fingerprintOf,
   GIT_MIN_VERSION,
   GIT_TIMEOUT_MS,
+  hashOf,
   headOf,
   KNOWLEDGE_LEASE_MS,
+  keepBytes,
   knowledgeRoot,
   leaseKey,
   openRepo,
@@ -34,8 +46,10 @@ import {
   undoStaged,
   unstage,
   withRepoLeases,
+  writeFileAtomic,
   writeIntent,
 } from "../../src/modules/knowledge/repo.ts";
+import { writeEntry } from "../../src/modules/knowledge/store.ts";
 import type { KnowledgeStore, Repo } from "../../src/modules/knowledge/types.ts";
 import { DB_FILE } from "../../src/store/db.ts";
 import { anyLeaseActive, getMeta, leaseActive, setMeta } from "../../src/store/meta.ts";
@@ -137,7 +151,7 @@ describe("the support folders", () => {
 
 describe("ensureRepo", () => {
   test("creates the workspace repository with its files, its folders and one commit by the person", () => {
-    const store = fx.store({ env: { WIZARDINGCODE_MEM_AUTHOR: "André Agro" } });
+    const store = fx.store({ env: { WIZARDINGCODE_MEM_AUTHOR: "Zoë Writer" } });
     const repo = ensureRepo(store, WORKSPACE);
     expect(repo.relative).toBe("knowledge/workspace");
     expect(repo.path).toBe(join(fx.dataDir, "knowledge", "workspace"));
@@ -161,7 +175,7 @@ describe("ensureRepo", () => {
     expect(realGit(repo.path, "rev-list", "--count", "HEAD").trim()).toBe("1");
     const identity = identityOf(personAuthor(store));
     expect(realGit(repo.path, "log", "-1", "--format=%an|%ae|%cn|%ce|%s").trim()).toBe(
-      `André Agro|${identity.email}|André Agro|${identity.email}|knowledge: repository (format 1)`,
+      `Zoë Writer|${identity.email}|Zoë Writer|${identity.email}|knowledge: repository (format 1)`,
     );
     expect(realGit(repo.path, "status", "--porcelain")).toBe("");
     if (unix) expect(mode(repo.path)).toBe(0o700);
@@ -218,14 +232,14 @@ describe("ensureRepo", () => {
     chmodSync(join(hooks, "pre-commit"), 0o755);
     writeFileSync(
       join(fx.home, ".gitconfig"),
-      `[user]\n\tname = Ana Lopes\n[core]\n\thooksPath = ${hooks}\n[commit]\n\tgpgsign = true\n`,
+      `[user]\n\tname = First Writer\n[core]\n\thooksPath = ${hooks}\n[commit]\n\tgpgsign = true\n`,
     );
     const store = fx.store();
     const repo = ensureRepo(store, WORKSPACE);
     commitFile(store, repo, "entries/a.md", "one\n");
     expect(realGit(repo.path, "rev-list", "--count", "HEAD").trim()).toBe("2");
     expect(existsSync(marker)).toBe(false);
-    expect(realGit(repo.path, "log", "-1", "--format=%an").trim()).toBe("Ana Lopes");
+    expect(realGit(repo.path, "log", "-1", "--format=%an").trim()).toBe("First Writer");
   });
 
   test("a data directory inside a parent repository never commits into the parent", () => {
@@ -628,6 +642,17 @@ describe("the leases", () => {
 describe("an interrupted operation", () => {
   const person = { kind: "person", name: "you", source: "default" } as const;
 
+  const hash = (text: string) => hashOf(Buffer.from(text));
+  const status = (repo: Repo) =>
+    realGit(repo.path, "status", "--porcelain", "--untracked-files=all").trimEnd();
+  /** A store that keeps what the engine tells the person. */
+  function reporting(): { store: KnowledgeStore; said: string[] } {
+    const said: string[] = [];
+    const store = fx.store();
+    store.report = (message) => said.push(message);
+    return { store, said };
+  }
+
   test("the intent record round-trips", () => {
     const repo = ensureRepo(fx.store(), WORKSPACE);
     expect(readIntent(repo)).toBeNull();
@@ -636,6 +661,7 @@ describe("an interrupted operation", () => {
       writer: person,
       existed: ["entries/a.md"],
       created: ["proposals/decided/x.md"],
+      written: { "entries/a.md": "0123456789abcdef", "proposals/open/x.md": null },
       proposalId: "x",
     };
     writeIntent(repo, intent);
@@ -646,8 +672,8 @@ describe("an interrupted operation", () => {
     clearIntent(repo);
   });
 
-  test("openRepo removes a new file an interrupted write left", () => {
-    const store = fx.store();
+  test("openRepo removes a new file an interrupted write left, and says so", () => {
+    const { store, said } = reporting();
     const repo = ensureRepo(store, WORKSPACE);
     writeFileSync(join(repo.path, "entries", "new.md"), "half written\n");
     stagePaths(store, repo, ["entries/new.md"], "write");
@@ -656,12 +682,16 @@ describe("an interrupted operation", () => {
       writer: person,
       existed: [],
       created: ["entries/new.md"],
+      written: { "entries/new.md": hash("half written\n") },
     });
 
     expect(openRepo(store, WORKSPACE)?.id).toBe(repo.id);
     expect(existsSync(join(repo.path, "entries", "new.md"))).toBe(false);
-    expect(realGit(repo.path, "status", "--porcelain")).toBe("");
+    expect(status(repo)).toBe("");
     expect(readIntent(repo)).toBeNull();
+    expect(said).toHaveLength(1);
+    expect(said[0]).toContain("entries/new.md");
+    expect(said[0]).toContain("interrupted");
   });
 
   test("openRepo puts an existing entry back to what HEAD holds", () => {
@@ -674,16 +704,17 @@ describe("an interrupted operation", () => {
       writer: person,
       existed: ["entries/a.md"],
       created: [],
+      written: { "entries/a.md": hash("version two, never committed\n") },
     });
 
     openRepo(store, WORKSPACE);
     expect(readFileSync(join(repo.path, "entries", "a.md"), "utf8")).toBe("version one\n");
-    expect(realGit(repo.path, "status", "--porcelain")).toBe("");
+    expect(status(repo)).toBe("");
     expect(readIntent(repo)).toBeNull();
   });
 
   test("an operation whose commit landed is only forgotten", () => {
-    const store = fx.store();
+    const { store, said } = reporting();
     const repo = ensureRepo(store, WORKSPACE);
     commitFile(store, repo, "entries/new.md", "committed\n");
     // The process died after the commit and before it removed its record.
@@ -692,11 +723,303 @@ describe("an interrupted operation", () => {
       writer: person,
       existed: [],
       created: ["entries/new.md"],
+      written: { "entries/new.md": hash("committed\n") },
     });
 
     openRepo(store, WORKSPACE);
     expect(readFileSync(join(repo.path, "entries", "new.md"), "utf8")).toBe("committed\n");
-    expect(realGit(repo.path, "status", "--porcelain")).toBe("");
+    expect(status(repo)).toBe("");
     expect(readIntent(repo)).toBeNull();
+    expect(said).toEqual([]);
+  });
+
+  test("a file the person edited after the interruption is never touched", () => {
+    const { store, said } = reporting();
+    const repo = ensureRepo(store, WORKSPACE);
+    commitFile(store, repo, "entries/a.md", "version one\n");
+    // The engine wrote and staged the next version of one entry and a new one, then died.
+    writeFileSync(join(repo.path, "entries", "a.md"), "version two\n");
+    writeFileSync(join(repo.path, "entries", "new.md"), "a new entry\n");
+    stagePaths(store, repo, ["entries/a.md", "entries/new.md"], "write");
+    writeIntent(repo, {
+      operation: "write",
+      writer: person,
+      existed: ["entries/a.md"],
+      created: ["entries/new.md"],
+      written: { "entries/a.md": hash("version two\n"), "entries/new.md": hash("a new entry\n") },
+    });
+    // Before the next command, the person works on both files in an editor.
+    writeFileSync(join(repo.path, "entries", "a.md"), "version two\nand my own words\n");
+    writeFileSync(join(repo.path, "entries", "new.md"), "a new entry, rewritten by me\n");
+
+    openRepo(store, WORKSPACE);
+    expect(readFileSync(join(repo.path, "entries", "a.md"), "utf8")).toBe(
+      "version two\nand my own words\n",
+    );
+    expect(readFileSync(join(repo.path, "entries", "new.md"), "utf8")).toBe(
+      "a new entry, rewritten by me\n",
+    );
+    // Nothing is staged: both are the person's own work now, for adopt to commit.
+    expect(status(repo).split("\n")).toEqual([" M entries/a.md", "?? entries/new.md"]);
+    expect(readIntent(repo)).toBeNull();
+    expect(said).toHaveLength(1);
+    expect(said[0]).toContain("entries/a.md");
+    expect(said[0]).toContain("entries/new.md");
+    expect(said[0]).toContain("knowledge adopt");
+  });
+
+  test("of two paths, the untouched one is undone and the edited one is kept", () => {
+    const { store, said } = reporting();
+    const repo = ensureRepo(store, WORKSPACE);
+    writeFileSync(join(repo.path, "entries", "one.md"), "written by the engine\n");
+    writeFileSync(join(repo.path, "entries", "two.md"), "written by the engine\n");
+    stagePaths(store, repo, ["entries/one.md", "entries/two.md"], "write");
+    writeIntent(repo, {
+      operation: "write",
+      writer: person,
+      existed: [],
+      created: ["entries/one.md", "entries/two.md"],
+      written: {
+        "entries/one.md": hash("written by the engine\n"),
+        "entries/two.md": hash("written by the engine\n"),
+      },
+    });
+    writeFileSync(join(repo.path, "entries", "two.md"), "edited by the person\n");
+
+    openRepo(store, WORKSPACE);
+    expect(existsSync(join(repo.path, "entries", "one.md"))).toBe(false);
+    expect(readFileSync(join(repo.path, "entries", "two.md"), "utf8")).toBe(
+      "edited by the person\n",
+    );
+    expect(status(repo)).toBe("?? entries/two.md");
+    expect(said).toHaveLength(2);
+  });
+
+  test("a record that does not say what was written undoes nothing", () => {
+    const { store, said } = reporting();
+    const repo = ensureRepo(store, WORKSPACE);
+    commitFile(store, repo, "entries/a.md", "version one\n");
+    writeFileSync(join(repo.path, "entries", "a.md"), "whose words are these\n");
+    stagePaths(store, repo, ["entries/a.md"], "write");
+    writeIntent(repo, {
+      operation: "write",
+      writer: person,
+      existed: ["entries/a.md"],
+      created: [],
+    });
+
+    openRepo(store, WORKSPACE);
+    expect(readFileSync(join(repo.path, "entries", "a.md"), "utf8")).toBe(
+      "whose words are these\n",
+    );
+    expect(status(repo)).toBe(" M entries/a.md");
+    expect(readIntent(repo)).toBeNull();
+    expect(said).toHaveLength(1);
+  });
+
+  test("an interrupted adopt gives the person's bytes back only where they did not go on working", () => {
+    const { store, said } = reporting();
+    const repo = ensureRepo(store, WORKSPACE);
+    commitFile(store, repo, "entries/a.md", "version one\n");
+    commitFile(store, repo, "entries/b.md", "version one\n");
+    // The person's hand edits, as adopt kept them before rewriting.
+    const kept = keepBytes(
+      repo,
+      new Map([
+        ["entries/a.md", Buffer.from("a, edited by hand\n")],
+        ["entries/b.md", Buffer.from("b, edited by hand\n")],
+      ]),
+    );
+    // Adopt rewrote and staged both, then died.
+    writeFileSync(join(repo.path, "entries", "a.md"), "a, edited by hand, stamped\n");
+    writeFileSync(join(repo.path, "entries", "b.md"), "b, edited by hand, stamped\n");
+    stagePaths(store, repo, ["entries/a.md", "entries/b.md"], "adopt");
+    writeIntent(repo, {
+      operation: "adopt",
+      writer: person,
+      existed: ["entries/a.md", "entries/b.md"],
+      created: [],
+      written: {
+        "entries/a.md": hash("a, edited by hand, stamped\n"),
+        "entries/b.md": hash("b, edited by hand, stamped\n"),
+      },
+      keptBytesFile: kept,
+    });
+    // The person goes on working on b before the next command.
+    writeFileSync(join(repo.path, "entries", "b.md"), "b, edited again\n");
+
+    openRepo(store, WORKSPACE);
+    expect(readFileSync(join(repo.path, "entries", "a.md"), "utf8")).toBe("a, edited by hand\n");
+    expect(readFileSync(join(repo.path, "entries", "b.md"), "utf8")).toBe("b, edited again\n");
+    expect(status(repo).split("\n")).toEqual([" M entries/a.md", " M entries/b.md"]);
+    expect(readIntent(repo)).toBeNull();
+    expect(existsSync(join(repo.path, ".git", kept))).toBe(false);
+    expect(said.join("\n")).toContain("entries/b.md");
+  });
+
+  test("the revert waits while another process holds the repository", () => {
+    const store = fx.store();
+    const repo = ensureRepo(store, WORKSPACE);
+    writeFileSync(join(repo.path, "entries", "new.md"), "in progress\n");
+    writeIntent(repo, {
+      operation: "write",
+      writer: person,
+      existed: [],
+      created: ["entries/new.md"],
+      written: { "entries/new.md": hash("in progress\n") },
+    });
+    setMeta(
+      fx.db,
+      leaseKey(repo.relative),
+      JSON.stringify({ owner: `${process.pid}-writer`, until: store.now() + 60_000 }),
+    );
+    // That operation is running, not interrupted: its file and its record stay.
+    openRepo(store, WORKSPACE);
+    expect(existsSync(join(repo.path, "entries", "new.md"))).toBe(true);
+    expect(readIntent(repo)).not.toBeNull();
+  });
+});
+
+describe("a folder that is not the store's own repository", () => {
+  const BASE = "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n";
+
+  /** A program that leaves a marker when git runs it. */
+  function trap(name: string): { script: string; marker: string } {
+    const marker = join(fx.dir, `${name}-ran`);
+    const script = join(fx.dir, `${name}.sh`);
+    writeFileSync(script, `#!/bin/sh\n: > '${marker}'\ncat\n`);
+    chmodSync(script, 0o755);
+    return { script, marker };
+  }
+
+  test("a configuration git would read from somewhere else is refused", () => {
+    const store = fx.store();
+    const repo = ensureRepo(store, WORKSPACE);
+    const gitDir = join(repo.path, ".git");
+    const refused = (name: string) => {
+      expect(codeOf(() => checkRepoConfig(repo.path))).toBe("invalid");
+      expect(thrown(() => checkRepoConfig(repo.path)).message).toContain(name);
+      expect(codeOf(() => openRepo(store, WORKSPACE))).toBe("invalid");
+    };
+
+    writeFileSync(join(gitDir, "commondir"), "../elsewhere\n");
+    refused("commondir");
+    rmSync(join(gitDir, "commondir"));
+
+    writeFileSync(join(gitDir, "config.worktree"), "[core]\n\tbare = false\n");
+    refused("config.worktree");
+    rmSync(join(gitDir, "config.worktree"));
+
+    writeFileSync(join(gitDir, "config"), `${BASE}[extensions]\n\tworktreeConfig = true\n`);
+    refused("worktreeConfig");
+
+    writeFileSync(join(gitDir, "config"), `${BASE}[diff "x"]\n\ttextconv = /tmp/x\n`);
+    refused("textconv");
+    writeFileSync(join(gitDir, "config"), `${BASE}[merge "x"]\n\tdriver = /tmp/x\n`);
+    refused("driver");
+
+    writeFileSync(join(gitDir, "config"), BASE);
+    expect(codeOf(() => checkRepoConfig(repo.path))).toBeNull();
+    expect(openRepo(store, WORKSPACE)?.id).toBe(repo.id);
+  });
+
+  test("a filter reached through a worktree configuration never runs", () => {
+    const store = fx.store({ env: { WIZARDINGCODE_MEM_AUTHOR: "Writer" } });
+    const repo = ensureRepo(store, WORKSPACE);
+    const { script, marker } = trap("filter");
+    const gitDir = join(repo.path, ".git");
+    writeFileSync(join(gitDir, "config"), `${BASE}[extensions]\n\tworktreeConfig = true\n`);
+    writeFileSync(join(gitDir, "config.worktree"), `[filter "x"]\n\tclean = ${script}\n`);
+    writeFileSync(join(repo.path, ".gitattributes"), "* filter=x\n");
+
+    const call = () =>
+      writeEntry(
+        store,
+        WORKSPACE,
+        { title: "An entry", kind: "knowledge", area: "code", context: "", subject: "", body: "x" },
+        personAuthor(store),
+      );
+    expect(codeOf(call)).toBe("invalid");
+    expect(existsSync(marker)).toBe(false);
+    expect(existsSync(join(repo.path, "entries", "an-entry.md"))).toBe(false);
+  });
+
+  test("a .git that is a file or a link is refused before git runs, and the repository it names is untouched", () => {
+    const outside = join(fx.dir, "outside");
+    mkdirSync(outside);
+    realGit(outside, "init", "-q", "-b", "main");
+    writeFileSync(join(outside, "theirs.txt"), "theirs\n");
+    realGit(outside, "add", "theirs.txt");
+    realGit(
+      outside,
+      "-c",
+      "user.name=T",
+      "-c",
+      "user.email=t@example.invalid",
+      "commit",
+      "-q",
+      "-m",
+      "theirs",
+    );
+    const head = realGit(outside, "rev-parse", "HEAD").trim();
+    const store = fx.store();
+    const folder = join(fx.dataDir, "knowledge", "workspace");
+    const untouched = () => {
+      expect(realGit(outside, "rev-parse", "HEAD").trim()).toBe(head);
+      expect(realGit(outside, "status", "--porcelain")).toBe("");
+      expect(realGit(outside, "rev-list", "--count", "HEAD").trim()).toBe("1");
+    };
+
+    mkdirSync(folder, { recursive: true });
+    writeFileSync(join(folder, ".git"), `gitdir: ${join(outside, ".git")}\n`);
+    expect(codeOf(() => ensureRepo(store, WORKSPACE))).toBe("invalid");
+    expect(thrown(() => ensureRepo(store, WORKSPACE)).message).toContain(".git");
+    expect(codeOf(() => openRepo(store, WORKSPACE))).toBe("invalid");
+    untouched();
+
+    rmSync(join(folder, ".git"));
+    symlinkSync(join(outside, ".git"), join(folder, ".git"));
+    expect(codeOf(() => ensureRepo(store, WORKSPACE))).toBe("invalid");
+    untouched();
+  });
+
+  test("a repository folder that is a link is refused, and nothing is written through it", () => {
+    const outside = join(fx.dir, "outside-folder");
+    mkdirSync(outside);
+    mkdirSync(join(fx.dataDir, "knowledge"), { recursive: true });
+    symlinkSync(outside, join(fx.dataDir, "knowledge", "workspace"));
+    const store = fx.store();
+    expect(codeOf(() => ensureRepo(store, WORKSPACE))).toBe("invalid");
+    expect(readdirSync(outside)).toEqual([]);
+  });
+
+  test("a linked folder inside the repository is refused, and nothing is written through it", () => {
+    const store = fx.store({ env: { WIZARDINGCODE_MEM_AUTHOR: "Writer" } });
+    const repo = ensureRepo(store, WORKSPACE);
+    const outside = join(fx.dir, "outside-entries");
+    mkdirSync(outside);
+    rmSync(join(repo.path, "entries"), { recursive: true });
+    symlinkSync(outside, join(repo.path, "entries"));
+
+    const call = () =>
+      writeEntry(
+        store,
+        WORKSPACE,
+        { title: "An entry", kind: "knowledge", area: "code", context: "", subject: "", body: "x" },
+        personAuthor(store),
+      );
+    expect(codeOf(call)).toBe("invalid");
+    expect(thrown(call).message).toContain("entries");
+    expect(readdirSync(outside)).toEqual([]);
+  });
+
+  test("a temporary file name that is already a link is not written through", () => {
+    const outside = join(fx.dir, "victim.txt");
+    writeFileSync(outside, "untouched\n");
+    const target = join(fx.dir, "target.md");
+    symlinkSync(outside, join(fx.dir, ".target.md.tmp"));
+    writeFileAtomic(target, "the new text\n");
+    expect(readFileSync(target, "utf8")).toBe("the new text\n");
+    expect(readFileSync(outside, "utf8")).toBe("untouched\n");
   });
 });

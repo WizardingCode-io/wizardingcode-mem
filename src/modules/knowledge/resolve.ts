@@ -6,13 +6,16 @@ import { withWrite } from "../../store/db.ts";
 import { nowIso } from "./entry.ts";
 import { KnowledgeError } from "./errors.ts";
 import {
+  existsOnDisk,
   knowledgeRoot,
   projectFolderName,
   readManifest,
+  refuseForeign,
   repoFolder,
   repoPath,
   writeManifest,
 } from "./repo.ts";
+import { requireSchema } from "./schema.ts";
 import type { KnowledgeStore, Manifest, Repo, ScopeRef, Writer } from "./types.ts";
 
 const PROJECTS = "knowledge/projects";
@@ -194,19 +197,23 @@ function ensureParents(store: KnowledgeStore, path: string): void {
 /**
  * The repository of a scope: its folder and its index row. Null when there is none and
  * `create` was not given. With `create`, the folder and its manifest are written when
- * missing, and a project's manifest learns the aliases the project has gained; the
- * repository itself is initialised by `openRepo`.
+ * missing; the repository itself is initialised by `openRepo`, which also teaches a
+ * project's manifest the aliases the project has gained, in a commit. Refused on tables a
+ * newer version wrote: resolving writes the repository's row.
  */
 export function resolveRepo(
   store: KnowledgeStore,
   ref: ScopeRef,
   options: { create?: Writer; folderName?: (aliasOrKey: string) => string },
 ): Repo | null {
+  requireSchema(store);
   const create = options.create !== undefined;
   if (ref.scope !== "project") {
     const relative = repoFolder(ref);
     const path = repoPath(store.dataDir, relative);
     if (!isDirectory(path)) {
+      // A link or a file where the folder goes is refused, never created through.
+      refuseForeign(path);
       if (!create) return null;
       ensureParents(store, path);
     }
@@ -224,8 +231,9 @@ export function resolveRepo(
     if (!create) return null;
     const remote = project.aliases.find((alias) => alias.startsWith("remote:"));
     const name = (options.folderName ?? projectFolderName)(remote ?? project.key);
+    // Anything already at the name, a link included, makes it taken: a new folder is new.
     const taken = (candidate: string) =>
-      isDirectory(repoPath(store.dataDir, candidate)) || rowAt(store, candidate) !== null;
+      existsOnDisk(repoPath(store.dataDir, candidate)) || rowAt(store, candidate) !== null;
     relative = repoFolder(ref, name);
     for (let n = 2; taken(relative); n++) relative = repoFolder(ref, `${name}-${n}`);
     ensureParents(store, repoPath(store.dataDir, relative));
@@ -237,15 +245,12 @@ export function resolveRepo(
     });
   }
   const path = repoPath(store.dataDir, relative);
-  if (create) {
-    const manifest = readManifest(path);
-    const known = manifest?.project?.aliases ?? [];
-    const gained = project.aliases.filter((alias) => !known.includes(alias));
-    if (manifest !== null && gained.length > 0) {
-      writeManifest(path, { ...manifest, project: { aliases: [...known, ...gained] } });
-    }
-  }
   return { ref, path, relative, id: saveRow(store, ref, relative) };
+}
+
+/** A project's aliases, the strongest first; null when there is no such project. */
+export function projectAliasesOf(store: KnowledgeStore, projectId: number): string[] | null {
+  return projectAliases(store, projectId)?.aliases ?? null;
 }
 
 /**
@@ -259,6 +264,7 @@ export function listRepos(store: KnowledgeStore): {
   ambiguous: { projectId: number; taken: string; others: string[] }[];
   claimed: { path: string; byProjectId: number; wantedBy: number }[];
 } {
+  requireSchema(store);
   const { found, ...rest } = scanRepos(store);
   return {
     ...rest,

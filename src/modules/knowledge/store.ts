@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import { lstatSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { redact } from "../../core/redact.ts";
-import { moduleSchemaState, withWrite } from "../../store/db.ts";
+import { withWrite } from "../../store/db.ts";
 import { authorOf, identityOf } from "./author.ts";
 import {
   AREA_ID,
@@ -28,19 +28,19 @@ import {
   TITLE_MAX,
   UUID,
 } from "./entry.ts";
-import { KnowledgeError, ModuleSchemaTooNewError } from "./errors.ts";
+import { KnowledgeError } from "./errors.ts";
 import {
   countOpen,
   countOpenAll,
   ensureFresh,
   fileHash,
   rebuildRepo,
-  recordRepoNow,
+  recordedFingerprint,
+  recordRepoAfter,
   taxonomyOrNull,
   upsertEntry,
   upsertProposal,
 } from "./index-store.ts";
-import { KNOWLEDGE_MODULE, KNOWLEDGE_SCHEMA_VERSION } from "./migrations.ts";
 import {
   clearIntent,
   commitPaths,
@@ -48,6 +48,9 @@ import {
   dropKept,
   ENTRIES_DIR,
   ensureRepo,
+  fingerprintOf,
+  hashOf,
+  headOf,
   keepBytes,
   MANIFEST_FILE,
   OPEN_DIR,
@@ -72,6 +75,7 @@ import {
   writeFileAtomic,
   writeIntent,
 } from "./repo.ts";
+import { requireSchema } from "./schema.ts";
 import type {
   AgentWriter,
   EntryChange,
@@ -93,12 +97,7 @@ const ADOPT = "wizardingcode-mem knowledge adopt";
 
 const invalid = (message: string) => new KnowledgeError("invalid", message);
 
-/** Refuses to read or write tables a newer wizardingcode-mem wrote. */
-export function requireSchema(store: KnowledgeStore): void {
-  if (moduleSchemaState(store.db, KNOWLEDGE_MODULE, KNOWLEDGE_SCHEMA_VERSION) === "too-new") {
-    throw new ModuleSchemaTooNewError(KNOWLEDGE_MODULE, KNOWLEDGE_SCHEMA_VERSION);
-  }
-}
+export { requireSchema };
 
 // --- The shape of what is written -------------------------------------------------------
 
@@ -281,17 +280,35 @@ export interface Commit {
   proposalId?: string;
 }
 
+/** What `commit` hands to `settle`: whether the index can trust the folders it finds after. */
+export interface Committed {
+  /**
+   * The folders were as the index knew them when the operation began to write. When they
+   * were not, a file was added or removed by hand since the last refresh: the index is
+   * then told to read the repository again, instead of recording folders it has not read.
+   */
+  undisturbed: boolean;
+}
+
 /**
  * Writes, stages and commits only the given paths. The intent record goes first and stays
  * until the caller has indexed the result. When anything fails, every path is put back to
  * what HEAD holds; when even that fails, the record is left for the next open to act on.
  */
-export function commit(store: KnowledgeStore, repo: Repo, change: Commit): void {
+export function commit(store: KnowledgeStore, repo: Repo, change: Commit): Committed {
+  const recorded = recordedFingerprint(store, repo);
+  const undisturbed = recorded !== null && recorded === fingerprintOf(repo.path);
+  // What each path holds once the operation is done: how an interrupted one is told from
+  // a file the person edited afterwards.
+  const written: Record<string, string | null> = {};
+  for (const file of change.write) written[file.path] = hashOf(Buffer.from(file.text));
+  for (const path of change.remove) written[path] = null;
   writeIntent(repo, {
     operation: change.operation,
     writer: change.writer,
     existed: change.existed,
     created: change.created,
+    written,
     ...(change.proposalId === undefined ? {} : { proposalId: change.proposalId }),
   });
   try {
@@ -325,14 +342,26 @@ export function commit(store: KnowledgeStore, repo: Repo, change: Commit): void 
     }
     throw error;
   }
+  return { undisturbed };
 }
 
-/** Indexes what a commit changed, records the repository's new head, and forgets the intent. */
-export function settle(store: KnowledgeStore, repo: Repo, index: () => void): void {
+/**
+ * Indexes what a commit changed, records the repository's new head, and forgets the
+ * intent. The head and the fingerprint are taken before the transaction, and the
+ * fingerprint is recorded only when nothing but this operation changed the folders.
+ */
+export function settle(
+  store: KnowledgeStore,
+  repo: Repo,
+  committed: Committed,
+  index: () => void,
+): void {
+  const head = headOf(repo.path);
+  const fingerprint = committed.undisturbed ? fingerprintOf(repo.path) : null;
   store.renew?.();
   withWrite(store.db, () => {
     index();
-    recordRepoNow(store, repo);
+    recordRepoAfter(store, repo, head, fingerprint);
   });
   clearIntent(repo);
 }
@@ -423,7 +452,7 @@ export function writeEntry(
     });
     const path = entryPath(slug);
     const text = checkSize(renderEntry(entry));
-    commit(store, repo, {
+    const committed = commit(store, repo, {
       operation: "write",
       writer,
       write: [{ path, text }],
@@ -432,7 +461,7 @@ export function writeEntry(
       created: current === null ? [path] : [],
       message: `knowledge: ${current === null ? "create" : "update"} ${slug} (v${entry.version})`,
     });
-    settle(store, repo, () =>
+    settle(store, repo, committed, () =>
       upsertEntry(store, repo.id, entry, path, fileHash(Buffer.from(text))),
     );
     return { kind: "written" as const, entry };
@@ -530,7 +559,7 @@ function propose(
     };
     const path = openPath(proposal.id);
     const text = checkSize(renderProposal(proposal));
-    commit(store, repo, {
+    const committed = commit(store, repo, {
       operation: "write",
       writer,
       write: [{ path, text }],
@@ -540,7 +569,7 @@ function propose(
       message: `knowledge: propose ${proposal.id} for ${slug}`,
       proposalId: proposal.id,
     });
-    settle(store, repo, () =>
+    settle(store, repo, committed, () =>
       upsertProposal(store, repo.id, proposal, path, fileHash(Buffer.from(text))),
     );
     return proposal;
@@ -644,7 +673,7 @@ export function acceptProposal(
     };
     const entryText = checkSize(renderEntry(entry));
     const decidedText = renderProposal(decided);
-    commit(store, repo, {
+    const committed = commit(store, repo, {
       operation: "accept",
       writer: person,
       write: [
@@ -657,7 +686,7 @@ export function acceptProposal(
       message: `knowledge: accept ${proposalId} into ${slug} (v${entry.version})\n\nProposed by ${proposal.proposedBy}.`,
       proposalId,
     });
-    settle(store, repo, () => {
+    settle(store, repo, committed, () => {
       upsertEntry(store, repo.id, entry, paths.entry, fileHash(Buffer.from(entryText)));
       upsertProposal(store, repo.id, decided, paths.decided, fileHash(Buffer.from(decidedText)));
     });
@@ -693,7 +722,7 @@ export function rejectProposal(
     };
     const paths = { open: openPath(proposalId), decided: decidedPath(proposalId) };
     const text = renderProposal(decided);
-    commit(store, repo, {
+    const committed = commit(store, repo, {
       operation: "reject",
       writer: person,
       write: [{ path: paths.decided, text }],
@@ -703,7 +732,7 @@ export function rejectProposal(
       message: `knowledge: reject ${proposalId}`,
       proposalId,
     });
-    settle(store, repo, () =>
+    settle(store, repo, committed, () =>
       upsertProposal(store, repo.id, decided, paths.decided, fileHash(Buffer.from(text))),
     );
     return decided;
@@ -853,11 +882,16 @@ function adoptIn(
   }
 
   const keptName = keepBytes(repo, kept);
+  // What adopt leaves at each entry file: its rewrite, or the person's bytes untouched.
+  const written: Record<string, string | null> = {};
+  for (const [path, bytes] of kept) written[path] = hashOf(bytes);
+  for (const { path, text } of rewrites) written[path] = hashOf(Buffer.from(text));
   writeIntent(repo, {
     operation: "adopt",
     writer: person,
     existed: changed.filter((path) => atHead.has(path)),
     created: changed.filter((path) => !atHead.has(path)),
+    written,
     keptBytesFile: keptName,
   });
   const count = paths.length;

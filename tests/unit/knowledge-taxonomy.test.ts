@@ -27,7 +27,7 @@ let clock: number;
 beforeEach(() => {
   fx = knowledgeFixture("knowledge-taxonomy");
   clock = NOW;
-  store = fx.store({ now: () => clock, env: { WIZARDINGCODE_MEM_AUTHOR: "André" } });
+  store = fx.store({ now: () => clock, env: { WIZARDINGCODE_MEM_AUTHOR: "Zoë" } });
 });
 afterEach(() => {
   fx.close();
@@ -106,7 +106,7 @@ describe("addArea", () => {
     expect(ids(taxonomy)).toHaveLength(10);
     expect(readTaxonomy(store, WORKSPACE)).toEqual(taxonomy);
     expect(commits(repo)).toBe(before + 1);
-    expect(lastCommit(repo)).toBe("André|knowledge: taxonomy add legal");
+    expect(lastCommit(repo)).toBe("Zoë|knowledge: taxonomy add legal");
     expect(lastPaths(repo)).toBe("taxonomy.md");
     expect(realGit(repo.path, "status", "--porcelain")).toBe("");
   });
@@ -170,7 +170,7 @@ describe("renameArea", () => {
     expect(ids(taxonomy)).toEqual(DEFAULT_AREAS.map((area) => area.id));
     expect(taxonomy.version).toBe(2);
     expect(commits(repo)).toBe(before + 1);
-    expect(lastCommit(repo)).toBe("André|knowledge: taxonomy rename people");
+    expect(lastCommit(repo)).toBe("Zoë|knowledge: taxonomy rename people");
     expect(lastPaths(repo)).toBe("taxonomy.md");
     expect(readFileSync(entryFile, "utf8")).toBe(text);
   });
@@ -217,7 +217,7 @@ describe("removeArea", () => {
     const before = commits(repo);
     const afterSales = removeArea(store, WORKSPACE, "sales", person());
     expect(ids(afterSales)).not.toContain("sales");
-    expect(lastCommit(repo)).toBe("André|knowledge: taxonomy remove sales");
+    expect(lastCommit(repo)).toBe("Zoë|knowledge: taxonomy remove sales");
     expect(lastPaths(repo)).toBe("taxonomy.md");
     const afterVideo = removeArea(store, WORKSPACE, "video", person());
     expect(ids(afterVideo)).toEqual([

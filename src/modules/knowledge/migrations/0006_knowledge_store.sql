@@ -2,13 +2,16 @@
 -- every row here is rebuilt from them.
 
 -- What the withdrawn module (ADR 0020, versions 1 to 5 of this module id) created, on a
--- store that ran it. Its index of knowledge kept inside project folders is dropped.
+-- store that ran it. Its index of knowledge kept inside project folders is dropped, with
+-- the three triggers and the two indexes on its own tables, which go with their tables.
 DROP TABLE IF EXISTS knowledge_fts;
 DROP TABLE IF EXISTS knowledge_entries;
 DROP TABLE IF EXISTS knowledge_state;
 DROP TABLE IF EXISTS knowledge_shown;
 DROP TABLE IF EXISTS knowledge_proposals;
 DROP TABLE IF EXISTS promoted_memories;
+-- Two indexes that module added to the core table `injections`, for its own promotion
+-- pass. No core query uses them: memory reads `injections` as it did before that module.
 DROP INDEX IF EXISTS injections_memory_shown;
 DROP INDEX IF EXISTS injections_memory_contexts;
 

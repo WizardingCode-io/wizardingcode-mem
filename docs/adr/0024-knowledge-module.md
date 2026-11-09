@@ -66,7 +66,7 @@ A proposal is `proposals/open/<proposal id>.md`: the proposed entry's fields and
 
 Each repository holds `knowledge.json` (its manifest), `.gitignore`, `entries/`, `proposals/open/` and `proposals/decided/`; the workspace and the shared ones also hold `taxonomy.md`. A repository is created at its first write, with one commit by the person whatever writer triggered it. Creating a project's repository creates the workspace's first, so the taxonomy exists to check against. Folders are created with mode 0700.
 
-The manifest is `{"format": 1, "scope": …, "project": {"aliases": […]}, "createdAt": …}`. A project's repository is found by its manifest, not by its folder name: by the row the index holds for the project, else by a manifest whose `remote:` or `gitdir:` aliases are among the project's. A `path:` alias never matches, since a folder can be reused by another repository. A project that gains a remote therefore keeps its repository. When no manifest matches, a folder is created, named with 16 hex characters of the SHA-256 of the project's remote alias, or of its key when it has no remote.
+The manifest is `{"format": 1, "scope": …, "project": {"aliases": […]}, "createdAt": …}`. A project's repository is found by its manifest, not by its folder name: by the row the index holds for the project, else by a manifest whose `remote:` or `gitdir:` aliases are among the project's. A `path:` alias never matches, since a folder can be reused by another repository. A project that gains a remote therefore keeps its repository, and its manifest learns the new alias at the project's next write, in a commit of `knowledge.json` alone by the person. When no manifest matches, a folder is created, named with 16 hex characters of the SHA-256 of the project's remote alias, or of its key when it has no remote.
 
 A project that matches two manifests takes the one matched by a remote, else the newest. A manifest already mapped to one project is never taken by a second. `knowledge rebuild` prints both cases and `doctor` warns about them.
 
@@ -76,18 +76,22 @@ Every git call goes through one runner (`runGit`): a synchronous process killed 
 
 - `--git-dir` and `--work-tree` are always explicit, and `GIT_CEILING_DIRECTORIES` is the knowledge folder: a data directory inside a parent git tree never commits into the parent.
 - `GIT_CONFIG_GLOBAL` points at an empty file, `GIT_CONFIG_NOSYSTEM=1`, and `HOME` is not passed. `-c` settings turn off signing, hooks, fsmonitor, the untracked cache, the pager, external diff and the ssh command. Nothing of the person's git setup runs here. The one exception is the lookup of the person's global `user.name`.
-- A repository's own `.git/config` is read as text before git is run in it. One that carries an `include`, `includeIf` or `filter` section, or a `hooksPath`, `fsmonitor` or `sshCommand` key, is refused: a folder dropped under `knowledge/` could carry a configuration that runs a program.
+- A repository's own `.git/config` is read as text before git is run in it. One that carries an `include`, `includeIf` or `filter` section, a `hooksPath`, `fsmonitor` or `sshCommand` key, or a diff or merge driver (`textconv`, `command`, `driver`), is refused: a folder dropped under `knowledge/` could carry a configuration that runs a program. git also reads a repository's configuration from the directory a `.git/commondir` file names, and from `.git/config.worktree` when `extensions.worktreeConfig` is set: both files and that key are refused, so the one file read is the one git reads.
+- A folder the store did not make is refused before git runs and before anything is written: a repository folder that is a link, a `.git` that is a file or a link (a gitfile names another repository, and every commit would land there), and an `entries` or `proposals` folder that is a link.
+- Paths are passed to git as literal paths (`GIT_LITERAL_PATHSPECS`): a file a person named with `*` or `[` never matches another.
 - git 2.32 or newer is required (`GIT_CONFIG_GLOBAL`). With no git, or an older one, writes are refused before any folder is created. Reading (`list`, `rebuild`) works without git, except the check for hand edits, which is then skipped and said.
 
 ## The lease and its renewal
 
-Writes to one repository are serialised by the engine's leases (`knowledge.lease:<repository path>`, 60 seconds). A write takes the root's lease, then the repository's. The leases are renewed before every git call and every index transaction, and once per 500 files in a rebuild; a renewal that fails stops the operation before that step. A lease held by another live process refuses the operation, which is never queued. A lease whose owner process is gone is taken over at once. A store move, a restore and a compact wait for a write, since `anyLeaseActive` reads these leases too.
+Writes to one repository are serialised by the engine's leases (`knowledge.lease:<repository path>`, 60 seconds). A write takes the root's lease, then the repository's. The leases are renewed before every git call and every index transaction, and once per 500 files in a rebuild; a renewal that fails stops the operation before that step. A lease held by another live process refuses the operation, which is never queued. A lease whose owner process is gone is taken over at once. A store move, a restore and a compact are refused while a write is under way, since `anyLeaseActive` reads these leases too.
 
 ## The write and its failure rule
 
 A person's write checks the fields, takes the leases, creates the repository when missing, refreshes the index, checks the area against the taxonomy, and checks the target: a regular file or nothing, indexed without a problem that makes it unusable, and as the last commit left it. A new entry is refused when the file exists. A change is refused when its base version is not the current one, and nothing changes. The file is written beside the target and renamed over it, staged by path and committed by path (`git commit --only`), then indexed.
 
-Before its first change to the working tree an operation writes an intent record to `.git/wizardingcode-op.json`: the operation, the writer and the paths it changes. It removes the record after indexing. When the commit fails, every path is put back to what HEAD holds (a path HEAD does not hold is removed), the index and the recorded head are untouched, the error is logged, and the operation is refused. A process that died before its commit leaves the record behind: the next open of the repository puts the tree back by it. That revert is skipped while another process holds the repository's lease, since that operation is running, not interrupted. An operation whose commit landed before the process died has nothing to put back.
+Before its first change to the working tree an operation writes an intent record to `.git/wizardingcode-op.json`: the operation, the writer, the paths it changes, and what it leaves at each path (the hash of the file it writes, or that it removes it). It removes the record after indexing. When the commit fails, every path is put back to what HEAD holds (a path HEAD does not hold is removed), the index and the recorded head are untouched, the error is logged, and the operation is refused.
+
+A process that died before its commit leaves the record behind, and the next open of the repository acts on it. It puts back only a path that is still as the engine left it. A path the person edited after the interruption is theirs: it is taken out of the index and left for `adopt`, never restored from HEAD and never deleted. A record that does not say what was written puts nothing back. An operation whose commit landed has nothing to put back. The revert is skipped while another process holds the repository's lease, since that operation is running, not interrupted. What the revert did is written to the log and, from the command line, to standard error.
 
 ## Proposals and the quota
 
@@ -101,7 +105,7 @@ Accepting requires an id that is a UUID (before any path is built), a proposal t
 
 `wizardingcode-mem knowledge adopt` commits what a person changed outside the engine, as the person, in one commit that lists the paths. An entry file edited or added by hand gets an id when it has none, the next version (1 for a new file; otherwise one past the higher of HEAD's version and the number in the file), `updated` and the person as author; everything else stays as they left it. A file that is still not a valid entry is committed exactly as it is and returned with its problem. A file the person deleted is recorded as deleted. `taxonomy.md`, `knowledge.json` and proposal files are committed as they are.
 
-Before rewriting anything, adopt keeps the files' bytes under `.git/`. When the commit fails, its paths are only unstaged and the bytes are written back: the person's work exists nowhere else, so it is never restored from HEAD.
+Before rewriting anything, adopt keeps the files' bytes under `.git/`. When the commit fails, its paths are only unstaged and the bytes are written back: the person's work exists nowhere else, so it is never restored from HEAD. An adopt that was interrupted gives the kept bytes back at the next open, and only for a file the person did not go on editing: a later edit wins over the older bytes.
 
 ## The taxonomy
 
@@ -113,18 +117,34 @@ A module's tables are versioned apart from the core schema, in `module_migration
 
 - The list `openDb` reads is `src/engine/module-schemas.ts`, which imports each module's migration list and no module code. A module's tables are created whether the module is on or not, so turning one on later never migrates on a hook.
 - The first open after an upgrade creates the tables once, under the write lock, as a core migration does. That open is usually a hook. On a migrated database the module pass costs one query.
-- A recorded module version newer than the binary's is left alone by `openDb`, so memory keeps working. The knowledge store refuses to read or write (`ModuleSchemaTooNewError`) and `doctor` names it.
+- A recorded module version newer than the binary's is left alone by `openDb`, so memory keeps working. The knowledge store refuses to read or write (`ModuleSchemaTooNewError`), a rebuild and a listing included since both write rows, and `doctor` names it.
 - No knowledge table has a foreign key or a trigger on a core table.
 
 Knowledge's first migration is **version 6**. Versions 1 to 5 of the module id `knowledge` belong to the withdrawn module of ADR 0020, and a store that ran it still holds those rows, for other tables. Migration 6 drops what the withdrawn module created where present, after a backup, and widens the two-column `module_migrations` table that module left. The index of project-folder knowledge such a store held is lost; no released version ever created it.
 
-The tables are `knowledge_repos` (one row per repository: its path, HEAD, a fingerprint of its folders, the files the cap left out), `knowledge_entries` and `knowledge_proposals`. A rebuild lists the three folders in byte order, never follows a link, reads at most 5,000 names per folder and 256 KiB per file, and replaces the repository's rows in one transaction. No file fails it: one with no usable id is indexed under `file:<name>`, one that shares another's id under `dup:<name>`, and the first name in byte order keeps the id. A file git lists as changed is a draft with a problem until adopted. Before a write, the recorded HEAD and fingerprint are compared with the repository's, and the rows are rebuilt when either differs.
+The tables are `knowledge_repos` (one row per repository: its path, HEAD, a fingerprint of its folders, the files the cap left out), `knowledge_entries` and `knowledge_proposals`. A rebuild lists the three folders in byte order, never follows a link, reads at most 5,000 names per folder and 256 KiB per file, and replaces the repository's rows in one transaction. No file fails it: one with no usable id is indexed under `file:<name>`, one that shares another's id under `dup:<name>`, and the first name in byte order keeps the id. For a proposal the name carries its folder (`file:open/<file>`, `dup:decided/<file>`), since the same file name can sit under both; a file under `proposals/decided/` that says nothing of its decision is listed with that problem. A file git lists as changed is a draft with a problem until adopted.
+
+Before a write, the recorded HEAD and fingerprint are compared with the repository's, and the rows are rebuilt when either differs. A rebuild takes the HEAD and the fingerprint before it reads the files, and a write records a fingerprint only when the folders were as the index knew them when it began: a file a person adds while the engine works then shows as a fingerprint the index does not hold, and the next refresh reads the repository again.
 
 ## The guarantee's boundary
 
 For every write made through the engine, an agent's change reaches an entry only after a person accepts it. The store cannot tell a person from an agent: the entry point decides which writer it passes. The command line passes the person. The tools of the next part will pass the host's agent id, taken from the connection and never from a tool argument.
 
 An agent with shell access to the data directory can write the files directly. Such an edit is a hand edit: the next write refuses it and `adopt` attributes it to the person. The guarantee does not cover it.
+
+## Personal data: what is kept, for how long, and how it is erased
+
+The only personal data this part holds is the person's author name (the `WIZARDINGCODE_MEM_AUTHOR` setting, else the global git `user.name`). It is written in three places, all inside the person's own data directory, and nothing leaves the machine in this part:
+
+- the `author` line of an entry and the `decided_by` line of a decided proposal;
+- the author and the committer of each commit, with an address derived from the name at `.invalid`, a reserved domain that never routes;
+- the index columns `knowledge_entries.author`, `knowledge_proposals.proposed_by` and `knowledge_proposals.decided_by`.
+
+**Retention.** As long as the repository's history. The engine never rewrites a commit and never deletes an entry, so a name written once stays until a person removes it. This differs from memory, where `compact` prunes old records.
+
+**Erasure.** There is no command for it in this part. A new name applies to what is written from then on: change the setting. To remove a name already written from one repository, a person rewrites that repository's history with git (the author and committer of its commits, and the `author` and `decided_by` lines in its files), then runs `wizardingcode-mem knowledge rebuild`, which replaces the index rows from the files. Deleting a repository's folder and running `rebuild` removes everything it held, the index rows included. A command that does this is a later part's work, and is needed before knowledge is shared with a team, where a name leaves the machine.
+
+`wizardingcode-mem backup` copies the database, and the database now holds the index: the text of entries and the names above go wherever backups are configured to go (a folder, or a bucket).
 
 ## Backups
 
@@ -137,9 +157,11 @@ Decided proposals are never deleted, and each folder is indexed up to 5,000 name
 ## Known limits
 
 - A project that is not a git repository is known by its folder path alone. A manifest is never matched by a path, so when the index rows of such a project are lost (a database restored from an older copy, a new database), its repository is reported as an orphan by `rebuild` and is not re-attached.
-- When a project gains an alias, the manifest learns it at the project's next write, as an uncommitted change to `knowledge.json`. `doctor` then reports one change made outside the engine until `adopt` commits it.
 - Only `.md` files in the three folders are knowledge. Other files there are ignored by the index, and committed as they are by `adopt`.
 - An entry is not renamed and not moved between repositories in this part.
+- A file a person adds in the few milliseconds between a write's commit and its indexing is recorded in the fingerprint without being read. It is still listed by git as untracked, so `doctor` reports it and `adopt` commits and indexes it.
+- A module migration that fails makes `openDb` fail, so memory stops until the cause is fixed, over a module no hook reads in this part. Containing the failure would need a rule for not repeating the attempt, and its backup, on every open; that is not built.
+- On a store that ran the withdrawn module, the one backup taken before migration 6 drops its tables is kept among the two most recent upgrade backups, and two later upgrades rotate it away.
 
 ## Write latency
 

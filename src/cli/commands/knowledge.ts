@@ -83,14 +83,19 @@ function parse(argv: string[], allowed: string[]): { flags: Map<string, string>;
   return { flags, rest };
 }
 
-function scopeOf(flags: Map<string, string>, among: readonly Scope[] = SCOPES): Scope | undefined {
+/** The `--scope` value, when it is one of the scopes this subcommand takes. */
+function scopeAmong<S extends Scope>(
+  flags: Map<string, string>,
+  among: readonly S[],
+): S | undefined {
   const value = flags.get("--scope");
   if (value === undefined) return undefined;
-  if (!(among as readonly string[]).includes(value)) {
-    throw new UsageError(`--scope must be one of ${among.join(", ")}`);
-  }
-  return value as Scope;
+  const scope = among.find((candidate) => candidate === value);
+  if (scope === undefined) throw new UsageError(`--scope must be one of ${among.join(", ")}`);
+  return scope;
 }
+
+const scopeOf = (flags: Map<string, string>) => scopeAmong(flags, SCOPES);
 
 function required(flags: Map<string, string>, name: string): string {
   const value = flags.get(name);
@@ -173,8 +178,8 @@ function decide(store: KnowledgeStore, argv: string[], decision: "accept" | "rej
 
 function area(store: KnowledgeStore, argv: string[]): void {
   const { flags, rest } = parse(argv, ["--scope"]);
-  const scope = scopeOf(flags, ["workspace", "shared"]) ?? "workspace";
-  if (scope === "project") throw new UsageError("a project reads the workspace's taxonomy");
+  // A project has no taxonomy of its own: it reads the workspace's.
+  const scope = scopeAmong(flags, ["workspace", "shared"] as const) ?? "workspace";
   const [action, id, label] = rest;
   const person = personAuthor(store);
   let version: number;
@@ -294,7 +299,12 @@ export async function run(argv: string[]): Promise<number> {
     }
     const { dataDir, storeDir } = resolvePaths();
     db = openDb({ dataDir: storeDir, busyTimeoutMs: 5000 });
-    const store = openStore({ db, dataDir });
+    const store = openStore({
+      db,
+      dataDir,
+      // What the store did on its own, such as undoing an interrupted write, is said here.
+      report: (message) => process.stderr.write(`wizardingcode-mem: ${message}\n`),
+    });
     if (command === "write") await write(store, rest);
     else if (command === "accept" || command === "reject") decide(store, rest, command);
     else if (command === "area") area(store, rest);

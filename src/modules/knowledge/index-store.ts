@@ -1,6 +1,5 @@
 // The index of the knowledge store: rows in the engine's database, rebuilt from the files.
 // The files in the repositories are the truth; nothing here is the only copy of anything.
-import { createHash } from "node:crypto";
 import { lstatSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { withWrite } from "../../store/db.ts";
@@ -10,6 +9,7 @@ import {
   DECIDED_DIR,
   ENTRIES_DIR,
   fingerprintOf,
+  hashOf,
   headOf,
   OPEN_DIR,
   openRepo,
@@ -20,6 +20,7 @@ import {
   withRepoLeases,
 } from "./repo.ts";
 import { listRepos } from "./resolve.ts";
+import { requireSchema } from "./schema.ts";
 import type {
   KnowledgeEntry,
   KnowledgeProposal,
@@ -30,13 +31,17 @@ import type {
 } from "./types.ts";
 
 /** The SHA-256 of a file's bytes as read, first 16 hex. */
-export function fileHash(bytes: Uint8Array): string {
-  return createHash("sha256").update(bytes).digest("hex").slice(0, 16);
-}
+export const fileHash = hashOf;
 
 /** A file with no usable id is indexed under its name, so it is listed and never lost. */
 const rowId = (id: string, name: string) =>
   UUID.test(id) || id.startsWith("dup:") ? id : `file:${name}`;
+
+/**
+ * How a proposal file is named in such an id: with its folder, `open/<file>` or
+ * `decided/<file>`, since the same file name can sit under both.
+ */
+const proposalName = (path: string) => path.slice("proposals/".length);
 
 /** One row per slug: a problem row and a later good row for the same file never collide. */
 export function upsertEntry(
@@ -78,8 +83,6 @@ export function upsertEntry(
   );
 }
 
-const fileName = (path: string) => path.slice(path.lastIndexOf("/") + 1);
-
 /** The folder says whether a proposal is open; a decided one says how in its frontmatter. */
 function stateOf(proposal: KnowledgeProposal, path: string): "open" | "accepted" | "rejected" {
   if (path.startsWith(`${OPEN_DIR}/`)) return "open";
@@ -103,7 +106,7 @@ export function upsertProposal(
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       repoId,
-      rowId(proposal.id, fileName(path)),
+      rowId(proposal.id, proposalName(path)),
       path,
       state,
       proposal.entryId,
@@ -128,12 +131,15 @@ export function upsertProposal(
   );
 }
 
-/** What the index was built from: `ensureFresh` compares these with the repository. */
+/**
+ * What the index was built from: `ensureFresh` compares these with the repository. A null
+ * fingerprint says the folders were not read as they are now, so the next refresh rebuilds.
+ */
 export function recordRepo(
   store: KnowledgeStore,
   repoId: number,
   head: string | null,
-  fingerprint: string,
+  fingerprint: string | null,
   overCap: number,
   dirtyChecked: boolean,
 ): void {
@@ -145,8 +151,27 @@ export function recordRepo(
   );
 }
 
-/** Records the repository as it is now, keeping what the last rebuild found about its folders. */
-export function recordRepoNow(store: KnowledgeStore, repo: Repo): void {
+/** The fingerprint the index holds for the repository; null when it holds none. */
+export function recordedFingerprint(store: KnowledgeStore, repo: Repo): string | null {
+  return (
+    store.db
+      .query<{ fingerprint: string | null }, [number]>(
+        "SELECT fingerprint FROM knowledge_repos WHERE id = ?",
+      )
+      .get(repo.id)?.fingerprint ?? null
+  );
+}
+
+/**
+ * Records the head and the fingerprint a write took before its transaction, keeping what
+ * the last rebuild found about the folders (the files over the cap, the dirty check).
+ */
+export function recordRepoAfter(
+  store: KnowledgeStore,
+  repo: Repo,
+  head: string | null,
+  fingerprint: string | null,
+): void {
   const row = store.db
     .query<{ over_cap: number; dirty_checked: number }, [number]>(
       "SELECT over_cap, dirty_checked FROM knowledge_repos WHERE id = ?",
@@ -155,8 +180,8 @@ export function recordRepoNow(store: KnowledgeStore, repo: Repo): void {
   recordRepo(
     store,
     repo.id,
-    headOf(repo.path),
-    fingerprintOf(repo.path),
+    head,
+    fingerprint,
     row?.over_cap ?? 0,
     (row?.dirty_checked ?? 1) === 1,
   );
@@ -437,10 +462,17 @@ export function readRepoFiles(store: KnowledgeStore, repo: Repo): RepoFiles {
         if (proposalIds.has(proposal.id)) {
           proposal = {
             ...proposal,
-            id: `dup:${name}`,
+            id: `dup:${proposalName(path)}`,
             problem: also(proposal.problem, "its id is also the id of another proposal file"),
           };
         } else proposalIds.add(proposal.id);
+      }
+      // A file moved here by hand says nothing of how it was decided: listed, with why.
+      if (folder === DECIDED_DIR && proposal.decision === null && !("problem" in file)) {
+        proposal = {
+          ...proposal,
+          problem: also(proposal.problem, "under proposals/decided with no decision"),
+        };
       }
       proposals.push({ proposal, path, hash: "problem" in file ? "" : fileHash(file.bytes) });
     }
@@ -453,6 +485,11 @@ export function readRepoFiles(store: KnowledgeStore, repo: Repo): RepoFiles {
  * lists as changed is a draft with a problem until a person adopts it.
  */
 export function rebuildRepo(store: KnowledgeStore, repo: Repo): RebuildResult {
+  requireSchema(store);
+  // Taken before the files are read: a file added while they are read then shows as a
+  // fingerprint the index does not hold, and the next refresh reads the repository again.
+  const head = headOf(repo.path);
+  const fingerprint = fingerprintOf(repo.path);
   const changed = changedPaths(store, repo);
   const files = readRepoFiles(store, repo);
   const { overCap } = files;
@@ -485,14 +522,7 @@ export function rebuildRepo(store: KnowledgeStore, repo: Repo): RebuildResult {
     for (const { proposal, path, hash } of proposals) {
       upsertProposal(store, repo.id, proposal, path, hash);
     }
-    recordRepo(
-      store,
-      repo.id,
-      headOf(repo.path),
-      fingerprintOf(repo.path),
-      overCap,
-      changed !== null,
-    );
+    recordRepo(store, repo.id, head, fingerprint, overCap, changed !== null);
   });
   return {
     entries: entries.length,
@@ -515,6 +545,7 @@ export function rebuildAll(
   store: KnowledgeStore,
   scope?: ScopeRef["scope"],
 ): ReturnType<typeof listRepos> & { results: Map<string, RebuildResult> } {
+  requireSchema(store);
   const listed = listRepos(store);
   const repos = listed.repos.filter((repo) => scope === undefined || repo.ref.scope === scope);
   const results = new Map<string, RebuildResult>();
@@ -551,6 +582,7 @@ export function rebuildAll(
 
 /** Rebuilds the repository's rows when its HEAD or its fingerprint is not what was indexed. */
 export function ensureFresh(store: KnowledgeStore, repo: Repo): void {
+  requireSchema(store);
   const row = store.db
     .query<{ head: string | null; fingerprint: string | null }, [number]>(
       "SELECT head, fingerprint FROM knowledge_repos WHERE id = ?",

@@ -21,6 +21,7 @@ import {
 } from "../../src/modules/knowledge/index-store.ts";
 import {
   ensureRepo,
+  hashOf,
   headOf,
   keepBytes,
   openRepo,
@@ -30,7 +31,8 @@ import {
   writeIntent,
   writeManifest,
 } from "../../src/modules/knowledge/repo.ts";
-import { adopt, writeEntry } from "../../src/modules/knowledge/store.ts";
+import { listRepos } from "../../src/modules/knowledge/resolve.ts";
+import { adopt, readEntry, writeEntry } from "../../src/modules/knowledge/store.ts";
 import type {
   EntryChange,
   KnowledgeEntry,
@@ -51,7 +53,7 @@ let clock: number;
 beforeEach(() => {
   fx = knowledgeFixture("knowledge-index");
   clock = NOW;
-  store = fx.store({ now: () => clock, env: { WIZARDINGCODE_MEM_AUTHOR: "André" } });
+  store = fx.store({ now: () => clock, env: { WIZARDINGCODE_MEM_AUTHOR: "Zoë" } });
 });
 afterEach(() => {
   fx.close();
@@ -206,11 +208,13 @@ describe("rebuildRepo", () => {
       join(repo.path, "proposals", "decided", `${proposal.id}.md`),
       readFileSync(join(repo.path, "proposals", "open", `${proposal.id}.md`)),
     );
+    // A file with no id under each folder, with the same name: two rows, not one.
     writeFileSync(join(repo.path, "proposals", "open", "stray.md"), "---\ntitle: x\n---\n");
+    writeFileSync(join(repo.path, "proposals", "decided", "stray.md"), "---\ntitle: y\n---\n");
 
     const result = rebuildRepo(store, repo);
     expect(result.entries).toBe(4);
-    expect(result.proposals).toBe(3);
+    expect(result.proposals).toBe(4);
     const ids = Object.fromEntries(
       fx.db
         .query<{ slug: string; id: string }, []>("SELECT slug, id FROM knowledge_entries")
@@ -231,14 +235,19 @@ describe("rebuildRepo", () => {
         "SELECT id, path, problem FROM knowledge_proposals ORDER BY path",
       )
       .all();
+    // The id of a file with none of its own names its folder: the same file name can sit
+    // under both.
     expect(proposalIds.map((row) => [row.path, row.id])).toEqual([
-      [`proposals/decided/${proposal.id}.md`, `dup:${proposal.id}.md`],
+      [`proposals/decided/${proposal.id}.md`, `dup:decided/${proposal.id}.md`],
+      ["proposals/decided/stray.md", "file:decided/stray.md"],
       [`proposals/open/${proposal.id}.md`, proposal.id],
-      ["proposals/open/stray.md", "file:stray.md"],
+      ["proposals/open/stray.md", "file:open/stray.md"],
     ]);
     expect(proposalIds.every((row) => row.path.includes("open/") || row.problem !== null)).toBe(
       true,
     );
+    // A file under decided/ that says nothing of its decision is listed with that problem.
+    expect(proposalIds[0]?.problem).toContain("no decision");
     // Twice the same answer.
     const again = entryRows();
     rebuildRepo(store, repo);
@@ -284,6 +293,86 @@ describe("rebuildRepo", () => {
     expect(entryRow(repo, "e-4999")).not.toBeNull();
     expect(repoRow(repo)?.over_cap).toBe(1);
   }, 30_000);
+});
+
+describe("a file added while the engine works", () => {
+  /** Runs `add` once, at the store's next renewal: a hand edit landing mid-operation. */
+  function atNextRenewal(add: () => void): void {
+    let done = false;
+    store.renew = () => {
+      if (done) return;
+      done = true;
+      add();
+    };
+  }
+
+  test("during a rebuild, it is read at the next refresh instead of staying out of the index", () => {
+    written("First entry");
+    const repo = workspace();
+    // A rebuild renews twice: before git's status, which comes before the files are read,
+    // and before its transaction, which comes after. The file appears at the second.
+    let renewals = 0;
+    store.renew = () => {
+      renewals++;
+      if (renewals !== 2) return;
+      writeFileSync(entryFile(repo, "late"), byHand({ ...NOTE, id: crypto.randomUUID() }));
+      utimesSync(join(repo.path, "entries"), new Date(), new Date(Date.now() + 5000));
+    };
+    rebuildRepo(store, repo);
+    store.renew = null;
+    expect(renewals).toBe(2);
+    expect(entryRow(repo, "late")).toBeNull();
+
+    // The index did not record folders it had not read: the refresh reads them now.
+    ensureFresh(store, repo);
+    expect(entryRow(repo, "late")).not.toBeNull();
+  });
+
+  test("during a write, it is read at the next refresh", () => {
+    written("First entry");
+    const repo = workspace();
+    // A file appears by hand after the write's refresh and before its commit.
+    atNextRenewal(() => {
+      writeFileSync(entryFile(repo, "late"), byHand({ ...NOTE, id: crypto.randomUUID() }));
+      utimesSync(join(repo.path, "entries"), new Date(), new Date(Date.now() + 5000));
+    });
+    writeEntry(
+      store,
+      WORKSPACE,
+      change({ slug: "first-entry", title: "First entry", baseVersion: 1 }),
+      person(),
+    );
+    store.renew = null;
+    expect(existsSync(entryFile(repo, "late"))).toBe(true);
+    expect(entryRow(repo, "first-entry")?.version).toBe(2);
+    expect(entryRow(repo, "late")).toBeNull();
+
+    expect(readEntry(store, WORKSPACE, "late")?.title).toBe("By hand");
+    expect(entryRow(repo, "late")).not.toBeNull();
+  });
+});
+
+describe("tables a newer version wrote", () => {
+  test("are not rewritten by a rebuild, a refresh or a listing", () => {
+    written("First entry");
+    const repo = workspace();
+    fx.db.run("UPDATE knowledge_entries SET title = 'theirs'");
+    fx.db.run("UPDATE knowledge_repos SET head = 'theirs'");
+    fx.db.run(
+      "INSERT INTO module_migrations (module, version, name, applied_at) VALUES ('knowledge', 7, 'x', 0)",
+    );
+    for (const call of [
+      () => rebuildAll(store),
+      () => rebuildRepo(store, repo),
+      () => ensureFresh(store, repo),
+      () => listRepos(store),
+      () => openRepo(store, WORKSPACE),
+    ]) {
+      expect(codeOf(call)).toBe("too-new");
+    }
+    expect(entryRows().map((row) => row.title)).toEqual(["theirs"]);
+    expect(repoRow(repo)?.head).toBe("theirs");
+  });
 });
 
 describe("ensureFresh", () => {
@@ -447,7 +536,7 @@ describe("adopt", () => {
     expect(result).toEqual({ adopted: 5, problems: [] });
     expect(commits(repo)).toBe(before + 1);
     expect(realGit(repo.path, "log", "-1", "--format=%an|%s").trim()).toBe(
-      "André|knowledge: adopt 5 changes made outside the engine",
+      "Zoë|knowledge: adopt 5 changes made outside the engine",
     );
     const body = realGit(repo.path, "log", "-1", "--format=%b");
     const paths = [
@@ -477,7 +566,7 @@ describe("adopt", () => {
     );
     expect(edited).toMatchObject({
       version: 2,
-      author: "André",
+      author: "Zoë",
       body: "The body, edited by hand.",
       problem: null,
     });
@@ -490,7 +579,7 @@ describe("adopt", () => {
     );
     expect(added).toMatchObject({
       version: 1,
-      author: "André",
+      author: "Zoë",
       title: "By hand",
       body: "Written in an editor.",
       problem: null,
@@ -558,7 +647,7 @@ describe("adopt", () => {
     const broken = fx.store({
       now: () => clock,
       env: {
-        WIZARDINGCODE_MEM_AUTHOR: "André",
+        WIZARDINGCODE_MEM_AUTHOR: "Zoë",
         PATH: fx.pathWith(
           stubGit(join(fx.dir, "failing-adopt"), { failOnce: "commit", stderr: "fatal: boom" }),
         ),
@@ -589,13 +678,15 @@ describe("adopt", () => {
     const hand = readFileSync(file, "utf8").replace("The body.", "The person's own words.");
     const kept = keepBytes(repo, new Map([["entries/edited-entry.md", Buffer.from(hand)]]));
     // The adopt had rewritten and staged the file when the process died.
-    writeFileSync(file, hand.replace("version: 1", "version: 2"));
+    const rewritten = hand.replace("version: 1", "version: 2");
+    writeFileSync(file, rewritten);
     realGit(repo.path, "add", "--", "entries/edited-entry.md");
     writeIntent(repo, {
       operation: "adopt",
       writer: person(),
       existed: ["entries/edited-entry.md"],
       created: [],
+      written: { "entries/edited-entry.md": hashOf(Buffer.from(rewritten)) },
       keptBytesFile: kept,
     });
 

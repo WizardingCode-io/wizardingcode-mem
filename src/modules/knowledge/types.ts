@@ -33,6 +33,11 @@ export interface KnowledgeStore {
   gitTimeoutMs: number;
   /** Extends the leases the running operation holds; null outside one. Throws when one was lost. */
   renew: (() => void) | null;
+  /**
+   * Where the store tells the person what it did on its own, such as putting back an
+   * operation that was interrupted. Null says it to the log only.
+   */
+  report: ((message: string) => void) | null;
 }
 
 export interface Repo {

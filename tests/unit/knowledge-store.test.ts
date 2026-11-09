@@ -10,7 +10,13 @@ import {
 import { join } from "node:path";
 import { redact } from "../../src/core/redact.ts";
 import { agentWriter, identityOf, personAuthor } from "../../src/modules/knowledge/author.ts";
-import { nowIso, parseEntry, parseProposal, UUID } from "../../src/modules/knowledge/entry.ts";
+import {
+  nowIso,
+  parseEntry,
+  parseProposal,
+  slugify,
+  UUID,
+} from "../../src/modules/knowledge/entry.ts";
 import { ModuleSchemaTooNewError } from "../../src/modules/knowledge/errors.ts";
 import { fileHash, rebuildRepo } from "../../src/modules/knowledge/index-store.ts";
 import {
@@ -48,7 +54,7 @@ let clock: number;
 beforeEach(() => {
   fx = knowledgeFixture("knowledge-store");
   clock = NOW;
-  store = fx.store({ now: () => clock, env: { WIZARDINGCODE_MEM_AUTHOR: "André" } });
+  store = fx.store({ now: () => clock, env: { WIZARDINGCODE_MEM_AUTHOR: "Zoë" } });
 });
 afterEach(() => {
   fx.close();
@@ -146,7 +152,7 @@ const failingCommit = (name: string) =>
   fx.store({
     now: () => clock,
     env: {
-      WIZARDINGCODE_MEM_AUTHOR: "André",
+      WIZARDINGCODE_MEM_AUTHOR: "Zoë",
       PATH: fx.pathWith(stubGit(join(fx.dir, name), { failOnce: "commit", stderr: "fatal: boom" })),
     },
   });
@@ -181,7 +187,7 @@ describe("a person's write", () => {
       context: "agency clients",
       subject: "discovery call",
       status: "active",
-      author: "André",
+      author: "Zoë",
       version: 1,
       created: nowIso(NOW),
       updated: nowIso(NOW),
@@ -193,7 +199,7 @@ describe("a person's write", () => {
     const text = readFileSync(entryFile(repo), "utf8");
     expect(parseEntry(text, SLUG, null)).toEqual(entry);
     expect(realGit(repo.path, "log", "-1", "--format=%s|%an|%cn").trim()).toBe(
-      `knowledge: create ${SLUG} (v1)|André|André`,
+      `knowledge: create ${SLUG} (v1)|Zoë|Zoë`,
     );
     expect(realGit(repo.path, "show", "--name-only", "--format=", "HEAD").trim()).toBe(
       `entries/${SLUG}.md`,
@@ -204,7 +210,7 @@ describe("a person's write", () => {
       id: entry.id,
       path: `entries/${SLUG}.md`,
       version: 1,
-      author: "André",
+      author: "Zoë",
       status: "active",
       body: "The body.",
       problem: null,
@@ -345,7 +351,7 @@ describe("a person's write", () => {
     const root = workspace();
     expect(existsSync(join(root.path, "taxonomy.md"))).toBe(true);
     expect(realGit(root.path, "log", "-1", "--format=%an|%s").trim()).toBe(
-      "André|knowledge: repository (format 1)",
+      "Zoë|knowledge: repository (format 1)",
     );
     const repo = openRepo(store, ref) as Repo;
     expect(readManifest(repo.path)?.scope).toBe("project");
@@ -611,6 +617,49 @@ describe("an agent's write", () => {
     ).toBe(body);
   });
 
+  test("a secret in an agent's title or subject is redacted too, and the slug comes from the redacted title", () => {
+    const key = `sk-ant-api03-${"a".repeat(40)}`;
+    const title = `Rotate ${key} monthly`;
+    const subject = `the key ${fakeAwsKey()}`;
+    const proposal = proposed(writeEntry(store, WORKSPACE, change({ title, subject }), agent));
+    const cleanTitle = redact(title, { env: store.env });
+    const cleanSubject = redact(subject, { env: store.env });
+    expect(cleanTitle).not.toContain(key);
+    expect(cleanSubject).not.toContain(fakeAwsKey());
+    expect(proposal.title).toBe(cleanTitle);
+    expect(proposal.subject).toBe(cleanSubject);
+    expect(proposal.slug).toBe(slugify(cleanTitle));
+    expect(proposal.slug).not.toContain("aaaaaaaa");
+    const repo = workspace();
+    const file = readFileSync(openFile(repo, proposal.id), "utf8");
+    expect(file).not.toContain(key);
+    expect(file).not.toContain(fakeAwsKey());
+    expect(realGit(repo.path, "log", "-1", "--format=%s")).not.toContain("aaaaaaaa");
+  });
+
+  test("a caller cannot set an entry's id, as a person or as an agent", () => {
+    const theirs = "11111111-1111-4111-8111-111111111111";
+    // The type has no id; a caller that passes one anyway is not obeyed.
+    const withId = (over: Partial<EntryChange>) =>
+      ({ ...change(over), id: theirs, entryId: theirs }) as EntryChange;
+
+    const entry = written(writeEntry(store, WORKSPACE, withId({}), person()));
+    expect(entry.id).toMatch(UUID);
+    expect(entry.id).not.toBe(theirs);
+    const next = written(
+      writeEntry(store, WORKSPACE, withId({ slug: SLUG, baseVersion: 1 }), person()),
+    );
+    expect(next.id).toBe(entry.id);
+
+    const proposal = proposed(writeEntry(store, WORKSPACE, withId({ title: "Another" }), agent));
+    expect(proposal.id).not.toBe(theirs);
+    expect(proposal.entryId).not.toBe(theirs);
+    const repo = workspace();
+    expect(readFileSync(entryFile(repo), "utf8")).not.toContain(theirs);
+    expect(readFileSync(openFile(repo, proposal.id), "utf8")).not.toContain(theirs);
+    expect(JSON.stringify(snapshot(repo))).not.toContain(theirs);
+  });
+
   test("a slug redaction would change, and a field redaction makes too long, are refused", () => {
     const slug = `sk-${"a".repeat(24)}`;
     const bySlug = () => writeEntry(store, WORKSPACE, change({ slug }), agent);
@@ -685,7 +734,7 @@ describe("deciding a proposal", () => {
       title: "A sharper script",
       body: "The agent's body.",
       version: 2,
-      author: "André",
+      author: "Zoë",
       created: entry.created,
       updated: nowIso(clock),
     });
@@ -699,7 +748,7 @@ describe("deciding a proposal", () => {
     expect(decided).toMatchObject({
       id: proposal.id,
       decision: "accepted",
-      decidedBy: "André",
+      decidedBy: "Zoë",
       decidedAt: nowIso(clock),
       decidedVersion: 2,
       body: "The agent's body.",
@@ -707,7 +756,7 @@ describe("deciding a proposal", () => {
     });
     expect(commits(repo)).toBe(before + 1);
     expect(realGit(repo.path, "log", "-1", "--format=%an|%s").trim()).toBe(
-      `André|knowledge: accept ${proposal.id} into ${SLUG} (v2)`,
+      `Zoë|knowledge: accept ${proposal.id} into ${SLUG} (v2)`,
     );
     expect(realGit(repo.path, "log", "-1", "--format=%b")).toContain(
       "Proposed by agent:claude-code.",
@@ -728,7 +777,7 @@ describe("deciding a proposal", () => {
     expect(proposalRow(repo, proposal.id)).toMatchObject({
       state: "accepted",
       body: "",
-      decided_by: "André",
+      decided_by: "Zoë",
       decided_version: 2,
       path: `proposals/decided/${proposal.id}.md`,
     });
@@ -755,14 +804,14 @@ describe("deciding a proposal", () => {
     expect(rejected).toMatchObject({
       id: proposal.id,
       decision: "rejected",
-      decidedBy: "André",
+      decidedBy: "Zoë",
       decidedVersion: null,
     });
     expect(existsSync(openFile(repo, proposal.id))).toBe(false);
     expect(readFileSync(decidedFile(repo, proposal.id), "utf8")).toContain("decision: rejected");
     expect(readFileSync(entryFile(repo), "utf8")).toBe(text);
     expect(realGit(repo.path, "log", "-1", "--format=%an|%s").trim()).toBe(
-      `André|knowledge: reject ${proposal.id}`,
+      `Zoë|knowledge: reject ${proposal.id}`,
     );
     expect(proposalRow(repo, proposal.id)).toMatchObject({ state: "rejected", body: "" });
     expect(status(repo)).toBe("");

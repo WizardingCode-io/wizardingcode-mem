@@ -133,10 +133,14 @@ export function anyLeaseActive(db: Db, now: number): boolean {
 /** One lease per knowledge repository being written: `knowledge.lease:<repository path>`. */
 export const KNOWLEDGE_LEASE_PREFIX = "knowledge.lease:";
 
+/** The first key after every key with the prefix: the prefix with its last character raised by one. */
+const KNOWLEDGE_LEASE_END = "knowledge.lease;";
+
 /** True while a write to any knowledge repository is under way. */
 function knowledgeLeaseActive(db: Db, now: number): boolean {
+  // A range on the primary key, which a pattern match could not use.
   const keys = db
-    .query<{ key: string }, [string]>("SELECT key FROM meta WHERE key LIKE ? || '%'")
-    .all(KNOWLEDGE_LEASE_PREFIX);
+    .query<{ key: string }, [string, string]>("SELECT key FROM meta WHERE key >= ? AND key < ?")
+    .all(KNOWLEDGE_LEASE_PREFIX, KNOWLEDGE_LEASE_END);
   return keys.some((row) => leaseActive(db, row.key, now));
 }

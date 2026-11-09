@@ -32,7 +32,7 @@ area: sales
 context: "agency clients"
 subject: "discovery call"
 status: active
-author: "André"
+author: "Zoë"
 version: 3
 created: 2026-11-08T23:10:00.000Z
 updated: 2026-11-09T08:00:00.000Z
@@ -76,7 +76,7 @@ describe("parseEntry", () => {
       context: "agency clients",
       subject: "discovery call",
       status: "active",
-      author: "André",
+      author: "Zoë",
       version: 3,
       created: "2026-11-08T23:10:00.000Z",
       updated: "2026-11-09T08:00:00.000Z",
@@ -313,12 +313,12 @@ The proposed body.
   test("reads a decided proposal and round-trips it", () => {
     const decided = OPEN.replace(
       "status: active\n",
-      'status: active\ndecision: accepted\ndecided_by: "André"\ndecided_at: 2026-11-09T09:00:00.000Z\ndecided_version: 3\n',
+      'status: active\ndecision: accepted\ndecided_by: "Zoë"\ndecided_at: 2026-11-09T09:00:00.000Z\ndecided_version: 3\n',
     );
     const proposal = parseProposal(decided, `${PROPOSAL_ID}.md`, NINE);
     expect(proposal).toMatchObject({
       decision: "accepted",
-      decidedBy: "André",
+      decidedBy: "Zoë",
       decidedAt: "2026-11-09T09:00:00.000Z",
       decidedVersion: 3,
       problem: null,

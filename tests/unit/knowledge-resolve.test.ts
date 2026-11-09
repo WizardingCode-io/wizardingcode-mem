@@ -3,6 +3,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import {
   ensureRepo,
+  openRepo,
   projectFolderName,
   readManifest,
   repoPath,
@@ -11,6 +12,7 @@ import {
 import { listRepos, resolveRepo } from "../../src/modules/knowledge/resolve.ts";
 import type { Manifest } from "../../src/modules/knowledge/types.ts";
 import { codeOf, type Fixture, knowledgeFixture } from "../helpers/knowledge.ts";
+import { realGit } from "../helpers/stub-git.ts";
 
 const person = { kind: "person", name: "you", source: "default" } as const;
 
@@ -78,7 +80,7 @@ describe("resolveRepo", () => {
     ]);
   });
 
-  test("a project that gains a remote keeps its folder, and the manifest learns the remote", () => {
+  test("a project that gains a remote keeps its folder", () => {
     const store = fx.store();
     const id = fx.addProject("gitdir:/x/.git", "path:/x");
     const first = resolveRepo(store, project(id), { create: person });
@@ -89,11 +91,64 @@ describe("resolveRepo", () => {
     const second = resolveRepo(store, project(id), { create: person });
     expect(second?.relative).toBe(first?.relative as string);
     expect(second?.id).toBe(first?.id as number);
+    // Resolving writes no file of an existing repository: the manifest is as it was.
     expect(readManifest(second?.path as string)?.project?.aliases).toEqual([
+      "gitdir:/x/.git",
+      "path:/x",
+    ]);
+  });
+
+  test("the manifest learns a gained remote at the next write, in a commit of its own", () => {
+    const store = fx.store({ env: { WIZARDINGCODE_MEM_AUTHOR: "Writer" } });
+    const id = fx.addProject("gitdir:/x/.git", "path:/x");
+    const first = ensureRepo(store, project(id));
+    const commits = () => Number(realGit(first.path, "rev-list", "--count", "HEAD").trim());
+    expect(commits()).toBe(1);
+    fx.db.run(
+      "INSERT INTO project_aliases (alias, project_id) VALUES ('remote:github.com/x/y', ?)",
+      [id],
+    );
+
+    // Reading does not teach it: only a write path does.
+    expect(openRepo(store, project(id))?.relative).toBe(first.relative);
+    expect(commits()).toBe(1);
+
+    const second = ensureRepo(store, project(id));
+    expect(second.relative).toBe(first.relative);
+    expect(readManifest(second.path)?.project?.aliases).toEqual([
       "gitdir:/x/.git",
       "path:/x",
       "remote:github.com/x/y",
     ]);
+    expect(commits()).toBe(2);
+    expect(realGit(first.path, "log", "-1", "--format=%an|%s").trim()).toBe(
+      "Writer|knowledge: manifest learns an alias of its project",
+    );
+    expect(realGit(first.path, "show", "--name-only", "--format=", "HEAD").trim()).toBe(
+      "knowledge.json",
+    );
+    // Nothing is left for adopt to credit to the person.
+    expect(realGit(first.path, "status", "--porcelain")).toBe("");
+    ensureRepo(store, project(id));
+    expect(commits()).toBe(2);
+  });
+
+  test("a manifest the person is editing is left to them", () => {
+    const store = fx.store();
+    const id = fx.addProject("gitdir:/x/.git", "path:/x");
+    const repo = ensureRepo(store, project(id));
+    const manifest = readManifest(repo.path) as Manifest;
+    writeManifest(repo.path, { ...manifest, createdAt: "edited by hand" });
+    fx.db.run(
+      "INSERT INTO project_aliases (alias, project_id) VALUES ('remote:github.com/x/y', ?)",
+      [id],
+    );
+    ensureRepo(store, project(id));
+    expect(readManifest(repo.path)).toMatchObject({
+      createdAt: "edited by hand",
+      project: { aliases: ["gitdir:/x/.git", "path:/x"] },
+    });
+    expect(realGit(repo.path, "rev-list", "--count", "HEAD").trim()).toBe("1");
   });
 
   test("with the rows lost, the folder is found through the manifest and the row rewritten", () => {

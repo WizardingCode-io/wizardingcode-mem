@@ -39,11 +39,13 @@ import {
   ENTRIES_DIR,
   GIT_MIN_VERSION,
   GIT_TIMEOUT_MS,
+  gitTooOld,
   knowledgeRoot,
   MANIFEST_FILE,
   OPEN_DIR,
   parseGitVersion,
   parseManifest,
+  readRegularFile,
   repoPath,
   runGit,
   statusOf,
@@ -570,7 +572,6 @@ function readingDb(name: string, db: Db | null, check: () => Check): Check {
   }
 }
 
-/** Looks, and changes nothing: no directory, database or setting is created or altered. */
 // --- Knowledge ------------------------------------------------------------------------
 
 /** A folder past this many files is close to the index's cap: said before files are left out. */
@@ -631,6 +632,7 @@ function knowledgeRepositories(context: DoctorContext, db: Db | null): Check {
     settings: loadSettings(env, context.dataDir),
     gitTimeoutMs: GIT_TIMEOUT_MS,
     renew: null,
+    report: null,
   };
   const warnings: string[] = [];
   const notes: string[] = [];
@@ -658,11 +660,7 @@ function knowledgeRepositories(context: DoctorContext, db: Db | null): Check {
     if (version === null) {
       git = false;
       warnings.push(`git did not answer: knowledge needs git ${wanted} or newer`);
-    } else if (
-      (version[0] ?? 0) < (GIT_MIN_VERSION[0] ?? 0) ||
-      ((version[0] ?? 0) === (GIT_MIN_VERSION[0] ?? 0) &&
-        (version[1] ?? 0) < (GIT_MIN_VERSION[1] ?? 0))
-    ) {
+    } else if (gitTooOld(version)) {
       git = false;
       warnings.push(`git ${version.join(".")} is older than ${wanted}, which knowledge needs`);
     }
@@ -686,7 +684,10 @@ function knowledgeRepositories(context: DoctorContext, db: Db | null): Check {
     let scan: ReturnType<typeof scanRepos>;
     try {
       scan = scanRepos(store);
-    } catch {
+    } catch (error) {
+      // Only tables that do not exist yet are a reason to read the folders unmapped; any
+      // other failure is a fault, and reaches the person as this check's warning.
+      if (!String((error as Error).message).includes("no such table: knowledge_")) throw error;
       scan = { found: unmapped(), orphans: [], ambiguous: [], claimed: [] };
     }
     found = scan.found;
@@ -714,8 +715,9 @@ function knowledgeRepositories(context: DoctorContext, db: Db | null): Check {
             `${row.path}: ${plural(row.over_cap, "file")} over the cap of ${FOLDER_CAP}`,
           );
         }
-      } catch {
+      } catch (error) {
         // The tables are created on the next write; there is nothing recorded to read.
+        if (!String((error as Error).message).includes("no such table: knowledge_")) throw error;
       }
     }
     if (personAuthor(store).source === "default") {
@@ -743,10 +745,16 @@ function knowledgeRepositories(context: DoctorContext, db: Db | null): Check {
     if (!isDirectory(join(repo.path, ".git"))) continue;
     repositories++;
     try {
-      const manifest = parseManifest(readFileSync(join(repo.path, MANIFEST_FILE), "utf8"));
-      if ("problem" in manifest) warnings.push(`${repo.relative}: ${manifest.problem}`);
-    } catch {
-      warnings.push(`${repo.relative}: ${MANIFEST_FILE} is missing`);
+      // Never through a link, and never more than the cap: as the module reads every file.
+      const bytes = readRegularFile(join(repo.path, MANIFEST_FILE));
+      if (bytes === null) warnings.push(`${repo.relative}: ${MANIFEST_FILE} is missing`);
+      else {
+        const manifest = parseManifest(new TextDecoder().decode(bytes));
+        if ("problem" in manifest) warnings.push(`${repo.relative}: ${manifest.problem}`);
+      }
+    } catch (error) {
+      if (!(error instanceof KnowledgeError)) throw error;
+      warnings.push(`${repo.relative}: ${error.message}`);
     }
     try {
       const age = context.now - statSync(join(repo.path, ".git", "index.lock")).mtimeMs;
@@ -832,6 +840,7 @@ function knowledge(context: DoctorContext, db: Db | null): Check {
   }
 }
 
+/** Looks, and changes nothing: no directory, database or setting is created or altered. */
 export function runChecks(context: DoctorContext): Check[] {
   const { check: databaseCheck, db } = database(context);
   try {

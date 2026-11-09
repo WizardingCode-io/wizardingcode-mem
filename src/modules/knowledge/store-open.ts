@@ -13,6 +13,7 @@ export function openStore(options: {
   env?: Record<string, string | undefined>;
   now?: () => number;
   gitTimeoutMs?: number;
+  report?: (message: string) => void;
 }): KnowledgeStore {
   const env = options.env ?? process.env;
   return {
@@ -23,5 +24,6 @@ export function openStore(options: {
     settings: loadSettings(env, options.dataDir),
     gitTimeoutMs: options.gitTimeoutMs ?? GIT_TIMEOUT_MS,
     renew: null,
+    report: options.report ?? null,
   };
 }

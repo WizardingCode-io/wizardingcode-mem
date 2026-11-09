@@ -327,11 +327,12 @@ wizardingcode-mem knowledge list
 - **Agents propose, you decide.** A change an agent makes through the engine is a proposal file, never the entry. `knowledge accept --scope <scope> <id>` writes it into the entry in a commit under your name that names the agent; `knowledge reject` files it with your decision. Nothing is deleted.
 - **Editing in an editor works.** The files are plain Markdown. A file you edit, add or delete by hand is yours to commit: `knowledge adopt` does it, as you. Until then the entry is listed as a draft, and the engine refuses to write over it.
 - **The database holds an index only.** `knowledge rebuild` recreates it from the files.
-- **Your name** on what you write is `WIZARDINGCODE_MEM_AUTHOR`, else your global git `user.name`, else `you`.
+- **Your name** on what you write is `WIZARDINGCODE_MEM_AUTHOR`, else your global git `user.name`, else `you`. It is kept in the entry, in the commit and in the index for as long as the repository's history: nothing here deletes it. Changing the setting changes what is written from then on; removing a name already written means rewriting that repository's history with git and running `knowledge rebuild` ([ADR 0024](docs/adr/0024-knowledge-module.md), Personal data). Nothing leaves your machine in this part.
+- **An interrupted write is undone.** If a write is cut short, the next command puts the files back and says so. A file you edited in the meantime is yours and is left as it is, for `knowledge adopt`.
 
-git 2.32 or newer is needed to write. Your own git hooks, templates, signing and configuration never run in these repositories.
+git 2.32 or newer is needed to write. Your own git hooks, templates, signing and configuration never run in these repositories, and a folder under `knowledge/` whose own git configuration could run a program, or whose `.git` points somewhere else, is refused.
 
-`wizardingcode-mem backup` copies the database and **does not copy these repositories**. Back up `~/.wizardingcode/mem/knowledge/` as you would any folder.
+`wizardingcode-mem backup` copies the database and **does not copy these repositories**. Back up `~/.wizardingcode/mem/knowledge/` as you would any folder. The database copy does hold the index, so the text of your entries goes wherever your backups go.
 
 ## Settings
 

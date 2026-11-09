@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { type Check, type DoctorContext, runChecks } from "../../src/doctor/checks.ts";
 import { doctorContext } from "../../src/doctor/context.ts";
@@ -16,7 +16,7 @@ let fx: Fixture;
 let store: KnowledgeStore;
 beforeEach(() => {
   fx = knowledgeFixture("doctor-knowledge");
-  store = fx.store({ env: { WIZARDINGCODE_MEM_AUTHOR: "André" } });
+  store = fx.store({ env: { WIZARDINGCODE_MEM_AUTHOR: "Zoë" } });
 });
 afterEach(() => {
   fx.close();
@@ -38,7 +38,7 @@ const workspace = (): Repo => openRepo(store, WORKSPACE) as Repo;
 const env = (over: Record<string, string | undefined> = {}) => ({
   PATH: process.env.PATH,
   HOME: fx.home,
-  WIZARDINGCODE_MEM_AUTHOR: "André",
+  WIZARDINGCODE_MEM_AUTHOR: "Zoë",
   ...over,
 });
 
@@ -138,9 +138,9 @@ describe("doctor: knowledge", () => {
     expect(check.detail).toContain(
       "no author configured: set WIZARDINGCODE_MEM_AUTHOR or a git user.name",
     );
-    writeFileSync(join(fx.home, ".gitconfig"), "[user]\n\tname = Ana Lopes\n");
+    writeFileSync(join(fx.home, ".gitconfig"), "[user]\n\tname = First Writer\n");
     // A fresh process would look the name up again; here the lookup is cached per home.
-    expect(knowledge({ env: env({ WIZARDINGCODE_MEM_AUTHOR: "André" }) }).status).toBe("ok");
+    expect(knowledge({ env: env({ WIZARDINGCODE_MEM_AUTHOR: "Zoë" }) }).status).toBe("ok");
   });
 
   test("warns when the knowledge tables are newer than this binary", () => {
@@ -201,6 +201,31 @@ describe("doctor: knowledge", () => {
     const check = knowledge();
     expect(check.status).toBe("warn");
     expect(check.detail).toContain("3 files over the cap");
+  });
+
+  test("a fault reading the index is a warning with its cause, never an ok", () => {
+    writeEntry(store, WORKSPACE, change(), person());
+    const usual = checks().length;
+    // Not a table that is missing yet: a table this version cannot read.
+    fx.db.run("ALTER TABLE knowledge_repos RENAME COLUMN path TO somewhere");
+    const all = checks();
+    expect(all).toHaveLength(usual);
+    const check = all.find((entry) => entry.name === "knowledge");
+    expect(check?.status).toBe("warn");
+    expect(check?.detail).toContain("could not be checked");
+    expect(check?.detail).toContain("path");
+  });
+
+  test("a manifest that is a link is not followed", () => {
+    const repo = ensureRepo(store, WORKSPACE);
+    const outside = join(fx.dir, "outside.json");
+    writeFileSync(outside, '{"format": 1, "scope": "workspace", "createdAt": "x"}');
+    rmSync(join(repo.path, "knowledge.json"));
+    symlinkSync(outside, join(repo.path, "knowledge.json"));
+    const check = knowledge();
+    expect(check.status).toBe("warn");
+    expect(check.detail).toContain("knowledge.json");
+    expect(check.detail).toContain("not a regular file");
   });
 
   test("with no database, the checks that need it are skipped and said", () => {

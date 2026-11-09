@@ -133,15 +133,34 @@ describe("the knowledge module's schema", () => {
         status TEXT, tags TEXT, updated TEXT, source TEXT, body TEXT, problem TEXT, hash TEXT,
         PRIMARY KEY (project_id, slug));
       CREATE VIRTUAL TABLE knowledge_fts USING fts5(title, tags, body, project_id, slug UNINDEXED);
+      -- The withdrawn module kept its full-text table in step with three triggers.
+      CREATE TRIGGER knowledge_entries_ai AFTER INSERT ON knowledge_entries BEGIN
+        INSERT INTO knowledge_fts (rowid, title, tags, body, project_id, slug)
+          VALUES (new.rowid, new.title, new.tags, new.body, new.project_id, new.slug);
+      END;
+      CREATE TRIGGER knowledge_entries_ad AFTER DELETE ON knowledge_entries BEGIN
+        DELETE FROM knowledge_fts WHERE rowid = old.rowid;
+      END;
+      CREATE TRIGGER knowledge_entries_au AFTER UPDATE ON knowledge_entries BEGIN
+        DELETE FROM knowledge_fts WHERE rowid = old.rowid;
+        INSERT INTO knowledge_fts (rowid, title, tags, body, project_id, slug)
+          VALUES (new.rowid, new.title, new.tags, new.body, new.project_id, new.slug);
+      END;
       CREATE TABLE knowledge_state (project_id INTEGER, fingerprint TEXT, indexed_at INTEGER);
       CREATE TABLE knowledge_shown (
         session_id TEXT, context_epoch INTEGER, project_id INTEGER, slug TEXT, event TEXT, at INTEGER);
       CREATE TABLE knowledge_proposals (id INTEGER PRIMARY KEY, memory_id INTEGER, project_id INTEGER, status TEXT);
+      CREATE INDEX knowledge_proposals_open ON knowledge_proposals(status, project_id);
       CREATE TABLE promoted_memories (memory_id INTEGER, project_id INTEGER, slug TEXT);
+      CREATE INDEX promoted_memories_project ON promoted_memories(project_id, slug);
       CREATE INDEX injections_memory_shown ON injections(memory_id, at);
       CREATE INDEX injections_memory_contexts ON injections(memory_id, session_id, context_epoch);
       INSERT INTO knowledge_entries (project_id, slug, title) VALUES (1, 'old', 'An old entry');
     `);
+    // The fixture is the withdrawn shape in use: the trigger filled the full-text table.
+    expect(old.query<{ n: number }, []>("SELECT count(*) AS n FROM knowledge_fts").get()?.n).toBe(
+      1,
+    );
     old.close();
 
     const db = open();
@@ -163,9 +182,27 @@ describe("the knowledge module's schema", () => {
       "promoted_memories",
       "injections_memory_shown",
       "injections_memory_contexts",
+      "knowledge_proposals_open",
+      "promoted_memories_project",
     ]) {
       expect(names).not.toContain(gone);
     }
+    // The three triggers went with their table, and the new one takes rows without them.
+    expect(
+      db
+        .query<{ name: string }, []>("SELECT name FROM sqlite_master WHERE type = 'trigger'")
+        .all()
+        .map((row) => row.name)
+        .filter((name) => name.startsWith("knowledge_")),
+    ).toEqual([]);
+    db.run(
+      "INSERT INTO knowledge_repos (scope, project_id, path, indexed_at) VALUES ('workspace', 0, 'knowledge/workspace', 0)",
+    );
+    db.run(
+      `INSERT INTO knowledge_entries (repo_id, id, slug, path, title, kind, area, status, author, version, body, hash)
+       VALUES (1, 'an-id', 'a-slug', 'entries/a-slug.md', 't', 'knowledge', 'code', 'active', 'a', 1, '', '')`,
+    );
+    db.run("DELETE FROM knowledge_entries");
     expect(names).toEqual(
       expect.arrayContaining(["knowledge_repos", "knowledge_entries", "knowledge_proposals"]),
     );

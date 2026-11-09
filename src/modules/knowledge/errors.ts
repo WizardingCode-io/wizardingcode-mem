@@ -20,6 +20,14 @@ export class KnowledgeError extends Error {
   }
 }
 
+/** A git call that was killed for running past its time: not the same as a git that is missing. */
+export class GitTimeoutError extends KnowledgeError {
+  constructor(message: string) {
+    super("git", message);
+    this.name = "GitTimeoutError";
+  }
+}
+
 /** The knowledge tables were written by a newer wizardingcode-mem. The store leaves them alone. */
 export class ModuleSchemaTooNewError extends KnowledgeError {
   constructor(module: string, supported: number) {

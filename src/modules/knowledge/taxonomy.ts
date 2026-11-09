@@ -14,7 +14,8 @@ import {
   withRepoLeases,
 } from "./repo.ts";
 import { listRepos } from "./resolve.ts";
-import { commit, requireClean, requireSchema, settle } from "./store.ts";
+import { requireSchema } from "./schema.ts";
+import { commit, requireClean, settle } from "./store.ts";
 import type { KnowledgeStore, PersonWriter, Repo, RootRef, Taxonomy } from "./types.ts";
 
 const invalid = (message: string) => new KnowledgeError("invalid", message);
@@ -70,7 +71,7 @@ function change(
     updated: nowIso(store.now()),
     areas: next(current.areas, repo),
   };
-  commit(store, repo, {
+  const committed = commit(store, repo, {
     operation: "taxonomy",
     writer: person,
     write: [{ path: TAXONOMY_FILE, text: renderTaxonomy(taxonomy) }],
@@ -80,7 +81,7 @@ function change(
     message: `knowledge: taxonomy ${action}`,
   });
   // No row changes: only the repository's head moved.
-  settle(store, repo, () => undefined);
+  settle(store, repo, committed, () => undefined);
   return taxonomy;
 }
 

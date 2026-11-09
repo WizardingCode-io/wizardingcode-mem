@@ -39,19 +39,19 @@ function codeOf(fn: () => unknown): string | null {
 
 describe("the person's author name", () => {
   test("the setting comes first", () => {
-    writeFileSync(join(home, ".gitconfig"), "[user]\n\tname = Ana Lopes\n");
-    expect(personAuthor(storeWith({ WIZARDINGCODE_MEM_AUTHOR: "André" }))).toEqual({
+    writeFileSync(join(home, ".gitconfig"), "[user]\n\tname = First Writer\n");
+    expect(personAuthor(storeWith({ WIZARDINGCODE_MEM_AUTHOR: "Zoë" }))).toEqual({
       kind: "person",
-      name: "André",
+      name: "Zoë",
       source: "setting",
     });
   });
 
   test("then the global git user.name", () => {
-    writeFileSync(join(home, ".gitconfig"), "[user]\n\tname = Ana Lopes\n");
+    writeFileSync(join(home, ".gitconfig"), "[user]\n\tname = First Writer\n");
     expect(personAuthor(storeWith({}))).toEqual({
       kind: "person",
-      name: "Ana Lopes",
+      name: "First Writer",
       source: "git",
     });
   });
@@ -61,18 +61,18 @@ describe("the person's author name", () => {
   });
 
   test("the git name is looked up once per home", () => {
-    writeFileSync(join(home, ".gitconfig"), "[user]\n\tname = Ana Lopes\n");
+    writeFileSync(join(home, ".gitconfig"), "[user]\n\tname = First Writer\n");
     const store = storeWith({});
-    expect(personAuthor(store).name).toBe("Ana Lopes");
-    writeFileSync(join(home, ".gitconfig"), "[user]\n\tname = Rui Sousa\n");
-    expect(personAuthor(store).name).toBe("Ana Lopes");
+    expect(personAuthor(store).name).toBe("First Writer");
+    writeFileSync(join(home, ".gitconfig"), "[user]\n\tname = Second Writer\n");
+    expect(personAuthor(store).name).toBe("First Writer");
     resetGitCaches();
-    expect(personAuthor(store).name).toBe("Rui Sousa");
+    expect(personAuthor(store).name).toBe("Second Writer");
   });
 
   test("a setting that names an agent is dropped and the author falls through", () => {
     expect(loadSettings({ WIZARDINGCODE_MEM_AUTHOR: "agent:x" }, dir).author).toBeNull();
-    expect(loadSettings({ WIZARDINGCODE_MEM_AUTHOR: "André" }, dir).author).toBe("André");
+    expect(loadSettings({ WIZARDINGCODE_MEM_AUTHOR: "Zoë" }, dir).author).toBe("Zoë");
     expect(loadSettings({}, dir).author).toBeNull();
     expect(personAuthor(storeWith({ WIZARDINGCODE_MEM_AUTHOR: "agent:x" }))).toEqual({
       kind: "person",
@@ -103,17 +103,17 @@ describe("the settings key", () => {
     expect(validatePatch({ WIZARDINGCODE_MEM_AUTHOR: "n".repeat(81) }).ok).toBe(false);
     expect(validatePatch({ WIZARDINGCODE_MEM_AUTHOR: "a\nb" }).ok).toBe(false);
     expect(validatePatch({ WIZARDINGCODE_MEM_AUTHOR: "n".repeat(80) }).ok).toBe(true);
-    expect(validatePatch({ WIZARDINGCODE_MEM_AUTHOR: "André" })).toEqual({
+    expect(validatePatch({ WIZARDINGCODE_MEM_AUTHOR: "Zoë" })).toEqual({
       ok: true,
-      changes: { WIZARDINGCODE_MEM_AUTHOR: "André" },
+      changes: { WIZARDINGCODE_MEM_AUTHOR: "Zoë" },
     });
   });
 
   test("publicSettings lists the key with its source", () => {
     expect(
-      publicSettings({ WIZARDINGCODE_MEM_AUTHOR: "André" }, dir).WIZARDINGCODE_MEM_AUTHOR,
+      publicSettings({ WIZARDINGCODE_MEM_AUTHOR: "Zoë" }, dir).WIZARDINGCODE_MEM_AUTHOR,
     ).toEqual({
-      value: "André",
+      value: "Zoë",
       source: "env",
     });
     expect(publicSettings({}, dir).WIZARDINGCODE_MEM_AUTHOR).toEqual({
@@ -131,13 +131,13 @@ describe("writers and identities", () => {
   });
 
   test("a person's e-mail comes from the name, at the .invalid domain", () => {
-    const hex = createHash("sha256").update("André Agro").digest("hex").slice(0, 8);
-    expect(identityOf({ kind: "person", name: "André Agro", source: "setting" })).toEqual({
-      name: "André Agro",
-      email: `andre-agro.${hex}@people.wizardingcode.invalid`,
+    const hex = createHash("sha256").update("Zoë Writer").digest("hex").slice(0, 8);
+    expect(identityOf({ kind: "person", name: "Zoë Writer", source: "setting" })).toEqual({
+      name: "Zoë Writer",
+      email: `zoe-writer.${hex}@people.wizardingcode.invalid`,
     });
-    const other = identityOf({ kind: "person", name: "Andre Agro", source: "git" });
-    expect(other.email).not.toBe(`andre-agro.${hex}@people.wizardingcode.invalid`);
+    const other = identityOf({ kind: "person", name: "Zoe Writer", source: "git" });
+    expect(other.email).not.toBe(`zoe-writer.${hex}@people.wizardingcode.invalid`);
     expect(other.email).toEndWith("@people.wizardingcode.invalid");
   });
 

@@ -1,10 +1,19 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { agentWriter } from "../../src/modules/knowledge/author.ts";
 import { parseEntry } from "../../src/modules/knowledge/entry.ts";
 import {
+  hashOf,
   headOf,
   repoPath,
   resetGitCaches,
@@ -418,6 +427,55 @@ describe("knowledge list, rebuild and adopt", () => {
     expect(rebuilt.stdout).toContain("1 file over the cap");
     expect(rebuilt.stdout).toContain("5000 entries");
   }, 60_000);
+
+  test("tables a newer version wrote are refused by every command, and left as they are", async () => {
+    await cli(...WRITE, "--body", "The body.");
+    withDb((db) => {
+      db.run("UPDATE knowledge_entries SET title = 'theirs'");
+      db.run(
+        "INSERT INTO module_migrations (module, version, name, applied_at) VALUES ('knowledge', 7, 'x', 0)",
+      );
+    });
+    for (const args of [
+      ["list"],
+      ["rebuild"],
+      ["adopt"],
+      ["area", "add", "legal", "Legal"],
+      [...WRITE, "--title", "Another", "--body", "x"],
+    ]) {
+      const result = await cli(...args);
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout).toBe("");
+      expect(result.stderr).toContain("newer than this wizardingcode-mem supports");
+    }
+    expect(
+      withDb((db) => db.query<{ title: string }, []>("SELECT title FROM knowledge_entries").all()),
+    ).toEqual([{ title: "theirs" }]);
+  });
+
+  test("a write that was interrupted is undone at the next command, and the person is told", async () => {
+    await cli(...WRITE, "--body", "The body.");
+    // What a killed write leaves: its file, and its record of what it wrote.
+    writeFileSync(entryFile("half"), "half written\n");
+    writeFileSync(
+      join(workspace(), ".git", "wizardingcode-op.json"),
+      JSON.stringify({
+        operation: "write",
+        writer: { kind: "person", name: "you", source: "default" },
+        existed: [],
+        created: ["entries/half.md"],
+        written: { "entries/half.md": hashOf(Buffer.from("half written\n")) },
+      }),
+    );
+    const listed = await cli("list");
+    expect(listed.exitCode).toBe(0);
+    expect(listed.stderr).toBe(
+      "wizardingcode-mem: an interrupted write in knowledge/workspace was undone: entries/half.md\n",
+    );
+    expect(existsSync(entryFile("half"))).toBe(false);
+    expect(listed.stdout).toContain(SLUG);
+    expect((await cli("list")).stderr).toBe("");
+  });
 
   test("an unknown subcommand prints the usage and exits 64", async () => {
     for (const args of [["nonsense"], []]) {
