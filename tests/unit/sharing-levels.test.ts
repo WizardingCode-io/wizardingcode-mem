@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  counterOfEpoch,
   effectiveLevel,
   epochOf,
   isHostLedAlias,
@@ -65,6 +66,14 @@ describe("epochOf", () => {
     expect(hash).toBeGreaterThanOrEqual(0);
     expect(hash).toBeLessThan(2 ** 20);
     expect(epochOf(3, lists)).toBe(3 * 2 ** 20 + hash);
+  });
+
+  test("counterOfEpoch reads the counter back from an epoch, whatever the lists", () => {
+    expect(counterOfEpoch(epochOf(0, lists))).toBe(0);
+    expect(counterOfEpoch(epochOf(3, lists))).toBe(3);
+    expect(counterOfEpoch(epochOf(1234567, { roots: [], areas: ["workspace:sales"] }))).toBe(
+      1234567,
+    );
   });
 
   test("an id is not the same in the roots as in the areas", () => {

@@ -292,6 +292,22 @@ describe("wizardingcode-mem ui: the overview's projects", () => {
     });
   });
 
+  test("a remote that is a local path gives the project no name a team knows it by: remote is false", async () => {
+    const other = join(home, "work", "other");
+    mkdirSync(other);
+    realGit(other, "init", "-q");
+    realGit(other, "remote", "add", "origin", join(home, "work", "elsewhere.git"));
+    const id = withDb((db) => resolveProject(db, other, NOW).id);
+    const s = await start();
+    const projects = await listed(s);
+    expect(projects.find((p) => p.id === id)).toMatchObject({
+      sharing: "local",
+      sharingReason: "level-local",
+      remote: false,
+      disabled: false,
+    });
+  });
+
   test("a level its project can no longer hold reads Nothing, and only the Sharing page removes it", async () => {
     share(projectId, "knowledge");
     withDb((db) => db.run("UPDATE projects SET disabled = 1 WHERE id = ?", [projectId]));

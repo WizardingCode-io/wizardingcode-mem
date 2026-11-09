@@ -108,6 +108,11 @@ export function epochOf(counter: number, inForce: { roots: string[]; areas: stri
   return counter * 2 ** HASH_BITS + hash20(`${inForce.roots.join(",")}|${inForce.areas.join(",")}`);
 }
 
+/** The change counter an epoch was derived from: the layout above, read back in one place. */
+export function counterOfEpoch(epoch: number): number {
+  return Math.floor(epoch / 2 ** HASH_BITS);
+}
+
 /** A hand-built policy, for tests: open, empty, for the team destination, but for `parts`. */
 export function policyWith(parts: Partial<SharingPolicy>): SharingPolicy {
   return {

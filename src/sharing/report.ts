@@ -13,7 +13,7 @@ import { type Db, moduleSchemaState } from "../store/db.ts";
 import { logError } from "../util/log.ts";
 import { redactForSend } from "./edge.ts";
 import { memoryHash } from "./hash.ts";
-import { epochOf, isHostLedAlias, levelKey, levelOf } from "./levels.ts";
+import { counterOfEpoch, epochOf, isHostLedAlias, levelKey, levelOf } from "./levels.ts";
 import { areasInForce, decide, knownAreas } from "./policy.ts";
 import { generationOf, hasLevelsTable, hasTable } from "./store.ts";
 import {
@@ -100,7 +100,6 @@ const idList = (ids: readonly number[]) => JSON.stringify(ids);
 // --- Previews -----------------------------------------------------------------------------
 
 /** The change counter an epoch was made from: what `epochOf` puts above its hash. */
-const counterIn = (epoch: number) => Math.floor(epoch / 2 ** 20);
 
 /** The levels with one project's replaced. A project at Nothing has no level. */
 function withLevel(
@@ -153,7 +152,7 @@ export function withChange(
     levels: change.level === undefined ? policy.levels : withLevel(policy.levels, change.level),
   };
   const inForce = { roots: [...next.roots], areas: [...next.areas] };
-  return { ...next, epoch: epochOf(counterIn(policy.epoch) + 1, inForce) };
+  return { ...next, epoch: epochOf(counterOfEpoch(policy.epoch) + 1, inForce) };
 }
 
 // --- The entries ----------------------------------------------------------------------------

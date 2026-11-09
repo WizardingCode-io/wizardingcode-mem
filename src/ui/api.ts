@@ -7,7 +7,7 @@ import { explicitMatch } from "../retrieve/query.ts";
 import { fuseRanks, SEMANTIC_POOL, semanticCandidates } from "../retrieve/semantic.ts";
 import type { Env } from "../settings/settings.ts";
 import { policyInForce, sharingRefusal } from "../sharing/in-force.ts";
-import { levelOf } from "../sharing/levels.ts";
+import { isHostLedAlias, levelOf } from "../sharing/levels.ts";
 import { knownAreas, loadPolicy } from "../sharing/policy.ts";
 import { type PolicyChange, type Report, withChange, wouldLeave } from "../sharing/report.ts";
 import {
@@ -58,7 +58,10 @@ export interface ProjectSummary {
   sharing: Level;
   /** Why: `allowed` for a level in force, else what makes the project share nothing. */
   sharingReason: Reason;
-  /** It has a git remote: the one name a team can match it by, which a level is bound to. */
+  /**
+   * It has a host-led git remote (`isHostLedAlias`): the one name a team can match it by,
+   * which a level is bound to. A remote that is a local path or a `file://` origin is none.
+   */
   remote: boolean;
   /** Memory is off for it. */
   disabled: boolean;
@@ -71,9 +74,18 @@ export interface ProjectSummary {
  */
 export function listProjects(db: Db, policy: SharingPolicy): ProjectSummary[] {
   type Counted = Omit<ProjectSummary, "sharing" | "sharingReason" | "remote" | "disabled"> & {
-    remote: number;
     disabled: number;
   };
+  // The one rule for "a name a team knows the project by" is isHostLedAlias (ADR 0025), so
+  // the remote aliases are read and judged in code, never by a pattern in SQL.
+  const named = new Set<number>();
+  for (const { projectId, alias } of db
+    .query<{ projectId: number; alias: string }, []>(
+      "SELECT project_id AS projectId, alias FROM project_aliases WHERE alias LIKE 'remote:%'",
+    )
+    .all()) {
+    if (isHostLedAlias(alias)) named.add(projectId);
+  }
   return db
     .query<Counted, []>(
       `SELECT p.id, p.name, p.key, p.disabled,
@@ -82,8 +94,7 @@ export function listProjects(db: Db, policy: SharingPolicy): ProjectSummary[] {
               (SELECT count(*) FROM memories m WHERE m.project_id = p.id AND m.status = 'superseded') AS superseded,
               (SELECT count(*) FROM memories m WHERE m.project_id = p.id AND m.status = 'active' AND m.stale = 1) AS stale,
               (SELECT max(x) FROM (SELECT max(last_seen_at) AS x FROM sessions s WHERE s.project_id = p.id
-                                   UNION ALL SELECT max(updated_at) FROM memories m WHERE m.project_id = p.id)) AS lastActivity,
-              EXISTS (SELECT 1 FROM project_aliases a WHERE a.project_id = p.id AND a.alias LIKE 'remote:%') AS remote
+                                   UNION ALL SELECT max(updated_at) FROM memories m WHERE m.project_id = p.id)) AS lastActivity
          FROM projects p
         ORDER BY lastActivity DESC NULLS LAST, p.id`,
     )
@@ -94,7 +105,7 @@ export function listProjects(db: Db, policy: SharingPolicy): ProjectSummary[] {
         ...row,
         sharing: level,
         sharingReason: reason,
-        remote: row.remote === 1,
+        remote: named.has(row.id),
         disabled: row.disabled === 1,
       };
     });
