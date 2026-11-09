@@ -51,12 +51,26 @@ export function resetKnowledgeLog(): void {
 
 /** What a context was already shown, as `<repo id>:<entry id>` keys. */
 export function alreadyShown(db: Db, sessionId: number, epoch: number): Set<string> {
+  // A row shown before the session started is not this session's: a path that removes a
+  // session row without the module's prune (0.6.0's compact after a rollback, a restore)
+  // leaves rows that the next session, given the freed id, must not read as its own.
   const rows = db
     .query<{ repo_id: number; entry_id: string }, [number, number]>(
-      "SELECT repo_id, entry_id FROM knowledge_shown WHERE session_id = ? AND context_epoch = ?",
+      `SELECT k.repo_id, k.entry_id FROM knowledge_shown k
+         JOIN sessions s ON s.id = k.session_id
+        WHERE k.session_id = ? AND k.context_epoch = ? AND k.at >= s.started_at`,
     )
     .all(sessionId, epoch);
   return new Set(rows.map((row) => shownKey(row.repo_id, row.entry_id)));
+}
+
+/** Drops the rows a gone session left under this session's id (see `alreadyShown`). */
+export function dropStaleShown(db: Db, sessionId: number): void {
+  db.run(
+    `DELETE FROM knowledge_shown
+      WHERE session_id = ? AND at < (SELECT started_at FROM sessions WHERE id = ?)`,
+    [sessionId, sessionId],
+  );
 }
 
 export interface ShownRow {
@@ -196,6 +210,7 @@ function forSessionStart(input: MomentInput, repoIds: number[]): string | null {
   // only) would add one check here and nothing else.
   const { db, sessionId, epoch, now, budgetChars } = input;
   return withWrite(db, () => {
+    dropStaleShown(db, sessionId);
     const shown = alreadyShown(db, sessionId, epoch);
     const pins = pinnedEntries(db, repoIds).filter(
       (pin) => !shown.has(shownKey(pin.repoId, pin.id)),

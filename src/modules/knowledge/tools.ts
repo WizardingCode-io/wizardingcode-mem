@@ -6,7 +6,6 @@ import { resolveProject } from "../../core/project.ts";
 import type { ModuleTool, ToolCall, ToolMode } from "../../engine/module.ts";
 import { makeJudge } from "../../judge/index.ts";
 import type { Judge } from "../../judge/types.ts";
-import { UNKNOWN_AGENT } from "../../mcp/agent-id.ts";
 import { inert } from "../../retrieve/render.ts";
 import { openDb } from "../../store/db.ts";
 import { logError } from "../../util/log.ts";
@@ -14,7 +13,14 @@ import { resolvePaths } from "../../util/paths.ts";
 import { clip } from "../../util/text.ts";
 import { searchTokens } from "../../util/words.ts";
 import { agentWriter, personAuthor } from "./author.ts";
-import { DEFAULT_AREAS, FIELD_MAX, parseTaxonomy, SLUG, TITLE_MAX } from "./entry.ts";
+import {
+  DEFAULT_AREAS,
+  FIELD_MAX,
+  parseTaxonomy,
+  SLUG,
+  TITLE_MAX,
+  UNKNOWN_AGENT,
+} from "./entry.ts";
 import { KnowledgeError } from "./errors.ts";
 import {
   browseEntries,

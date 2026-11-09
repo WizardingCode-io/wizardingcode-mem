@@ -6,6 +6,7 @@ import {
   readFileSync,
   renameSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
@@ -174,6 +175,38 @@ describe("refreshStale", () => {
     expect(refreshStale(store, 3)).toBe(0);
     expect(rows()).toEqual(before);
     expect(logLines("knowledge.refresh").length).toBe(logged + 1);
+  });
+
+  test("with the knowledge root a file, or its projects folder a link, nothing is forgotten and the refusal is logged once", () => {
+    // The states rebuild refuses (refuseLinkedRoots): the unattended refresh must refuse the
+    // same way, since every repository path then reads as absent or through a link.
+    const repos = fourRepos();
+    for (const repo of repos) commitByHand(repo);
+    const rows = () => [
+      count("SELECT count(*) AS n FROM knowledge_repos"),
+      count("SELECT count(*) AS n FROM knowledge_entries"),
+      count("SELECT count(*) AS n FROM knowledge_fts"),
+    ];
+    const before = rows();
+    const root = join(fx.dataDir, "knowledge");
+    renameSync(root, join(fx.dir, "root-away"));
+    writeFileSync(root, "not a folder\n");
+    let logged = logLines("knowledge.refresh").length;
+    expect(refreshStale(store, 3)).toBe(0);
+    expect(rows()).toEqual(before);
+    expect(logLines("knowledge.refresh").length).toBe(logged + 1);
+    rmSync(root);
+    renameSync(join(fx.dir, "root-away"), root);
+
+    const projects = join(root, "projects");
+    renameSync(projects, join(fx.dir, "projects-away"));
+    symlinkSync(join(fx.dir, "projects-away"), projects);
+    logged = logLines("knowledge.refresh").length;
+    expect(refreshStale(store, 3)).toBe(0);
+    expect(rows()).toEqual(before);
+    expect(logLines("knowledge.refresh").length).toBe(logged + 1);
+    rmSync(projects);
+    renameSync(join(fx.dir, "projects-away"), projects);
   });
 
   test("a repository whose lease another process holds is passed over, unlogged, uncounted", () => {

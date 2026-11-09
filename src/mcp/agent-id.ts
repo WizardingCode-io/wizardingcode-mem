@@ -1,10 +1,7 @@
 // Who an MCP call comes from: the agent id a knowledge proposal is written under. The id
 // is not authenticated. It tells an agent from a person, which is all the store's
 // guarantee needs, and one agent from another for the hourly rate.
-import { AGENT_ID } from "../modules/knowledge/entry.ts";
-
-/** The id when the host's name matches no row: the one fallback, used by the tools too. */
-export const UNKNOWN_AGENT = "mcp";
+import { AGENT_ID, UNKNOWN_AGENT } from "../modules/knowledge/entry.ts";
 
 /** One row per host the product installs into: a prefix of the lower-cased name, and its id. */
 const HOSTS: readonly (readonly [prefix: string, id: string])[] = [

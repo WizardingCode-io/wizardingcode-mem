@@ -10,6 +10,8 @@ export const KINDS = /^(?:knowledge|strategy|persona|pattern)$/;
 export const STATUSES = /^(?:active|draft|archived)$/;
 export const SLUG = /^[a-z0-9][a-z0-9-]*$/;
 export const AGENT_ID = /^[a-z0-9][a-z0-9-]*$/;
+/** The agent id of a host the MCP handshake does not name: the one fallback. */
+export const UNKNOWN_AGENT = "mcp";
 export const AREA_ID = /^[a-z0-9][a-z0-9-]*$/;
 /** Lower case only: ids name files, and a case-insensitive file system must not merge two. */
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;

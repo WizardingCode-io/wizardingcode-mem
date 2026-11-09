@@ -20,6 +20,7 @@ import {
   OPEN_DIR,
   openRepo,
   readRegularFile,
+  refuseLinkedRoots,
   repoPath,
   statusOf,
   taxonomyFor,
@@ -842,6 +843,10 @@ export function refreshStale(store: KnowledgeStore, limit: number): number {
       log(new Error(`${root} is not there; the index keeps its repositories`));
       return 0;
     }
+    // The states rebuild refuses (the root or its projects folder a link or a file): every
+    // repository path would then read as absent, or through the link. Refused, logged once,
+    // nothing forgotten, as rebuildAll's own rule.
+    refuseLinkedRoots(store.dataDir);
     for (const row of rows) {
       if (rebuilt >= limit) break;
       try {

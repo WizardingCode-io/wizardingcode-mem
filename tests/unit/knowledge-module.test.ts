@@ -664,6 +664,35 @@ describe("session start", () => {
     expect(block(start("s2"))).toBe(before);
   });
 
+  test("a session that reuses a removed session's id is shown the pins: rows older than its start are not its own", () => {
+    // A session row removed by a path that does not prune the shown rows (0.6.0's compact
+    // after a rollback, a restore). SQLite gives the next session the freed id.
+    threePins();
+    expect(pinLines(block(start("s1")))).toEqual(THREE_LINES);
+    const removed = fx.db.query<{ id: number }, []>("SELECT max(id) AS id FROM sessions").get();
+    const id = removed?.id ?? -1;
+    fx.db.run("DELETE FROM sessions WHERE id = ?", [id]);
+    const shownOf = (session: number) =>
+      fx.db
+        .query<{ n: number }, [number]>(
+          "SELECT count(*) AS n FROM knowledge_shown WHERE session_id = ?",
+        )
+        .get(session)?.n;
+    expect(shownOf(id)).toBe(3);
+    expect(pinLines(block(start("s2")))).toEqual(THREE_LINES);
+    const reused = fx.db.query<{ id: number }, []>("SELECT max(id) AS id FROM sessions").get();
+    expect(reused?.id).toBe(id);
+    // The stale rows are gone and the new session's three are there.
+    expect(shownOf(id)).toBe(3);
+    expect(
+      fx.db
+        .query<{ n: number }, [number]>(
+          "SELECT count(*) AS n FROM knowledge_shown k JOIN sessions s ON s.id = k.session_id WHERE k.session_id = ? AND k.at < s.started_at",
+        )
+        .get(id)?.n,
+    ).toBe(0);
+  });
+
   test("every session start shows them: a second session, and a project with earlier sessions", () => {
     // Sessions of the project before any pin existed.
     expect(block(start("earlier-1"))).toBeNull();
