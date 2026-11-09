@@ -57,7 +57,10 @@ export interface Settings {
   uiAutoOpen: boolean;
   /** Where the database lives when it was moved away from the data directory. */
   storeDir: string | null;
-  /** The modules on, as the comma list it was given; null means the default (memory). */
+  /**
+   * The modules on, as the comma list it was given; null means the default,
+   * `memory,knowledge`. An explicit `memory` turns knowledge off.
+   */
   modules: string | null;
   /**
    * The roots and the root-qualified areas allowed to leave, as in force and sorted, and
@@ -88,7 +91,7 @@ export const DEFAULTS = {
   uiAutoOpen: true,
   backupEveryHours: 24,
   backupKeep: 10,
-  modules: "memory",
+  modules: "memory,knowledge",
 } as const;
 
 const RETENTION = { min: 7, max: 3650 };

@@ -6,6 +6,9 @@ import { loadModel } from "../../embed/model.ts";
 import { makeJudge } from "../../judge/index.ts";
 import { proposeRulesSafely } from "../../links/rules.ts";
 import { suggestLinksSafely } from "../../links/suggest.ts";
+import { refreshStale } from "../../modules/knowledge/index-store.ts";
+import { REFRESH_PER_DRAIN } from "../../modules/knowledge/policy.ts";
+import { openStore } from "../../modules/knowledge/store-open.ts";
 import { type Db, openDb } from "../../store/db.ts";
 import { logError } from "../../util/log.ts";
 import { resolvePaths } from "../../util/paths.ts";
@@ -46,6 +49,13 @@ export async function run(): Promise<number> {
     suggestLinksSafely(db, Date.now());
     // The author's own rules: proposed from the newest conventions and decisions, bounded, never fatal.
     await proposeRulesSafely(db, { judge, now: Date.now(), model });
+    // The knowledge files that changed since they were indexed: the hooks read no file, so
+    // this is how a commit made elsewhere reaches them. Bounded, never fatal.
+    try {
+      refreshStale(openStore({ db, dataDir }), REFRESH_PER_DRAIN);
+    } catch (error) {
+      logError("knowledge.refresh", error);
+    }
     return 0;
   } catch (error) {
     logError("distill", error);

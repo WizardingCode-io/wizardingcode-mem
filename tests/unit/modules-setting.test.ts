@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { EngineModule } from "../../src/engine/module.ts";
 import { BUILT_IN, enabledModules, moduleAllowed } from "../../src/engine/modules.ts";
+import { knowledge } from "../../src/modules/knowledge/index.ts";
 import { memory } from "../../src/modules/memory/index.ts";
 import { echo } from "../fixtures/echo-module.ts";
 
-const AVAILABLE: readonly EngineModule[] = [memory, echo];
+const AVAILABLE: readonly EngineModule[] = [memory, knowledge, echo];
 const ids = (modules: EngineModule[]) => modules.map((module) => module.id);
 
 /** Parses with a log the test can read, so nothing reaches the real log. */
@@ -15,8 +16,8 @@ function parse(raw: string | undefined, available: readonly EngineModule[] = AVA
 }
 
 describe("BUILT_IN", () => {
-  test("is memory alone", () => {
-    expect(ids([...BUILT_IN])).toEqual(["memory"]);
+  test("is memory, then knowledge", () => {
+    expect(ids([...BUILT_IN])).toEqual(["memory", "knowledge"]);
   });
 });
 
@@ -27,14 +28,14 @@ describe("moduleAllowed", () => {
 });
 
 describe("enabledModules", () => {
-  test("unset, empty, whitespace or only commas mean memory alone", () => {
+  test("unset, empty, whitespace or only commas mean the default, memory and knowledge", () => {
     for (const raw of [undefined, "", "   ", " , ,"]) {
-      expect(parse(raw)).toEqual({ ids: ["memory"], logged: [] });
+      expect(parse(raw)).toEqual({ ids: ["memory", "knowledge"], logged: [] });
     }
   });
 
   test("defaults to the built-in list", () => {
-    expect(ids(enabledModules(undefined))).toEqual(["memory"]);
+    expect(ids(enabledModules(undefined))).toEqual(["memory", "knowledge"]);
     expect(ids(enabledModules("memory"))).toEqual(["memory"]);
   });
 
@@ -47,14 +48,14 @@ describe("enabledModules", () => {
   });
 
   test("unknown ids are ignored and told once each", () => {
-    expect(parse("memory,knowledge,knowledge,personas")).toEqual({
+    expect(parse("memory,nonesuch,nonesuch,personas")).toEqual({
       ids: ["memory"],
-      logged: ["knowledge", "personas"],
+      logged: ["nonesuch", "personas"],
     });
   });
 
   test("memory is always on: a list without it still has it, first", () => {
     expect(parse("echo").ids).toEqual(["memory", "echo"]);
-    expect(parse("knowledge")).toEqual({ ids: ["memory"], logged: ["knowledge"] });
+    expect(parse("nonesuch")).toEqual({ ids: ["memory"], logged: ["nonesuch"] });
   });
 });

@@ -36,7 +36,7 @@ export interface HookDeps {
   spawnHistoryIndex?: (transcriptPath: string, agent: string) => void;
   /**
    * The modules on, in the engine's order; asked only when a moment injects. Default: the
-   * built-in default, memory alone.
+   * settings' default list, memory and knowledge.
    */
   modules?: () => readonly EngineModule[];
   /** Told about failures that were contained here rather than thrown; `scope` names the module when one failed. */

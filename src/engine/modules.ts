@@ -1,13 +1,14 @@
+import { knowledge } from "../modules/knowledge/index.ts";
 import { memory } from "../modules/memory/index.ts";
 import { DEFAULTS } from "../settings/settings.ts";
 import { logError } from "../util/log.ts";
 import type { EngineModule } from "./module.ts";
 
 // Which modules this binary has, and which of them are on. The order here is the order the
-// composer asks them in (memory first, ruling F3); the setting only switches them.
+// composer joins their text in (memory first, ruling F3); the setting only switches them.
 
 /** Every module shipped in this binary, in the engine's order. */
-export const BUILT_IN: readonly EngineModule[] = [memory];
+export const BUILT_IN: readonly EngineModule[] = [memory, knowledge];
 
 /** The modules on when the setting names none: the settings' own default. */
 const DEFAULT_IDS = DEFAULTS.modules.split(",");
@@ -30,9 +31,10 @@ function logUnknown(id: string): void {
 
 /**
  * The modules on, from `WIZARDINGCODE_MODULES` (a comma list). Unset or blank means the
- * default, memory alone; otherwise the known ids named plus memory, which cannot be switched
- * off in this version (ruling F9: stopping it for a project is the per-project "memory off"). Unknown ids are ignored and told once each; duplicates collapse; the
- * order is always `available`'s.
+ * settings' default, `memory,knowledge`; otherwise the known ids named plus memory, which
+ * cannot be switched off in this version (ruling F9: stopping it for a project is the
+ * per-project "memory off"), so an explicit `memory` turns knowledge off. Unknown ids are
+ * ignored and told once each; duplicates collapse; the order is always `available`'s.
  */
 export function enabledModules(
   raw: string | undefined | null,

@@ -146,7 +146,7 @@ describe("the bridge follows the setting", () => {
     const result = await runCliWith(
       {
         input: JSON.stringify({ query: "x" }),
-        env: { ...env, WIZARDINGCODE_MODULES: "knowledge" },
+        env: { ...env, WIZARDINGCODE_MODULES: "nonesuch" },
       },
       "tool",
       "memory_search",

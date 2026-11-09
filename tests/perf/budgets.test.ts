@@ -9,10 +9,14 @@ import {
   readRepoState,
   rebuildRepo,
   replaceRepoRows,
+  searchEntries,
 } from "../../src/modules/knowledge/index-store.ts";
+import { CANDIDATES, knowledgeEvidence } from "../../src/modules/knowledge/policy.ts";
 import { ensureRepo, openRepo } from "../../src/modules/knowledge/repo.ts";
 import { openStore } from "../../src/modules/knowledge/store-open.ts";
 import type { KnowledgeStore, Repo, ScopeRef } from "../../src/modules/knowledge/types.ts";
+import { visibleRepos } from "../../src/modules/knowledge/visible.ts";
+import { buildQuery, matchTerms } from "../../src/retrieve/query.ts";
 import { openDb, withWrite } from "../../src/store/db.ts";
 import { insertMemory } from "../../src/store/memories.ts";
 import { hostBinary, runBinary } from "../helpers/binary.ts";
@@ -328,6 +332,24 @@ describe(`the knowledge corpus of ${KNOWLEDGE_ROWS} entries`, () => {
     }
   });
 
+  test("the floor lets through the entry that holds the first measured prompt's words", () => {
+    const db = openDb({ dataDir, busyTimeoutMs: 5000 });
+    try {
+      const [, firstMeasured] = measuredPrompts(2);
+      const query = buildQuery(firstMeasured as string);
+      if (query === null) throw new Error("the first measured prompt gives no query");
+      const repoIds = visibleRepos(db, resolveProject(db, project).id).map((repo) => repo.id);
+      const candidates = searchEntries(db, matchTerms(query.match), repoIds, {}, null, CANDIDATES);
+      // The hook's search and floor, as `contribute` runs them: the entry is the best
+      // candidate, and it passes. Every measured prompt shares the template's own words with
+      // it, so in the latency cases it is shown at the unmeasured first run of a session.
+      expect(candidates[0]?.slug).toBe("the-first-measured-prompt");
+      expect(knowledgeEvidence(query, candidates[0] as (typeof candidates)[number])).toBe("words");
+    } finally {
+      db.close();
+    }
+  });
+
   test(`a rebuild's write transaction at ${VISIBLE_ENTRIES} entries takes under ${REBUILD_TRANSACTION_MS} ms`, () => {
     const db = openDb({ dataDir, busyTimeoutMs: 5000 });
     try {
@@ -358,6 +380,9 @@ describe(`hook latency with ${MEMORIES} memories`, () => {
     console.log(`prompt: ${result.shown}`);
     // The measurement only means something if retrieval actually ran and found things.
     expect(result.outputs.filter((out) => out !== "").length).toBeGreaterThan(RUNS / 2);
+    // Knowledge searched too, and its floor let entries through: the time measured includes
+    // that search and its record.
+    expect(result.outputs.some((out) => out.includes("<wizardingcode-knowledge>"))).toBe(true);
     expect(result.value).toBeLessThanOrEqual(BUDGET_MS.prompt);
   }, 120_000);
 

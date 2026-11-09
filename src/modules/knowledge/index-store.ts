@@ -1,9 +1,12 @@
 // The index of the knowledge store: rows in the engine's database, rebuilt from the files.
 // The files in the repositories are the truth; nothing here is the only copy of anything.
 import { join } from "node:path";
-import { withWrite } from "../../store/db.ts";
+import { type Db, withWrite } from "../../store/db.ts";
+import { logError } from "../../util/log.ts";
+import { anyOf } from "../../util/words.ts";
 import { parseEntry, parseProposal, UUID, unreadEntry, unreadProposal } from "./entry.ts";
 import { isRefusal, KnowledgeError } from "./errors.ts";
+import { BM25_WEIGHTS } from "./policy.ts";
 import {
   DECIDED_DIR,
   ENTRIES_DIR,
@@ -752,4 +755,186 @@ export function ensureFresh(store: KnowledgeStore, repo: Repo): void {
     .get(repo.id);
   if (row?.head === headOf(repo.path) && row.fingerprint === fingerprintOf(repo.path)) return;
   rebuildRepo(store, repo);
+}
+
+// --- The drain's refresh --------------------------------------------------------------
+
+interface HeldRepo {
+  id: number;
+  scope: ScopeRef["scope"];
+  project_id: number;
+  path: string;
+  head: string | null;
+  fingerprint: string | null;
+}
+
+const refOf = (row: HeldRepo): ScopeRef =>
+  row.scope === "project" ? { scope: "project", projectId: row.project_id } : { scope: row.scope };
+
+/**
+ * One repository of the refresh: forgotten when its folder is gone, left alone when the
+ * index holds what the disk holds (`ensureFresh`'s comparison), otherwise rebuilt under its
+ * lease in its own transaction. True only for a rebuild.
+ */
+function refreshOne(store: KnowledgeStore, row: HeldRepo): boolean {
+  const path = repoPath(store.dataDir, row.path);
+  if (kindAt(path) === "absent") {
+    withWrite(store.db, () => {
+      dropRepoRows(store.db, row.id);
+      store.db.run("DELETE FROM knowledge_repos WHERE id = ?", [row.id]);
+    });
+    return false;
+  }
+  if (row.head === headOf(path) && row.fingerprint === fingerprintOf(path)) return false;
+  const repo = openRepo(store, refOf(row));
+  if (repo === null) return false;
+  withRepoLeases(store, [repo.relative], () => rebuildRepo(store, repo));
+  return true;
+}
+
+/**
+ * The drain's refresh: brings into the index the repositories whose files changed, so
+ * that the hooks, which read no file, see them. Every repository the index knows is
+ * compared with the disk, the least recently indexed first, and at most `limit` that
+ * differ are rebuilt. A repository whose folder is gone is forgotten, as `rebuildAll`
+ * forgets it; with the knowledge root itself absent nothing is forgotten, since the rows
+ * may be another data directory's. A lease held elsewhere passes a repository over; any
+ * other failure is logged; neither counts, and none leaves this function. Returns the
+ * repositories rebuilt.
+ */
+export function refreshStale(store: KnowledgeStore, limit: number): number {
+  const log = (error: unknown) => logError("knowledge.refresh", error, store.dataDir);
+  let rebuilt = 0;
+  try {
+    requireSchema(store);
+    const rows = store.db
+      .query<HeldRepo, []>(
+        "SELECT id, scope, project_id, path, head, fingerprint FROM knowledge_repos ORDER BY indexed_at, id",
+      )
+      .all();
+    if (rows.length === 0) return 0;
+    const root = knowledgeRoot(store.dataDir);
+    if (kindAt(root) === "absent") {
+      log(new Error(`${root} is not there; the index keeps its repositories`));
+      return 0;
+    }
+    for (const row of rows) {
+      if (rebuilt >= limit) break;
+      try {
+        if (refreshOne(store, row)) rebuilt++;
+      } catch (error) {
+        if (!(error instanceof KnowledgeError && error.code === "locked")) log(error);
+      }
+    }
+  } catch (error) {
+    log(error);
+  }
+  return rebuilt;
+}
+
+// --- Reading the index on the hook path and in the tools ----------------------------------
+
+/** An indexed entry as a search finds it: where it is, and how well it matched. */
+export type Hit = KnowledgeEntry & {
+  repoId: number;
+  scope: "workspace" | "project" | "shared";
+  hash: string;
+  /** bm25's score, lower is better; 0 outside a search. */
+  bm25: number;
+};
+
+/**
+ * The one match string the search table is given: any of the tokens, each quoted by
+ * `anyOf`, confined to the text columns so that no term reaches an id column. A token is
+ * one term: a word, or an identifier the index reads as a phrase. Null with no token.
+ */
+export function ftsMatch(tokens: string[]): string | null {
+  const terms = [...new Set(tokens.filter((token) => token !== ""))];
+  if (terms.length === 0) return null;
+  return `{title area context subject body} : (${anyOf(terms)})`;
+}
+
+interface HitRow extends EntryRow {
+  repo_id: number;
+  scope: Hit["scope"];
+  hash: string;
+  rank: number;
+}
+
+const toHit = (row: HitRow): Hit => ({
+  id: row.id,
+  slug: row.slug,
+  title: row.title,
+  kind: row.kind,
+  area: row.area,
+  context: row.context,
+  subject: row.subject,
+  status: row.status,
+  author: row.author,
+  version: row.version,
+  created: row.created,
+  updated: row.updated,
+  supersedes: row.supersedes,
+  pinned: row.pinned === 1,
+  body: row.body,
+  extra: [],
+  problem: row.problem,
+  repoId: row.repo_id,
+  scope: row.scope,
+  hash: row.hash,
+  bm25: row.rank,
+});
+
+/** The key of an entry a context was shown: `<repo id>:<entry id>`. */
+export const shownKey = (repoId: number, entryId: string) => `${repoId}:${entryId}`;
+
+/**
+ * The active, problem-free entries of the given repositories that match any of the tokens,
+ * best first by bm25 with the title weighted highest. The repositories, the filters and
+ * the entries already shown are confined inside the query, so another project's entry is
+ * never a candidate. Takes a database, not a store, since a hook calls it; it does not
+ * check the schema, which its callers do.
+ */
+export function searchEntries(
+  db: Db,
+  tokens: string[],
+  repoIds: number[],
+  filters: { area?: string; kind?: string; without?: { repoId: number; entryId: string } },
+  excludeShown: Set<string> | null,
+  limit: number,
+): Hit[] {
+  const match = ftsMatch(tokens);
+  if (match === null || repoIds.length === 0 || limit <= 0) return [];
+  const without = filters.without ?? null;
+  return db
+    .query<HitRow, (string | number | null)[]>(
+      `SELECT e.id, e.slug, e.title, e.kind, e.area, e.context, e.subject, e.status, e.author,
+              e.version, e.created, e.updated, e.supersedes, e.pinned, e.body, e.problem,
+              e.repo_id, e.hash, r.scope, bm25(knowledge_fts, ${BM25_WEIGHTS.join(", ")}) AS rank
+         FROM knowledge_fts f
+         JOIN knowledge_entries e ON e.repo_id = f.repo_id AND e.id = f.entry_id
+         JOIN knowledge_repos r ON r.id = e.repo_id
+        WHERE knowledge_fts MATCH ?
+          AND f.repo_id IN (${repoIds.map(() => "?").join(", ")})
+          AND e.status = 'active' AND e.problem IS NULL
+          AND (? IS NULL OR e.area = ?)
+          AND (? IS NULL OR e.kind = ?)
+          AND NOT (e.repo_id IS ? AND e.id IS ?)
+          AND (e.repo_id || ':' || e.id) NOT IN (SELECT value FROM json_each(?))
+        ORDER BY rank, e.repo_id, e.slug
+        LIMIT ?`,
+    )
+    .all(
+      match,
+      ...repoIds,
+      filters.area ?? null,
+      filters.area ?? null,
+      filters.kind ?? null,
+      filters.kind ?? null,
+      without?.repoId ?? null,
+      without?.entryId ?? null,
+      JSON.stringify([...(excludeShown ?? [])]),
+      limit,
+    )
+    .map(toHit);
 }
