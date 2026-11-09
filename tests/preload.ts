@@ -38,4 +38,24 @@ for (const name of PATH_OVERRIDES) delete process.env[name];
 // Behaviour, not a path, but a shell that exports it would change the module set in every
 // spawned hook, server and viewer.
 delete process.env.WIZARDINGCODE_MODULES;
+// The knowledge store names an author and runs git. A shell that exports these would change
+// every author and every git call in the tests, and a suite started from a git hook would
+// write into the outer repository's index.
+const GIT_AND_AUTHOR = [
+  "WIZARDINGCODE_MEM_AUTHOR",
+  "GIT_DIR",
+  "GIT_WORK_TREE",
+  "GIT_INDEX_FILE",
+  "GIT_OBJECT_DIRECTORY",
+  "GIT_CONFIG_PARAMETERS",
+  "GIT_CONFIG_COUNT",
+  "GIT_CEILING_DIRECTORIES",
+  "GIT_AUTHOR_NAME",
+  "GIT_AUTHOR_EMAIL",
+  "GIT_COMMITTER_NAME",
+  "GIT_COMMITTER_EMAIL",
+  "GIT_CONFIG_GLOBAL",
+  "GIT_CONFIG_NOSYSTEM",
+];
+for (const name of GIT_AND_AUTHOR) delete process.env[name];
 process.on("exit", () => rmSync(testHome, { recursive: true, force: true }));
