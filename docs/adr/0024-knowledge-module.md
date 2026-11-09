@@ -83,6 +83,7 @@ Every git call goes through one runner (`runGit`): a synchronous process killed 
 - git also reads a repository's configuration from the directory a `.git/commondir` file names, and from `.git/config.worktree` when `extensions.worktreeConfig` is set. Both files are refused, so the one file read is the one git reads. A `.git/objects/info/alternates` file, which has git read objects from another repository on the disk, is refused with them.
 - A new repository is created with the object and ref formats the store reads (`init.defaultObjectFormat=sha1`, `init.defaultRefFormat=files`). git writes other formats to `.git/config` as extensions, which the rule above refuses.
 - A folder the store did not make is refused before git runs and before anything is written: a repository folder that is a link, a `.git` that is a file or a link (a gitfile names another repository, and every commit would land there), an `entries` or `proposals` folder that is a link, a link where the store keeps `knowledge.json`, `taxonomy.md` or `.gitignore`, and a `.gitmodules` file.
+- A `.git` that holds anything but regular files and folders is refused. git writes inside it: its commit message and a line of its log in place, objects and branches into its folders. Through a link there, git wrote into a file of the person's, and through linked `refs` and `objects` folders it committed into another repository. Every entry is read with its kind, at every depth, except the files inside the object folders, which git only reads or replaces whole.
 - git never runs in a repository nested inside a knowledge repository. `git status` is always given `--ignore-submodules=all`, which wins over every setting. Without it, git runs a second `git status` inside the nested repository, under that repository's own configuration, which the store never checked. Every git call also carries `diff.ignoreSubmodules=all` and `submodule.recurse=false` as a second layer; a `.gitmodules` setting overrides those two, and only the flag wins over it. `adopt` refuses a folder that is a git repository of its own, and names it.
 - A path is followed only through folders. Where a folder on the way to a file, inside the repository, is a link, the file beyond it is another folder's: the store does not read it as its own, restore it or remove it, whatever a record says.
 - Paths are passed to git as literal paths (`GIT_LITERAL_PATHSPECS`): a file a person named with `*` or `[` never matches another.
@@ -100,7 +101,7 @@ Before its first change to the working tree an operation writes an intent record
 
 A process that died before its commit leaves the record behind, and the next open of the repository acts on it, each path by itself. A path that is clean against HEAD needs nothing: its commit landed, or the operation never reached it. Of the others, only a path that is still as the engine left it is put back. A path that is not as the engine left it may be the person's work: it is taken out of the index and left for `adopt`, never restored from HEAD and never deleted. A record that does not say what was written puts nothing back. The revert is skipped while another process holds the repository's lease, since that operation is running, not interrupted. What the revert did is written to the log and, from the command line, to standard error.
 
-The record sits in a folder that may have been dropped there, so it is acted on only when it is one the store could have written: a known operation, and no path but the manifest, the taxonomy and files under `entries/` and `proposals/`. A record that names any other path (`.git/config`, for one) is removed with the kept bytes it names, nothing is put back, and the person is told. Without this rule, the revert would write where the record says, after the configuration was checked. The record and the kept bytes are read as regular files, never through a link.
+The record sits in a folder that may have been dropped there, so it is acted on only when it is one the store could have written: a known operation, and no path but the manifest, the taxonomy and files under `entries/` and `proposals/`. A record that names any other path (`.git/config`, for one) is removed with the kept bytes it names, nothing is put back, and the person is told. Without this rule, the revert would write where the record says, after the configuration was checked. The record and the kept bytes are read as regular files, never through a link, and whole: an adopt writes them as large as the files it adopts, so a cap on reading them would lose what it kept.
 
 ## Proposals and the quota
 
@@ -112,7 +113,7 @@ Accepting requires an id that is a UUID (before any path is built), a proposal t
 
 ## adopt
 
-`wizardingcode-mem knowledge adopt` commits what a person changed outside the engine, as the person, in one commit that lists the paths. An entry file edited or added by hand gets an id when it has none, the next version (1 for a new file; otherwise one past the higher of HEAD's version and the number in the file), `updated` and the person as author; everything else stays as they left it. A file that is still not a valid entry is committed exactly as it is and returned with its problem. A file the person deleted is recorded as deleted. `taxonomy.md`, `knowledge.json` and proposal files are committed as they are.
+`wizardingcode-mem knowledge adopt` commits what a person changed outside the engine, as the person, in one commit that lists the paths, one line each: a line break or another control character in a file's name is written as `?` there. An entry file edited or added by hand gets an id when it has none, the next version (1 for a new file; otherwise one past the higher of HEAD's version and the number in the file), `updated` and the person as author; everything else stays as they left it. A file that is still not a valid entry is committed exactly as it is and returned with its problem. A file the person deleted is recorded as deleted. `taxonomy.md`, `knowledge.json` and proposal files are committed as they are.
 
 Before rewriting anything, adopt writes its record and then keeps the bytes of the entry files under `.git/`, under the name the record gives, so that no kept bytes are left without a record to remove them. When the commit fails, its paths are only unstaged and the bytes are written back: the person's work exists nowhere else, so it is never restored from HEAD. An adopt that was interrupted gives the kept bytes back at the next open, and only for a file the person did not go on editing: a later edit wins over the older bytes. Kept bytes are written back only to a file directly under `entries/`. The adopt's record says what it leaves at every path, a removal included, so an interrupted adopt is undone path by path.
 
@@ -151,7 +152,7 @@ The only personal data this part holds is the person's author name (the `WIZARDI
 
 **Retention.** As long as the repository's history. The engine never rewrites a commit and never deletes an entry, so a name written once stays until a person removes it. This differs from memory, where `compact` prunes old records.
 
-**Erasure.** There is no command for it in this part. A new name applies to what is written from then on: change the setting. To remove a name already written from one repository, a person rewrites that repository's history with git (the author and committer of its commits, and the `author` and `decided_by` lines in its files), then runs `wizardingcode-mem knowledge rebuild`, which replaces the index rows from the files. Deleting a repository's folder and running `rebuild` removes everything it held, the index rows included. A command that does this is a later part's work, and is needed before knowledge is shared with a team, where a name leaves the machine.
+**Erasure.** There is no command for it in this part. A new name applies to what is written from then on: change the setting. To remove a name already written from one repository, a person rewrites that repository's history with git (the author and committer of its commits, and the `author` and `decided_by` lines in its files), then runs `wizardingcode-mem knowledge rebuild`, which replaces the index rows from the files. Deleting a repository's folder and running `rebuild` removes everything it held, the index rows included. A repository the store refuses is not rebuilt: its rows, the name among them, stay as they were last indexed until it is accepted again or its folder is removed. A command that does this is a later part's work, and is needed before knowledge is shared with a team, where a name leaves the machine.
 
 `wizardingcode-mem backup` copies the database, and the database now holds the index: the text of entries and the names above go wherever backups are configured to go (a folder, or a bucket).
 
@@ -179,17 +180,17 @@ Decided proposals are never deleted, and each folder is indexed up to 5,000 name
 
 A write is three to eleven git calls (`status`, `add`, `commit`; `init`, `add`, `commit` for each of up to two repositories created; `--version` and the `user.name` lookup once per process), and the store blocks its own process for them. No hook calls the store.
 
-Measured on 2026-11-09 on one machine (an Apple silicon Mac, git 2.54.0, a local SSD), 30 runs of each operation in a repository of about 30 entries, each entry about 400 bytes of body:
+Measured on 2026-11-09 on one machine (an Apple silicon Mac, git 2.54.0, a local SSD), 30 runs of each operation in a repository of about 30 entries, each entry about 400 bytes of body. These are the figures of the code as it stands, with every check on the repository and on its `.git` in place:
 
 | Operation | p50 | p95 |
 | :- | :- | :- |
-| The first write, which creates the repository | 124 ms (one run) | |
-| A person's new entry | 51 ms | 78 ms |
-| A person's change | 49 ms | 67 ms |
-| An agent's proposal | 48 ms | 66 ms |
-| Accepting a proposal | 79 ms | 93 ms |
-| Reading an entry | under 1 ms | under 1 ms |
-| Rebuilding the index of 31 entries and 30 proposals | 17 ms (one run) | |
+| The first write, which creates the repository | 92 ms (one run) | |
+| A person's new entry | 44 ms | 52 ms |
+| A person's change | 44 ms | 53 ms |
+| An agent's proposal | 44 ms | 50 ms |
+| Accepting a proposal | 71 ms | 77 ms |
+| Reading an entry | 1 ms | 1 ms |
+| Rebuilding the index of 31 entries and 30 proposals | 15 ms (one run) | |
 
 Not measured: a repository of thousands of entries, a slow or network disk, Linux, Windows. The next part runs one write per tool call and measures again before accepting the cost there.
 
@@ -198,4 +199,4 @@ Not measured: a repository of thousands of entries, a slow or network disk, Linu
 - **Knowledge for the agent**: the module in the composer, the tools to search, read and propose, the judgements of duplicates and contradictions through the `Judge` interface, the full-text index, and the reversal of ADR 0019's note of 2026-10-13 in that ADR's text.
 - **The viewer**: the Knowledge and Personas views, deciding proposals, editing the taxonomy.
 - **The sharing policy** (ADR 0025, not written yet): what may leave the machine, per project and per area.
-- **The team server and the sync** (ADR 0026, not written yet): members, devices, the server's copy of what is shared, and the author's name replaced by the member's. If the sync writes a setting into a repository's `.git/config` (a remote, a branch), it adds that setting to the list of allowed ones in the same release: a binary without it refuses the repository.
+- **The team server and the sync** (ADR 0026, not written yet): members, devices, the server's copy of what is shared, and the author's name replaced by the member's. If the sync writes a setting into a repository's `.git/config` (a remote, a branch), it adds that setting to the list of allowed ones in the same release: a binary without it refuses the repository. The same holds for a new operation that leaves a record: a binary that does not know its name removes the record, and the kept bytes it names, without putting anything back.

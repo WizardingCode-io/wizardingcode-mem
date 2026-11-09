@@ -4,7 +4,7 @@ import { lstatSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { withWrite } from "../../store/db.ts";
 import { parseEntry, parseProposal, UUID, unreadEntry, unreadProposal } from "./entry.ts";
-import { KnowledgeError } from "./errors.ts";
+import { isRefusal, KnowledgeError } from "./errors.ts";
 import {
   DECIDED_DIR,
   ENTRIES_DIR,
@@ -534,6 +534,41 @@ export function rebuildRepo(store: KnowledgeStore, repo: Repo): RebuildResult {
   };
 }
 
+/** What a command over several repositories did: one result each, or why one was refused. */
+export type InEachRepo<T> = ReturnType<typeof listRepos> & {
+  results: Map<string, T>;
+  /** The repositories the store refused, each with why. */
+  refused: Map<string, string>;
+};
+
+/**
+ * Opens each listed repository of a scope (every scope when none is given) and does
+ * `work` in it. A repository the store refuses, at its opening or during the work, is set
+ * aside with why and does not stop the others; any other failure stops the command. A
+ * listed folder with no repository in it has no result. The one place this rule lives,
+ * for `rebuild`, `list` and `adopt`.
+ */
+export function inEachRepo<T>(
+  store: KnowledgeStore,
+  scope: ScopeRef["scope"] | undefined,
+  work: (repo: Repo) => T,
+): InEachRepo<T> {
+  const listed = listRepos(store);
+  const repos = listed.repos.filter((repo) => scope === undefined || repo.ref.scope === scope);
+  const results = new Map<string, T>();
+  const refused = new Map<string, string>();
+  for (const found of repos) {
+    try {
+      const repo = openRepo(store, found.ref);
+      if (repo !== null) results.set(repo.relative, work(repo));
+    } catch (error) {
+      if (!isRefusal(error)) throw error;
+      refused.set(found.relative, error.message);
+    }
+  }
+  return { ...listed, repos, results, refused };
+}
+
 /**
  * Rebuilds every repository under the data directory (or every one of a scope), and
  * forgets the rows of repositories whose folder is gone. A project folder is mapped to its
@@ -542,29 +577,11 @@ export function rebuildRepo(store: KnowledgeStore, repo: Repo): RebuildResult {
 export function rebuildAll(
   store: KnowledgeStore,
   scope?: ScopeRef["scope"],
-): ReturnType<typeof listRepos> & {
-  results: Map<string, RebuildResult>;
-  /** The repositories the store refused, each with why: the others are rebuilt all the same. */
-  refused: Map<string, string>;
-} {
+): InEachRepo<RebuildResult> {
   requireSchema(store);
-  const listed = listRepos(store);
-  const repos = listed.repos.filter((repo) => scope === undefined || repo.ref.scope === scope);
-  const results = new Map<string, RebuildResult>();
-  const refused = new Map<string, string>();
-  for (const found of repos) {
-    try {
-      const repo = openRepo(store, found.ref);
-      if (repo === null) continue;
-      results.set(
-        repo.relative,
-        withRepoLeases(store, [repo.relative], () => rebuildRepo(store, repo)),
-      );
-    } catch (error) {
-      if (!(error instanceof KnowledgeError && error.code === "invalid")) throw error;
-      refused.set(found.relative, error.message);
-    }
-  }
+  const all = inEachRepo(store, scope, (repo) =>
+    withRepoLeases(store, [repo.relative], () => rebuildRepo(store, repo)),
+  );
   const rows = store.db
     .query<{ id: number; scope: string; path: string }, []>(
       "SELECT id, scope, path FROM knowledge_repos",
@@ -580,7 +597,7 @@ export function rebuildAll(
       store.db.run("DELETE FROM knowledge_repos WHERE id = ?", [row.id]);
     });
   }
-  return { ...listed, repos, results, refused };
+  return all;
 }
 
 /** Rebuilds the repository's rows when its HEAD or its fingerprint is not what was indexed. */

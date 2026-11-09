@@ -4,13 +4,14 @@ import { personAuthor } from "../../modules/knowledge/author.ts";
 import { KnowledgeError } from "../../modules/knowledge/errors.ts";
 import {
   ensureFresh,
+  type InEachRepo,
+  inEachRepo,
   listEntries,
   listProposals,
   type RebuildResult,
   rebuildAll,
 } from "../../modules/knowledge/index-store.ts";
-import { openRepo, withRepoLeases } from "../../modules/knowledge/repo.ts";
-import { listRepos } from "../../modules/knowledge/resolve.ts";
+import { withRepoLeases } from "../../modules/knowledge/repo.ts";
 import {
   acceptProposal,
   adopt,
@@ -19,7 +20,7 @@ import {
 } from "../../modules/knowledge/store.ts";
 import { openStore } from "../../modules/knowledge/store-open.ts";
 import { addArea, removeArea, renameArea } from "../../modules/knowledge/taxonomy.ts";
-import type { KnowledgeStore, Repo, ScopeRef } from "../../modules/knowledge/types.ts";
+import type { KnowledgeStore, ScopeRef } from "../../modules/knowledge/types.ts";
 import { type Db, openDb } from "../../store/db.ts";
 import { logError } from "../../util/log.ts";
 import { resolvePaths } from "../../util/paths.ts";
@@ -210,19 +211,18 @@ function rebuildLine(relative: string, result: RebuildResult): string {
 }
 
 /**
- * The repositories the store refused during a command, each said on standard error. One
- * of them does not stop the command for the others; the command then exits with 1.
+ * The repositories the store refused during a command. One of them does not stop the
+ * command for the others (`inEachRepo`); the command then exits with 1.
  */
 type Refused = string[];
 
-function refuse(refused: Refused, relative: string, message: string): void {
-  refused.push(relative);
-  process.stderr.write(`wizardingcode-mem: ${relative}: ${message}\n`);
+/** Says each refused repository on standard error, and keeps it for the exit code. */
+function sayRefused(all: InEachRepo<unknown>, refused: Refused): void {
+  for (const [relative, message] of all.refused) {
+    refused.push(relative);
+    process.stderr.write(`wizardingcode-mem: ${relative}: ${message}\n`);
+  }
 }
-
-/** Whether an error is the store refusing one repository, rather than a fault. */
-const isRefusal = (error: unknown): error is KnowledgeError =>
-  error instanceof KnowledgeError && error.code === "invalid";
 
 function rebuild(store: KnowledgeStore, argv: string[], refused: Refused): void {
   const { flags, rest } = parse(argv, ["--scope"]);
@@ -230,7 +230,7 @@ function rebuild(store: KnowledgeStore, argv: string[], refused: Refused): void 
   const scope = scopeOf(flags);
   const all = rebuildAll(store, scope);
   for (const [relative, result] of all.results) out(rebuildLine(relative, result));
-  for (const [relative, message] of all.refused) refuse(refused, relative, message);
+  sayRefused(all, refused);
   for (const repo of all.repos) {
     if (all.results.has(repo.relative) || all.refused.has(repo.relative)) continue;
     out(`${repo.relative}: not a repository`);
@@ -246,71 +246,53 @@ function rebuild(store: KnowledgeStore, argv: string[], refused: Refused): void 
   for (const path of unclear) out(`ambiguous ${path}`);
 }
 
-/** The repositories of a scope that are repositories, opened; one the store refuses is said. */
-function opened(store: KnowledgeStore, scope: Scope | undefined, refused: Refused): Repo[] {
-  const repos: Repo[] = [];
-  for (const found of listRepos(store).repos) {
-    if (scope !== undefined && found.ref.scope !== scope) continue;
-    try {
-      const repo = openRepo(store, found.ref);
-      if (repo !== null) repos.push(repo);
-    } catch (error) {
-      if (!isRefusal(error)) throw error;
-      refuse(refused, found.relative, error.message);
-    }
-  }
-  return repos;
-}
-
 function adoptAll(store: KnowledgeStore, argv: string[], refused: Refused): void {
   const { flags, rest } = parse(argv, ["--scope"]);
   if (rest.length > 0) throw new UsageError(`unexpected argument ${rest[0]}`);
   const scope = scopeOf(flags);
-  const repos = opened(store, scope, refused);
-  if (repos.length === 0 && refused.length === 0) out(nothing(scope));
   const person = personAuthor(store);
-  for (const repo of repos) {
-    try {
-      const result = adopt(store, repo.ref, person);
-      out(
-        result.adopted === 0
-          ? `${repo.relative}: clean`
-          : `${repo.relative}: adopted ${plural(result.adopted, "change")}`,
-      );
-      for (const problem of result.problems) out(`  ${problem}`);
-    } catch (error) {
-      if (!isRefusal(error)) throw error;
-      refuse(refused, repo.relative, error.message);
-    }
+  const all = inEachRepo(store, scope, (repo) => adopt(store, repo.ref, person));
+  for (const [relative, result] of all.results) {
+    out(
+      result.adopted === 0
+        ? `${relative}: clean`
+        : `${relative}: adopted ${plural(result.adopted, "change")}`,
+    );
+    for (const problem of result.problems) out(`  ${problem}`);
   }
+  sayRefused(all, refused);
+  if (all.results.size === 0 && all.refused.size === 0) out(nothing(scope));
 }
 
 function list(store: KnowledgeStore, argv: string[], refused: Refused): void {
   const { flags, rest } = parse(argv, ["--scope"]);
   if (rest.length > 0) throw new UsageError(`unexpected argument ${rest[0]}`);
   const scope = scopeOf(flags);
-  const repos = opened(store, scope, refused);
-  if (repos.length === 0 && refused.length === 0) out(nothing(scope));
-  for (const repo of repos) {
+  const all = inEachRepo(store, scope, (repo) => {
     try {
       withRepoLeases(store, [repo.relative], () => ensureFresh(store, repo));
     } catch (error) {
       // A write is under way: the rows are listed as they stand.
       if (!(error instanceof KnowledgeError && error.code === "locked")) throw error;
     }
-    out(repo.relative);
-    for (const entry of listEntries(store, repo.id)) {
+    return { entries: listEntries(store, repo.id), proposals: listProposals(store, repo.id) };
+  });
+  for (const [relative, { entries, proposals }] of all.results) {
+    out(relative);
+    for (const entry of entries) {
       out(
         `  ${entry.slug}  ${entry.kind}  ${entry.area}  ${entry.status}  v${entry.version}  ${entry.author}`,
       );
       if (entry.problem !== null) out(`    problem: ${entry.problem}`);
     }
-    for (const proposal of listProposals(store, repo.id)) {
+    for (const proposal of proposals) {
       const state = proposal.decision ?? "open";
       out(`  ${state}  ${proposal.id}  ${proposal.slug}  by ${proposal.proposedBy}`);
       if (proposal.problem !== null) out(`    problem: ${proposal.problem}`);
     }
   }
+  sayRefused(all, refused);
+  if (all.results.size === 0 && all.refused.size === 0) out(nothing(scope));
 }
 
 /**

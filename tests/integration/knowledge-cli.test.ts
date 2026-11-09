@@ -514,4 +514,43 @@ describe("knowledge list, rebuild and adopt", () => {
     expect(write.exitCode).toBe(1);
     expect(write.stderr).toContain("remote.origin.url");
   });
+
+  test("a repository adopt refuses does not stop adopt for the others, and a fault still does", async () => {
+    const shared = WRITE.map((arg) => (arg === "workspace" ? "shared" : arg));
+    expect((await cli(...WRITE, "--body", "The body.")).exitCode).toBe(0);
+    expect((await cli(...shared, "--body", "The body.")).exitCode).toBe(0);
+    // The shared repository opens, and its adopt is what refuses: a repository inside it.
+    const nested = join(dataDir, "knowledge", "shared", "entries", "notes");
+    mkdirSync(nested);
+    realGit(nested, "init", "-q");
+    writeFileSync(join(workspace(), "entries", "by-hand.md"), "a note\n");
+
+    const result = await cli("adopt");
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("knowledge/shared: ");
+    expect(result.stderr).toContain("entries/notes");
+    expect(result.stdout).toContain("knowledge/workspace: adopted 1 change");
+    expect(result.stdout).not.toContain("knowledge/shared");
+
+    // Only a refusal is set aside. With no git at all, the command stops with that fault.
+    rmSync(nested, { recursive: true });
+    env.PATH = join(dir, "no-programs-here");
+    const fault = await cli("adopt");
+    expect(fault.exitCode).toBe(1);
+    expect(fault.stderr).toContain("git");
+    expect(fault.stdout).toBe("");
+  });
+
+  test("when every repository is refused, the command says each and nothing else", async () => {
+    expect((await cli(...WRITE, "--body", "The body.")).exitCode).toBe(0);
+    const config = join(workspace(), ".git", "config");
+    writeFileSync(config, `${readFileSync(config, "utf8")}[alias]\n\tst = status\n`);
+    for (const command of ["list", "adopt", "rebuild"]) {
+      const result = await cli(command);
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout).toBe("");
+      expect(result.stderr).toContain("knowledge/workspace: ");
+      expect(result.stderr).toContain("alias.st");
+    }
+  });
 });

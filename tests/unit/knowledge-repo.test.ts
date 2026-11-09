@@ -6,13 +6,14 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   statSync,
   symlinkSync,
   utimesSync,
   writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { identityOf, personAuthor } from "../../src/modules/knowledge/author.ts";
 import { DEFAULT_AREAS } from "../../src/modules/knowledge/entry.ts";
 import {
@@ -150,10 +151,14 @@ describe("names and versions", () => {
 
 describe("nothing of the store's own sits beside the repositories", () => {
   test("the store keeps no file or folder under knowledge/ but the repositories", () => {
-    ensureRepo(fx.store(), WORKSPACE);
+    const repo = ensureRepo(fx.store(), WORKSPACE);
     const root = join(fx.dataDir, "knowledge");
     expect(readdirSync(root)).toEqual(["workspace"]);
     if (unix) expect(mode(root)).toBe(0o700);
+    // And git copied no template into the new repository: not its own, not anyone's.
+    for (const name of ["hooks", "info", "description"]) {
+      expect(existsSync(join(repo.path, ".git", name))).toBe(false);
+    }
   });
 
   /** A first write into a data directory where `prepare` has already put files. */
@@ -1175,13 +1180,63 @@ describe("an interrupted operation", () => {
     );
     symlinkSync(elsewhere, record);
     expect(readIntent(repo)).toBeNull();
-    // Removed like any record the store cannot act on; what it pointed at is untouched.
+    // A link inside .git refuses the repository, like any other; its target is untouched.
+    expect(codeOf(() => openRepo(store, WORKSPACE))).toBe("invalid");
+    expect(thrown(() => openRepo(store, WORKSPACE)).message).toContain(record);
+    expect(existsSync(elsewhere)).toBe(true);
+    rmSync(record);
+
+    // A folder at the record's path is removed like any record the store cannot act on.
+    mkdirSync(record);
+    writeFileSync(join(record, "inside"), "x\n");
+    expect(readIntent(repo)).toBeNull();
+    expect(openRepo(store, WORKSPACE)?.id).toBe(repo.id);
+    expect(existsSync(record)).toBe(false);
+  });
+
+  test("a record the store cannot act on waits while another process holds the repository", () => {
+    const { store, said } = reporting();
+    const repo = ensureRepo(store, WORKSPACE);
+    const record = join(repo.path, ".git", "wizardingcode-op.json");
+    writeFileSync(
+      record,
+      JSON.stringify({ operation: "write", writer: person, existed: ["../x.md"], created: [] }),
+    );
+    const key = leaseKey(repo.relative);
+    setMeta(
+      fx.db,
+      key,
+      JSON.stringify({ owner: `${process.pid}-writer`, until: store.now() + 60_000 }),
+    );
+    // That process may be the one writing the record: it is left alone, and nothing is said.
+    openRepo(store, WORKSPACE);
+    expect(existsSync(record)).toBe(true);
+    expect(said).toEqual([]);
+
+    fx.db.run("DELETE FROM meta WHERE key = ?", [key]);
     openRepo(store, WORKSPACE);
     expect(existsSync(record)).toBe(false);
-    expect(existsSync(elsewhere)).toBe(true);
+    expect(said).toHaveLength(1);
+  });
 
-    mkdirSync(record);
-    expect(readIntent(repo)).toBeNull();
+  test("a folder left at a kept-bytes name does not stop the repository from opening", () => {
+    const store = fx.store();
+    const repo = ensureRepo(store, WORKSPACE);
+    const kept = "wizardingcode-kept-00000000-0000-4000-8000-000000000000.json";
+    mkdirSync(join(repo.path, ".git", kept));
+    writeFileSync(join(repo.path, ".git", kept, "inside"), "x\n");
+    writeFileSync(
+      join(repo.path, ".git", "wizardingcode-op.json"),
+      JSON.stringify({
+        operation: "adopt",
+        writer: person,
+        existed: ["../x.md"],
+        created: [],
+        keptBytesFile: kept,
+      }),
+    );
+    expect(openRepo(store, WORKSPACE)?.id).toBe(repo.id);
+    expect(existsSync(join(repo.path, ".git", kept))).toBe(false);
   });
 
   test("a record the store did not write is removed with its kept bytes, and said", () => {
@@ -1203,7 +1258,7 @@ describe("an interrupted operation", () => {
     expect(existsSync(join(repo.path, ".git", kept))).toBe(false);
     expect(existsSync(join(repo.path, "entries", "a.md"))).toBe(false);
     expect(said).toHaveLength(1);
-    expect(said[0]).toContain("not one the store wrote");
+    expect(said[0]).toContain("not one this version of the store writes");
   });
 
   test("a record that names a path outside the knowledge folders is not acted on", () => {
@@ -1551,6 +1606,52 @@ describe("a folder that is not the store's own repository", () => {
     );
     expect(codeOf(() => openRepo(store, WORKSPACE))).toBe("invalid");
     expect(thrown(() => openRepo(store, WORKSPACE)).message).toContain(".gitmodules");
+  });
+
+  test("a link anywhere inside .git is refused before git runs, and nothing is written through it", () => {
+    const store = fx.store({ env: { WIZARDINGCODE_MEM_AUTHOR: "Writer" } });
+    const repo = ensureRepo(store, WORKSPACE);
+    const gitDir = join(repo.path, ".git");
+    const victim = join(fx.dir, "the-persons-file");
+    const elsewhere = join(fx.dir, "the-persons-folder");
+    mkdirSync(elsewhere);
+    const aside = join(fx.dir, "kept-aside");
+    const write = () => writeEntry(store, WORKSPACE, AN_ENTRY, personAuthor(store));
+
+    /** Puts a link at a name inside .git, sees the write refused, and puts things back. */
+    const refusedWith = (name: string, target: string) => {
+      const path = join(gitDir, ...name.split("/"));
+      const had = existsSync(path);
+      if (had) renameSync(path, aside);
+      else mkdirSync(dirname(path), { recursive: true });
+      symlinkSync(target, path);
+      writeFileSync(victim, "the person's own lines\n");
+
+      expect(codeOf(write)).toBe("invalid");
+      expect(thrown(write).message).toContain(path);
+      expect(readFileSync(victim, "utf8")).toBe("the person's own lines\n");
+      expect(readdirSync(elsewhere)).toEqual([]);
+
+      rmSync(path);
+      if (had) renameSync(aside, path);
+    };
+    // git writes its commit message there, in place.
+    refusedWith("COMMIT_EDITMSG", victim);
+    // git appends a line with the writer's name there.
+    refusedWith("logs/HEAD", victim);
+    refusedWith("logs", elsewhere);
+    // git moves a branch and writes objects there.
+    refusedWith("refs", elsewhere);
+    refusedWith("refs/heads/main", victim);
+    refusedWith("objects", elsewhere);
+    refusedWith("objects/pack", elsewhere);
+    refusedWith("HEAD", victim);
+    refusedWith("info", elsewhere);
+    refusedWith("anything-else", victim);
+
+    // Put back as the store made it, the repository takes the write.
+    expect(write().kind).toBe("written");
+    expect(existsSync(join(repo.path, "entries", "an-entry.md"))).toBe(true);
   });
 
   test("a temporary file name that is already a link is not written through", () => {

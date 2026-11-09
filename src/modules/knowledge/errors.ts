@@ -20,6 +20,14 @@ export class KnowledgeError extends Error {
   }
 }
 
+/**
+ * Whether an error is the store refusing one repository as it stands (code `invalid`),
+ * rather than a fault such as a missing git or a lease held elsewhere. The one place that
+ * says so: a command over several repositories sets a refusal aside and goes on.
+ */
+export const isRefusal = (error: unknown): error is KnowledgeError =>
+  error instanceof KnowledgeError && error.code === "invalid";
+
 /** A git call that was killed for running past its time: not the same as a git that is missing. */
 export class GitTimeoutError extends KnowledgeError {
   constructor(message: string) {

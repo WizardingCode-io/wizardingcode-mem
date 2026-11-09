@@ -3,8 +3,8 @@
 // person accepts it. The store cannot tell a person from an agent: the entry point that
 // calls it says which, and passes the writer.
 import { randomUUID } from "node:crypto";
-import { lstatSync, mkdirSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { lstatSync } from "node:fs";
+import { join } from "node:path";
 import { redact } from "../../core/redact.ts";
 import { withWrite } from "../../store/db.ts";
 import { authorOf, identityOf } from "./author.ts";
@@ -41,7 +41,9 @@ import {
   upsertProposal,
 } from "./index-store.ts";
 import {
+  type Change,
   clearIntent,
+  commitChange,
   commitPaths,
   DECIDED_DIR,
   dropKept,
@@ -51,7 +53,6 @@ import {
   fingerprintOf,
   hashOf,
   headOf,
-  type IntentOperation,
   keepBytes,
   keptFileName,
   MANIFEST_FILE,
@@ -71,7 +72,6 @@ import {
   statusOf,
   TAXONOMY_FILE,
   taxonomyFor,
-  undoStaged,
   unstage,
   withRepoLeases,
   writeFileAtomic,
@@ -266,20 +266,6 @@ const stale = (current: number, based: number, what: string) =>
 
 // --- The commit and the failure rule -----------------------------------------------------
 
-export interface Commit {
-  operation: IntentOperation;
-  writer: Writer;
-  /** Files written and staged. */
-  write: { path: string; text: string }[];
-  /** Files removed from the repository. */
-  remove: string[];
-  /** Of all those paths, the ones HEAD holds, and the ones it does not. */
-  existed: string[];
-  created: string[];
-  message: string;
-  proposalId?: string;
-}
-
 /** What `commit` hands to `settle`: whether the index can trust the folders it finds after. */
 export interface Committed {
   /**
@@ -291,57 +277,13 @@ export interface Committed {
 }
 
 /**
- * Writes, stages and commits only the given paths. The intent record goes first and stays
- * until the caller has indexed the result. When anything fails, every path is put back to
- * what HEAD holds; when even that fails, the record is left for the next open to act on.
+ * Commits a change (`commitChange`), and says whether the folders were as the index knew
+ * them when it began. The intent record stays until the caller has indexed the result.
  */
-export function commit(store: KnowledgeStore, repo: Repo, change: Commit): Committed {
+export function commit(store: KnowledgeStore, repo: Repo, change: Change): Committed {
   const recorded = recordedFingerprint(store, repo);
   const undisturbed = recorded !== null && recorded === fingerprintOf(repo.path);
-  // What each path holds once the operation is done: how an interrupted one is told from
-  // a file the person edited afterwards.
-  const written: Record<string, string | null> = {};
-  for (const file of change.write) written[file.path] = hashOf(Buffer.from(file.text));
-  for (const path of change.remove) written[path] = null;
-  writeIntent(repo, {
-    operation: change.operation,
-    writer: change.writer,
-    existed: change.existed,
-    created: change.created,
-    written,
-    ...(change.proposalId === undefined ? {} : { proposalId: change.proposalId }),
-  });
-  try {
-    for (const file of change.write) {
-      const target = absolute(repo, file.path);
-      mkdirSync(dirname(target), { recursive: true, mode: 0o700 });
-      writeFileAtomic(target, file.text);
-    }
-    const staged = change.write.map((file) => file.path);
-    stagePaths(store, repo, staged, change.operation);
-    if (change.remove.length > 0) removePaths(store, repo, change.remove, change.operation);
-    commitPaths(
-      store,
-      repo,
-      [...staged, ...change.remove],
-      change.message,
-      identityOf(change.writer),
-      change.operation,
-    );
-  } catch (error) {
-    try {
-      undoStaged(
-        store,
-        repo,
-        { existed: change.existed, created: change.created },
-        change.operation,
-      );
-      clearIntent(repo);
-    } catch {
-      // The intent record stays: the next `openRepo` puts the tree back.
-    }
-    throw error;
-  }
+  commitChange(store, repo, change);
   return { undisturbed };
 }
 
@@ -758,6 +700,9 @@ export function readEntry(
 // --- Hand edits: adopt -------------------------------------------------------------------
 
 const ENTRY_FILE = new RegExp(`^${ENTRIES_DIR}/([^/]+)\\.md$`);
+/** The characters a terminal or a log acts on: line breaks, tabs, escapes. */
+// biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are what is matched.
+const CONTROL = /[\x00-\x1f\x7f]/g;
 
 /**
  * The text an entry file a person wrote by hand is committed as: an id when it has none,
@@ -915,11 +860,14 @@ function adoptIn(
       });
     }
     if (count > 0) {
+      // One line for each path, whatever the name holds: a line break in a file's name
+      // must not put a line of its own into the message.
+      const listed = paths.map((path) => path.replace(CONTROL, "?"));
       commitPaths(
         store,
         repo,
         paths,
-        `knowledge: adopt ${count} ${count === 1 ? "change" : "changes"} made outside the engine\n\n${paths.join("\n")}`,
+        `knowledge: adopt ${count} ${count === 1 ? "change" : "changes"} made outside the engine\n\n${listed.join("\n")}`,
         identityOf(person),
         "adopt",
       );

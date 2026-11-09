@@ -690,6 +690,16 @@ describe("adopt", () => {
     expect(adopt(store, WORKSPACE, person()).adopted).toBe(3);
   });
 
+  test("a file name with a line break never puts a line of its own into the commit message", () => {
+    const repo = ensureRepo(store, WORKSPACE);
+    writeFileSync(join(repo.path, "entries", "a\nSigned-off-by: someone else\n"), "x\n");
+    expect(adopt(store, WORKSPACE, person()).adopted).toBe(1);
+    const message = realGit(repo.path, "log", "-1", "--format=%B");
+    expect(message.split("\n")).not.toContain("Signed-off-by: someone else");
+    expect(message).toContain("entries/a?Signed-off-by: someone else?");
+    expect(status(repo)).toEqual([""]);
+  });
+
   test("an adopt that stops midway is undone at every path, each said once", () => {
     const { repo, edited, added } = handWork();
     const taxonomyFile = join(repo.path, "taxonomy.md");

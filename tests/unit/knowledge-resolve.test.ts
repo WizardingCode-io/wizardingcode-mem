@@ -13,7 +13,7 @@ import {
 import { listRepos, resolveRepo } from "../../src/modules/knowledge/resolve.ts";
 import type { Manifest } from "../../src/modules/knowledge/types.ts";
 import { setMeta } from "../../src/store/meta.ts";
-import { codeOf, type Fixture, knowledgeFixture } from "../helpers/knowledge.ts";
+import { codeOf, type Fixture, knowledgeFixture, thrown } from "../helpers/knowledge.ts";
 import { realGit, stubGit } from "../helpers/stub-git.ts";
 
 const person = { kind: "person", name: "you", source: "default" } as const;
@@ -186,7 +186,14 @@ describe("resolveRepo", () => {
         ),
       },
     });
-    expect(codeOf(() => ensureRepo(broken, project(id)))).toBe("git");
+    const failure = thrown(() => ensureRepo(broken, project(id)));
+    expect(
+      codeOf(() => {
+        throw failure;
+      }),
+    ).toBe("git");
+    // The commit is what failed first, and it is its error the caller sees.
+    expect(failure.message).toContain("git commit");
     expect(realGit(first.path, "status", "--porcelain").trim()).toBe("M  knowledge.json");
 
     // The next write puts the engine's own change back, then makes it again in a commit.

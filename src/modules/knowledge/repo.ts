@@ -8,6 +8,7 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   closeSync,
   constants,
+  type Dirent,
   existsSync,
   fstatSync,
   lstatSync,
@@ -116,9 +117,10 @@ export function existsOnDisk(path: string): boolean {
 /**
  * Refuses a folder the store did not make: one that is a link, one whose `.git` is a file
  * or a link (a gitfile names another repository, and every later commit would land
- * there), one whose knowledge folders or own files are links, or one with a `.gitmodules`
- * file (the store keeps no repository inside its own). Checked before git is run and
- * before anything is written, so nothing is read or written outside the repository.
+ * there), one whose knowledge folders or own files are links, one with a `.gitmodules`
+ * file (the store keeps no repository inside its own), or one whose `.git` holds a link.
+ * Checked before git is run and before anything is written, so nothing is read or written
+ * outside the repository.
  */
 export function refuseForeign(repoFolder: string): void {
   /** Whatever is at the path must be what the store keeps there: a folder, or a regular file. */
@@ -130,10 +132,11 @@ export function refuseForeign(repoFolder: string): void {
       return;
     }
     if (wanted === "folder" ? found.isDirectory() : found.isFile()) return;
-    const what = found.isSymbolicLink() ? "a link" : `not a ${wanted}`;
     throw new KnowledgeError(
       "invalid",
-      `${path} is ${what}; the knowledge store never follows one out of its own repository`,
+      found.isSymbolicLink()
+        ? `${path} is a link; the knowledge store never follows one out of its own repository`
+        : `${path} is not a ${wanted === "folder" ? "folder" : "regular file"}, which is what the knowledge store keeps there`,
     );
   };
   if (!existsOnDisk(repoFolder)) return;
@@ -146,6 +149,38 @@ export function refuseForeign(repoFolder: string): void {
       `${modules} names repositories nested in this one, and the knowledge store keeps none; remove it`,
     );
   }
+  refuseLinksInside(join(repoFolder, ".git"));
+}
+
+/**
+ * Refuses a `.git` that holds anything but regular files and folders. git writes inside
+ * it: its commit message and a line of its log in place, objects and branches into its
+ * folders. Through a link there, git would write into another file, or commit into
+ * another repository. Every entry is read with its kind, at every depth, except the files
+ * inside the object folders, which git only reads or replaces whole.
+ */
+function refuseLinksInside(gitDir: string): void {
+  const objects = join(gitDir, "objects");
+  const walk = (folder: string): void => {
+    let entries: Dirent[];
+    try {
+      entries = readdirSync(folder, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const path = join(folder, entry.name);
+      if (entry.isDirectory()) {
+        if (folder !== objects) walk(path);
+      } else if (!entry.isFile()) {
+        throw new KnowledgeError(
+          "invalid",
+          `${path} is ${entry.isSymbolicLink() ? "a link" : "not a regular file"}, and the knowledge store never lets git write through one; remove it`,
+        );
+      }
+    }
+  };
+  walk(gitDir);
 }
 
 /**
@@ -268,8 +303,9 @@ export function gitEnv(
 }
 
 /**
- * git's own name for no configuration file, on every system: it reads `/dev/null` as an
- * empty file, and maps the name to the null device where there is no such path.
+ * git's own name for no configuration file: its documentation says to set the variable
+ * to `/dev/null` to skip the file. Run on macOS; not run on Windows
+ * (ADR 0024, known limits).
  */
 const NO_CONFIG = "/dev/null";
 
@@ -299,8 +335,8 @@ function configArgs(repo: string | null): string[] {
     "init.defaultRefFormat=files",
   ];
   // Hooks are looked for inside the repository's own configuration file. Nothing can be
-  // inside a file, so git finds no hook, on any system. A call with no repository yet
-  // (`init`, `--version`) runs none.
+  // inside a file, so git finds no hook. Run on macOS; not run on Windows (ADR 0024, known
+  // limits). A call with no repository yet (`init`, `--version`) runs none.
   if (repo !== null) settings.push(`core.hooksPath=${join(repo, ".git", "config")}`);
   return settings.flatMap((setting) => ["-c", setting]);
 }
@@ -652,33 +688,17 @@ function learnAliases(store: KnowledgeStore, repo: Repo): void {
     if (found === null || statusOf(store, repo, [MANIFEST_FILE]).length > 0) return;
     const { manifest, known, gained } = found;
     const next: Manifest = { ...manifest, project: { aliases: [...known, ...gained] } };
-    const person = personAuthor(store);
-    // The record first, as for any write: a process that dies here leaves a manifest the
-    // next open puts back, not one that waits for `adopt`.
-    writeIntent(repo, {
+    // A write like any other, under its record: one that stops midway is put back at the
+    // next open, not left for `adopt`.
+    commitChange(store, repo, {
       operation: "write",
-      writer: person,
+      writer: personAuthor(store),
+      write: [{ path: MANIFEST_FILE, text: manifestText(next) }],
+      remove: [],
       existed: [MANIFEST_FILE],
       created: [],
-      written: { [MANIFEST_FILE]: hashOf(Buffer.from(manifestText(next))) },
+      message: `knowledge: manifest learns ${gained.length === 1 ? "an alias" : `${gained.length} aliases`} of its project`,
     });
-    writeManifest(repo.path, next);
-    try {
-      stagePaths(store, repo, [MANIFEST_FILE], "write");
-      commitPaths(
-        store,
-        repo,
-        [MANIFEST_FILE],
-        `knowledge: manifest learns ${gained.length === 1 ? "an alias" : `${gained.length} aliases`} of its project`,
-        identityOf(person),
-        "write",
-      );
-    } catch (error) {
-      // When even this fails, the record stays for the next open.
-      undoStaged(store, repo, { existed: [MANIFEST_FILE], created: [] }, "write");
-      clearIntent(repo);
-      throw error;
-    }
     clearIntent(repo);
   };
   // While another process holds the repository, the aliases wait for the next write.
@@ -942,7 +962,7 @@ export function restoreToHead(
 // `openRepo` puts the tree back by it.
 
 /** The operations that leave a record. A record of any other is not read. */
-export const INTENT_OPERATIONS = ["write", "accept", "reject", "adopt", "taxonomy"] as const;
+const INTENT_OPERATIONS = ["write", "accept", "reject", "adopt", "taxonomy"] as const;
 export type IntentOperation = (typeof INTENT_OPERATIONS)[number];
 
 export interface Intent {
@@ -969,13 +989,83 @@ export function writeIntent(repo: Repo, intent: Intent): void {
   writeFileAtomic(intentPath(repo), JSON.stringify(intent));
 }
 
+/** What one operation changes in a repository, and how its commit reads. */
+export interface Change {
+  operation: IntentOperation;
+  writer: Writer;
+  /** Files written and staged. */
+  write: { path: string; text: string }[];
+  /** Files removed from the repository. */
+  remove: string[];
+  /** Of all those paths, the ones HEAD holds, and the ones it does not. */
+  existed: string[];
+  created: string[];
+  message: string;
+  proposalId?: string;
+}
+
+/**
+ * Writes, stages and commits only the given paths: the one place the failure rule lives.
+ * The intent record goes first and is left in place, for the caller to remove once it has
+ * done what follows the commit. When anything fails, every path is put back to what HEAD
+ * holds and the record is removed; when even that fails, the record is left for the next
+ * open to act on. The error thrown is the first one, whatever the undo did.
+ */
+export function commitChange(store: KnowledgeStore, repo: Repo, change: Change): void {
+  // What each path holds once the operation is done: how an interrupted one is told from
+  // a file the person edited afterwards.
+  const written: Record<string, string | null> = {};
+  for (const file of change.write) written[file.path] = hashOf(Buffer.from(file.text));
+  for (const path of change.remove) written[path] = null;
+  writeIntent(repo, {
+    operation: change.operation,
+    writer: change.writer,
+    existed: change.existed,
+    created: change.created,
+    written,
+    ...(change.proposalId === undefined ? {} : { proposalId: change.proposalId }),
+  });
+  try {
+    for (const file of change.write) {
+      const target = join(repo.path, ...file.path.split("/"));
+      mkdirSync(dirname(target), { recursive: true, mode: 0o700 });
+      writeFileAtomic(target, file.text);
+    }
+    const staged = change.write.map((file) => file.path);
+    stagePaths(store, repo, staged, change.operation);
+    if (change.remove.length > 0) removePaths(store, repo, change.remove, change.operation);
+    commitPaths(
+      store,
+      repo,
+      [...staged, ...change.remove],
+      change.message,
+      identityOf(change.writer),
+      change.operation,
+    );
+  } catch (error) {
+    try {
+      undoStaged(
+        store,
+        repo,
+        { existed: change.existed, created: change.created },
+        change.operation,
+      );
+      clearIntent(repo);
+    } catch {
+      // The intent record stays: the next `openRepo` puts the tree back.
+    }
+    throw error;
+  }
+}
+
 const KEPT_NAME = /^wizardingcode-kept-[0-9a-f-]+\.json$/;
 
 /**
- * A record and a kept-bytes file are read as regular files, never through a link, and no
- * larger than this: an adopt of thousands of files writes a long record, not an endless one.
+ * A record and a kept-bytes file are read as regular files, never through a link, and
+ * whole: an adopt writes them as large as the files it adopts, so a cap on reading them
+ * would lose what it kept.
  */
-const RECORD_MAX_BYTES = 64 * 1024 * 1024;
+const NO_CAP = Number.POSITIVE_INFINITY;
 
 const isPlain = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -992,7 +1082,7 @@ function readRecord(repo: Repo): { present: boolean; intent: Intent | null; kept
   if (!existsOnDisk(file)) return { present: false, intent: null };
   let raw: unknown;
   try {
-    const bytes = readRegularFile(file, RECORD_MAX_BYTES);
+    const bytes = readRegularFile(file, NO_CAP);
     raw = bytes === null ? null : JSON.parse(new TextDecoder().decode(bytes));
   } catch {
     return { present: true, intent: null };
@@ -1000,7 +1090,8 @@ function readRecord(repo: Repo): { present: boolean; intent: Intent | null; kept
   if (!isPlain(raw)) return { present: true, intent: null };
   const { operation, existed, created, written, keptBytesFile } = raw;
   const named = typeof keptBytesFile === "string" && KEPT_NAME.test(keptBytesFile);
-  const rejected = { present: true, intent: null, ...(named ? { kept: keptBytesFile } : {}) };
+  const kept = named ? { kept: keptBytesFile } : {};
+  const rejected = { present: true, intent: null, ...kept };
   const ownPaths = (value: unknown): value is string[] =>
     Array.isArray(value) && value.every((item) => typeof item === "string" && ownPath(item));
   const operations: readonly unknown[] = INTENT_OPERATIONS;
@@ -1010,7 +1101,7 @@ function readRecord(repo: Repo): { present: boolean; intent: Intent | null; kept
     return rejected;
   }
   if (keptBytesFile !== undefined && !named) return rejected;
-  return { ...rejected, intent: raw as unknown as Intent };
+  return { present: true, intent: raw as unknown as Intent, ...kept };
 }
 
 /** The record an operation left, or null when there is none the store can act on. */
@@ -1051,7 +1142,7 @@ export function restoreKept(repo: Repo, name: string | undefined, only?: Set<str
   const file = join(repo.path, ".git", name);
   let kept: unknown;
   try {
-    const bytes = readRegularFile(file, RECORD_MAX_BYTES);
+    const bytes = readRegularFile(file, NO_CAP);
     kept = bytes === null ? null : JSON.parse(new TextDecoder().decode(bytes));
   } catch {
     return;
@@ -1069,7 +1160,7 @@ export function restoreKept(repo: Repo, name: string | undefined, only?: Set<str
 
 export function dropKept(repo: Repo, name: string | undefined): void {
   if (name !== undefined && KEPT_NAME.test(name))
-    rmSync(join(repo.path, ".git", name), { force: true });
+    rmSync(join(repo.path, ".git", name), { force: true, recursive: true });
 }
 
 /** What is at a path now, as the intent record names it: a hash, null for nothing, or unknown. */
@@ -1116,7 +1207,7 @@ function revertInterrupted(store: KnowledgeStore, repo: Repo): void {
       report(
         store,
         "revert",
-        `a record of an interrupted operation in ${repo.relative} was not one the store wrote; it was removed and nothing was put back`,
+        `a record of an interrupted operation in ${repo.relative} was not one this version of the store writes; it was removed and nothing was put back`,
       );
     });
     return;
