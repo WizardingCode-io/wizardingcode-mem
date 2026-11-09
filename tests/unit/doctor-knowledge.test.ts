@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   chmodSync,
+  existsSync,
   mkdirSync,
   readFileSync,
   renameSync,
@@ -66,6 +67,77 @@ describe("doctor: knowledge", () => {
     expect(knowledge()).toMatchObject({ status: "skip" });
     const names = checks().map((check) => check.name);
     expect(names.indexOf("knowledge")).toBe(names.indexOf("backups") + 1);
+  });
+
+  test("warns that the module is off, before its skip, with no knowledge folder", () => {
+    const off = env({ WIZARDINGCODE_MODULES: "memory" });
+    expect(knowledge({ env: off })).toEqual({
+      name: "knowledge",
+      status: "warn",
+      detail: "knowledge is off (WIZARDINGCODE_MODULES)",
+    });
+  });
+
+  test("warns that the module is off beside the counts of a repository", () => {
+    writeEntry(store, WORKSPACE, change(), person());
+    const check = knowledge({ env: env({ WIZARDINGCODE_MODULES: "memory" }) });
+    expect(check.status).toBe("warn");
+    expect(check.detail).toContain("knowledge is off (WIZARDINGCODE_MODULES)");
+    expect(check.detail).toContain("1 repository, 1 entry");
+  });
+
+  test("an unknown module id in the setting writes no line to the log", () => {
+    const logs = join(fx.dir, "log-home");
+    const before = process.env.WIZARDINGCODE_MEM_DATA_DIR;
+    process.env.WIZARDINGCODE_MEM_DATA_DIR = logs;
+    try {
+      const check = knowledge({ env: env({ WIZARDINGCODE_MODULES: "memory,nonesuch" }) });
+      expect(check).toMatchObject({ status: "warn" });
+      expect(check.detail).toContain("knowledge is off (WIZARDINGCODE_MODULES)");
+    } finally {
+      if (before === undefined) delete process.env.WIZARDINGCODE_MEM_DATA_DIR;
+      else process.env.WIZARDINGCODE_MEM_DATA_DIR = before;
+    }
+    expect(existsSync(join(logs, "logs", "wizardingcode-mem.log"))).toBe(false);
+  });
+
+  test("warns when the pinned lines exceed the session-start share, with a database and with none", () => {
+    // Five pinned lines of over 200 characters each: more than 1,000 characters of pins.
+    for (const n of [1, 2, 3, 4, 5]) {
+      const title = `Pinned rule number ${n} ${"about discovery calls and the pricing of agencies ".repeat(2)}`;
+      writeEntry(store, WORKSPACE, change({ title: title.trim(), pinned: true }), person());
+    }
+    const elsewhere = join(fx.dir, "no-database-here");
+    mkdirSync(elsewhere);
+    for (const check of [knowledge(), knowledge({ storeDir: elsewhere })]) {
+      expect(check.status).toBe("warn");
+      expect(check.detail).toContain("pinned entries exceed the session-start share");
+      expect(check.detail).toContain("a project's own pins add to them in that project");
+    }
+  });
+
+  test("a few short pins are within the share and draw no warning", () => {
+    writeEntry(store, WORKSPACE, change({ pinned: true }), person());
+    writeEntry(
+      store,
+      { scope: "shared" },
+      change({ title: "Discount ladder", pinned: true }),
+      person(),
+    );
+    const check = knowledge();
+    expect(check.status).toBe("ok");
+    expect(check.detail).not.toContain("pinned");
+  });
+
+  test("warns when the search table and the active entries differ in number", () => {
+    writeEntry(store, WORKSPACE, change(), person());
+    writeEntry(store, WORKSPACE, change({ title: "Pricing rules for agencies" }), person());
+    writeEntry(store, WORKSPACE, change({ title: "Discount ladder" }), person());
+    expect(knowledge().status).toBe("ok");
+    fx.db.run("DELETE FROM knowledge_fts WHERE rowid = (SELECT min(rowid) FROM knowledge_fts)");
+    const check = knowledge();
+    expect(check.status).toBe("warn");
+    expect(check.detail).toContain("FTS rows 2, active entries 3; run knowledge rebuild");
   });
 
   test("counts the repositories, the entries, the drafts and the open proposals", () => {

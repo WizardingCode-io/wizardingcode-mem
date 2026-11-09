@@ -1,10 +1,16 @@
 // What the knowledge module shows an agent, in numbers, and the rule a prompt's candidate
 // has to pass before a hook shows it. A leaf: the hooks, the refresh and the tests read it.
+import { MOMENT_BUDGET } from "../../engine/budget.ts";
 import type { Query } from "../../retrieve/query.ts";
 import { isGeneric, searchTokens, stem } from "../../util/words.ts";
 
 /** Knowledge's part of each moment's budget: 840 characters at session start, 480 on a prompt. */
 export const KNOWLEDGE_SHARE = 0.2;
+/**
+ * Knowledge's characters at session start, worked out as the composer works out a share:
+ * what the pinned lines must fit in, wrapper and intro included, and what `doctor` measures.
+ */
+export const SESSION_START_SHARE = Math.floor(KNOWLEDGE_SHARE * MOMENT_BUDGET["session-start"]);
 /** Entries a prompt shows at most, whatever room is left. */
 export const MAX_PER_PROMPT = 2;
 /** The search's best candidates, in bm25 order, that the floor is run over. */

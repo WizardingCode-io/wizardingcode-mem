@@ -53,6 +53,49 @@ function turn(sessionId: number, seq: number, state: string, startedAt: number):
 }
 const count = (table: string) =>
   db.query<{ n: number }, []>(`SELECT count(*) AS n FROM ${table}`).get()?.n ?? 0;
+/** A project repository's row; each has its own owner, as one project has one repository. */
+function repo(path: string): number {
+  const owner = 1000 + count("knowledge_repos");
+  return db
+    .query<{ id: number }, [number, string]>(
+      "INSERT INTO knowledge_repos (scope, project_id, path, indexed_at) VALUES ('project', ?, ?, 1) RETURNING id",
+    )
+    .get(owner, path)?.id as number;
+}
+function shown(sessionId: number, repoId: number, entryId: string): void {
+  db.run(
+    `INSERT INTO knowledge_shown (session_id, context_epoch, repo_id, entry_id, event, rule, at)
+     VALUES (?, 0, ?, ?, 'prompt', 'words', 1)`,
+    [sessionId, repoId, entryId],
+  );
+}
+const shownRows = () =>
+  db
+    .query<{ session_id: number; repo_id: number; entry_id: string }, []>(
+      "SELECT session_id, repo_id, entry_id FROM knowledge_shown ORDER BY session_id, entry_id",
+    )
+    .all();
+
+/**
+ * A live session and repository, a session the run removes, a session already gone and a
+ * repository already gone: rows of each, and one row whose session is removed by the run
+ * and whose repository is gone, which counts once.
+ */
+function seedShown(): { live: number; kept: number; goes: number } {
+  const live = session("live", NOW - DAY);
+  turn(live, 1, "done", NOW - DAY);
+  const goes = session("old", NOW - 200 * DAY);
+  turn(goes, 1, "done", NOW - 200 * DAY);
+  const kept = repo("knowledge/projects/kept");
+  const dropped = repo("knowledge/projects/dropped");
+  db.run("DELETE FROM knowledge_repos WHERE id = ?", [dropped]);
+  shown(live, kept, "a");
+  shown(live, dropped, "b");
+  shown(goes, kept, "c");
+  shown(goes, dropped, "d");
+  shown(9999, kept, "e");
+  return { live, kept, goes };
+}
 
 describe("compact", () => {
   test("finished turns older than the retention window go, unless a memory came from them", () => {
@@ -183,6 +226,47 @@ describe("compact", () => {
     expect(compact(db, { now: NOW, dryRun: true })).toMatchObject({ turns: 1, dryRun: true });
   });
 
+  test("knowledge shown rows whose session or repository is gone go; the others stay", () => {
+    const { live, kept } = seedShown();
+    const report = compact(db, { now: NOW, vacuum: false });
+    expect(report.sessions).toBe(1);
+    expect(report.knowledgeShown).toBe(4);
+    expect(shownRows()).toEqual([{ session_id: live, repo_id: kept, entry_id: "a" }]);
+  });
+
+  test("a dry run counts the shown rows the real run deletes, each once, and deletes none", () => {
+    seedShown();
+    const dry = compact(db, { now: NOW, vacuum: false, dryRun: true });
+    expect(dry.knowledgeShown).toBe(4);
+    expect(count("knowledge_shown")).toBe(5);
+    expect(count("sessions")).toBe(2);
+    expect(compact(db, { now: NOW, vacuum: false }).knowledgeShown).toBe(dry.knowledgeShown);
+  });
+
+  test("runs on a store without the knowledge shown table, and reports 0", () => {
+    const old = session("old", NOW - 200 * DAY);
+    turn(old, 1, "done", NOW - 200 * DAY);
+    db.run("DROP TABLE knowledge_shown");
+    expect(compact(db, { now: NOW, vacuum: false, dryRun: true }).knowledgeShown).toBe(0);
+    const report = compact(db, { now: NOW, vacuum: false });
+    expect(report).toMatchObject({ turns: 1, sessions: 1, knowledgeShown: 0 });
+  });
+
+  test("a row of a removed session goes with it, so a session that reuses its id starts unshown", () => {
+    const kept = repo("knowledge/projects/kept");
+    const old = session("old", NOW - 200 * DAY);
+    turn(old, 1, "done", NOW - 200 * DAY);
+    shown(old, kept, "a");
+    expect(compact(db, { now: NOW, vacuum: false })).toMatchObject({
+      sessions: 1,
+      knowledgeShown: 1,
+    });
+    // SQLite gives the highest id back once its row is deleted.
+    const reused = session("new", NOW);
+    expect(reused).toBe(old);
+    expect(count("knowledge_shown")).toBe(0);
+  });
+
   test("the file shrinks after a vacuum", () => {
     const s = session("bulk", NOW - 200 * DAY);
     for (let i = 1; i <= 300; i++) {
@@ -208,7 +292,9 @@ describe("wizardingcode-mem compact", () => {
     db = openDb({ dataDir, busyTimeoutMs: 2000 });
     expect(result.exitCode).toBe(0);
     expect(result.stderr).toBe("");
-    expect(result.stdout).toMatch(/^compact: 1 turn, 1 session, 0 hook runs removed · .* → .*\n$/);
+    expect(result.stdout).toMatch(
+      /^compact: 1 turn, 1 session, 0 hook runs removed · .* → .*\nknowledge shown: 0 rows\n$/,
+    );
     expect(count("turns")).toBe(0);
   });
 
@@ -223,6 +309,7 @@ describe("wizardingcode-mem compact", () => {
     );
     db = openDb({ dataDir, busyTimeoutMs: 2000 });
     expect(result.stdout).toContain("would remove");
+    expect(result.stdout.endsWith("\nknowledge shown: 0 rows\n")).toBe(true);
     expect(count("turns")).toBe(1);
   });
 

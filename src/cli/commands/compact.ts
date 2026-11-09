@@ -28,6 +28,7 @@ export function run(argv: string[]): number {
         ? `compact: would remove ${what} (${size(report.bytesBefore)} now)\n`
         : `compact: ${what} removed · ${size(report.bytesBefore)} → ${size(report.bytesAfter)}\n`,
     );
+    process.stdout.write(`knowledge shown: ${plural(report.knowledgeShown, "row")}\n`);
     return 0;
   } catch (error) {
     logError("compact", error);

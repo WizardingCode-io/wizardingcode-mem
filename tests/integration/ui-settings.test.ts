@@ -175,7 +175,13 @@ describe("wizardingcode-mem ui: settings", () => {
     const dry = await (
       await api(s, "/api/compact", { method: "POST", body: JSON.stringify({ dryRun: true }) })
     ).json();
-    expect(dry).toMatchObject({ dryRun: true, turns: 1, sessions: 1, hookRuns: 0 });
+    expect(dry).toMatchObject({
+      dryRun: true,
+      turns: 1,
+      sessions: 1,
+      hookRuns: 0,
+      knowledgeShown: 0,
+    });
     let db = openDb({ dataDir, busyTimeoutMs: 2000 });
     expect(count(db, "turns")).toBe(1);
     db.close();

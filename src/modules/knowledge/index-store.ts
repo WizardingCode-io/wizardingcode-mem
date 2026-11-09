@@ -927,6 +927,40 @@ export function browseEntries(
     .map(toHit);
 }
 
+/**
+ * The pinned, active, problem-free entries of the given repositories, newest `updated`
+ * first: what a session start shows.
+ */
+export function pinnedEntries(db: Db, repoIds: number[]): Hit[] {
+  if (repoIds.length === 0) return [];
+  return db
+    .query<HitRow, number[]>(
+      `SELECT ${HIT_COLUMNS}, 0 AS rank
+         FROM knowledge_entries e
+         JOIN knowledge_repos r ON r.id = e.repo_id
+        WHERE e.repo_id IN (${placeholders(repoIds)})
+          AND e.pinned = 1 AND e.status = 'active' AND e.problem IS NULL
+        ORDER BY e.updated DESC, e.repo_id, e.slug`,
+    )
+    .all(...repoIds)
+    .map(toHit);
+}
+
+/**
+ * The search table's rows and the active, problem-free entries, over every repository.
+ * The index writer keeps one row per such entry, so two numbers that differ are a gap
+ * that `knowledge rebuild` repairs. Read-only.
+ */
+export function ftsCount(db: Db): { rows: number; active: number } {
+  const n = (sql: string) => db.query<{ n: number }, []>(sql).get()?.n ?? 0;
+  return {
+    rows: n("SELECT count(*) AS n FROM knowledge_fts"),
+    active: n(
+      "SELECT count(*) AS n FROM knowledge_entries WHERE status = 'active' AND problem IS NULL",
+    ),
+  };
+}
+
 /** The indexed row of a slug in one repository, whatever its status; null when there is none. */
 export function entryAt(db: Db, repoId: number, slug: string): Hit | null {
   const row = db

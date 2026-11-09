@@ -87,6 +87,11 @@ function entryLine(entry: Pick<Hit, "scope" | "slug" | "kind" | "area" | "title"
   return inert(`- ${entry.scope}/${entry.slug} · ${entry.kind} · ${entry.area} · ${entry.title}`);
 }
 
+/** A pinned entry's line at session start: `- <scope>/<slug> · <kind> · <area id> · <title>`. */
+export function pinnedLine(entry: Pick<Hit, "scope" | "slug" | "kind" | "area" | "title">): string {
+  return entryLine(entry);
+}
+
 /** The body up to its first blank line, on one line, clipped. */
 function firstParagraph(body: string): string {
   const paragraph = body.trim().split(/\n\s*\n/)[0] ?? "";

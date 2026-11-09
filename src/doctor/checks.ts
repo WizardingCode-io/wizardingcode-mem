@@ -3,6 +3,7 @@ import { accessSync, constants, existsSync, readFileSync, statSync } from "node:
 import { basename, dirname, join } from "node:path";
 import { lastBackup } from "../backup/schedule.ts";
 import { semanticStatus } from "../embed/status.ts";
+import { BUILT_IN, enabledModules } from "../engine/modules.ts";
 import { ANTIGRAVITY } from "../install/antigravity.ts";
 import { CLAUDE_CODE } from "../install/claude-code.ts";
 import { claudeDesktopServer, hasClaudeDesktop } from "../install/claude-desktop.ts";
@@ -22,9 +23,11 @@ import { QWEN } from "../install/qwen.ts";
 import { Breaker } from "../judge/breaker.ts";
 import { keyFingerprint } from "../judge/key.ts";
 import { personAuthor } from "../modules/knowledge/author.ts";
+import { INTRO, pinnedLine, WRAPPER_CLOSE, WRAPPER_OPEN } from "../modules/knowledge/contribute.ts";
 import { KnowledgeError } from "../modules/knowledge/errors.ts";
-import { FOLDER_CAP, readRepoFiles } from "../modules/knowledge/index-store.ts";
+import { FOLDER_CAP, ftsCount, type Hit, readRepoFiles } from "../modules/knowledge/index-store.ts";
 import { KNOWLEDGE_MODULE, KNOWLEDGE_SCHEMA_VERSION } from "../modules/knowledge/migrations.ts";
+import { SESSION_START_SHARE } from "../modules/knowledge/policy.ts";
 import {
   checkRepoConfig,
   DECIDED_DIR,
@@ -582,6 +585,32 @@ const FOLDER_WARN = 4000;
 const LOCK_STALE_MS = 60_000;
 const PROBLEMS_NAMED = 5;
 
+const KNOWLEDGE_OFF = "knowledge is off (WIZARDINGCODE_MODULES)";
+
+/**
+ * Whether the modules setting turned off a module this binary has: the built-in modules
+ * minus the ones the setting enables. An unknown id in the setting is not logged from here,
+ * since `doctor` writes nothing.
+ */
+function knowledgeOff(env: Record<string, string | undefined>, dataDir: string): boolean {
+  const enabled = enabledModules(loadSettings(env, dataDir).modules, BUILT_IN, () => {});
+  return BUILT_IN.filter((module) => !enabled.includes(module)).some(
+    (module) => module.id === KNOWLEDGE_MODULE,
+  );
+}
+
+/**
+ * The characters the pinned lines take at session start, newest first, in the block they
+ * are shown in (the wrapper and the intro); 0 with no pin.
+ */
+function pinnedChars(pins: Hit[]): number {
+  if (pins.length === 0) return 0;
+  const lines = [...pins]
+    .sort((a, b) => (b.updated ?? "").localeCompare(a.updated ?? ""))
+    .map(pinnedLine);
+  return [WRAPPER_OPEN, INTRO, ...lines, WRAPPER_CLOSE].join("\n").length;
+}
+
 /**
  * The fixed scopes' names with no database to map projects by: whatever is at each, a
  * link or a file included, as the module finds them (`scanRepos`).
@@ -618,12 +647,16 @@ function projectFolders(dataDir: string): string[] {
  */
 function knowledgeRepositories(context: DoctorContext, db: Db | null): Check {
   const name = "knowledge";
+  const env = context.env ?? process.env;
+  const off = knowledgeOff(env, context.dataDir);
   // The module's own rule, before anything under these folders is listed or read.
   refuseLinkedRoots(context.dataDir);
   if (kindAt(knowledgeRoot(context.dataDir)) === "absent") {
-    return { name, status: "skip", detail: "no knowledge repository yet" };
+    // Said even with nothing written yet: the person may be about to write some.
+    return off
+      ? { name, status: "warn", detail: KNOWLEDGE_OFF }
+      : { name, status: "skip", detail: "no knowledge repository yet" };
   }
-  const env = context.env ?? process.env;
   const store: KnowledgeStore = {
     // Read-only, and only where a database exists: `scanRepos` and nothing that writes.
     db: db as Db,
@@ -635,7 +668,7 @@ function knowledgeRepositories(context: DoctorContext, db: Db | null): Check {
     renew: null,
     report: null,
   };
-  const warnings: string[] = [];
+  const warnings: string[] = off ? [KNOWLEDGE_OFF] : [];
   const notes: string[] = [];
 
   let git = context.which("git") !== null;
@@ -720,6 +753,15 @@ function knowledgeRepositories(context: DoctorContext, db: Db | null): Check {
         // The tables are created on the next write; there is nothing recorded to read.
         if (!String((error as Error).message).includes("no such table: knowledge_")) throw error;
       }
+      try {
+        // A gap in the index writer: the hooks and the tools search that table alone.
+        const { rows, active } = ftsCount(db);
+        if (rows !== active) {
+          warnings.push(`FTS rows ${rows}, active entries ${active}; run knowledge rebuild`);
+        }
+      } catch (error) {
+        if (!String((error as Error).message).includes("no such table: knowledge_")) throw error;
+      }
     }
     if (personAuthor(store).source === "default") {
       warnings.push("no author configured: set WIZARDINGCODE_MEM_AUTHOR or a git user.name");
@@ -754,6 +796,8 @@ function knowledgeRepositories(context: DoctorContext, db: Db | null): Check {
   // The repositories read: one the store refuses has its warning above, and is not counted.
   let repositories = 0;
   const problems: string[] = [];
+  // The workspace's and the shared repository's pins, which every project is shown.
+  const pins: Hit[] = [];
   for (const repo of found) {
     if (unread.has(repo.relative)) continue;
     repositories++;
@@ -807,6 +851,13 @@ function knowledgeRepositories(context: DoctorContext, db: Db | null): Check {
     problems.push(
       ...files.entries.filter(({ entry }) => entry.problem !== null).map(({ entry }) => entry.slug),
     );
+    const { scope } = repo.ref;
+    if (scope !== "project") {
+      for (const { entry } of files.entries) {
+        if (!entry.pinned || entry.status !== "active" || entry.problem !== null) continue;
+        pins.push({ ...entry, repoId: 0, scope, hash: "", bm25: 0 });
+      }
+    }
 
     if (!git) continue;
     try {
@@ -827,6 +878,12 @@ function knowledgeRepositories(context: DoctorContext, db: Db | null): Check {
       if (!(error instanceof KnowledgeError)) throw error;
       warnings.push(`${repo.relative}: ${error.message}`);
     }
+  }
+  const pinned = pinnedChars(pins);
+  if (pinned > SESSION_START_SHARE) {
+    warnings.push(
+      `pinned entries exceed the session-start share (${pinned} of ${SESSION_START_SHARE} characters); a project's own pins add to them in that project`,
+    );
   }
   if (problems.length > 0) {
     const more = problems.length - PROBLEMS_NAMED;

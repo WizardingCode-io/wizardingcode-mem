@@ -2,8 +2,10 @@ import pkg from "../../package.json" with { type: "json" };
 import type { ProjectRef } from "../core/project.ts";
 import type { SkipReason } from "../distill/pipeline.ts";
 import { noneSkipped, SKIPPED_KEY, type SkippedBy, skippedText } from "../distill/skips.ts";
+import { BUILT_IN, enabledModules } from "../engine/modules.ts";
 import type { HistoryStatus } from "../history/status.ts";
 import { USAGE_KEYS } from "../judge/index.ts";
+import { KNOWLEDGE_MODULE } from "../modules/knowledge/migrations.ts";
 import { type Env, loadSettings, publicSettings } from "../settings/settings.ts";
 import { levelOf } from "../sharing/levels.ts";
 import { isDefault, loadPolicy } from "../sharing/policy.ts";
@@ -45,7 +47,21 @@ export interface StatusReport {
   dataDir: string;
   /** The history import across projects; set by callers that look at the transcripts. */
   history?: HistoryStatus;
+  /** Null where the knowledge tables do not exist, or with no database. */
+  knowledge: KnowledgeStatus | null;
   sharing: SharingStatus;
+}
+
+/** What the agent can be shown from the knowledge index, over every repository. */
+export interface KnowledgeStatus {
+  /** Whether the modules setting has the module on. */
+  on: boolean;
+  /** Active, problem-free entries. */
+  entries: number;
+  /** The pinned ones among them. */
+  pinned: number;
+  /** Distinct entries shown in the last 24 hours, at a prompt or a session start. */
+  shown24h: number;
 }
 
 /**
@@ -166,6 +182,50 @@ function skippedBy(db: Db | null, project: ProjectRef | null): StatusReport["tur
   return by;
 }
 
+const DAY_MS = 86_400_000;
+const KNOWLEDGE_TABLES = ["knowledge_entries", "knowledge_shown"];
+
+/**
+ * The knowledge line's figures, read from the index as it is: no file, no git, no write.
+ * Null with no database, and where the knowledge tables do not exist.
+ */
+export function knowledgeStatus(db: Db | null, now: number, on: boolean): KnowledgeStatus | null {
+  if (db === null) return null;
+  const tables = db
+    .query<{ n: number }, string[]>(
+      `SELECT count(*) AS n FROM sqlite_master WHERE type = 'table' AND name IN (${KNOWLEDGE_TABLES.map(() => "?").join(", ")})`,
+    )
+    .get(...KNOWLEDGE_TABLES)?.n;
+  if (tables !== KNOWLEDGE_TABLES.length) return null;
+  const counts = db
+    .query<{ entries: number; pinned: number | null }, []>(
+      `SELECT count(*) AS entries, sum(pinned) AS pinned FROM knowledge_entries
+        WHERE status = 'active' AND problem IS NULL`,
+    )
+    .get();
+  const shown =
+    db
+      .query<{ n: number }, [number]>(
+        "SELECT count(*) AS n FROM (SELECT DISTINCT repo_id, entry_id FROM knowledge_shown WHERE at > ?)",
+      )
+      .get(now - DAY_MS)?.n ?? 0;
+  return { on, entries: counts?.entries ?? 0, pinned: counts?.pinned ?? 0, shown24h: shown };
+}
+
+/** Whether the modules setting has knowledge on; an unknown id is not logged from here. */
+function knowledgeOn(env: Env, dataDir: string): boolean {
+  return enabledModules(loadSettings(env, dataDir).modules, BUILT_IN, () => {}).some(
+    (module) => module.id === KNOWLEDGE_MODULE,
+  );
+}
+
+/** The `knowledge` line of `status`. */
+export function formatKnowledge(knowledge: KnowledgeStatus): string {
+  if (!knowledge.on) return "knowledge off";
+  const { entries, pinned, shown24h } = knowledge;
+  return `knowledge ${plural(entries, "entry", "entries")} · ${pinned} pinned · ${shown24h} shown in 24 h`;
+}
+
 /** The setting behind each list, whose source says whether the environment narrowed it. */
 const SHARING_LISTS = {
   roots: "WIZARDINGCODE_MEM_SHARE_ROOTS",
@@ -273,6 +333,7 @@ export function statusReport(
     modelCalls: 0,
     judge: judgeReport(db, project, dataDir),
     dataDir,
+    knowledge: knowledgeStatus(db, now, knowledgeOn(env, dataDir)),
     sharing: sharingStatus(db, project, dataDir, env, now),
   };
 }
@@ -334,7 +395,9 @@ export function formatStatus(report: StatusReport): string {
       `turns     ${turns.distilled} distilled · ${skippedText(turns.skipped, turns.skippedBy)} · ${turns.failed} failed · ${turns.queued} queued`,
     );
   }
-  // Printed whether or not anything is stored here: what leaves concerns the machine.
+  // Printed whether or not anything is stored here: knowledge and what leaves concern the
+  // machine, not this project's memories.
+  if (report.knowledge !== null) lines.push(formatKnowledge(report.knowledge));
   lines.push(formatSharing(report.sharing));
   if (hooks.runs > 0) {
     const speeds = hooks.latency.map((l) => `${l.event} p50 ${l.p50} ms, p95 ${l.p95} ms`);
