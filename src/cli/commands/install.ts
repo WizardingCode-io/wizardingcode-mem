@@ -1,4 +1,4 @@
-import { existsSync, readSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { doctorContext } from "../../doctor/context.ts";
@@ -40,6 +40,7 @@ import {
 import { defaultDataDir } from "../../util/paths.ts";
 import { isCompiled } from "../../util/self.ts";
 import { EXIT_USAGE } from "../exit.ts";
+import { askYesNo } from "../prompt.ts";
 
 export const SUPPORTED_AGENTS = [
   "claude-code",
@@ -102,21 +103,12 @@ function describeInstall(
   ].join("\n");
 }
 
-/** Asks on the terminal. Without one, the answer is no: nothing is retired unasked. */
+/**
+ * Asks on the terminal, where Enter alone is yes. Without one, the answer is no: nothing is
+ * retired unasked.
+ */
 function confirm(question: string): boolean {
-  if (!process.stdin.isTTY || !process.stdout.isTTY) return false;
-  process.stdout.write(`${question} [Y/n] `);
-  const buffer = Buffer.alloc(64);
-  let read = 0;
-  try {
-    read = readSync(0, buffer, 0, buffer.length, null);
-  } catch {
-    return false;
-  }
-  // Enter means yes; end of input, with nothing typed, does not.
-  if (read === 0) return false;
-  const answer = buffer.toString("utf8", 0, read).trim().toLowerCase();
-  return answer === "" || answer === "y" || answer === "yes" || answer === "s" || answer === "sim";
+  return askYesNo(question, true);
 }
 
 /**
