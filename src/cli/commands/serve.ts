@@ -477,7 +477,7 @@ async function mirror(shell: Shell, argv: string[]): Promise<number> {
   if ("error" in parsed) return usage(parsed.error);
   const db = openTeamForWrite(shell.dir, shell.now);
   try {
-    const run = await runMirror(
+    const run = runMirror(
       { db, dataDir: shell.dir, env: process.env, log: shell.log, now: () => Date.now() },
       { rebuild: parsed.values.rebuild === true },
     );
@@ -499,7 +499,7 @@ async function purge(shell: Shell, argv: string[]): Promise<number> {
   const db = openTeamForWrite(shell.dir, shell.now);
   try {
     // The erasure, its audit row and the repositories' replay, under the mirror lease.
-    const result = await purgeItem(
+    const result = purgeItem(
       { db, dataDir: shell.dir, env: process.env, log: shell.log, now: () => Date.now() },
       kind,
       uid,

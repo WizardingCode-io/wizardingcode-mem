@@ -1,5 +1,6 @@
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -134,6 +135,10 @@ const filesAt = (repo: string) =>
     .split("\n")
     .filter((line) => line !== "")
     .sort();
+const purgedCount = (t: TestServer) =>
+  t.server.db
+    .query<{ n: number }, []>("SELECT count(*) AS n FROM audit WHERE action = 'purged'")
+    .get()?.n ?? 0;
 const lastRun = (t: TestServer) =>
   JSON.parse(getMeta(t.server.db, "mirror.last") ?? "null") as {
     at: number;
@@ -158,7 +163,7 @@ describe("the export", () => {
       baseHash: b.hash,
     });
 
-    const run = await runMirror(mirrorCtx(t), { rebuild: false });
+    const run = runMirror(mirrorCtx(t), { rebuild: false });
     expect(run).toEqual({ commits: 4, errors: [] });
     const repo = sharedRepo(t);
     const aFile = fileNameFor(uuidOf(a1.uid), "alpha");
@@ -198,7 +203,7 @@ describe("the export", () => {
     expect(manifest).toMatchObject({ format: 1, scope: "shared", mirror: true });
 
     const head = realGit(repo, "rev-parse", "HEAD");
-    const again = await runMirror(mirrorCtx(t), { rebuild: false });
+    const again = runMirror(mirrorCtx(t), { rebuild: false });
     expect(again).toEqual({ commits: 0, errors: [] });
     expect(realGit(repo, "rev-parse", "HEAD")).toBe(head);
     expect(lastRun(t)?.commits).toBe(0);
@@ -209,7 +214,7 @@ describe("the export", () => {
     const { t, ana } = await team();
     const p = entryPayload({ scope: "project", remoteAlias: ALIAS_A, slug: "first" });
     await pushOne(t.server, ana.token, sendOf(p));
-    await runMirror(mirrorCtx(t), { rebuild: false });
+    runMirror(mirrorCtx(t), { rebuild: false });
     const folderA = join(repos(t), repoFolder("project", ALIAS_A, null));
     expect(repoFolder("project", ALIAS_A, null)).toBe(
       `projects/github-com-acme-site-${projectFolderName(ALIAS_A).slice(0, 8)}`,
@@ -218,7 +223,7 @@ describe("the export", () => {
     expect(existsSync(join(folderA, fileNameFor(uuid, "first")))).toBe(true);
     const renamed = { ...p, slug: "second" };
     await pushOne(t.server, ana.token, sendOf(renamed, { baseRevision: 1, baseHash: p.hash }));
-    expect((await runMirror(mirrorCtx(t), { rebuild: false })).commits).toBe(1);
+    expect(runMirror(mirrorCtx(t), { rebuild: false }).commits).toBe(1);
     expect(existsSync(join(folderA, fileNameFor(uuid, "first")))).toBe(false);
     expect(existsSync(join(folderA, fileNameFor(uuid, "second")))).toBe(true);
     const renameCommit = commitsOf(folderA).at(-1);
@@ -232,7 +237,7 @@ describe("the export", () => {
 
     const moved = { ...renamed, uid: entryUid("project", ALIAS_B, uuid), remoteAlias: ALIAS_B };
     await pushOne(t.server, ana.token, sendOf(moved, { baseRevision: 2, baseHash: p.hash }));
-    expect((await runMirror(mirrorCtx(t), { rebuild: false })).commits).toBe(1);
+    expect(runMirror(mirrorCtx(t), { rebuild: false }).commits).toBe(1);
     const folderB = join(repos(t), repoFolder("project", ALIAS_B, null));
     expect(existsSync(join(folderA, fileNameFor(uuid, "second")))).toBe(false);
     expect(readFileSync(join(folderB, fileNameFor(uuid, "second")), "utf8")).toBe(
@@ -262,7 +267,7 @@ describe("the export", () => {
         sendOf(entryPayload({ scope: "workspace", slug: "note" })),
       );
     }
-    expect((await runMirror(mirrorCtx(t), { rebuild: false })).errors).toEqual([]);
+    expect(runMirror(mirrorCtx(t), { rebuild: false }).errors).toEqual([]);
     const folders = readdirSync(join(repos(t), "members")).sort();
     expect(folders).toEqual(
       [
@@ -295,7 +300,7 @@ describe("failures, repair, rebuild, purge", () => {
     const project = entryPayload({ scope: "project", remoteAlias: ALIAS_A, slug: "p" });
     await pushOne(t.server, ana.token, sendOf(shared));
     await pushOne(t.server, ana.token, sendOf(project));
-    expect((await runMirror(mirrorCtx(t), { rebuild: false })).commits).toBe(2);
+    expect(runMirror(mirrorCtx(t), { rebuild: false }).commits).toBe(2);
     await pushOne(
       t.server,
       ana.token,
@@ -307,7 +312,7 @@ describe("failures, repair, rebuild, purge", () => {
       sendOf(rehashed({ ...project, body: "p2\n" }), { baseRevision: 1, baseHash: project.hash }),
     );
     const stub = stubGit(join(t.dir, "stub-fail"), { failOnce: "commit", stderr: "fatal: boom" });
-    const run = await runMirror(mirrorCtx(t, stub), { rebuild: false });
+    const run = runMirror(mirrorCtx(t, stub), { rebuild: false });
     expect(run.commits).toBe(1);
     expect(run.errors).toHaveLength(1);
     expect(run.errors[0]?.folder).toBe("shared");
@@ -315,7 +320,7 @@ describe("failures, repair, rebuild, purge", () => {
     expect(lastRun(t)?.error).toContain("shared");
     expect(entryByUuid(t.server.db, uuidOf(shared.uid))?.mirror_revision).toBe(1);
     expect(entryByUuid(t.server.db, uuidOf(project.uid))?.mirror_revision).toBe(2);
-    const next = await runMirror(mirrorCtx(t), { rebuild: false });
+    const next = runMirror(mirrorCtx(t), { rebuild: false });
     expect(next).toEqual({ commits: 1, errors: [] });
     expect(entryByUuid(t.server.db, uuidOf(shared.uid))?.mirror_revision).toBe(2);
     expect(
@@ -335,7 +340,7 @@ describe("failures, repair, rebuild, purge", () => {
       ana.token,
       sendOf(entryPayload({ scope: "project", remoteAlias: ALIAS_B, slug: "q" })),
     );
-    expect((await runMirror(mirrorCtx(t), { rebuild: false })).errors).toEqual([]);
+    expect(runMirror(mirrorCtx(t), { rebuild: false }).errors).toEqual([]);
     expect(existsSync(join(folder, ".git", "index.lock"))).toBe(false);
     expect(commitsOf(folder).map((c) => c.subject)).toEqual([
       "team: init project",
@@ -354,12 +359,12 @@ describe("failures, repair, rebuild, purge", () => {
     );
     const w = entryPayload({ scope: "workspace", slug: "w" });
     await pushOne(t.server, ana.token, sendOf(w));
-    await runMirror(mirrorCtx(t), { rebuild: false });
+    runMirror(mirrorCtx(t), { rebuild: false });
     const before = commitsOf(sharedRepo(t)).map((c) => [c.subject, c.an, c.body]);
     const beforeFiles = filesAt(sharedRepo(t));
     rmSync(sharedRepo(t), { recursive: true, force: true });
     expect(leaseOf(t.server.db, "serve.lease")?.until).toBeGreaterThan(t.clock.now);
-    const rebuilt = await runMirror(mirrorCtx(t), { rebuild: true });
+    const rebuilt = runMirror(mirrorCtx(t), { rebuild: true });
     expect(rebuilt).toEqual({ commits: 3, errors: [] });
     expect(commitsOf(sharedRepo(t)).map((c) => [c.subject, c.an, c.body])).toEqual(before);
     expect(filesAt(sharedRepo(t))).toEqual(beforeFiles);
@@ -387,7 +392,7 @@ describe("failures, repair, rebuild, purge", () => {
       scope: "project" as const,
     };
     await pushOne(t.server, ana.token, sendOf(moved, { baseRevision: 1, baseHash: p.hash }));
-    await runMirror(mirrorCtx(t), { rebuild: false });
+    runMirror(mirrorCtx(t), { rebuild: false });
     const folderA = join(repos(t), repoFolder("project", ALIAS_A, null));
     expect(
       realGit(
@@ -403,8 +408,8 @@ describe("failures, repair, rebuild, purge", () => {
     // The write-ahead log holds frames of the pushes; the purge's truncating checkpoint empties it.
     const wal = `${teamPaths(t.dir).db}-wal`;
     expect(statSync(wal).size).toBeGreaterThan(0);
-    const purged = await purgeItem(mirrorCtx(t), "entry", moved.uid, t.clock.now);
-    expect(purged).toEqual({ revisions: 2, feedRows: 3, errors: [], wal: "truncated" });
+    const purged = purgeItem(mirrorCtx(t), "entry", moved.uid, t.clock.now);
+    expect(purged).toEqual({ rows: 2, feedRows: 3, errors: [], wal: "truncated" });
     expect(statSync(wal).size).toBe(0);
     expect(getMeta(t.server.db, "mirror.replay")).toBeNull();
     expect(
@@ -460,8 +465,8 @@ describe("failures, repair, rebuild, purge", () => {
     const m = memoryPayload({ rowId: 9 });
     await pushOne(t.server, ana.token, sendOf(m));
     const feedUid = `remote:${ana.deviceAlias}:${m.uid}`;
-    const purgedMemory = await purgeItem(mirrorCtx(t), "memory", feedUid, t.clock.now);
-    expect(purgedMemory).toEqual({ revisions: 1, feedRows: 1, errors: [], wal: "truncated" });
+    const purgedMemory = purgeItem(mirrorCtx(t), "memory", feedUid, t.clock.now);
+    expect(purgedMemory).toEqual({ rows: 1, feedRows: 1, errors: [], wal: "truncated" });
     expect(memoryByKey(t.server.db, ana.deviceId, m.uid)).toBeNull();
     expect(
       t.server.db
@@ -473,7 +478,7 @@ describe("failures, repair, rebuild, purge", () => {
       result: "refused",
       reason: "purged",
     });
-    await expect(purgeItem(mirrorCtx(t), "entry", `shared:${uuid}`, t.clock.now)).rejects.toThrow();
+    expect(() => purgeItem(mirrorCtx(t), "entry", `shared:${uuid}`, t.clock.now)).toThrow();
   });
 });
 
@@ -484,7 +489,7 @@ describe("isolation, the lease, the plan", () => {
     const envFile = join(t.dir, "env.txt");
     const argsFile = join(t.dir, "args.txt");
     const stub = stubGit(join(t.dir, "stub-iso"), { dumpEnvTo: envFile, recordArgsTo: argsFile });
-    expect((await runMirror(mirrorCtx(t, stub), { rebuild: false })).errors).toEqual([]);
+    expect(runMirror(mirrorCtx(t, stub), { rebuild: false }).errors).toEqual([]);
     const env = readFileSync(envFile, "utf8");
     expect(env).toContain("GIT_CONFIG_GLOBAL=/dev/null");
     expect(env).toContain("GIT_CONFIG_NOSYSTEM=1");
@@ -528,7 +533,7 @@ describe("isolation, the lease, the plan", () => {
     expect(claimLease(t.server.db, MIRROR_LEASE, "mirror-other", t.clock.now, MIRROR_TTL_MS)).toBe(
       true,
     );
-    await expect(runMirror(mirrorCtx(t), { rebuild: false })).rejects.toThrow(LeaseHeldError);
+    expect(() => runMirror(mirrorCtx(t), { rebuild: false })).toThrow(LeaseHeldError);
     t.server.db.run("DELETE FROM meta WHERE key = ?", [MIRROR_LEASE]);
 
     // One renewal per git call: the clock is read once to take the lease, once per renewal
@@ -537,7 +542,7 @@ describe("isolation, the lease, the plan", () => {
     const stub = stubGit(join(t.dir, "stub-renew"), { recordArgsTo: argsFile });
     let reads = 0;
     const ctx = { ...mirrorCtx(t, stub), now: () => t.clock.now + 1000 * reads++ };
-    const run = await runMirror(ctx, { rebuild: false });
+    const run = runMirror(ctx, { rebuild: false });
     expect(run.commits).toBe(2);
     const gitCalls = readFileSync(argsFile, "utf8")
       .split("\t\n")
@@ -563,7 +568,7 @@ describe("isolation, the lease, the plan", () => {
         return t.clock.now;
       },
     };
-    const aborted = await runMirror(stolen, { rebuild: false });
+    const aborted = runMirror(stolen, { rebuild: false });
     expect(aborted.commits).toBeLessThan(2);
     expect(aborted.errors.some((e) => /lease/.test(e.message))).toBe(true);
     expect(lastRun(t)?.error).toMatch(/lease/);
@@ -580,14 +585,12 @@ describe("isolation, the lease, the plan", () => {
     const { t, ana } = await team();
     const p = entryPayload({ scope: "shared", slug: "held" });
     await pushOne(t.server, ana.token, sendOf(p));
-    await runMirror(mirrorCtx(t), { rebuild: false });
+    runMirror(mirrorCtx(t), { rebuild: false });
     const uuid = uuidOf(p.uid);
     expect(claimLease(t.server.db, MIRROR_LEASE, "mirror-other", t.clock.now, MIRROR_TTL_MS)).toBe(
       true,
     );
-    await expect(purgeItem(mirrorCtx(t), "entry", p.uid, t.clock.now)).rejects.toThrow(
-      LeaseHeldError,
-    );
+    expect(() => purgeItem(mirrorCtx(t), "entry", p.uid, t.clock.now)).toThrow(LeaseHeldError);
     expect(entryByUuid(t.server.db, uuid)).not.toBeNull();
     expect(
       t.server.db
@@ -601,8 +604,8 @@ describe("isolation, the lease, the plan", () => {
     ).toBe(0);
     expect(realGit(sharedRepo(t), "log", "--all", "--format=%s").includes(uuid)).toBe(true);
     t.server.db.run("DELETE FROM meta WHERE key = ?", [MIRROR_LEASE]);
-    const done = await purgeItem(mirrorCtx(t), "entry", p.uid, t.clock.now);
-    expect(done).toEqual({ revisions: 1, feedRows: 1, errors: [], wal: "truncated" });
+    const done = purgeItem(mirrorCtx(t), "entry", p.uid, t.clock.now);
+    expect(done).toEqual({ rows: 1, feedRows: 1, errors: [], wal: "truncated" });
     expect(entryByUuid(t.server.db, uuid)).toBeNull();
     expect(realGit(sharedRepo(t), "log", "--all", "--format=%s").includes(uuid)).toBe(false);
     expect(
@@ -618,13 +621,22 @@ describe("isolation, the lease, the plan", () => {
     const gone = entryPayload({ scope: "shared", slug: "gone" });
     await pushOne(t.server, ana.token, sendOf(keep));
     await pushOne(t.server, ana.token, sendOf(gone));
-    await runMirror(mirrorCtx(t), { rebuild: false });
+    runMirror(mirrorCtx(t), { rebuild: false });
     const keepFile = join(sharedRepo(t), fileNameFor(uuidOf(keep.uid), "keep"));
     expect(existsSync(keepFile)).toBe(true);
     // The replay's first commit fails: the erasure holds, the folder is left without the kept entry.
     const stub = stubGit(join(t.dir, "stub-replay"), { failOnce: "commit", stderr: "fatal: boom" });
-    const purged = await purgeItem(mirrorCtx(t, stub), "entry", gone.uid, t.clock.now);
-    expect(purged).toMatchObject({ revisions: 1, feedRows: 1, wal: "truncated" });
+    // The note is there at the first clock read after the erasure committed, before any git ran.
+    const ctx = mirrorCtx(t, stub);
+    const clock = ctx.now;
+    const seen: { purged: number; note: string | null }[] = [];
+    ctx.now = () => {
+      seen.push({ purged: purgedCount(t), note: getMeta(t.server.db, "mirror.replay") });
+      return clock();
+    };
+    const purged = purgeItem(ctx, "entry", gone.uid, t.clock.now);
+    expect(purged).toMatchObject({ rows: 1, feedRows: 1, wal: "truncated" });
+    expect(seen.find((s) => s.purged > 0)?.note).toContain("shared");
     expect(purged.errors).toHaveLength(1);
     expect(purged.errors[0]).toMatchObject({ folder: "shared" });
     expect(entryByUuid(t.server.db, uuidOf(gone.uid))).toBeNull();
@@ -634,7 +646,7 @@ describe("isolation, the lease, the plan", () => {
     ]);
     expect(lastRun(t)?.error).toContain("shared");
     // The next run finds the owed replay, redoes the folder without the purged entry and clears the mark.
-    const next = await runMirror(mirrorCtx(t), { rebuild: false });
+    const next = runMirror(mirrorCtx(t), { rebuild: false });
     expect(next.errors).toEqual([]);
     expect(getMeta(t.server.db, "mirror.replay")).toBeNull();
     expect(readFileSync(keepFile, "utf8")).toBe(keep.frontmatter + keep.body);
@@ -645,6 +657,71 @@ describe("isolation, the lease, the plan", () => {
       "team: init shared",
       `team: send ${keep.uid}`,
     ]);
+  });
+
+  test("a second purge before the first's replay is whole adds its folders to the note and replays both", async () => {
+    const { t, ana } = await team();
+    const keepShared = entryPayload({ scope: "shared", slug: "keep-shared" });
+    const goneShared = entryPayload({ scope: "shared", slug: "gone-shared" });
+    const keepA = entryPayload({ scope: "project", remoteAlias: ALIAS_A, slug: "keep-a" });
+    const goneA = entryPayload({ scope: "project", remoteAlias: ALIAS_A, slug: "gone-a" });
+    for (const p of [keepShared, goneShared, keepA, goneA]) {
+      await pushOne(t.server, ana.token, sendOf(p));
+    }
+    runMirror(mirrorCtx(t), { rebuild: false });
+    const folderA = join(repos(t), repoFolder("project", ALIAS_A, null));
+    // The first purge's replay fails: shared is owed.
+    const stub = stubGit(join(t.dir, "stub-merge"), { failOnce: "commit", stderr: "fatal: boom" });
+    expect(purgeItem(mirrorCtx(t, stub), "entry", goneShared.uid, t.clock.now).errors).toHaveLength(
+      1,
+    );
+    expect(JSON.parse(getMeta(t.server.db, "mirror.replay") ?? "null")).toEqual([
+      ["shared", { scope: "shared" }],
+    ]);
+    // The second, in another folder and with git working, finishes the first's replay too.
+    const second = purgeItem(mirrorCtx(t), "entry", goneA.uid, t.clock.now);
+    expect(second.errors).toEqual([]);
+    expect(getMeta(t.server.db, "mirror.replay")).toBeNull();
+    expect(
+      readFileSync(join(sharedRepo(t), fileNameFor(uuidOf(keepShared.uid), "keep-shared")), "utf8"),
+    ).toBe(keepShared.frontmatter + keepShared.body);
+    expect(readFileSync(join(folderA, fileNameFor(uuidOf(keepA.uid), "keep-a")), "utf8")).toBe(
+      keepA.frontmatter + keepA.body,
+    );
+    for (const [repo, gone] of [
+      [sharedRepo(t), goneShared],
+      [folderA, goneA],
+    ] as const) {
+      expect(realGit(repo, "log", "--all", "--format=%s").includes(uuidOf(gone.uid))).toBe(false);
+    }
+  });
+
+  test("a note the engine cannot read makes the next run a rebuild, which clears it", async () => {
+    const { t, ana } = await team();
+    const p = entryPayload({ scope: "shared", slug: "p" });
+    await pushOne(t.server, ana.token, sendOf(p));
+    runMirror(mirrorCtx(t), { rebuild: false });
+    rmSync(sharedRepo(t), { recursive: true, force: true });
+    setMeta(t.server.db, "mirror.replay", "{not json");
+    expect(runMirror(mirrorCtx(t), { rebuild: false })).toEqual({ commits: 1, errors: [] });
+    expect(getMeta(t.server.db, "mirror.replay")).toBeNull();
+    expect(existsSync(join(sharedRepo(t), fileNameFor(uuidOf(p.uid), "p")))).toBe(true);
+  });
+
+  test("a throw outside the per-revision blocks is recorded in mirror.last, the lease released, the rebuild still owed", async () => {
+    const { t, ana } = await team();
+    await pushOne(t.server, ana.token, sendOf(entryPayload({ scope: "shared", slug: "p" })));
+    runMirror(mirrorCtx(t), { rebuild: false });
+    // The repositories' root cannot be removed while its parent is read-only.
+    chmodSync(t.dir, 0o500);
+    try {
+      expect(() => runMirror(mirrorCtx(t), { rebuild: true })).toThrow();
+    } finally {
+      chmodSync(t.dir, 0o700);
+    }
+    expect(lastRun(t)?.error).toContain("(run)");
+    expect(leaseOf(t.server.db, MIRROR_LEASE)).toBeNull();
+    expect(runMirror(mirrorCtx(t), { rebuild: false })).toEqual({ commits: 1, errors: [] });
   });
 });
 
@@ -705,13 +782,19 @@ describe("the scheduler", () => {
     t.clock.advance(30_000);
     expect(calls).toHaveLength(1);
     expect(calls[0]?.dataDir).toBe(t.dir);
-    // The child is alive: the hourly tick and a new push timer start nothing.
-    t.clock.advance(3_600_000);
+    const wal = `${teamPaths(t.dir).db}-wal`;
+    expect(statSync(wal).size).toBeGreaterThan(0);
+    // The child is alive: the hourly tick and a new push timer start nothing, and the log is not
+    // cut. The advances land on the tick itself, so no lease renewal writes after it.
+    t.clock.advance(3_600_000 - 90_000);
     expect(calls).toHaveLength(1);
+    expect(statSync(wal).size).toBeGreaterThan(0);
     release();
     await Bun.sleep(10);
     t.clock.advance(3_600_000);
     expect(calls).toHaveLength(2);
+    // No child was alive at this tick: the hourly checkpoint cut the log before the child started.
+    expect(statSync(wal).size).toBe(0);
     // Stop signals the running child and waits for it.
     const stopped = t.server.stop();
     await Bun.sleep(10);

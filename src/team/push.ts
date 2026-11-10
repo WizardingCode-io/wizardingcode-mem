@@ -4,7 +4,7 @@ import { entryUid } from "../sharing/types.ts";
 import type { Caller } from "./auth.ts";
 import type { PushReason } from "./contract.ts";
 import type { Db } from "./db.ts";
-import { HttpError } from "./errors.ts";
+import { HttpError, unknownItem } from "./errors.ts";
 import { memoryKey, splitMemoryKey } from "./ids.ts";
 import { disableMember } from "./members.ts";
 import {
@@ -149,7 +149,10 @@ function tombstoneEntry(
   return revision;
 }
 
-/** The feed form of a memory's uid: the owning device's alias, never its id. */
+/** The alias of a device, or nothing for one the server does not hold: what a memory's feed uid carries. */
+export const deviceAlias = (db: Db, deviceId: string): string =>
+  deviceById(db, deviceId)?.alias ?? "";
+
 /** A memory's feed uid: the device's alias and the memory's own uid, as the devices read it. */
 export const memoryFeedUid = (deviceAlias: string, uid: string): string =>
   `remote:${deviceAlias}:${uid}`;
@@ -483,7 +486,7 @@ export function applyWithdraw(
     }
     if (item.baseRevision !== row.revision) return { uid: item.uid, result: "stale", current };
     if (row.member_id !== caller.member.id && !admin) return refused(item.uid, "not-owner");
-    const alias = deviceById(db, row.device_id)?.alias ?? "";
+    const alias = deviceAlias(db, row.device_id);
     return {
       uid: item.uid,
       result: "withdrawn",
@@ -591,8 +594,6 @@ export function disableWithItems(
   return { devices, withdrawn, detail: `devices ${devices}, withdrawn ${withdrawn}` };
 }
 
-const unknown = () => new HttpError(404, { error: "unknown" });
-
 /** Tombstones and locks; on an item already withdrawn, locks alone. 404 `unknown`. */
 export function withdrawByAdmin(
   db: Db,
@@ -603,10 +604,10 @@ export function withdrawByAdmin(
 ): { revision: number } {
   return transaction(db, () => {
     const named = parseFeedUid(db, kind, uid, null);
-    if (named === null) throw unknown();
+    if (named === null) throw unknownItem();
     if (kind === "entry") {
       const row = entryByUuid(db, named.key);
-      if (row === null) throw unknown();
+      if (row === null) throw unknownItem();
       if (row.withdrawn_at === null) {
         return { revision: tombstoneEntry(db, row, actor, now, null, true) };
       }
@@ -615,9 +616,9 @@ export function withdrawByAdmin(
     }
     const { deviceId, uid: memoryUid } = splitMemoryKey(named.key);
     const row = memoryByKey(db, deviceId, memoryUid);
-    if (row === null) throw unknown();
+    if (row === null) throw unknownItem();
     if (row.withdrawn_at === null) {
-      const alias = deviceById(db, row.device_id)?.alias ?? "";
+      const alias = deviceAlias(db, row.device_id);
       return { revision: tombstoneMemory(db, row, alias, actor, now, null, true) };
     }
     setMemoryLock(db, deviceId, memoryUid, true);
@@ -629,14 +630,14 @@ export function withdrawByAdmin(
 export function reinstateByAdmin(db: Db, kind: "entry" | "memory", uid: string): void {
   transaction(db, () => {
     const named = parseFeedUid(db, kind, uid, null);
-    if (named === null) throw unknown();
+    if (named === null) throw unknownItem();
     if (kind === "entry") {
-      if (entryByUuid(db, named.key) === null) throw unknown();
+      if (entryByUuid(db, named.key) === null) throw unknownItem();
       setEntryLock(db, named.key, false);
       return;
     }
     const { deviceId, uid: memoryUid } = splitMemoryKey(named.key);
-    if (memoryByKey(db, deviceId, memoryUid) === null) throw unknown();
+    if (memoryByKey(db, deviceId, memoryUid) === null) throw unknownItem();
     setMemoryLock(db, deviceId, memoryUid, false);
   });
 }

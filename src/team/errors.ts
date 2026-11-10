@@ -50,3 +50,6 @@ export class LeaseHeldError extends Error {
 
 /** The exit code of `serve` against a `team.db` a newer wizardingcode-mem wrote. */
 export const TEAM_SCHEMA_TOO_NEW = 3;
+
+/** An item, or a kind of item, the server does not hold: the one 404 of the item routes and the operator's commands. */
+export const unknownItem = (): HttpError => new HttpError(404, { error: "unknown" });

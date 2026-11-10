@@ -1,8 +1,9 @@
 // The team server's own database, `team.db`: its own migration list and `user_version`, over
 // the core runner (`openFile`, `openExistingFile`), never a client's store. The one file of
 // the folder that imports the core store; the rest import `Db` from here. It holds the
-// schema and the three ways to open the file, and the two reads an open needs: the version
-// the file is at and whether it is a team database.
+// schema, the three ways to open the file, and the statements an open runs before the store
+// can be asked: the version read, the schema check, `secure_delete`, and migration 1's
+// identity write.
 import { join } from "node:path";
 import { type Backups, type Db, type Migration, openExistingFile, openFile } from "../store/db.ts";
 import { NotATeamDatabaseError, SchemaBehindError } from "./errors.ts";

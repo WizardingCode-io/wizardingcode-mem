@@ -5,7 +5,7 @@ import { json, problem } from "../http/respond.ts";
 import { readAudit } from "./audit.ts";
 import { authenticate, type Caller, checkContract, requireAdmin } from "./auth.ts";
 import { CONTRACT } from "./contract.ts";
-import { HttpError } from "./errors.ts";
+import { HttpError, unknownItem } from "./errors.ts";
 import { parsePullQuery, pullWithWait } from "./feed.ts";
 import { newHexId, REQUEST_ID } from "./ids.ts";
 import {
@@ -197,7 +197,7 @@ const actorOf = (caller: Caller): Actor => ({
 
 /** The `:kind` of an item route; anything else names nothing. */
 function itemKind(raw: string): "entry" | "memory" {
-  if (raw !== "entry" && raw !== "memory") throw new HttpError(404, { error: "unknown" });
+  if (raw !== "entry" && raw !== "memory") throw unknownItem();
   return raw;
 }
 

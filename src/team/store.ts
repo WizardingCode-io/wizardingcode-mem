@@ -570,23 +570,27 @@ export function workspaceEntriesOf(db: Db, memberId: string): EntryRow[] {
 /** Rows a replay or an export reads per batch: a read snapshot spans one batch, never the history. */
 export const REVISION_BATCH = 200;
 
-/** A revision the mirror has not exported, with its entry's creator. */
-export type PendingRow = RevisionRow & { creator: string };
+/** The key of a revision the mirror has not exported, with its entry's creator. */
+export interface PendingKey {
+  seq: number;
+  uuid: string;
+  revision: number;
+  creator: string;
+}
 
 /**
- * The pending revisions after `seq` in feed order: the entries through the partial index as the
- * outer loop (`CROSS JOIN` fixes it), their revisions past the exported mark, at most `LIMIT`.
+ * The pending revisions after `seq` in feed order, keys alone, so the sort holds no text: the
+ * entries through the partial index as the outer loop (`CROSS JOIN` fixes it), their revisions
+ * past the exported mark, at most `LIMIT`.
  */
-const PENDING_SQL = `SELECT ${REVISION_COLUMNS.split(", ")
-  .map((column) => `r.${column}`)
-  .join(", ")}, e.created_by_member AS creator
+const PENDING_SQL = `SELECT r.seq, r.uuid, r.revision, e.created_by_member AS creator
    FROM entries e CROSS JOIN entry_revisions r ON r.uuid = e.uuid
    WHERE e.mirror_revision < e.revision AND r.revision > e.mirror_revision AND r.seq > ?
    ORDER BY r.seq LIMIT ?`;
 
-/** The revisions the mirror has not exported, after `seq`, in feed order, at most `limit`. */
-export function pendingRevisionsAfter(db: Db, seq: number, limit: number): PendingRow[] {
-  return db.query<PendingRow, [number, number]>(PENDING_SQL).all(seq, limit);
+/** The keys of the revisions the mirror has not exported, after `seq`, in feed order, at most `limit`. */
+export function pendingRevisionsAfter(db: Db, seq: number, limit: number): PendingKey[] {
+  return db.query<PendingKey, [number, number]>(PENDING_SQL).all(seq, limit);
 }
 
 /** The planner's lines for the pending query: a test reads them for the partial index's name. */

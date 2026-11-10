@@ -251,7 +251,7 @@ describe("items from the shell", () => {
     expect(jsonOut(purged.stdout)).toEqual({
       event: "purged",
       uid: gone.uid,
-      revisions: 1,
+      rows: 1,
       feedRows: 1,
       errors: [],
       wal: "truncated",
@@ -270,7 +270,7 @@ describe("items from the shell", () => {
     expect(jsonOut((await cli(t, "purge", "memory", feedUid, "--yes")).stdout)).toEqual({
       event: "purged",
       uid: feedUid,
-      revisions: 1,
+      rows: 1,
       feedRows: 1,
       errors: [],
       wal: "truncated",

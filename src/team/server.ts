@@ -14,7 +14,7 @@ import { BOOTSTRAP_HOURS, bootstrapIfEmpty } from "./members.ts";
 import { scheduleMirror, spawnMirror } from "./mirror.ts";
 import { handle } from "./routes.ts";
 import { ChangeSignal, REAL_TIMERS, type Timers } from "./signal.ts";
-import { getMeta } from "./store.ts";
+import { checkpointWal, getMeta } from "./store.ts";
 import type { Context, Limits } from "./types.ts";
 
 export type { Timers };
@@ -213,6 +213,8 @@ export async function startTeamServer(options: ServerOptions): Promise<TeamServe
     buckets.joins.sweep();
     buckets.bytes.sweep();
     buckets.auth.sweep();
+    // The log is cut while no export child reads it: a purge's `busy` checkpoint is finished here.
+    if (mirror.child() === null) checkpointWal(db);
     mirror.hourly();
   }, HOUR_MS);
 
