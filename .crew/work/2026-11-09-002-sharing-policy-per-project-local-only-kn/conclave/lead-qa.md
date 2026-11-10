@@ -1,0 +1,10 @@
+# qa lead's validation of 2026-11-09-002-sharing-policy-per-project-local-only-kn: spec
+verdict: returned
+R-1. plan.md Phase B step 3 and step 4 (with the `store.ts` and `levelOf` signatures) — Phase B tests need code that only Phase C creates. Step 3's `previewLevel`, `setLevel`, `reconcileSettings` and `reconcileLevels` cases need a `SharingPolicy`, and several name `loadPolicy` outright: "a fresh policy (the row reads local, unbound-alias)", "a row the policy reads as disabled", and "two policies loaded from one file and one baseline with different environments". `loadPolicy` and `levelOf` are created in Phase C step 6, and `setLevel` step 3 calls `levelOf`. Step 4's green run cannot pass, and the plan's "typecheck passes at the end of every phase" rule breaks. Fix one of these:
+ - Move `levelOf`, `loadPolicy` and the policy-dependent store cases into Phase C. Then Phase B's store cases cover only the schema, `counterOf`, `generationOf`, `resetLevels`, `lastChange` and `remoteAliasOf`.
+ - Or give Phase B a hand-built policy helper and state that `levelOf` lives in `types.ts` or in a leaf file Phase B creates.
+ - Either way, name which `crew tdd` record (AC-1/AC-6, or AC-3) carries each moved case.
+R-2. spec.md AC-9 last clause ("with an inert id in the list the viewer's save does not send it"), plan.md steps 13 and 14, and AC-10's "Save leaving out a key whose source is `env`" — the only proof is a string-presence copy test (`fromEnvironment(` appears in `Sharing.vue`). Presence of the string does not prove the omission. The inert-id drop is not asserted anywhere, not even as a string. Both behaviours are true by construction, and the test would stay green if the logic were wrong or missing. Fix:
+ - Put the patch computation in a pure module under `ui/src/` that takes the taxonomies, the inert ids, the toggles and the key sources, and returns the patch.
+ - Add a unit test with a red run that covers dropping inert ids, leaving out an `env`-sourced key, and the `none` and comma-list forms.
+ - Make AC-9 and AC-10 cite that test.

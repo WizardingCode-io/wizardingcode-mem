@@ -1,0 +1,32 @@
+{
+  "objections": [
+    {
+      "id": "O-1",
+      "raisedBy": "gap-round",
+      "severity": "advisory",
+      "text": "An agent with a shell can widen sharing: share project all --yes runs without a person, and the env file can be written directly. The confirmation protects a person at a terminal, not against a process; part 1 named agent shell access as the guarantee's boundary, and here it decides what may leave. Every change is logged with its source and share status prints the last one; the ADR says so.",
+      "raisedAt": "2026-11-09T01:27:44.159Z"
+    },
+    {
+      "id": "O-2",
+      "raisedBy": "gap-round",
+      "severity": "advisory",
+      "text": "A restore changes the person's choices: the levels in the copy are reset to Nothing on purpose, so a copy taken under a wider policy never re-grants it; the roots and areas in the env file keep their current values. The CLI and the viewer say what was reset and it is logged with source restore; a person who restores sets the levels again.",
+      "raisedAt": "2026-11-09T01:27:48.365Z"
+    },
+    {
+      "id": "O-3",
+      "raisedBy": "gap-round",
+      "severity": "advisory",
+      "text": "The settings rule that the environment wins over the file gains two exceptions, the sharing keys, where the environment can only narrow; the Settings page's footer states the rule without them. The footer is reworded in this part and the ADR records the exception; a reader of src/settings/settings.ts meets one special case.",
+      "raisedAt": "2026-11-09T01:27:52.698Z"
+    },
+    {
+      "id": "O-4",
+      "raisedBy": "gap-round",
+      "severity": "advisory",
+      "text": "Memories have no area: a project at Knowledge and memories sends every memory of the fixed set whatever the area list says, so a private area protects knowledge only. The Sharing page and the project dock say it in plain words and the ADR records it; a filter by memory kind is a later item if the team asks.",
+      "raisedAt": "2026-11-09T01:27:57.114Z"
+    }
+  ]
+}
