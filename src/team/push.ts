@@ -5,7 +5,8 @@ import type { Caller } from "./auth.ts";
 import type { PushReason } from "./contract.ts";
 import type { Db } from "./db.ts";
 import { HttpError } from "./errors.ts";
-import type { Context } from "./routes.ts";
+import { memoryKey, splitMemoryKey } from "./ids.ts";
+import { disableMember } from "./members.ts";
 import {
   currentChangeOf,
   deviceByAlias,
@@ -30,6 +31,7 @@ import {
   upsertMemory,
   workspaceEntriesOf,
 } from "./store.ts";
+import type { Context } from "./types.ts";
 import { checkEntryPayload, checkMemoryPayload, parseEntryUid, type Refusal } from "./validate.ts";
 
 export interface PushItem {
@@ -52,10 +54,8 @@ export interface PushResult {
   rule?: string;
 }
 
-/** Who writes a tombstone the item's owner did not ask for: an admin's ids, or the CLI's. */
+/** Who writes a tombstone the item's owner did not ask for: an admin's ids, or the CLI's (`OPERATOR` in ids.ts). */
 export type Actor = { memberId: string; deviceId: string };
-
-export const OPERATOR: Actor = { memberId: "operator", deviceId: "cli" };
 
 const refused = (uid: string, refusal: Refusal | PushReason): PushResult =>
   typeof refusal === "string"
@@ -165,7 +165,7 @@ function tombstoneMemory(
   insertChange(db, {
     kind: "memory",
     uid: memoryFeedUid(deviceAlias, row.uid),
-    key: `${row.device_id}:${row.uid}`,
+    key: memoryKey(row.device_id, row.uid),
     op: "tombstone",
     scope: "project",
     remoteAlias: row.remote_alias,
@@ -321,7 +321,7 @@ export function applyMemory(
   const checked = checkMemoryPayload({ uid: item.uid, payload: item.payload });
   if ("result" in checked) return refused(item.uid, checked);
   const { payload, hash, size } = checked;
-  const key = `${caller.device.id}:${payload.uid}`;
+  const key = memoryKey(caller.device.id, payload.uid);
   return transaction(db, () => {
     if (isPurged(db, key)) return refused(item.uid, "purged");
     const row = memoryByKey(db, caller.device.id, payload.uid);
@@ -414,15 +414,9 @@ export function parseFeedUid(
   const feed = FEED_MEMORY.exec(uid);
   if (feed !== null) {
     const device = deviceByAlias(db, feed[1] as string);
-    return device === null ? null : { key: `${device.id}:${feed[2] as string}` };
+    return device === null ? null : { key: memoryKey(device.id, feed[2] as string) };
   }
-  return callerDeviceId === null ? null : { key: `${callerDeviceId}:${uid}` };
-}
-
-/** A memory's key split at its first colon: the device id carries none, the uid may. */
-function splitMemoryKey(key: string): { deviceId: string; uid: string } {
-  const colon = key.indexOf(":");
-  return { deviceId: key.slice(0, colon), uid: key.slice(colon + 1) };
+  return callerDeviceId === null ? null : { key: memoryKey(callerDeviceId, uid) };
 }
 
 /** The one retry rule: the tombstone's own actor, on the revision just before it, is answered `withdrawn`. */
@@ -573,6 +567,22 @@ export function tombstoneMemberItems(db: Db, memberId: string, now: number, acto
     }
     return count;
   });
+}
+
+/**
+ * A disable from either edge: the devices revoked, the member's workspace entries and their
+ * devices' memories tombstoned when asked, and the audit detail both edges record.
+ */
+export function disableWithItems(
+  db: Db,
+  memberId: string,
+  now: number,
+  withdraw: boolean,
+  actor: Actor,
+): { devices: number; withdrawn: number; detail: string } {
+  const { devices } = disableMember(db, memberId, now);
+  const withdrawn = withdraw ? tombstoneMemberItems(db, memberId, now, actor) : 0;
+  return { devices, withdrawn, detail: `devices ${devices}, withdrawn ${withdrawn}` };
 }
 
 const unknown = () => new HttpError(404, { error: "unknown" });

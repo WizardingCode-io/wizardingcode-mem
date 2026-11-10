@@ -218,8 +218,8 @@ describe("the team database", () => {
       db: join(dir, "team.db"),
       repos: join(dir, "repos"),
       feedFile: join(dir, "feed.seq"),
-      backups: join(dir, "backups"),
     });
+    expect(teamBackups(dir)).toEqual({ folder: join(dir, "backups"), prefix: "team" });
   });
 
   test("a newer team.db is refused as too new; a stranger's file as not a team database, before any migration", () => {

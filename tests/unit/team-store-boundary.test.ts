@@ -7,9 +7,13 @@ const read = (name: string) => readFileSync(join(TEAM, name), "utf8");
 const files = () =>
   existsSync(TEAM) ? readdirSync(TEAM).filter((name) => name.endsWith(".ts")) : [];
 
-/** The import specifiers of a module, as written. */
+/** The import specifiers of a module, as written: static, dynamic and `require`. */
 function importsOf(source: string): string[] {
-  return [...source.matchAll(/from\s+"([^"]+)"/g)].map((match) => match[1] as string);
+  return [
+    ...source.matchAll(/from\s+"([^"]+)"/g),
+    ...source.matchAll(/\bimport\(\s*"([^"]+)"\s*\)/g),
+    ...source.matchAll(/\brequire\(\s*"([^"]+)"\s*\)/g),
+  ].map((match) => match[1] as string);
 }
 
 describe("the store boundary: every SQL statement of the team server lives in store.ts", () => {

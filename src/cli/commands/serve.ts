@@ -12,30 +12,23 @@ import {
   ServerRunningError,
   TEAM_SCHEMA_TOO_NEW,
 } from "../../team/errors.ts";
+import { OPERATOR } from "../../team/ids.ts";
 import { currentMarks, renewInstance, writeHighWater } from "../../team/instance.ts";
 import { requireNoServer } from "../../team/lease.ts";
 import { createTeamLog, installLogSink, type TeamLog } from "../../team/log.ts";
 import {
-  checkExpiry,
-  checkName,
   checkRole,
-  disableMember,
   enableMember,
+  inviteFrom,
   listDevices,
   listInvitations,
   listMembers,
-  mintInvitation,
   revokeDevice,
   revokeInvitation,
   setRole,
 } from "../../team/members.ts";
 import { purgeItem, runMirror } from "../../team/mirror.ts";
-import {
-  OPERATOR,
-  reinstateByAdmin,
-  tombstoneMemberItems,
-  withdrawByAdmin,
-} from "../../team/push.ts";
+import { disableWithItems, reinstateByAdmin, withdrawByAdmin } from "../../team/push.ts";
 import { startTeamServer } from "../../team/server.ts";
 import { readStatus, renderStatus } from "../../team/status.ts";
 import { sequenceHighWater } from "../../team/store.ts";
@@ -43,23 +36,26 @@ import { defaultDataDir } from "../../util/paths.ts";
 import { EXIT_USAGE } from "../exit.ts";
 
 const USAGE = `Usage: wizardingcode-mem serve [--data <dir>] [--host <addr>] [--port <n>] [--trust-proxy]
-       wizardingcode-mem serve invite --role admin|member --name <name> [--expires <hours>]
-       wizardingcode-mem serve invite --for <member id> [--expires <hours>]
-       wizardingcode-mem serve invitations
-       wizardingcode-mem serve invitation revoke <id>
-       wizardingcode-mem serve members
-       wizardingcode-mem serve revoke <device id>
-       wizardingcode-mem serve disable <member id> [--withdraw]
-       wizardingcode-mem serve enable <member id>
-       wizardingcode-mem serve role <member id> admin|member
-       wizardingcode-mem serve withdraw entry <uid> | memory remote:<alias>:<uid>
-       wizardingcode-mem serve reinstate entry <uid> | memory remote:<alias>:<uid>
-       wizardingcode-mem serve status [--json]
-       wizardingcode-mem serve audit [--limit <n>]
-       wizardingcode-mem serve mirror [--rebuild]
-       wizardingcode-mem serve purge entry <uid> | memory remote:<alias>:<uid> --yes
-       wizardingcode-mem serve instance renew
-       wizardingcode-mem serve health [--url <origin>]
+       wizardingcode-mem serve [--data <dir>] <subcommand> ...
+
+Subcommands (every one takes --data <dir> as well):
+       invite --role admin|member --name <name> [--expires <hours>]
+       invite --for <member id> [--expires <hours>]
+       invitations
+       invitation revoke <id>
+       members
+       revoke <device id>
+       disable <member id> [--withdraw]
+       enable <member id>
+       role <member id> admin|member
+       withdraw entry <uid> | memory remote:<alias>:<uid>
+       reinstate entry <uid> | memory remote:<alias>:<uid>
+       status [--json]
+       audit [--limit <n>]
+       mirror [--rebuild]
+       purge entry <uid> | memory remote:<alias>:<uid> --yes
+       instance renew
+       health [--url <origin>]
 
 The data directory is --data, WIZARDINGCODE_MEM_TEAM_DATA, or <data dir>/team.
 `;
@@ -141,6 +137,30 @@ function parseFlags(argv: string[], known: Record<string, FlagKind>): Flags | { 
   return { values, rest };
 }
 
+/**
+ * `--data <dir>` taken out of a subcommand's arguments wherever it stands, so every
+ * subcommand reads the directory the same way the server does (the child the server starts
+ * passes it this way).
+ */
+function takeData(
+  argv: string[],
+): { data: string | undefined; rest: string[] } | { error: string } {
+  const rest: string[] = [];
+  let data: string | undefined;
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i] as string;
+    if (arg === "--data") {
+      const value = argv[i + 1];
+      if (value === undefined || value.startsWith("--")) return { error: "--data needs a value" };
+      data = value;
+      i++;
+      continue;
+    }
+    rest.push(arg);
+  }
+  return { data, rest };
+}
+
 function usage(message?: string): number {
   if (message !== undefined) err(`wizardingcode-mem serve: ${message}\n`);
   process.stderr.write(USAGE);
@@ -188,7 +208,6 @@ async function runServer(argv: string[]): Promise<number> {
       host: args.host,
       port: args.port,
       trustProxy: args.trustProxy,
-      env: process.env,
       stdout: out,
     });
   } catch (error) {
@@ -262,40 +281,24 @@ function invite(shell: Shell, argv: string[]): number {
   const parsed = parseFlags(argv, { role: "value", name: "value", for: "value", expires: "value" });
   if ("error" in parsed) return usage(parsed.error);
   const { values } = parsed;
-  const hours = values.expires === undefined ? undefined : Number(values.expires);
   if (values.for === undefined && (values.role === undefined || values.name === undefined)) {
     return usage("invite needs --role and --name, or --for <member id>");
   }
-  const expiresInHours = checkExpiry(hours);
   const code = write(shell, (db) => {
-    const made =
-      values.for !== undefined
-        ? mintInvitation(db, {
-            role: "member",
-            name: null,
-            forMember: values.for as string,
-            createdByDevice: null,
-            expiresInHours,
-            now: shell.now,
-          })
-        : mintInvitation(db, {
-            role: checkRole(values.role),
-            name: checkName(values.name),
-            forMember: null,
-            createdByDevice: null,
-            expiresInHours,
-            now: shell.now,
-          });
+    const made = inviteFrom(
+      db,
+      {
+        role: values.role,
+        name: values.name,
+        forMember: values.for,
+        expiresInHours: values.expires === undefined ? undefined : Number(values.expires),
+      },
+      null,
+      shell.now,
+    );
     return {
       result: made.code,
-      audit: {
-        action: "invitation made",
-        target: made.invitation.id,
-        detail:
-          made.invitation.forMember === null
-            ? `${made.invitation.role} ${made.invitation.name}`
-            : `device for ${made.invitation.forMember}`,
-      },
+      audit: { action: "invitation made", target: made.invitation.id, detail: made.detail },
     };
   });
   out(code);
@@ -375,20 +378,14 @@ function disable(shell: Shell, argv: string[]): number {
   if ("error" in parsed) return usage(parsed.error);
   const id = parsed.rest[0];
   if (id === undefined) return usage("disable needs a member id");
-  const counts = write(shell, (db) => {
-    const { devices } = disableMember(db, id, shell.now);
-    const withdrawn =
-      parsed.values.withdraw === true ? tombstoneMemberItems(db, id, shell.now, OPERATOR) : 0;
+  const done = write(shell, (db) => {
+    const result = disableWithItems(db, id, shell.now, parsed.values.withdraw === true, OPERATOR);
     return {
-      result: { devices, withdrawn },
-      audit: {
-        action: "member disabled",
-        target: id,
-        detail: `devices ${devices}, withdrawn ${withdrawn}`,
-      },
+      result,
+      audit: { action: "member disabled", target: id, detail: result.detail },
     };
   });
-  emit({ event: "member-disabled", id, ...counts });
+  emit({ event: "member-disabled", id, devices: done.devices, withdrawn: done.withdrawn });
   return 0;
 }
 
@@ -407,7 +404,7 @@ function role(shell: Shell, id: string | undefined, raw: string | undefined): nu
     return usage("role needs a member id and admin|member");
   const wanted = checkRole(raw);
   write(shell, (db) => {
-    setRole(db, id, wanted);
+    setRole(db, id, wanted, shell.now);
     return { result: undefined, audit: { action: "role set", target: id, detail: wanted } };
   });
   emit({ event: "role-set", id, role: wanted });
@@ -501,22 +498,23 @@ async function purge(shell: Shell, argv: string[]): Promise<number> {
   if (parsed.values.yes !== true) return usage("purge erases durably: add --yes");
   const db = openTeamForWrite(shell.dir, shell.now);
   try {
+    // The erasure, its audit row and the repositories' replay, under the mirror lease.
     const result = await purgeItem(
       { db, dataDir: shell.dir, env: process.env, log: shell.log, now: () => Date.now() },
       kind,
       uid,
       shell.now,
+      OPERATOR,
     );
-    audit(db, {
-      at: shell.now,
-      source: "cli",
-      action: "purged",
-      target: uid,
-      detail: `${kind}: ${result.revisions} revisions, ${result.feedRows} feed rows`,
-    });
     writeHighWater(teamPaths(shell.dir).feedFile, currentMarks(db));
-    emit({ event: "purged", uid, ...result });
-    return 0;
+    emit({
+      event: "purged",
+      uid,
+      revisions: result.revisions,
+      feedRows: result.feedRows,
+      errors: result.errors,
+    });
+    return result.errors.length === 0 ? 0 : 1;
   } finally {
     db.close();
   }
@@ -562,16 +560,19 @@ async function health(argv: string[]): Promise<number> {
 }
 
 export async function run(argv: string[]): Promise<number> {
-  const [sub, ...rest] = argv;
-  if (sub === undefined || sub.startsWith("--")) return runServer(argv);
-  if (sub === "--help" || sub === "-h") {
+  if (argv[0] === "--help" || argv[0] === "-h") {
     process.stdout.write(USAGE);
     return 0;
   }
+  const taken = takeData(argv);
+  if ("error" in taken) return usage(taken.error);
+  const [sub, ...rest] = taken.rest;
+  // No subcommand, or flags alone: the server, which parses its own flags (`--data` among them).
+  if (sub === undefined || sub.startsWith("--")) return runServer(argv);
   // Every subcommand's log goes to standard error, so standard output carries its own output alone.
   const log = createTeamLog(err, Date.now);
   const uninstall = installLogSink(log);
-  const shell: Shell = { dir: resolveTeamDir(process.env), log, now: Date.now() };
+  const shell: Shell = { dir: taken.data ?? resolveTeamDir(process.env), log, now: Date.now() };
   try {
     switch (sub) {
       case "invite":

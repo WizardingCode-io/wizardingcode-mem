@@ -6,6 +6,8 @@ import {
   CODE_ALPHABET,
   hashSecret,
   isLoopback,
+  MEMORY_UID,
+  memoryKey,
   newCode,
   newDeviceAlias,
   newDeviceId,
@@ -13,9 +15,12 @@ import {
   newInvitationId,
   newMemberId,
   newToken,
+  OPERATOR,
+  OPERATOR_ID,
   REQUEST_ID,
   randomBase32,
   sameHash,
+  splitMemoryKey,
   TOKEN,
 } from "../../src/team/ids.ts";
 
@@ -62,6 +67,20 @@ describe("the team's ids, tokens and codes", () => {
     expect("a".repeat(65)).not.toMatch(REQUEST_ID);
     expect("with space").not.toMatch(REQUEST_ID);
     expect("").not.toMatch(REQUEST_ID);
+  });
+
+  test("a memory's key joins the device id and the uid and splits at the first colon; the uid grammar; the operator", () => {
+    expect(memoryKey("abcdefghijkl", "a1b2c3d4:17")).toBe("abcdefghijkl:a1b2c3d4:17");
+    expect(splitMemoryKey("abcdefghijkl:a1b2c3d4:17")).toEqual({
+      deviceId: "abcdefghijkl",
+      uid: "a1b2c3d4:17",
+    });
+    expect(MEMORY_UID.test("a1b2c3d4:17")).toBe(true);
+    for (const bad of ["a1b2c3d4", "a1b2c3d4:", "A1B2C3D4:1", "a1b2c3d4:1@2", "a1b2c3d:1", "x:1"]) {
+      expect({ bad, ok: MEMORY_UID.test(bad) }).toEqual({ bad, ok: false });
+    }
+    expect(OPERATOR).toEqual({ memberId: OPERATOR_ID, deviceId: "cli" });
+    expect(OPERATOR_ID).toBe("operator");
   });
 
   test("loopback is 127.0.0.0/8, ::1 and localhost", () => {

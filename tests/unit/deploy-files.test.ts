@@ -162,7 +162,9 @@ describe("the workflows", () => {
     expect(String(metadata?.with?.images).trim()).toBe(IMAGE);
     const tags = String(metadata?.with?.tags);
     expect(tags).toContain("type=semver,pattern={{version}}");
-    expect(tags).toMatch(/type=raw,value=latest,enable=.*contains\(github\.ref_name, '-'\)/);
+    expect(tags).toMatch(
+      /type=raw,value=latest,enable=\$\{\{ !contains\(github\.ref_name, '-'\) \}\}/,
+    );
     const build = docker?.steps.find((step) => step.uses?.startsWith("docker/build-push-action@"));
     expect(build?.with).toMatchObject({ context: ".", file: "Dockerfile", push: true });
     expect(String(build?.with?.platforms)).toBe("linux/amd64,linux/arm64");

@@ -1,10 +1,12 @@
 // The team server's own database, `team.db`: its own migration list and `user_version`, over
 // the core runner (`openFile`, `openExistingFile`), never a client's store. The one file of
-// the folder that imports the core store; the rest import `Db` from here.
-import { randomBytes } from "node:crypto";
+// the folder that imports the core store; the rest import `Db` from here. It holds the
+// schema and the three ways to open the file, and the two reads an open needs: the version
+// the file is at and whether it is a team database.
 import { join } from "node:path";
 import { type Backups, type Db, type Migration, openExistingFile, openFile } from "../store/db.ts";
 import { NotATeamDatabaseError, SchemaBehindError } from "./errors.ts";
+import { newHexId } from "./ids.ts";
 import teamInit from "./migrations/0001_team_init.sql" with { type: "text" };
 import { leaseActive } from "./store.ts";
 
@@ -13,17 +15,12 @@ export type { Db, Migration };
 export const TEAM_DB_FILE = "team.db";
 export const TEAM_LATEST = 1;
 
-/** A fresh random id of 16 hex characters: the server's id and its instance. */
-function hex16(): string {
-  return randomBytes(8).toString("hex");
-}
-
 /** Migration 1 also mints what names this server: `team.schema`, `server.id`, `server.instance`, `server.created_at`. */
 function mintIdentity(lock: Db): void {
   const rows: [string, string][] = [
     ["team.schema", "team"],
-    ["server.id", hex16()],
-    ["server.instance", hex16()],
+    ["server.id", newHexId()],
+    ["server.instance", newHexId()],
     ["server.created_at", String(Date.now())],
   ];
   for (const [key, value] of rows) {
@@ -41,27 +38,16 @@ export function teamBackups(dir: string): Backups {
   return { folder: join(dir, "backups"), prefix: "team" };
 }
 
-export function teamPaths(dir: string): {
-  db: string;
-  repos: string;
-  feedFile: string;
-  backups: string;
-} {
+export function teamPaths(dir: string): { db: string; repos: string; feedFile: string } {
   return {
     db: join(dir, TEAM_DB_FILE),
     repos: join(dir, "repos"),
     feedFile: join(dir, "feed.seq"),
-    backups: join(dir, "backups"),
   };
 }
 
 function userVersion(db: Db): number {
   return db.query<{ user_version: number }, []>("PRAGMA user_version").get()?.user_version ?? 0;
-}
-
-/** The team schema the file is at: what `serve status` prints. */
-export function teamSchemaVersion(db: Db): number {
-  return userVersion(db);
 }
 
 /**
@@ -83,6 +69,12 @@ export function requireTeamSchema(db: Db): void {
   if (schema?.value !== "team") throw new NotATeamDatabaseError();
 }
 
+/** What a writer's connection sets before anything else: deleted rows are overwritten (a purge erases). */
+function prepareWriter(db: Db): void {
+  db.run("PRAGMA secure_delete = ON");
+  requireTeamSchema(db);
+}
+
 /** Opens or creates the team database and brings it to this binary's version. */
 export function openTeamDb(dir: string, busyTimeoutMs = 5000): Db {
   return openFile({
@@ -91,7 +83,7 @@ export function openTeamDb(dir: string, busyTimeoutMs = 5000): Db {
     backups: teamBackups(dir),
     migrations: TEAM_MIGRATIONS,
     busyTimeoutMs,
-    before: requireTeamSchema,
+    before: prepareWriter,
   });
 }
 
@@ -101,9 +93,10 @@ export function openTeamExisting(dir: string): Db | null {
 }
 
 /**
- * For a CLI writer beside a possibly running server: a database behind this binary's list
- * is never migrated under a live server (its lease fresh), since the server would then run
- * on a schema it does not know. `latest` and `migrations` are for tests of that rule.
+ * For a writer beside a possibly running server, the server's own start included: a database
+ * behind this binary's list is never migrated under a live server (its lease fresh), since
+ * that server would then run on a schema it does not know. `latest` and `migrations` are for
+ * tests of that rule.
  */
 export function openTeamForWrite(
   dir: string,
@@ -127,6 +120,6 @@ export function openTeamForWrite(
     backups: teamBackups(dir),
     migrations: options.migrations ?? TEAM_MIGRATIONS,
     busyTimeoutMs: options.busyTimeoutMs ?? 5000,
-    before: requireTeamSchema,
+    before: prepareWriter,
   });
 }

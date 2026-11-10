@@ -17,21 +17,24 @@ import {
 } from "../modules/knowledge/repo.ts";
 import type { Identity } from "../modules/knowledge/types.ts";
 import { entryUid } from "../sharing/types.ts";
-import { selfCommand } from "../util/self.ts";
+import { audit } from "./audit.ts";
 import { type Db, teamPaths } from "./db.ts";
 import { HttpError } from "./errors.ts";
+import { OPERATOR, splitMemoryKey } from "./ids.ts";
 import { holdLease, MIRROR_LEASE, MIRROR_TTL_MS } from "./lease.ts";
 import type { TeamLog } from "./log.ts";
-import { parseFeedUid } from "./push.ts";
+import { type Actor, parseFeedUid } from "./push.ts";
 import type { Timers } from "./signal.ts";
 import {
-  allRevisions,
+  clearMeta,
   deleteEntry,
   deleteMemory,
   deleteRevisions,
   deviceById,
   entriesPendingMirror,
   entryByUuid,
+  forEachRevision,
+  getMeta,
   insertChange,
   insertPurged,
   markPurged,
@@ -107,6 +110,7 @@ export function mirrorHost(
     renew: null,
     root: teamPaths(dataDir).repos,
     extraConfig: ["-c", "safe.directory=*"],
+    logScope: "team",
   };
 }
 
@@ -362,6 +366,9 @@ function pendingRevisions(db: Db): Pending[] {
   return pending.sort((a, b) => a.revision.seq - b.revision.seq);
 }
 
+/** Set while a rebuild removes the repositories and resets the marks; a run that finds it finishes the rebuild. */
+const REBUILD_MARK = "mirror.rebuild";
+
 const summary = (errors: MirrorRun["errors"]) =>
   errors.length === 0
     ? null
@@ -405,9 +412,13 @@ export async function runMirror(
   const errors = underMirrorLease(
     ctx,
     (host, failures) => {
-      if (options.rebuild) {
+      // A rebuild cut between the removal and the reset would leave every revision marked
+      // exported with no repository: the marker makes the next run finish it.
+      if (options.rebuild || getMeta(ctx.db, REBUILD_MARK) !== null) {
+        setMeta(ctx.db, REBUILD_MARK, String(ctx.now()));
         rmSync(root, { recursive: true, force: true });
         resetMirrorRevisions(ctx.db);
+        clearMeta(ctx.db, REBUILD_MARK);
       }
       const failed = new Set<string>();
       const skipped = new Set<string>();
@@ -461,57 +472,153 @@ export async function runMirror(
 
 /**
  * Replays the exported revisions that touch `folders` after those folders were removed: a
- * purge's rebuild. Revisions the mirror has not exported yet are left to the next run.
+ * purge's rebuild, under the lease the caller holds. Revisions the mirror has not exported
+ * yet are left to the next run. The history is read one row at a time.
  */
 function replayFolders(
   ctx: MirrorContext,
+  host: GitHost,
   folders: ReadonlyMap<string, RepoMeta>,
-): MirrorRun["errors"] {
+  failures: MirrorRun["errors"],
+): void {
   const root = teamPaths(ctx.dataDir).repos;
-  return underMirrorLease(
+  for (const folder of folders.keys()) rmSync(join(root, folder), { recursive: true, force: true });
+  const only = new Set(folders.keys());
+  const exported = new Map<string, { creator: string; mirrorRevision: number }>();
+  forEachRevision(ctx.db, (revision) => {
+    let entry = exported.get(revision.uuid);
+    if (entry === undefined) {
+      const row = entryByUuid(ctx.db, revision.uuid);
+      entry = {
+        creator: row?.created_by_member ?? revision.writer_member,
+        mirrorRevision: row?.mirror_revision ?? 0,
+      };
+      exported.set(revision.uuid, entry);
+    }
+    if (revision.revision > entry.mirrorRevision) return undefined;
+    const previous =
+      revision.revision > 1 ? revisionAt(ctx.db, revision.uuid, revision.revision - 1) : null;
+    try {
+      applyRevision(ctx.db, host, root, revision, previous, entry.creator, only, ctx.now());
+      return undefined;
+    } catch (error) {
+      failures.push({
+        folder:
+          error instanceof MirrorRepoError
+            ? error.folder
+            : placeOf(ctx.db, revision, entry.creator).relative,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      return error instanceof MirrorRepoError ? undefined : false;
+    }
+  });
+  // A repository the purged entry alone had filled stays, with its init commit and nothing else.
+  for (const [relative, meta] of folders) {
+    try {
+      ensureMirrorRepo(host, join(root, relative), meta, ctx.now());
+    } catch (error) {
+      failures.push({
+        folder: relative,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+}
+
+const unknown = () => new HttpError(404, { error: "unknown" });
+
+/**
+ * Erasure (D-24), under the mirror lease from the first step, so a run in progress is refused
+ * before anything is erased: one transaction removes the item's row (and an entry's
+ * revisions), turns its feed rows into `purge` rows, writes one more `purge` row, records the
+ * key and writes the audit row; then, for an entry, every repository its revisions touched
+ * is removed and replayed without it. A replay that fails is recorded in `meta.mirror.last`
+ * and in the result, never silently.
+ */
+export async function purgeItem(
+  ctx: MirrorContext,
+  kind: "entry" | "memory",
+  uid: string,
+  now: number,
+  actor: Actor,
+): Promise<{ revisions: number; feedRows: number; errors: MirrorRun["errors"] }> {
+  const { db } = ctx;
+  const named = parseFeedUid(db, kind, uid, null);
+  if (named === null) throw unknown();
+  const touched = new Map<string, RepoMeta>();
+  let result: { revisions: number; feedRows: number } | null = null;
+  const errors = underMirrorLease(
     ctx,
     (host, failures) => {
-      for (const folder of folders.keys())
-        rmSync(join(root, folder), { recursive: true, force: true });
-      const only = new Set(folders.keys());
-      const exported = new Map<string, { creator: string; mirrorRevision: number }>();
-      for (const revision of allRevisions(ctx.db)) {
-        let entry = exported.get(revision.uuid);
-        if (entry === undefined) {
-          const row = entryByUuid(ctx.db, revision.uuid);
-          entry = {
-            creator: row?.created_by_member ?? revision.writer_member,
-            mirrorRevision: row?.mirror_revision ?? 0,
-          };
-          exported.set(revision.uuid, entry);
-        }
-        if (revision.revision > entry.mirrorRevision) continue;
-        const previous =
-          revision.revision > 1 ? revisionAt(ctx.db, revision.uuid, revision.revision - 1) : null;
-        try {
-          applyRevision(ctx.db, host, root, revision, previous, entry.creator, only, ctx.now());
-        } catch (error) {
-          failures.push({
-            folder:
-              error instanceof MirrorRepoError
-                ? error.folder
-                : placeOf(ctx.db, revision, entry.creator).relative,
-            message: error instanceof Error ? error.message : String(error),
+      result = transaction(db, () => {
+        const erased = (() => {
+          if (kind === "entry") {
+            const row = entryByUuid(db, named.key);
+            if (row === null) throw unknown();
+            for (const revision of revisionsOf(db, row.uuid)) {
+              const place = placeOf(db, revision, row.created_by_member);
+              touched.set(place.relative, place.meta);
+            }
+            const revisions = deleteRevisions(db, row.uuid);
+            deleteEntry(db, row.uuid);
+            const feedRows = markPurged(db, row.uuid);
+            insertChange(db, {
+              kind: "entry",
+              uid: entryUid(
+                row.scope as "workspace" | "shared" | "project",
+                row.remote_alias,
+                row.uuid,
+              ),
+              key: row.uuid,
+              op: "purge",
+              scope: row.scope,
+              remoteAlias: row.remote_alias,
+              revision: row.revision,
+              hash: "",
+              movedTo: null,
+              memberId: actor.memberId,
+              deviceId: actor.deviceId,
+              clientEpoch: null,
+              at: now,
+            });
+            insertPurged(db, row.uuid, now);
+            return { revisions, feedRows };
+          }
+          const { deviceId, uid: memoryUid } = splitMemoryKey(named.key);
+          const row = memoryByKey(db, deviceId, memoryUid);
+          if (row === null) throw unknown();
+          deleteMemory(db, deviceId, memoryUid);
+          const feedRows = markPurged(db, named.key);
+          const alias = deviceById(db, deviceId)?.alias ?? "";
+          insertChange(db, {
+            kind: "memory",
+            uid: `remote:${alias}:${memoryUid}`,
+            key: named.key,
+            op: "purge",
+            scope: "project",
+            remoteAlias: row.remote_alias,
+            revision: row.revision,
+            hash: "",
+            movedTo: null,
+            memberId: actor.memberId,
+            deviceId: actor.deviceId,
+            clientEpoch: null,
+            at: now,
           });
-          if (!(error instanceof MirrorRepoError)) break;
-        }
-      }
-      // A repository the purged entry alone had filled stays, with its init commit and nothing else.
-      for (const [relative, meta] of folders) {
-        try {
-          ensureMirrorRepo(host, join(root, relative), meta, ctx.now());
-        } catch (error) {
-          failures.push({
-            folder: relative,
-            message: error instanceof Error ? error.message : String(error),
-          });
-        }
-      }
+          insertPurged(db, named.key, now);
+          return { revisions: 1, feedRows };
+        })();
+        audit(db, {
+          at: now,
+          source: actor.memberId === OPERATOR.memberId ? "cli" : "api",
+          deviceId: actor.memberId === OPERATOR.memberId ? null : actor.deviceId,
+          action: "purged",
+          target: uid,
+          detail: `${kind}: ${erased.revisions} revisions, ${erased.feedRows} feed rows`,
+        });
+        return erased;
+      });
+      if (touched.size > 0) replayFolders(ctx, host, touched, failures);
       return failures;
     },
     (_result, failures) => {
@@ -524,89 +631,8 @@ function replayFolders(
       }
     },
   );
-}
-
-/** A memory's key split at its first colon. */
-function splitKey(key: string): { deviceId: string; uid: string } {
-  const colon = key.indexOf(":");
-  return { deviceId: key.slice(0, colon), uid: key.slice(colon + 1) };
-}
-
-const unknown = () => new HttpError(404, { error: "unknown" });
-
-/**
- * Erasure (D-24): one transaction removes the item's row (and an entry's revisions), turns
- * its feed rows into `purge` rows, writes one more `purge` row and records the key; then,
- * for an entry, every repository its revisions touched is removed and replayed without it.
- */
-export async function purgeItem(
-  ctx: MirrorContext,
-  kind: "entry" | "memory",
-  uid: string,
-  now: number,
-): Promise<{ revisions: number; feedRows: number }> {
-  const { db } = ctx;
-  const named = parseFeedUid(db, kind, uid, null);
-  if (named === null) throw unknown();
-  const touched = new Map<string, RepoMeta>();
-  const result = transaction(db, () => {
-    if (kind === "entry") {
-      const row = entryByUuid(db, named.key);
-      if (row === null) throw unknown();
-      for (const revision of revisionsOf(db, row.uuid)) {
-        const place = placeOf(db, revision, row.created_by_member);
-        touched.set(place.relative, place.meta);
-      }
-      const revisions = deleteRevisions(db, row.uuid);
-      deleteEntry(db, row.uuid);
-      const feedRows = markPurged(db, row.uuid);
-      insertChange(db, {
-        kind: "entry",
-        uid: entryUid(row.scope as "workspace" | "shared" | "project", row.remote_alias, row.uuid),
-        key: row.uuid,
-        op: "purge",
-        scope: row.scope,
-        remoteAlias: row.remote_alias,
-        revision: row.revision,
-        hash: "",
-        movedTo: null,
-        memberId: "operator",
-        deviceId: "cli",
-        clientEpoch: null,
-        at: now,
-      });
-      insertPurged(db, row.uuid, now);
-      return { revisions, feedRows };
-    }
-    const { deviceId, uid: memoryUid } = splitKey(named.key);
-    const row = memoryByKey(db, deviceId, memoryUid);
-    if (row === null) throw unknown();
-    deleteMemory(db, deviceId, memoryUid);
-    const feedRows = markPurged(db, named.key);
-    const alias = deviceById(db, deviceId)?.alias ?? "";
-    insertChange(db, {
-      kind: "memory",
-      uid: `remote:${alias}:${memoryUid}`,
-      key: named.key,
-      op: "purge",
-      scope: "project",
-      remoteAlias: row.remote_alias,
-      revision: row.revision,
-      hash: "",
-      movedTo: null,
-      memberId: "operator",
-      deviceId: "cli",
-      clientEpoch: null,
-      at: now,
-    });
-    insertPurged(db, named.key, now);
-    return { revisions: 1, feedRows };
-  });
-  if (touched.size > 0) {
-    const errors = replayFolders(ctx, touched);
-    for (const error of errors) ctx.log.line({ level: "error", event: "mirror-replay", ...error });
-  }
-  return result;
+  for (const error of errors) ctx.log.line({ level: "error", event: "mirror-replay", ...error });
+  return { ...(result as unknown as { revisions: number; feedRows: number }), errors };
 }
 
 // --- The child and its schedule --------------------------------------------------------
@@ -621,9 +647,12 @@ function forwardLine(log: TeamLog, line: string): void {
   }
 }
 
-/** Runs `serve mirror` as a child of this process; `signal` ends it early. */
-export function spawnMirror(dataDir: string, log: TeamLog, signal: AbortSignal): Promise<void> {
-  const child = Bun.spawn(selfCommand("serve", "mirror", "--data", dataDir), {
+/**
+ * Runs the export as a child of this process (`command` is this binary's own `serve mirror
+ * --data <dir>` line, or a test's) and forwards its lines to the log; `signal` ends it early.
+ */
+export function spawnMirror(command: string[], log: TeamLog, signal: AbortSignal): Promise<void> {
+  const child = Bun.spawn(command, {
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",

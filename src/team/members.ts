@@ -195,12 +195,6 @@ export function revokeInvitation(db: Db, id: string, now: number): boolean {
   return true;
 }
 
-export type JoinRefusal =
-  | "invitation unknown"
-  | "invitation expired"
-  | "invitation used"
-  | "invitation revoked";
-
 /**
  * A join: the code's hash must match an open invitation. A device invitation adds a device to
  * its member; a member invitation creates the member; the bootstrap invitation creates the
@@ -317,14 +311,58 @@ export function enableMember(db: Db, id: string): void {
 }
 
 /** Refused when it would demote the last active admin. */
-export function setRole(db: Db, id: string, role: Role): void {
+export function setRole(db: Db, id: string, role: Role, now: number): void {
   transaction(db, () => {
     const member = memberById(db, id);
     if (member === null) throw new HttpError(404, { error: "member unknown" });
-    if (member.role === "admin" && role === "member" && isLastActiveAdmin(db, id))
-      throw lastAdminStays();
+    if (member.role === "admin" && role === "member") {
+      if (isLastActiveAdmin(db, id)) throw lastAdminStays();
+      // A demoted admin's open invitations vouch for a permission they no longer hold.
+      for (const device of listDeviceRows(db, id)) revokeInvitationsOfDevice(db, device.id, now);
+    }
     setMemberRole(db, id, role);
   });
+}
+
+/** What both edges hand to `mintInvitation`: a member by role and name, or a device for a member. */
+export interface InviteInput {
+  role?: unknown;
+  name?: unknown;
+  forMember?: unknown;
+  expiresInHours?: unknown;
+}
+
+/** One invitation from either edge's input, with the audit detail both record. */
+export function inviteFrom(
+  db: Db,
+  input: InviteInput,
+  createdByDevice: string | null,
+  now: number,
+): { invitation: Invitation; code: string; detail: string } {
+  const expiresInHours = checkExpiry(input.expiresInHours);
+  const made =
+    input.forMember !== undefined
+      ? mintInvitation(db, {
+          role: "member",
+          name: null,
+          forMember: typeof input.forMember === "string" ? input.forMember : "",
+          createdByDevice,
+          expiresInHours,
+          now,
+        })
+      : mintInvitation(db, {
+          role: checkRole(input.role),
+          name: checkName(input.name),
+          forMember: null,
+          createdByDevice,
+          expiresInHours,
+          now,
+        });
+  const detail =
+    made.invitation.forMember === null
+      ? `${made.invitation.role} ${made.invitation.name}`
+      : `device for ${made.invitation.forMember}`;
+  return { ...made, detail };
 }
 
 /** A new token for the device, answered once; the old one is invalid from this transaction on. */

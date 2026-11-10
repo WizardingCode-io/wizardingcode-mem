@@ -1,8 +1,9 @@
 // `wizardingcode-mem serve`: one process per data directory, over its own database, answering
 // the sync API; one lease, one change signal, one set of buckets, injected clock and timers.
-
-import { type Db, openTeamDb, teamPaths } from "./db.ts";
+import { selfCommand } from "../util/self.ts";
+import { type Db, openTeamForWrite, teamPaths } from "./db.ts";
 import { freeBytes as diskFreeBytes } from "./disk.ts";
+import { SchemaBehindError } from "./errors.ts";
 import { isLoopback } from "./ids.ts";
 import { checkRestore, currentMarks, writeHighWater } from "./instance.ts";
 import { holdLease, SERVE_LEASE, SERVE_RENEW_MS, SERVE_TTL_MS } from "./lease.ts";
@@ -10,9 +11,10 @@ import { type Buckets, createBuckets } from "./limits.ts";
 import { createTeamLog, installLogSink } from "./log.ts";
 import { BOOTSTRAP_VALID_HOURS, bootstrapIfEmpty } from "./members.ts";
 import { scheduleMirror, spawnMirror } from "./mirror.ts";
-import { type Context, handle, type Limits } from "./routes.ts";
+import { handle } from "./routes.ts";
 import { ChangeSignal, REAL_TIMERS, type Timers } from "./signal.ts";
 import { getMeta } from "./store.ts";
+import type { Context, Limits } from "./types.ts";
 
 export type { Timers };
 
@@ -26,6 +28,9 @@ export const LIMITS: Limits = {
   requestsPerMinute: 600,
   payloadBytesPerHour: 67_108_864,
   joinsPerMinute: 10,
+  authFailuresPerMinute: 60,
+  heldPullsPerDevice: 8,
+  aliasesPerPull: 100,
   minFreeBytes: 209_715_200,
   minFreeBytesHealth: 104_857_600,
 };
@@ -43,11 +48,11 @@ export interface ServerOptions {
   now?: () => number;
   timers?: Timers;
   onBootstrap?: (code: string) => void;
-  env?: Record<string, string | undefined>;
   freeBytes?: (path: string) => number | null;
   stdout?: (line: string) => void;
-  gitPath?: string;
-  /** What runs the export: the child process by default; a test's function. `signal` ends it early. */
+  /** The command line of the export child; this binary's own `serve mirror --data <dir>` by default. */
+  mirrorCommand?: (dataDir: string) => string[];
+  /** What runs the export instead of a child process: a test's function. `signal` ends it early. */
   mirrorChild?: (dataDir: string, signal: AbortSignal) => Promise<void>;
 }
 
@@ -76,11 +81,17 @@ export async function startTeamServer(options: ServerOptions): Promise<TeamServe
   const uninstall = installLogSink(log);
   const paths = teamPaths(options.dataDir);
 
+  // A database behind this binary is never migrated under a live server: the lease is read first.
   let db: Db;
   try {
-    db = openTeamDb(options.dataDir);
+    db = openTeamForWrite(options.dataDir, now());
   } catch (error) {
     uninstall();
+    if (error instanceof SchemaBehindError) {
+      throw new Error(
+        `another serve holds ${options.dataDir} (its lease is fresh and the database is behind this binary)`,
+      );
+    }
     throw error;
   }
 
@@ -110,10 +121,12 @@ export async function startTeamServer(options: ServerOptions): Promise<TeamServe
   const serverId = getMeta(db, "server.id") as string;
   const instance = () => getMeta(db, "server.instance") as string;
   const signal = new ChangeSignal(timers);
+  const command =
+    options.mirrorCommand ?? ((dir: string) => selfCommand("serve", "mirror", "--data", dir));
   const mirror = scheduleMirror(
     { dataDir: options.dataDir, log },
     timers,
-    options.mirrorChild ?? ((dir, abort) => spawnMirror(dir, log, abort)),
+    options.mirrorChild ?? ((dir, abort) => spawnMirror(command(dir), log, abort)),
   );
   const buckets: Buckets = createBuckets(LIMITS, now);
 
@@ -133,6 +146,7 @@ export async function startTeamServer(options: ServerOptions): Promise<TeamServe
     limits: LIMITS,
     buckets,
     signal,
+    held: new Map(),
     freeBytes: options.freeBytes ?? diskFreeBytes,
     dataDir: options.dataDir,
     log,
@@ -193,6 +207,7 @@ export async function startTeamServer(options: ServerOptions): Promise<TeamServe
     buckets.devices.sweep();
     buckets.joins.sweep();
     buckets.bytes.sweep();
+    buckets.auth.sweep();
     mirror.hourly();
   }, HOUR_MS);
 

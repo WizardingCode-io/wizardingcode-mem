@@ -463,7 +463,8 @@ export function runGit(
   const fail = (reason: string, timedOut = false): never => {
     const message = `git ${subcommand} in ${repo ?? host.dataDir} failed: ${clip(reason.trim(), STDERR_MAX)}`;
     const error = timedOut ? new GitTimeoutError(message) : new KnowledgeError("git", message);
-    if (options.quiet !== true) logError(`knowledge.${options.operation}`, error, host.dataDir);
+    if (options.quiet !== true)
+      logError(`${host.logScope ?? "knowledge"}.${options.operation}`, error, host.dataDir);
     throw error;
   };
 
@@ -475,15 +476,18 @@ export function runGit(
   let result: ReturnType<typeof Bun.spawnSync>;
   try {
     // The host's extra settings come after the runner's own, so the subcommand lookup above still holds.
-    result = Bun.spawnSync([git, ...location, ...configArgs(repo), ...(host.extraConfig ?? []), ...args], {
-      ...(existsSync(cwd) ? { cwd } : {}),
-      env: gitEnv(host, options),
-      stdin: "ignore",
-      stdout: "pipe",
-      stderr: "pipe",
-      timeout,
-      killSignal: "SIGKILL",
-    });
+    result = Bun.spawnSync(
+      [git, ...location, ...configArgs(repo), ...(host.extraConfig ?? []), ...args],
+      {
+        ...(existsSync(cwd) ? { cwd } : {}),
+        env: gitEnv(host, options),
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "pipe",
+        timeout,
+        killSignal: "SIGKILL",
+      },
+    );
   } catch (error) {
     return fail(error instanceof Error ? error.message : String(error));
   }

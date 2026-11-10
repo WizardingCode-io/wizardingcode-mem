@@ -70,15 +70,24 @@ export function restrict(path: string, mode: number): void {
   }
 }
 
-/** A copy of the file before an upgrade, in the backups folder itself, pruned to the newest few per folder. */
+/**
+ * A copy of the file before an upgrade, in the backups folder itself, pruned to the newest
+ * few of the same prefix: a folder two stores share keeps each one's copies.
+ */
 function backup(db: Db, backups: Backups, version: number): void {
   mkdirSync(backups.folder, { recursive: true, mode: 0o700 });
-  // Timestamp first, so that sorting by name is sorting by age.
-  const target = join(backups.folder, `${backups.prefix}-${Date.now()}-v${version}-${process.pid}.db`);
+  // The prefix, then the timestamp: among one prefix's files, sorting by name is sorting by age.
+  const target = join(
+    backups.folder,
+    `${backups.prefix}-${Date.now()}-v${version}-${process.pid}.db`,
+  );
   db.run(`VACUUM INTO '${target.replaceAll("'", "''")}'`);
   restrict(target, 0o600);
+  const own = new RegExp(
+    `^${backups.prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}-\\d+-v\\d+-\\d+\\.db$`,
+  );
   const old = readdirSync(backups.folder)
-    .filter((name) => name.endsWith(".db"))
+    .filter((name) => own.test(name))
     .sort()
     .slice(0, -BACKUPS_KEPT);
   for (const name of old) rmSync(join(backups.folder, name), { force: true });
@@ -169,7 +178,7 @@ const byVersion = (a: Migration, b: Migration) => a.version - b.version;
  * Brings a file's own schema (its `user_version`) to the latest version of the list. The
  * client store's list is `MIGRATIONS`; another file (the team server's `team.db`) brings its own.
  */
-export function migrateFile(
+function migrateFile(
   db: Db,
   path: string,
   options: { migrations: readonly Migration[]; backups: Backups },
@@ -272,7 +281,7 @@ function prepareModuleMigrations(lock: Db): void {
  * included: with nothing pending it costs one query. A module version newer than this
  * binary's list is left alone.
  */
-export function migrateModules(
+function migrateModules(
   db: Db,
   path: string,
   backups: Backups,
@@ -349,7 +358,12 @@ export function openFile(options: OpenFileOptions): Db {
     db.run("PRAGMA foreign_keys = ON");
     db.run("PRAGMA synchronous = NORMAL");
     options.before?.(db);
-    migrateFile(db, path, { migrations: options.migrations, backups: options.backups }, options.busyTimeoutMs);
+    migrateFile(
+      db,
+      path,
+      { migrations: options.migrations, backups: options.backups },
+      options.busyTimeoutMs,
+    );
     options.after?.(db);
   } catch (error) {
     db.close();

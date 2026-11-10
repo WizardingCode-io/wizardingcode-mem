@@ -1,4 +1,4 @@
-const MAIN = new URL("../../src/cli/main.ts", import.meta.url).pathname;
+export const MAIN = new URL("../../src/cli/main.ts", import.meta.url).pathname;
 
 export interface CliResult {
   stdout: string;

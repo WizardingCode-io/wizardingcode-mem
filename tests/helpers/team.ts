@@ -82,7 +82,6 @@ export interface TestServer {
   /** Every line the server wrote to its output. */
   lines: string[];
   mirrorRuns: { count: number };
-  env: Record<string, string>;
   close(): Promise<void>;
 }
 
@@ -106,7 +105,6 @@ export async function startTestServer(
   const lines: string[] = [];
   const mirrorRuns = { count: 0 };
   let code = "";
-  const env: Record<string, string> = { PATH: process.env.PATH ?? "", HOME: join(dir, "home") };
   const server = await startTeamServer({
     dataDir: dir,
     host: "127.0.0.1",
@@ -117,12 +115,16 @@ export async function startTestServer(
     onBootstrap: (c) => {
       code = c;
     },
-    env,
     freeBytes: () => freeBytes.value,
     stdout: (line) => lines.push(line),
-    mirrorChild: async () => {
-      mirrorRuns.count++;
-    },
+    // The counting stub stands in for the child unless the test gives the real command line.
+    ...(overrides.mirrorCommand === undefined
+      ? {
+          mirrorChild: async () => {
+            mirrorRuns.count++;
+          },
+        }
+      : {}),
     ...overrides,
   });
   return {
@@ -133,7 +135,6 @@ export async function startTestServer(
     freeBytes,
     lines,
     mirrorRuns,
-    env,
     close: async () => {
       await server.stop();
     },
@@ -347,7 +348,7 @@ export function memoryPayload(input: MemoryInput = {}): OutgoingMemory {
   };
   return {
     kind: "memory",
-    uid: input.uid ?? memoryUid(input.generation ?? "g1a2b3c4", input.rowId ?? 1),
+    uid: input.uid ?? memoryUid(input.generation ?? "a1b2c3d4", input.rowId ?? 1),
     remoteAlias: input.remoteAlias ?? ALIAS_A,
     ...fields,
     createdAt: input.createdAt ?? 1_699_000_000_000,

@@ -64,6 +64,16 @@ const lastAudit = (t: TestServer) =>
     .get();
 const marks = (t: TestServer) => readHighWater(teamPaths(t.dir).feedFile);
 
+/** A writer subcommand: exit 0, one audit row, and the high-water file moved with it. */
+async function writer(t: TestServer, ...args: string[]) {
+  const before = auditCount(t);
+  const result = await cli(t, ...args);
+  expect({ args, exitCode: result.exitCode }).toEqual({ args, exitCode: 0 });
+  expect(auditCount(t)).toBe(before + 1);
+  expect(marks(t).audit).toBe(sequenceHighWater(t.server.db, "audit"));
+  return result;
+}
+
 describe("invitations and members from the shell", () => {
   test("invite prints a code alone that joins; --for binds a device; bad input exits 64; unknown member exits 1", async () => {
     const { t, ana } = await team();
@@ -136,7 +146,7 @@ describe("invitations and members from the shell", () => {
       (await cli(t, "invite", "--for", ana.memberId)).stdout.trim(),
       "desk",
     );
-    const revoked = await cli(t, "revoke", desk.deviceId);
+    const revoked = await writer(t, "revoke", desk.deviceId);
     expect(jsonOut(revoked.stdout)).toEqual({ event: "device-revoked", id: desk.deviceId });
     expect((await api(t.server, desk.token, "GET", "/v1/me")).status).toBe(401);
     const last = await cli(t, "revoke", admin.deviceId);
@@ -144,7 +154,7 @@ describe("invitations and members from the shell", () => {
     expect(last.stderr).toContain("the last admin stays");
     expect(last.stderr).toContain("serve invite --for");
 
-    const disabled = await cli(t, "disable", ana.memberId, "--withdraw");
+    const disabled = await writer(t, "disable", ana.memberId, "--withdraw");
     expect(disabled.exitCode).toBe(0);
     expect(jsonOut(disabled.stdout)).toEqual({
       event: "member-disabled",
@@ -160,7 +170,7 @@ describe("invitations and members from the shell", () => {
       action: "member disabled",
       target: ana.memberId,
     });
-    const enabled = await cli(t, "enable", ana.memberId);
+    const enabled = await writer(t, "enable", ana.memberId);
     expect(jsonOut(enabled.stdout)).toEqual({ event: "member-enabled", id: ana.memberId });
     const back = await joinAs(
       t.server,
@@ -169,7 +179,7 @@ describe("invitations and members from the shell", () => {
     );
     expect((await api(t.server, back.token, "GET", "/v1/me")).status).toBe(200);
 
-    const role = await cli(t, "role", ana.memberId, "admin");
+    const role = await writer(t, "role", ana.memberId, "admin");
     expect(jsonOut(role.stdout)).toEqual({ event: "role-set", id: ana.memberId, role: "admin" });
     expect((await api(t.server, back.token, "GET", "/v1/me")).body.member.role).toBe("admin");
     expect((await cli(t, "role", ana.memberId, "owner")).exitCode).toBe(64);
@@ -186,7 +196,7 @@ describe("items from the shell", () => {
     const m = memoryPayload({ rowId: 2 });
     await pushOne(t.server, ana.token, sendOf(p));
     await pushOne(t.server, ana.token, sendOf(m));
-    const withdrawn = await cli(t, "withdraw", "entry", p.uid);
+    const withdrawn = await writer(t, "withdraw", "entry", p.uid);
     expect(withdrawn.exitCode).toBe(0);
     expect(jsonOut(withdrawn.stdout)).toEqual({ event: "withdrawn", uid: p.uid, revision: 2 });
     expect(entryByUuid(t.server.db, p.uid.slice(-36))).toMatchObject({
@@ -205,7 +215,7 @@ describe("items from the shell", () => {
       action: "item withdrawn",
       target: feedUid,
     });
-    const reinstated = await cli(t, "reinstate", "entry", p.uid);
+    const reinstated = await writer(t, "reinstate", "entry", p.uid);
     expect(jsonOut(reinstated.stdout)).toEqual({ event: "reinstated", uid: p.uid });
     expect(entryByUuid(t.server.db, p.uid.slice(-36))?.locked_by_admin).toBe(0);
     expect(jsonOut((await cli(t, "reinstate", "memory", feedUid)).stdout)).toEqual({
@@ -243,6 +253,7 @@ describe("items from the shell", () => {
       uid: gone.uid,
       revisions: 1,
       feedRows: 1,
+      errors: [],
     });
     expect(entryByUuid(t.server.db, gone.uid.slice(-36))).toBeNull();
     expect(auditCount(t)).toBe(before + 1);
@@ -260,6 +271,7 @@ describe("items from the shell", () => {
       uid: feedUid,
       revisions: 1,
       feedRows: 1,
+      errors: [],
     });
   });
 });
@@ -311,11 +323,12 @@ describe("status, audit, health, instance renew", () => {
     expect(none.exitCode).toBe(1);
     expect(none.stderr).toContain("no team database");
 
-    const audit = await cli(t, "audit", "--limit", "2");
+    await cli(t, "invite", "--role", "member", "--name", "Rui");
+    const audit = await cli(t, "audit", "--limit", "5");
     expect(audit.exitCode).toBe(0);
     const rows = audit.stdout.trim().split("\n");
-    expect(rows).toHaveLength(2);
-    expect(rows[0]).toContain("join");
+    expect(rows).toHaveLength(5);
+    expect(rows[0]).toContain("invitation made");
     const all = await cli(t, "audit", "--limit", "50");
     expect(all.stdout.trim().split("\n").length).toBe(auditCount(t));
     expect(all.stdout.trim().split("\n").at(-1)).toContain("bootstrap");
@@ -350,6 +363,27 @@ describe("status, audit, health, instance renew", () => {
     );
     db?.close();
     expect(marks(t).changes).toBeGreaterThanOrEqual(1_000_001);
+  });
+
+  test("--data names the directory for every subcommand, before or after it, as the server's child passes it", async () => {
+    const { t, admin, ana } = await team();
+    const bare = (...args: string[]) =>
+      runCliWith({ env: { WIZARDINGCODE_MEM_MIGRATE: "off" } }, "serve", ...args);
+    const before = await bare("--data", t.dir, "members");
+    expect(before.exitCode).toBe(0);
+    expect(before.stdout).toContain(admin.memberId);
+    const after = await bare("members", "--data", t.dir);
+    expect(after.exitCode).toBe(0);
+    expect(after.stdout).toContain(admin.memberId);
+    await pushOne(t.server, ana.token, sendOf(entryPayload({ scope: "shared", slug: "d" })));
+    // The command line the server gives its child.
+    const child = await bare("mirror", "--data", t.dir);
+    expect(child.exitCode).toBe(0);
+    expect(jsonOut(child.stdout)).toEqual({ event: "mirror", commits: 1, errors: [] });
+    expect((await bare("--data")).exitCode).toBe(64);
+    const status = await bare("--data", t.dir, "status", "--json");
+    expect(status.exitCode).toBe(0);
+    expect((jsonOut(status.stdout) as { mirror: { pending: number } }).mirror.pending).toBe(0);
   });
 
   test("an unknown subcommand exits 64 with the usage", async () => {

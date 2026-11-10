@@ -20,6 +20,10 @@ export function transaction<T>(db: Db, fn: () => T): T {
 
 export const getMeta = coreGetMeta;
 export const setMeta = coreSetMeta;
+
+export function clearMeta(db: Db, key: string): void {
+  db.run("DELETE FROM meta WHERE key = ?", [key]);
+}
 export const leaseActive = coreLeaseActive;
 export const releaseLease = coreReleaseLease;
 
@@ -60,18 +64,29 @@ export function sequenceHighWater(db: Db, table: SequenceTable): number {
   );
 }
 
-/** Moves the high-water up to `to`, inserting the row when the table never had one; never lowers it. */
+/**
+ * Moves the high-water up to `to`, inserting the row when the table never had one; never
+ * lowers it. Two statements: the caller runs it inside `transaction` where a writer may race.
+ */
 export function advanceSequence(db: Db, table: SequenceTable, to: number): void {
-  withWrite(db, () => {
-    const current = db
-      .query<{ seq: number }, [string]>("SELECT seq FROM sqlite_sequence WHERE name = ?")
-      .get(table);
-    if (current === null) {
-      db.run("INSERT INTO sqlite_sequence (name, seq) VALUES (?, ?)", [table, to]);
-    } else if (current.seq < to) {
-      db.run("UPDATE sqlite_sequence SET seq = ? WHERE name = ?", [to, table]);
-    }
-  });
+  const current = db
+    .query<{ seq: number }, [string]>("SELECT seq FROM sqlite_sequence WHERE name = ?")
+    .get(table);
+  if (current === null) {
+    db.run("INSERT INTO sqlite_sequence (name, seq) VALUES (?, ?)", [table, to]);
+  } else if (current.seq < to) {
+    db.run("UPDATE sqlite_sequence SET seq = ? WHERE name = ?", [to, table]);
+  }
+}
+
+/** Runs `fn` in a deferred transaction: one snapshot for several reads. */
+export function readTransaction<T>(db: Db, fn: () => T): T {
+  return db.transaction(fn)();
+}
+
+/** The team schema the file is at (`user_version`): what `serve status` prints. */
+export function teamSchemaVersion(db: Db): number {
+  return db.query<{ user_version: number }, []>("PRAGMA user_version").get()?.user_version ?? 0;
 }
 
 // --- Members ----------------------------------------------------------------------------
@@ -587,6 +602,15 @@ export function allRevisions(db: Db): RevisionRow[] {
     .all();
 }
 
+/** Every revision in feed order, one at a time: a replay never holds the whole history. */
+export function forEachRevision(db: Db, fn: (revision: RevisionRow) => boolean | undefined): void {
+  for (const revision of db
+    .query<RevisionRow, []>(`SELECT ${REVISION_COLUMNS} FROM entry_revisions ORDER BY seq`)
+    .iterate()) {
+    if (fn(revision) === false) return;
+  }
+}
+
 /** Deletes the entry's revisions; the count. Run before `deleteEntry`: the foreign key is on. */
 export function deleteRevisions(db: Db, uuid: string): number {
   return db.run("DELETE FROM entry_revisions WHERE uuid = ?", [uuid]).changes;
@@ -834,8 +858,10 @@ export function explainHasChanges(db: Db, query: FeedQuery): string[] {
 
 /** Turns every row of a key, its move tombstones included, into a `purge` row with no hash; the count. */
 export function markPurged(db: Db, key: string): number {
+  // The move tombstones' keys are `<key>@<n>`: every string between `<key>@` and `<key>A`
+  // (the character after `@`), a range the `changes_key` index serves.
   return db.run(
-    "UPDATE changes SET op = 'purge', hash = '', moved_to = NULL WHERE key = ? OR substr(key, 1, length(?) + 1) = ? || '@'",
+    "UPDATE changes SET op = 'purge', hash = '', moved_to = NULL WHERE key = ? OR (key > ? || '@' AND key < ? || 'A')",
     [key, key, key],
   ).changes;
 }

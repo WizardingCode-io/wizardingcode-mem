@@ -4,7 +4,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import pkg from "../../package.json" with { type: "json" };
 import { headOf } from "../modules/knowledge/repo.ts";
-import { openTeamExisting, teamPaths, teamSchemaVersion } from "./db.ts";
+import { openTeamExisting, teamPaths } from "./db.ts";
 import { freeBytes } from "./disk.ts";
 import { type Marks, readHighWater } from "./instance.ts";
 import { SERVE_LEASE } from "./lease.ts";
@@ -16,6 +16,7 @@ import {
   pendingBootstrapInvitation,
   pendingMirrorCount,
   sequenceHighWater,
+  teamSchemaVersion,
 } from "./store.ts";
 
 export interface MirrorLast {

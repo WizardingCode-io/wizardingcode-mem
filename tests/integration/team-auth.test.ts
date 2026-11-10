@@ -1,4 +1,5 @@
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
+import { hashSecret } from "../../src/team/ids.ts";
 import { getMeta, leaseOf } from "../../src/team/store.ts";
 import {
   adminOf,
@@ -92,9 +93,16 @@ describe("join", () => {
     expect(again.body.error).toBe("invitation used");
     // The token is nowhere in the database or the log.
     const dump = t.server.db
-      .query<{ v: string }, []>("SELECT group_concat(token_hash) AS v FROM devices")
-      .get()?.v;
+      .query<{ name: string }, []>("SELECT name FROM sqlite_master WHERE type = 'table'")
+      .all()
+      .map((table) => JSON.stringify(t.server.db.query(`SELECT * FROM "${table.name}"`).all()))
+      .join("\n");
     expect(dump).not.toContain(admin.token.slice(5));
+    expect(
+      t.server.db
+        .query<{ h: string }, [string]>("SELECT token_hash AS h FROM devices WHERE id = ?")
+        .get(admin.deviceId)?.h,
+    ).toBe(hashSecret(admin.token));
     expect(t.lines.join("\n")).not.toContain(admin.token.slice(5));
   });
 
@@ -240,6 +248,27 @@ describe("invitations, roles, devices, members", () => {
     ).toBe(403);
     expect((await api(t.server, ana.token, "GET", "/v1/members")).status).toBe(403);
     expect((await api(t.server, ana.token, "GET", "/v1/audit")).status).toBe(403);
+    // Every other admin route refuses a member before it reads its arguments.
+    const adminRoutes: [string, string, unknown][] = [
+      ["GET", "/v1/invitations", undefined],
+      ["POST", "/v1/invitations/nothing/revoke", {}],
+      ["GET", "/v1/devices", undefined],
+      ["POST", `/v1/devices/${admin.deviceId}/revoke`, {}],
+      ["POST", `/v1/members/${admin.memberId}/disable`, {}],
+      ["POST", `/v1/members/${admin.memberId}/enable`, {}],
+      ["POST", `/v1/members/${admin.memberId}/role`, { role: "member" }],
+      ["POST", "/v1/items/entry/nothing/withdraw", {}],
+      ["POST", "/v1/items/entry/nothing/reinstate", {}],
+    ];
+    for (const [method, path, body] of adminRoutes) {
+      const answer = await api(t.server, ana.token, method, path, body);
+      expect({ path, status: answer.status, error: answer.body.error }).toEqual({
+        path,
+        status: 403,
+        error: "admin only",
+      });
+    }
+    expect((await api(t.server, admin.token, "GET", "/v1/me")).body.member.role).toBe("admin");
     // A bad name, an unknown member and a bad expiry are 400 or 404.
     expect(
       (
@@ -444,6 +473,10 @@ describe("the lease", () => {
     // The lease the first server released: a second start takes it; a stale one would be replaced as well.
     const again = await start({ dataDir: t.dir });
     expect(leaseOf(again.server.db, "serve.lease")?.owner).toMatch(/^serve-/);
+    // A pull held while the lease is lost is answered with the empty page before the exit.
+    const admin = await joinAs(again.server, t.code, "laptop");
+    const held = pull(again.server, admin.token, { since: 0, wait: 20 });
+    await Bun.sleep(50);
     again.server.db.run("UPDATE meta SET value = ? WHERE key = 'serve.lease'", [
       JSON.stringify({ owner: "serve-intruder", until: again.clock.now + 60_000 }),
     ]);
@@ -451,13 +484,94 @@ describe("the lease", () => {
     await again.server.stopped();
     expect(again.server.exitCode()).toBe(1);
     expect(eventsOf(again, "lease-lost")).toHaveLength(1);
+    const answer = await held;
+    expect(answer.status).toBe(200);
+    expect(answer.body.items).toEqual([]);
+    expect(answer.body.next).toBe(0);
   });
 });
 
 const auditCount = (t: TestServer) =>
   t.server.db.query<{ n: number }, []>("SELECT count(*) AS n FROM audit").get()?.n ?? 0;
 
+describe("a demoted admin", () => {
+  test("keeps no open invitation: the codes their devices minted are revoked with the role", async () => {
+    const t = await start();
+    const admin = await adminOf(t);
+    const second = await joinAs(
+      t.server,
+      await invite(t, admin.token, { role: "admin", name: "Second" }),
+      "x",
+    );
+    const pending = await invite(t, second.token, { role: "admin", name: "Would-be" });
+    const other = await invite(t, second.token, { forMember: second.memberId });
+    expect(
+      (
+        await api(t.server, admin.token, "POST", `/v1/members/${second.memberId}/role`, {
+          role: "member",
+        })
+      ).status,
+    ).toBe(200);
+    for (const code of [pending, other]) {
+      const refused = await api(t.server, null, "POST", "/v1/join", { code, label: "x" });
+      expect(refused.status).toBe(410);
+      expect(refused.body.error).toBe("invitation revoked");
+    }
+    expect((await api(t.server, second.token, "GET", "/v1/me")).body.member.role).toBe("member");
+    // A promotion revokes nothing.
+    const fresh = await invite(t, admin.token, { forMember: second.memberId });
+    expect(
+      (
+        await api(t.server, admin.token, "POST", `/v1/members/${second.memberId}/role`, {
+          role: "admin",
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (await api(t.server, null, "POST", "/v1/join", { code: fresh, label: "y" })).status,
+    ).toBe(200);
+  });
+});
+
 describe("limits, the proxy, the request id, the body cap, a thrown error", () => {
+  test("requests with a wrong token count against the address: the 61st in a minute is 429", async () => {
+    const t = await start();
+    const admin = await adminOf(t);
+    for (let i = 0; i < 60; i++) {
+      expect((await api(t.server, "wcm1_wrong", "GET", "/v1/me")).status).toBe(401);
+    }
+    const refused = await api(t.server, "wcm1_wrong", "GET", "/v1/me");
+    expect(refused.status).toBe(429);
+    expect(refused.headers.get("retry-after")).toMatch(/^\d+$/);
+    // A right token from the same address is not limited by the failures.
+    expect((await api(t.server, admin.token, "GET", "/v1/me")).status).toBe(200);
+    t.clock.advance(60_000);
+    expect((await api(t.server, "wcm1_wrong", "GET", "/v1/me")).status).toBe(401);
+  });
+
+  test("a device holds at most eight pulls: the ninth answers the empty page at once; a push releases the held ones", async () => {
+    const t = await start();
+    const admin = await adminOf(t);
+    const ana = await memberOf(t, admin.token, "Ana");
+    const held = Array.from({ length: LIMITS.heldPullsPerDevice }, () =>
+      pull(t.server, admin.token, { since: 0, wait: 20 }),
+    );
+    await Bun.sleep(100);
+    const started = performance.now();
+    const ninth = await pull(t.server, admin.token, { since: 0, wait: 20 });
+    expect(performance.now() - started).toBeLessThan(1000);
+    expect(ninth.status).toBe(200);
+    expect(ninth.body.items).toEqual([]);
+    await pushOne(t.server, ana.token, sendOf(entryPayload({ scope: "shared", slug: "wake" })));
+    const answers = await Promise.all(held);
+    for (const answer of answers) expect(answer.body.items).toHaveLength(1);
+    // The slots are free again: a new pull waits and is answered by the next push.
+    const later = pull(t.server, admin.token, { since: answers[0]?.body.next, wait: 20 });
+    await Bun.sleep(50);
+    await pushOne(t.server, ana.token, sendOf(entryPayload({ scope: "shared", slug: "wake-2" })));
+    expect((await later).body.items).toHaveLength(1);
+  });
+
   test("the eleventh join from one address in a minute is 429 with Retry-After and writes no audit row; health is never limited", async () => {
     const t = await start();
     await adminOf(t);

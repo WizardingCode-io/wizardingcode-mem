@@ -40,16 +40,25 @@ export class Bucket {
   }
 }
 
-export type Buckets = { devices: Bucket; joins: Bucket; bytes: Bucket };
+export type Buckets = { devices: Bucket; joins: Bucket; bytes: Bucket; auth: Bucket };
 
-/** The three buckets the routes take from: requests per device, joins per address, applied bytes per device. */
+/**
+ * The buckets the routes take from: requests per device, joins per address, applied bytes
+ * per device, and failed authentications per address.
+ */
 export function createBuckets(
-  limits: { requestsPerMinute: number; joinsPerMinute: number; payloadBytesPerHour: number },
+  limits: {
+    requestsPerMinute: number;
+    joinsPerMinute: number;
+    payloadBytesPerHour: number;
+    authFailuresPerMinute: number;
+  },
   now: () => number,
 ): Buckets {
   return {
     devices: new Bucket(limits.requestsPerMinute, limits.requestsPerMinute / 60, now),
     joins: new Bucket(limits.joinsPerMinute, limits.joinsPerMinute / 60, now),
     bytes: new Bucket(limits.payloadBytesPerHour, limits.payloadBytesPerHour / 3600, now),
+    auth: new Bucket(limits.authFailuresPerMinute, limits.authFailuresPerMinute / 60, now),
   };
 }

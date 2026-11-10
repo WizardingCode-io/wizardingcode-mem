@@ -7,7 +7,13 @@ import { openTeamDb, openTeamExisting } from "../../src/team/db.ts";
 import { SERVE_LEASE } from "../../src/team/lease.ts";
 import { leaseOf, setMeta } from "../../src/team/store.ts";
 import { runCli, type SpawnedCli, spawnCli } from "../helpers/cli.ts";
-import { cleanTestDirs, eventsOf, startTestServer, type TestServer } from "../helpers/team.ts";
+import {
+  cleanTestDirs,
+  entryPayload,
+  eventsOf,
+  startTestServer,
+  type TestServer,
+} from "../helpers/team.ts";
 
 const dirs: string[] = [];
 const tempDir = () => {
@@ -146,7 +152,19 @@ describe("the serve process", () => {
     });
     expect(joined.status).toBe(200);
     const { token } = (await joined.json()) as { token: string };
-    const held = fetch(`${origin}/v1/pull?since=0&wait=20`, {
+    // A pushed payload: its text must stay out of the log.
+    const payload = entryPayload({ scope: "shared", slug: "logged", body: "PAYLOAD-MARKER-9f3c" });
+    const pushed = await fetch(`${origin}/v1/push`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        epoch: 1,
+        items: [{ op: "send", kind: "entry", uid: payload.uid, payload }],
+      }),
+    });
+    expect(pushed.status).toBe(200);
+    // The cursor past the pushed row, so the pull is held until the stop answers it.
+    const held = fetch(`${origin}/v1/pull?since=1&wait=20`, {
       headers: { authorization: `Bearer ${token}` },
     });
     await Bun.sleep(150);
@@ -171,6 +189,9 @@ describe("the serve process", () => {
     const everything = out.raw.join("\n");
     expect(everything).not.toContain(token.slice(5));
     expect(everything).toContain("request");
+    expect(everything).not.toContain("PAYLOAD-MARKER-9f3c");
+    expect(everything).not.toContain("id: ");
+    expect(out.raw.filter((line) => line.includes("wci1_"))).toHaveLength(1);
   });
 
   test("the host comes from the environment; a host outside loopback without trust-proxy logs plain-http", async () => {
@@ -244,10 +265,21 @@ describe("the serve process", () => {
     expect(existsSync(join(legacy, "shibaox-mem.db"))).toBe(true);
     expect(readdirSync(legacy).sort()).toEqual(["shibaox-mem.db", "ui.json"]);
     expect(existsSync(join(home, ".wizardingcode"))).toBe(false);
+    // The server itself, with the same seeded home.
+    const running = serve(tempDir(), home);
+    const out = watch(running);
+    await out.until((line) => line.event === "listening");
+    running.kill("SIGTERM");
+    expect(await running.exited).toBe(0);
+    expect(readdirSync(legacy).sort()).toEqual(["shibaox-mem.db", "ui.json"]);
+    expect(existsSync(join(home, ".wizardingcode"))).toBe(false);
 
     const help = await runCli("--help");
     expect(help.exitCode).toBe(0);
     expect(help.stdout).toContain("serve");
+    const serveHelp = await runCli("serve", "--help");
+    expect(serveHelp.exitCode).toBe(0);
+    expect(serveHelp.stdout).toContain("Subcommands");
 
     const dir = tempDir();
     const newer = new Database(join(dir, "team.db"), { create: true });

@@ -5,6 +5,7 @@ import { projectFolderName } from "../../src/modules/knowledge/repo.ts";
 import { entryUid } from "../../src/sharing/types.ts";
 import { teamPaths } from "../../src/team/db.ts";
 import { LeaseHeldError } from "../../src/team/errors.ts";
+import { OPERATOR } from "../../src/team/ids.ts";
 import { MIRROR_LEASE, MIRROR_TTL_MS } from "../../src/team/lease.ts";
 import { createTeamLog } from "../../src/team/log.ts";
 import {
@@ -25,6 +26,7 @@ import {
   memoryByKey,
   setMeta,
 } from "../../src/team/store.ts";
+import { MAIN } from "../helpers/cli.ts";
 import { realGit, stubGit } from "../helpers/stub-git.ts";
 import {
   ALIAS_A,
@@ -32,6 +34,7 @@ import {
   adminOf,
   cleanTestDirs,
   entryPayload,
+  eventsOf,
   fakeTimers,
   type Joined,
   memberOf,
@@ -388,8 +391,15 @@ describe("failures, repair, rebuild, purge", () => {
       ).trim(),
     ).not.toBe("");
 
-    const purged = await purgeItem(mirrorCtx(t), "entry", moved.uid, t.clock.now);
-    expect(purged).toEqual({ revisions: 2, feedRows: 3 });
+    const purged = await purgeItem(mirrorCtx(t), "entry", moved.uid, t.clock.now, OPERATOR);
+    expect(purged).toEqual({ revisions: 2, feedRows: 3, errors: [] });
+    expect(
+      t.server.db
+        .query<{ source: string; target: string }, []>(
+          "SELECT source, target FROM audit WHERE action = 'purged'",
+        )
+        .all(),
+    ).toEqual([{ source: "cli", target: moved.uid }]);
     expect(entryByUuid(t.server.db, uuid)).toBeNull();
     const rows = t.server.db
       .query<{ op: string; hash: string; key: string }, [string, string]>(
@@ -436,8 +446,8 @@ describe("failures, repair, rebuild, purge", () => {
     const m = memoryPayload({ rowId: 9 });
     await pushOne(t.server, ana.token, sendOf(m));
     const feedUid = `remote:${ana.deviceAlias}:${m.uid}`;
-    const purgedMemory = await purgeItem(mirrorCtx(t), "memory", feedUid, t.clock.now);
-    expect(purgedMemory).toEqual({ revisions: 1, feedRows: 1 });
+    const purgedMemory = await purgeItem(mirrorCtx(t), "memory", feedUid, t.clock.now, OPERATOR);
+    expect(purgedMemory).toEqual({ revisions: 1, feedRows: 1, errors: [] });
     expect(memoryByKey(t.server.db, ana.deviceId, m.uid)).toBeNull();
     expect(
       t.server.db
@@ -449,7 +459,9 @@ describe("failures, repair, rebuild, purge", () => {
       result: "refused",
       reason: "purged",
     });
-    await expect(purgeItem(mirrorCtx(t), "entry", `shared:${uuid}`, t.clock.now)).rejects.toThrow();
+    await expect(
+      purgeItem(mirrorCtx(t), "entry", `shared:${uuid}`, t.clock.now, OPERATOR),
+    ).rejects.toThrow();
   });
 });
 
@@ -475,6 +487,13 @@ describe("isolation, the lease, the plan", () => {
     const init = calls.find((args) => args.includes("init"));
     expect(init).toContain("--template=");
     for (const args of calls) {
+      // No signing anywhere; the hooks path pointed at a file wherever a repository is named.
+      expect(args).toContain("commit.gpgsign=false");
+      if (args.includes("--git-dir")) {
+        expect(
+          args.some((arg) => arg.startsWith("core.hooksPath=") && arg.endsWith("/.git/config")),
+        ).toBe(true);
+      }
       const safe = args.indexOf("safe.directory=*");
       expect({ args: args.join(" "), found: safe > 0 }).toEqual({
         args: args.join(" "),
@@ -500,12 +519,19 @@ describe("isolation, the lease, the plan", () => {
     await expect(runMirror(mirrorCtx(t), { rebuild: false })).rejects.toThrow(LeaseHeldError);
     t.server.db.run("DELETE FROM meta WHERE key = ?", [MIRROR_LEASE]);
 
-    // The clock moves 1 s at every read: the lease's `until` after the run shows the last renewal.
+    // One renewal per git call: the clock is read once to take the lease, once per renewal
+    // (before every git call), once per revision for the commit's time, once for the record.
+    const argsFile = join(t.dir, "renew-args.txt");
+    const stub = stubGit(join(t.dir, "stub-renew"), { recordArgsTo: argsFile });
     let reads = 0;
-    const ctx = { ...mirrorCtx(t), now: () => t.clock.now + 1000 * reads++ };
+    const ctx = { ...mirrorCtx(t, stub), now: () => t.clock.now + 1000 * reads++ };
     const run = await runMirror(ctx, { rebuild: false });
     expect(run.commits).toBe(2);
-    expect(reads).toBeGreaterThan(3);
+    const gitCalls = readFileSync(argsFile, "utf8")
+      .split("\t\n")
+      .filter((record) => record !== "" && record !== "\n").length;
+    expect(gitCalls).toBeGreaterThan(4);
+    expect(reads).toBe(1 + gitCalls + run.commits + 1);
     expect(leaseOf(t.server.db, MIRROR_LEASE)).toBeNull();
 
     // A lost lease: the clock's fourth read hands the lease to another owner.
@@ -537,6 +563,70 @@ describe("isolation, the lease, the plan", () => {
     const plan = explainPendingMirror(t.server.db);
     expect(plan.some((line) => line.includes("entries_pending"))).toBe(true);
   });
+
+  test("a purge while a mirror run holds the lease is refused before anything is erased; after it, the purge erases and audits", async () => {
+    const { t, ana } = await team();
+    const p = entryPayload({ scope: "shared", slug: "held" });
+    await pushOne(t.server, ana.token, sendOf(p));
+    await runMirror(mirrorCtx(t), { rebuild: false });
+    const uuid = uuidOf(p.uid);
+    expect(claimLease(t.server.db, MIRROR_LEASE, "mirror-other", t.clock.now, MIRROR_TTL_MS)).toBe(
+      true,
+    );
+    await expect(purgeItem(mirrorCtx(t), "entry", p.uid, t.clock.now, OPERATOR)).rejects.toThrow(
+      LeaseHeldError,
+    );
+    expect(entryByUuid(t.server.db, uuid)).not.toBeNull();
+    expect(
+      t.server.db
+        .query<{ key: string }, [string]>("SELECT key FROM purged WHERE key = ?")
+        .get(uuid),
+    ).toBeNull();
+    expect(
+      t.server.db
+        .query<{ n: number }, []>("SELECT count(*) AS n FROM audit WHERE action = 'purged'")
+        .get()?.n,
+    ).toBe(0);
+    expect(realGit(sharedRepo(t), "log", "--all", "--format=%s").includes(uuid)).toBe(true);
+    t.server.db.run("DELETE FROM meta WHERE key = ?", [MIRROR_LEASE]);
+    const done = await purgeItem(mirrorCtx(t), "entry", p.uid, t.clock.now, OPERATOR);
+    expect(done).toEqual({ revisions: 1, feedRows: 1, errors: [] });
+    expect(entryByUuid(t.server.db, uuid)).toBeNull();
+    expect(realGit(sharedRepo(t), "log", "--all", "--format=%s").includes(uuid)).toBe(false);
+    expect(
+      t.server.db
+        .query<{ n: number }, []>("SELECT count(*) AS n FROM audit WHERE action = 'purged'")
+        .get()?.n,
+    ).toBe(1);
+  });
+});
+
+describe("the real child", () => {
+  test("the server runs serve mirror --data <dir> through this binary's command line and forwards its lines to the log", async () => {
+    const t = await start({
+      mirrorCommand: (dir: string) => [process.execPath, MAIN, "serve", "mirror", "--data", dir],
+    });
+    const admin = await adminOf(t, "Admin");
+    const payload = entryPayload({ scope: "shared", slug: "child" });
+    await pushOne(t.server, admin.token, sendOf(payload));
+    expect(lastRun(t)).toBeNull();
+    // The quiet minute passes: the timer launches the child, a real process over the same database.
+    t.clock.advance(60_000);
+    const deadline = Date.now() + 30_000;
+    while (Date.now() < deadline && lastRun(t) === null) await Bun.sleep(100);
+    expect(lastRun(t)).toMatchObject({ commits: 1, error: null });
+    while (
+      Date.now() < deadline &&
+      !eventsOf(t, "mirror").some((line) => line.child === "mirror")
+    ) {
+      await Bun.sleep(50);
+    }
+    const forwarded = eventsOf(t, "mirror").find((line) => line.child === "mirror");
+    expect(forwarded).toMatchObject({ commits: 1, errors: [] });
+    expect(eventsOf(t, "mirror-exit")).toHaveLength(0);
+    expect(entryByUuid(t.server.db, uuidOf(payload.uid))?.mirror_revision).toBe(1);
+    expect(existsSync(join(sharedRepo(t), fileNameFor(uuidOf(payload.uid), "child")))).toBe(true);
+  }, 40_000);
 });
 
 describe("the scheduler", () => {

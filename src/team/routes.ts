@@ -1,28 +1,23 @@
 // The route table and the one handler: the request id, the proxy rule, the body cap, the
 // contract, the authentication, the problem shape, the log line.
 import type { Server } from "bun";
-import { json, jsonObject, problem } from "../http/respond.ts";
+import { json, problem } from "../http/respond.ts";
 import { audit, readAudit } from "./audit.ts";
 import { authenticate, type Caller, checkContract, requireAdmin } from "./auth.ts";
 import { CONTRACT } from "./contract.ts";
-import type { Db } from "./db.ts";
 import { HttpError } from "./errors.ts";
 import { parsePullQuery, pullWithWait } from "./feed.ts";
 import { newHexId, REQUEST_ID } from "./ids.ts";
-import type { Buckets } from "./limits.ts";
-import type { RequestLine, TeamLog } from "./log.ts";
 import {
-  checkExpiry,
   checkLabel,
   checkName,
   checkRole,
-  disableMember,
   enableMember,
+  inviteFrom,
   join,
   listDevices,
   listInvitations,
   listMembers,
-  mintInvitation,
   revokeDevice,
   revokeInvitation,
   rotateToken,
@@ -31,45 +26,12 @@ import {
 import {
   type Actor,
   applyPush,
+  disableWithItems,
   reinstateByAdmin,
   summarizePush,
-  tombstoneMemberItems,
   withdrawByAdmin,
 } from "./push.ts";
-import type { ChangeSignal } from "./signal.ts";
-
-export interface Limits {
-  bodyBytes: number;
-  itemsPerPush: number;
-  itemBytes: number;
-  pullItems: number;
-  pullBytes: number;
-  pullWaitSeconds: number;
-  requestsPerMinute: number;
-  payloadBytesPerHour: number;
-  joinsPerMinute: number;
-  minFreeBytes: number;
-  minFreeBytesHealth: number;
-}
-
-export interface Context {
-  db: Db;
-  now: () => number;
-  serverId: string;
-  instance: () => string;
-  trustProxy: boolean;
-  limits: Limits;
-  buckets: Buckets;
-  signal: ChangeSignal;
-  freeBytes: (path: string) => number | null;
-  dataDir: string;
-  log: TeamLog;
-  /** After a route wrote a feed or an audit row: the high-water file always, the signal and the mirror timer when `feed`. */
-  onWrite: (what: { feed: boolean }) => void;
-}
-
-/** What a handler adds to the request's log line. */
-export type Meta = Partial<Pick<RequestLine, "deviceId" | "memberId" | "held" | "pull" | "push">>;
+import type { Context, Meta } from "./types.ts";
 
 const IDS_ON = new Set([401, 403, 409, 410]);
 
@@ -180,30 +142,49 @@ async function readBody(ctx: Context, request: Request): Promise<Record<string, 
     throw tooLarge();
   }
   const bytes = await readBounded(request, ctx.limits.bodyBytes);
-  const parsed = await jsonObject(new Request(request.url, { method: "POST", body: bytes }));
-  if (parsed instanceof Response) {
-    const body = (await parsed.json()) as { error: string };
-    throw new HttpError(400, { error: body.error });
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(new TextDecoder().decode(bytes));
+  } catch {
+    throw new HttpError(400, { error: "body must be JSON" });
   }
-  return parsed;
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new HttpError(400, { error: "body must be an object" });
+  }
+  return parsed as Record<string, unknown>;
 }
 
 const ids = (ctx: Context) => ({ serverId: ctx.serverId, instance: ctx.instance() });
 
+const rateLimited = (retryAfterSec: number) =>
+  new HttpError(429, { error: "rate limited", retryAfterSec });
+
+/**
+ * The contract, the token, the device's request bucket, the role. A missing or wrong token
+ * counts against the address, so guessing is bounded too.
+ */
 async function withCaller(
   ctx: Context,
   request: Request,
   admin: boolean,
+  address: string,
   meta: Meta,
 ): Promise<Caller> {
   checkContract(request);
-  const caller = authenticate(ctx.db, request, ctx.now());
+  let caller: Caller;
+  try {
+    caller = authenticate(ctx.db, request, ctx.now());
+  } catch (error) {
+    if (error instanceof HttpError && error.status === 401) {
+      const taken = ctx.buckets.auth.take(address);
+      if (!taken.ok) throw rateLimited(taken.retryAfterSec);
+    }
+    throw error;
+  }
   meta.deviceId = caller.device.id;
   meta.memberId = caller.member.id;
   const taken = ctx.buckets.devices.take(caller.device.id);
-  if (!taken.ok) {
-    throw new HttpError(429, { error: "rate limited", retryAfterSec: taken.retryAfterSec });
-  }
+  if (!taken.ok) throw rateLimited(taken.retryAfterSec);
   if (admin) requireAdmin(caller);
   return caller;
 }
@@ -230,8 +211,7 @@ const ROUTES: Route[] = [
 
   route("POST", "/v1/join", async (ctx, request, _params, address) => {
     const taken = ctx.buckets.joins.take(address);
-    if (!taken.ok)
-      throw new HttpError(429, { error: "rate limited", retryAfterSec: taken.retryAfterSec });
+    if (!taken.ok) throw rateLimited(taken.retryAfterSec);
     const body = await readBody(ctx, request);
     const code = typeof body.code === "string" ? body.code : "";
     const label = checkLabel(body.label);
@@ -275,8 +255,8 @@ const ROUTES: Route[] = [
     }
   }),
 
-  route("GET", "/v1/me", async (ctx, request, _params, _address, meta) => {
-    const caller = await withCaller(ctx, request, false, meta);
+  route("GET", "/v1/me", async (ctx, request, _params, address, meta) => {
+    const caller = await withCaller(ctx, request, false, address, meta);
     return json({
       member: { id: caller.member.id, name: caller.member.name, role: caller.member.role },
       device: { id: caller.device.id, alias: caller.device.alias, label: caller.device.label },
@@ -288,7 +268,7 @@ const ROUTES: Route[] = [
   }),
 
   route("POST", "/v1/devices/me/rotate", async (ctx, request, _params, address, meta) => {
-    const caller = await withCaller(ctx, request, false, meta);
+    const caller = await withCaller(ctx, request, false, address, meta);
     const token = rotateToken(ctx.db, caller.device.id);
     audit(ctx.db, {
       at: ctx.now(),
@@ -302,18 +282,23 @@ const ROUTES: Route[] = [
     return json({ token });
   }),
 
-  route("POST", "/v1/push", async (ctx, request, _params, _address, meta) => {
-    const caller = await withCaller(ctx, request, false, meta);
+  route("POST", "/v1/push", async (ctx, request, _params, address, meta) => {
+    const caller = await withCaller(ctx, request, false, address, meta);
     const body = await readBody(ctx, request);
     const results = applyPush(ctx, caller, body);
     meta.push = summarizePush(results);
     return json({ results });
   }),
 
-  route("GET", "/v1/pull", async (ctx, request, _params, _address, meta) => {
-    const caller = await withCaller(ctx, request, false, meta);
+  route("GET", "/v1/pull", async (ctx, request, _params, address, meta) => {
+    const caller = await withCaller(ctx, request, false, address, meta);
     const query = parsePullQuery(new URL(request.url), ctx.limits);
-    const page = await pullWithWait(ctx, query, { admin: caller.member.role === "admin" }, meta);
+    const page = await pullWithWait(
+      ctx,
+      query,
+      { admin: caller.member.role === "admin", deviceId: caller.device.id },
+      meta,
+    );
     meta.pull = {
       since: query.since,
       next: page.next,
@@ -325,28 +310,10 @@ const ROUTES: Route[] = [
   }),
 
   route("POST", "/v1/invitations", async (ctx, request, _params, address, meta) => {
-    const caller = await withCaller(ctx, request, true, meta);
+    const caller = await withCaller(ctx, request, true, address, meta);
     const body = await readBody(ctx, request);
     const now = ctx.now();
-    const expiresInHours = checkExpiry(body.expiresInHours);
-    const made =
-      body.forMember !== undefined
-        ? mintInvitation(ctx.db, {
-            role: "member",
-            name: null,
-            forMember: typeof body.forMember === "string" ? body.forMember : "",
-            createdByDevice: caller.device.id,
-            expiresInHours,
-            now,
-          })
-        : mintInvitation(ctx.db, {
-            role: checkRole(body.role),
-            name: checkName(body.name),
-            forMember: null,
-            createdByDevice: caller.device.id,
-            expiresInHours,
-            now,
-          });
+    const made = inviteFrom(ctx.db, body, caller.device.id, now);
     audit(ctx.db, {
       at: now,
       source: "api",
@@ -354,10 +321,7 @@ const ROUTES: Route[] = [
       address,
       action: "invitation made",
       target: made.invitation.id,
-      detail:
-        made.invitation.forMember === null
-          ? `${made.invitation.role} ${made.invitation.name}`
-          : `device for ${made.invitation.forMember}`,
+      detail: made.detail,
     });
     ctx.onWrite({ feed: false });
     return json(
@@ -373,13 +337,13 @@ const ROUTES: Route[] = [
     );
   }),
 
-  route("GET", "/v1/invitations", async (ctx, request, _params, _address, meta) => {
-    await withCaller(ctx, request, true, meta);
+  route("GET", "/v1/invitations", async (ctx, request, _params, address, meta) => {
+    await withCaller(ctx, request, true, address, meta);
     return json({ invitations: listInvitations(ctx.db, ctx.now()) });
   }),
 
   route("POST", "/v1/invitations/:id/revoke", async (ctx, request, params, address, meta) => {
-    const caller = await withCaller(ctx, request, true, meta);
+    const caller = await withCaller(ctx, request, true, address, meta);
     const now = ctx.now();
     if (!revokeInvitation(ctx.db, params.id as string, now))
       throw new HttpError(404, { error: "invitation unknown" });
@@ -395,19 +359,19 @@ const ROUTES: Route[] = [
     return json({ id: params.id, revokedAt: now });
   }),
 
-  route("GET", "/v1/members", async (ctx, request, _params, _address, meta) => {
-    await withCaller(ctx, request, true, meta);
+  route("GET", "/v1/members", async (ctx, request, _params, address, meta) => {
+    await withCaller(ctx, request, true, address, meta);
     return json({ members: listMembers(ctx.db) });
   }),
 
-  route("GET", "/v1/devices", async (ctx, request, _params, _address, meta) => {
-    await withCaller(ctx, request, true, meta);
+  route("GET", "/v1/devices", async (ctx, request, _params, address, meta) => {
+    await withCaller(ctx, request, true, address, meta);
     const member = new URL(request.url).searchParams.get("member");
     return json({ devices: listDevices(ctx.db, member ?? undefined) });
   }),
 
   route("POST", "/v1/devices/:id/revoke", async (ctx, request, params, address, meta) => {
-    const caller = await withCaller(ctx, request, true, meta);
+    const caller = await withCaller(ctx, request, true, address, meta);
     const now = ctx.now();
     revokeDevice(ctx.db, params.id as string, now);
     audit(ctx.db, {
@@ -423,13 +387,11 @@ const ROUTES: Route[] = [
   }),
 
   route("POST", "/v1/members/:id/disable", async (ctx, request, params, address, meta) => {
-    const caller = await withCaller(ctx, request, true, meta);
+    const caller = await withCaller(ctx, request, true, address, meta);
     const body = await readBody(ctx, request);
     const now = ctx.now();
     const id = params.id as string;
-    const { devices } = disableMember(ctx.db, id, now);
-    const withdrawn =
-      body.withdraw === true ? tombstoneMemberItems(ctx.db, id, now, actorOf(caller)) : 0;
+    const done = disableWithItems(ctx.db, id, now, body.withdraw === true, actorOf(caller));
     audit(ctx.db, {
       at: now,
       source: "api",
@@ -437,14 +399,14 @@ const ROUTES: Route[] = [
       address,
       action: "member disabled",
       target: id,
-      detail: `devices ${devices}, withdrawn ${withdrawn}`,
+      detail: done.detail,
     });
-    ctx.onWrite({ feed: withdrawn > 0 });
-    return json({ id, disabledAt: now, devices, withdrawn });
+    ctx.onWrite({ feed: done.withdrawn > 0 });
+    return json({ id, disabledAt: now, devices: done.devices, withdrawn: done.withdrawn });
   }),
 
   route("POST", "/v1/members/:id/enable", async (ctx, request, params, address, meta) => {
-    const caller = await withCaller(ctx, request, true, meta);
+    const caller = await withCaller(ctx, request, true, address, meta);
     const now = ctx.now();
     enableMember(ctx.db, params.id as string);
     audit(ctx.db, {
@@ -460,11 +422,11 @@ const ROUTES: Route[] = [
   }),
 
   route("POST", "/v1/members/:id/role", async (ctx, request, params, address, meta) => {
-    const caller = await withCaller(ctx, request, true, meta);
+    const caller = await withCaller(ctx, request, true, address, meta);
     const body = await readBody(ctx, request);
     const role = checkRole(body.role);
     const now = ctx.now();
-    setRole(ctx.db, params.id as string, role);
+    setRole(ctx.db, params.id as string, role, now);
     audit(ctx.db, {
       at: now,
       source: "api",
@@ -479,7 +441,7 @@ const ROUTES: Route[] = [
   }),
 
   route("POST", "/v1/items/:kind/:uid/withdraw", async (ctx, request, params, address, meta) => {
-    const caller = await withCaller(ctx, request, true, meta);
+    const caller = await withCaller(ctx, request, true, address, meta);
     const kind = itemKind(params.kind as string);
     const uid = params.uid as string;
     const now = ctx.now();
@@ -498,7 +460,7 @@ const ROUTES: Route[] = [
   }),
 
   route("POST", "/v1/items/:kind/:uid/reinstate", async (ctx, request, params, address, meta) => {
-    const caller = await withCaller(ctx, request, true, meta);
+    const caller = await withCaller(ctx, request, true, address, meta);
     const kind = itemKind(params.kind as string);
     const uid = params.uid as string;
     const now = ctx.now();
@@ -516,8 +478,8 @@ const ROUTES: Route[] = [
     return json({ uid });
   }),
 
-  route("GET", "/v1/audit", async (ctx, request, _params, _address, meta) => {
-    await withCaller(ctx, request, true, meta);
+  route("GET", "/v1/audit", async (ctx, request, _params, address, meta) => {
+    await withCaller(ctx, request, true, address, meta);
     const limit = new URL(request.url).searchParams.get("limit");
     return json({ rows: readAudit(ctx.db, limit === null ? undefined : Number(limit)) });
   }),

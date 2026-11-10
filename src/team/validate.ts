@@ -21,6 +21,7 @@ import {
   type OutgoingMemory,
 } from "../sharing/types.ts";
 import type { PushReason } from "./contract.ts";
+import { MEMORY_UID } from "./ids.ts";
 
 export type EntryScope = "workspace" | "shared" | "project";
 
@@ -177,7 +178,12 @@ export function checkMemoryPayload(item: {
 }): CheckedMemory | Refusal {
   const { payload } = item;
   if (!hasExactKeys(payload, OUTGOING_MEMORY_KEYS) || !typedMemory(payload)) return refuse("shape");
-  if (payload.uid !== item.uid || !isHostLedAlias(payload.remoteAlias)) return refuse("shape");
+  if (
+    payload.uid !== item.uid ||
+    !MEMORY_UID.test(payload.uid) ||
+    !isHostLedAlias(payload.remoteAlias)
+  )
+    return refuse("shape");
   const size = Buffer.byteLength(JSON.stringify(payload), "utf8");
   if (size > ENTRY_MAX_BYTES) return refuse("size");
   const hash = memoryHash(payload);

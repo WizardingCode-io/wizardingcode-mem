@@ -1,11 +1,11 @@
 // The server's instance and the high-water file: how a database restored from an older copy
 // is told from the live one, and what happens when it is (D-13).
-import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { writeFileAtomic } from "../modules/knowledge/repo.ts";
 import { type AuditSource, audit } from "./audit.ts";
 import type { Db } from "./db.ts";
-import { advanceSequence, sequenceHighWater, setMeta } from "./store.ts";
+import { newHexId } from "./ids.ts";
+import { advanceSequence, sequenceHighWater, setMeta, transaction } from "./store.ts";
 
 /** The two `AUTOINCREMENT` high-waters the file records. */
 export type Marks = { changes: number; audit: number };
@@ -38,9 +38,9 @@ export function currentMarks(db: Db): Marks {
 }
 
 /**
- * A new instance: every client that sees it pulls from zero. The feed's sequence moves to
- * `floor + SEQUENCE_MARGIN`, the file is rewritten with the database's marks, and the audit
- * records it. Returns the new instance id.
+ * A new instance: every client that sees it pulls from zero. In one transaction the feed's
+ * sequence moves to `floor + SEQUENCE_MARGIN` and the audit records it; then the file is
+ * rewritten with the database's marks. Returns the new instance id.
  */
 export function renewInstance(
   db: Db,
@@ -50,11 +50,12 @@ export function renewInstance(
   floor: number,
   detail = "",
 ): string {
-  const instance = randomBytes(8).toString("hex");
-  setMeta(db, "server.instance", instance);
-  advanceSequence(db, "changes", floor + SEQUENCE_MARGIN);
-  audit(db, { at: now, source, action: "instance renewed", target: instance, detail });
-  // The file last, so it carries the marks the audit row just moved.
+  const instance = newHexId();
+  transaction(db, () => {
+    setMeta(db, "server.instance", instance);
+    advanceSequence(db, "changes", floor + SEQUENCE_MARGIN);
+    audit(db, { at: now, source, action: "instance renewed", target: instance, detail });
+  });
   writeHighWater(feedFile, currentMarks(db));
   return instance;
 }

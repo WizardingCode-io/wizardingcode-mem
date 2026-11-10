@@ -48,9 +48,16 @@ describe("the token bucket", () => {
   test("createBuckets builds the three buckets from the limits", () => {
     let now = 0;
     const buckets = createBuckets(
-      { requestsPerMinute: 600, joinsPerMinute: 10, payloadBytesPerHour: 64 * MIB },
+      {
+        requestsPerMinute: 600,
+        joinsPerMinute: 10,
+        payloadBytesPerHour: 64 * MIB,
+        authFailuresPerMinute: 60,
+      },
       () => now,
     );
+    for (let i = 0; i < 60; i++) expect(buckets.auth.take("1.2.3.4").ok).toBe(true);
+    expect(buckets.auth.take("1.2.3.4")).toEqual({ ok: false, retryAfterSec: 1 });
     for (let i = 0; i < 10; i++) expect(buckets.joins.take("1.2.3.4").ok).toBe(true);
     expect(buckets.joins.take("1.2.3.4")).toEqual({ ok: false, retryAfterSec: 6 });
     for (let i = 0; i < 600; i++) expect(buckets.devices.take("d").ok).toBe(true);

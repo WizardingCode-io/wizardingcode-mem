@@ -29,6 +29,7 @@ CREATE TABLE entries (
   mirror_revision INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX entries_pending ON entries(uuid) WHERE mirror_revision < revision;
+CREATE INDEX entries_creator ON entries(created_by_member, scope);
 CREATE TABLE entry_revisions (
   uuid TEXT NOT NULL REFERENCES entries(uuid), revision INTEGER NOT NULL,
   seq INTEGER NOT NULL,
@@ -40,6 +41,7 @@ CREATE TABLE entry_revisions (
   PRIMARY KEY (uuid, revision)
 );
 CREATE INDEX entry_revisions_hash ON entry_revisions(uuid, hash, writer_device);
+CREATE INDEX entry_revisions_seq ON entry_revisions(seq);
 CREATE TABLE memories (
   device_id TEXT NOT NULL REFERENCES devices(id), uid TEXT NOT NULL,
   remote_alias TEXT NOT NULL, payload TEXT NOT NULL, hash TEXT NOT NULL,

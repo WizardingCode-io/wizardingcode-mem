@@ -185,19 +185,25 @@ describe("checkMemoryPayload, in the spec's order", () => {
       ["bad status", rehashedMemory({ ...payload, status: "9" })],
       ["kind wrong", { ...payload, kind: "entry" }],
       ["uid mismatch", { ...payload, uid: "other:1" }],
+      ["uid outside the grammar", { ...memoryPayload({ uid: "a1b2c3d4:x" }) }],
+      ["uid with an @", { ...memoryPayload({ uid: "a1b2c3d4:1@2" }) }],
+      ["generation not hex", { ...memoryPayload({ uid: "g1b2c3d4:1" }) }],
       ["path alias", { ...payload, remoteAlias: "remote:/Users/me/site" }],
       ["not an object", 7],
     ];
     for (const [name, candidate] of cases) {
+      const uid = (candidate as { uid?: string } | null)?.uid ?? payload.uid;
       expect({
         name,
-        ...refused(checkMemoryPayload({ uid: payload.uid, payload: candidate })),
+        ...refused(checkMemoryPayload({ uid, payload: candidate })),
       }).toEqual({
         name,
         result: "refused",
         reason: "shape",
       });
     }
+    const rowId = memoryPayload({ uid: "0123abcd:987654321" });
+    expect("size" in checkMemoryPayload({ uid: rowId.uid, payload: rowId })).toBe(true);
   });
 
   test("the size, the hash, the secret", () => {

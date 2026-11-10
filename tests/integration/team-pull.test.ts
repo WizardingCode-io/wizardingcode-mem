@@ -3,9 +3,14 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { entryUid } from "../../src/sharing/types.ts";
 import { openTeamForWrite, teamPaths } from "../../src/team/db.ts";
-import { explainChangesSince, explainHasChanges } from "../../src/team/feed.ts";
 import { readHighWater } from "../../src/team/instance.ts";
-import { entryByUuid, insertChange, sequenceHighWater } from "../../src/team/store.ts";
+import {
+  entryByUuid,
+  explainChangesSince,
+  explainHasChanges,
+  insertChange,
+  sequenceHighWater,
+} from "../../src/team/store.ts";
 import {
   ALIAS_A,
   ALIAS_B,
@@ -18,7 +23,6 @@ import {
   type Joined,
   memberOf,
   memoryPayload,
-  newUuid,
   pull,
   pullAll,
   pushOne,
@@ -534,6 +538,13 @@ describe("the project alias in the query", () => {
     expect(page.next).toBe(0);
     const both = await pullAll(t.server, ana.token, { since: 0, projects: [OTHER, ALIAS_A] });
     expect(both.items.map((item) => item.uid)).toEqual([inA.uid]);
-    expect(newUuid()).toMatch(/^[0-9a-f-]{36}$/);
+    // An alias named twice is read once; more aliases than the cap is 400.
+    const twice = await pullAll(t.server, ana.token, { since: 0, projects: [ALIAS_A, ALIAS_A] });
+    expect(twice.items.map((item) => item.uid)).toEqual([inA.uid]);
+    const many = Array.from({ length: 101 }, (_, i) => `remote:github.com/acme/repo-${i}`);
+    expect((await pull(t.server, ana.token, { since: 0, projects: many })).status).toBe(400);
+    expect(
+      (await pull(t.server, ana.token, { since: 0, projects: many.slice(0, 100) })).status,
+    ).toBe(200);
   });
 });

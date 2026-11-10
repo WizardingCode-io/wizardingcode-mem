@@ -27,6 +27,15 @@ export function setLogSink(next: LogSink | null): void {
   sink = next;
 }
 
+/** An error as a log carries it: its label, and its message on one line, redacted and clipped. */
+export function describeError(error: unknown): { name: string; message: string } {
+  const message = error instanceof Error ? error.message : String(error);
+  return {
+    name: errorLabel(error),
+    message: clip(redact(message.replace(/\s+/g, " ")), MESSAGE_MAX_CHARS, "…"),
+  };
+}
+
 /**
  * Appends one line to the local error log, or hands it to the sink when one is set.
  * Errors only, never payloads; one previous generation of the file is kept. Logging never
@@ -34,9 +43,7 @@ export function setLogSink(next: LogSink | null): void {
  */
 export function logError(scope: string, error: unknown, dataDir: string = defaultDataDir()): void {
   try {
-    const name = errorLabel(error);
-    const message = error instanceof Error ? error.message : String(error);
-    const line = clip(redact(message.replace(/\s+/g, " ")), MESSAGE_MAX_CHARS, "…");
+    const { name, message: line } = describeError(error);
     const at = new Date().toISOString();
     if (sink !== null) {
       sink({ at, scope, name, message: line });

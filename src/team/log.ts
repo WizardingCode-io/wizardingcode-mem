@@ -1,10 +1,6 @@
 // The team server's log: JSON lines, one per request or event, never a token, a code (after
 // the bootstrap line) or a payload. Every `logError` of the process goes through it too.
-import { redact } from "../core/redact.ts";
-import { errorLabel, type LogSink, setLogSink } from "../util/log.ts";
-import { clip } from "../util/text.ts";
-
-const MESSAGE_MAX_CHARS = 300;
+import { describeError, type LogSink, setLogSink } from "../util/log.ts";
 
 export interface RequestLine {
   requestId: string;
@@ -42,13 +38,11 @@ export function createTeamLog(sink: (line: string) => void, now: () => number): 
     line: write,
     request: (fields) => write({ event: "request", ...fields }),
     error: (scope, error, requestId) => {
-      const message = error instanceof Error ? error.message : String(error);
       write({
         level: "error",
         event: "error",
         scope,
-        name: errorLabel(error),
-        message: clip(redact(message.replace(/\s+/g, " ")), MESSAGE_MAX_CHARS, "…"),
+        ...describeError(error),
         ...(requestId === undefined ? {} : { requestId }),
       });
     },

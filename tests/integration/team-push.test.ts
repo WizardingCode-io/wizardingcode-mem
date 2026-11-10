@@ -2,7 +2,7 @@ import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { entryUid } from "../../src/sharing/types.ts";
 import { teamPaths } from "../../src/team/db.ts";
 import { readHighWater } from "../../src/team/instance.ts";
-import { insertPurged } from "../../src/team/store.ts";
+import { insertPurged, setEntryLock } from "../../src/team/store.ts";
 import {
   ALIAS_A,
   ALIAS_B,
@@ -208,7 +208,20 @@ describe("entry sends: revisions, idempotency, stale, appliedAs", () => {
     expect(
       await pushOne(t.server, ana.token, sendOf(payload, { baseRevision: 7, baseHash: "zzz" })),
     ).toEqual(first);
-    // Locked by an admin: the retry still applies.
+    // Locked by an admin while live (the lock set directly, as no route locks a live row):
+    // the retry still applies, since idempotency is read before the lock.
+    setEntryLock(t.server.db, uuidOf(payload.uid), true);
+    expect(await pushOne(t.server, ana.token, sendOf(payload))).toEqual(first);
+    const edited = rehashed({ ...payload, body: "while locked\n" });
+    expect(
+      await pushOne(
+        t.server,
+        ana.token,
+        sendOf(edited, { baseRevision: 1, baseHash: payload.hash }),
+      ),
+    ).toEqual({ uid: payload.uid, result: "refused", reason: "withdrawn-by-admin" });
+    setEntryLock(t.server.db, uuidOf(payload.uid), false);
+    // Withdrawn and locked by an admin, then reinstated: a re-send on the tombstone's base applies.
     const locked = await api(
       t.server,
       admin.token,
@@ -719,19 +732,26 @@ describe("rate, storage, transactions, the signal, the marks", () => {
     await push(t.server, ana.token, [sendOf(a)]);
     expect(t.server.signalFired()).toBe(fired + 1);
 
-    t.freeBytes.value = 100 * 1024 * 1024;
+    // The storage floor is 200 MiB: just under it refuses, just over it applies.
+    t.freeBytes.value = 199 * 1024 * 1024;
     const d = entryPayload({ scope: "shared", slug: "d" });
     const low = await push(t.server, ana.token, [sendOf(d), sendOf(a)]);
     expect(low.body.results).toEqual([
       { uid: d.uid, result: "refused", reason: "storage" },
       { uid: a.uid, result: "applied", revision: 1, hash: a.hash },
     ]);
+    t.freeBytes.value = 201 * 1024 * 1024;
+    expect(await pushOne(t.server, ana.token, sendOf(d))).toMatchObject({
+      result: "applied",
+      revision: 1,
+    });
     t.freeBytes.value = 10 * 1024 * 1024 * 1024;
 
+    const e = entryPayload({ scope: "shared", slug: "e" });
     drainBucket(t.server.buckets.bytes, ana.deviceId);
-    const rate = await push(t.server, ana.token, [sendOf(d), sendOf(a)]);
+    const rate = await push(t.server, ana.token, [sendOf(e), sendOf(a)]);
     expect(rate.body.results).toEqual([
-      { uid: d.uid, result: "refused", reason: "rate" },
+      { uid: e.uid, result: "refused", reason: "rate" },
       { uid: a.uid, result: "applied", revision: 1, hash: a.hash },
     ]);
     const line = eventsOf(t, "request")
@@ -742,7 +762,7 @@ describe("rate, storage, transactions, the signal, the marks", () => {
       stale: 0,
       refused: 1,
       withdrawn: 0,
-      refusals: [{ uid: d.uid, reason: "rate" }],
+      refusals: [{ uid: e.uid, reason: "rate" }],
     });
   });
 });

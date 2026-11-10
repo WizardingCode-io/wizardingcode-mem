@@ -52,8 +52,4 @@ export class ChangeSignal {
   isClosed(): boolean {
     return this.closed;
   }
-
-  waiting(): number {
-    return this.waiters.size;
-  }
 }

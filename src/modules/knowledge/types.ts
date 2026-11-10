@@ -34,6 +34,8 @@ export interface GitHost {
   renew: (() => void) | null;
   root?: string;
   extraConfig?: readonly string[];
+  /** The first part of the scope a failed git call is logged under; `knowledge` when absent. */
+  logScope?: string;
 }
 
 /**
