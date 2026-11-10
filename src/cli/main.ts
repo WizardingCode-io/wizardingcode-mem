@@ -26,12 +26,21 @@ const COMMANDS: Record<string, () => Promise<CommandModule>> = {
   share: () => import("./commands/share.ts"),
   status: () => import("./commands/status.ts"),
   doctor: () => import("./commands/doctor.ts"),
+  serve: () => import("./commands/serve.ts"),
   __spike: () => import("./commands/spike.ts"),
 };
+
+/** Commands that never touch a person's store: the legacy data migration is not for them. */
+const SKIPS_LEGACY: ReadonlySet<string> = new Set(["serve"]);
 
 const USAGE = `wizardingcode-mem ${pkg.version} — persistent memory for coding agents
 
 Usage: wizardingcode-mem <command> [options]
+
+Commands:
+  install, uninstall, status, doctor, ui, distill, history, embed, backup,
+  compact, knowledge, share, import, rejudge, hook, mcp, tool,
+  serve (the team server and its subcommands; wizardingcode-mem serve --help)
 
 Options:
   -v, --version   Print the version
@@ -55,7 +64,7 @@ async function main(argv: string[]): Promise<number> {
   }
   // A shibaox-mem install (0.3.0 and before) is taken over before anything reads the store.
   applyLegacyEnv(process.env);
-  if (process.env.WIZARDINGCODE_MEM_MIGRATE !== "off") {
+  if (process.env.WIZARDINGCODE_MEM_MIGRATE !== "off" && !SKIPS_LEGACY.has(name)) {
     let migration: string;
     try {
       migration = migrateLegacyData();

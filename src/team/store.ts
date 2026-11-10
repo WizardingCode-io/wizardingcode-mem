@@ -330,6 +330,35 @@ export function countMembers(db: Db): number {
   return db.query<{ n: number }, []>("SELECT count(*) AS n FROM members").get()?.n ?? 0;
 }
 
+export function memberCounts(db: Db): { active: number; disabled: number } {
+  const row = db
+    .query<{ active: number | null; disabled: number | null }, []>(
+      "SELECT sum(disabled_at IS NULL) AS active, sum(disabled_at IS NOT NULL) AS disabled FROM members",
+    )
+    .get();
+  return { active: row?.active ?? 0, disabled: row?.disabled ?? 0 };
+}
+
+export function deviceCounts(db: Db): { active: number; revoked: number } {
+  const row = db
+    .query<{ active: number | null; revoked: number | null }, []>(
+      "SELECT sum(revoked_at IS NULL) AS active, sum(revoked_at IS NOT NULL) AS revoked FROM devices",
+    )
+    .get();
+  return { active: row?.active ?? 0, revoked: row?.revoked ?? 0 };
+}
+
+/** How many entries the mirror has yet to export. */
+export function pendingMirrorCount(db: Db): number {
+  return (
+    db
+      .query<{ n: number }, []>(
+        "SELECT count(*) AS n FROM entries WHERE mirror_revision < revision",
+      )
+      .get()?.n ?? 0
+  );
+}
+
 // --- Entries ----------------------------------------------------------------------------
 
 export interface EntryRow {

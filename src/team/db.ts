@@ -59,6 +59,11 @@ function userVersion(db: Db): number {
   return db.query<{ user_version: number }, []>("PRAGMA user_version").get()?.user_version ?? 0;
 }
 
+/** The team schema the file is at: what `serve status` prints. */
+export function teamSchemaVersion(db: Db): number {
+  return userVersion(db);
+}
+
 /**
  * A file at version 0 is new and passes. Any other file must be a team database: a `meta`
  * table with `team.schema = 'team'`. Read by hand, before any version check or migration, so
