@@ -32,6 +32,7 @@ import { DEFAULT_AREAS, ENTRY_MAX_BYTES, nowIso, parseTaxonomy, renderTaxonomy }
 import { GitTimeoutError, KnowledgeError } from "./errors.ts";
 import { projectAliasesOf, resolveRepo } from "./resolve.ts";
 import type {
+  GitHost,
   Identity,
   KnowledgeStore,
   Manifest,
@@ -362,8 +363,10 @@ export function parseGitVersion(text: string): number[] | null {
 interface GitOptions {
   /** Names the log line: `knowledge.<operation>`. */
   operation: string;
-  /** The author and the committer of a commit. */
+  /** The author of a commit, and its committer unless `committer` says otherwise. */
   identity?: Identity;
+  /** The committer of a commit when it is not the author: the team server signing a member's revision. */
+  committer?: Identity;
   /** The one lookup that may read the person's configuration: their global `user.name`. */
   allowUserConfig?: boolean;
   /** A call that changes nothing takes no index lock. */
@@ -371,31 +374,34 @@ interface GitOptions {
   timeoutMs?: number;
 }
 
+export type { GitHost };
+
 export function gitEnv(
-  store: KnowledgeStore,
-  options: Pick<GitOptions, "identity" | "allowUserConfig" | "readOnly">,
+  host: GitHost,
+  options: Pick<GitOptions, "identity" | "committer" | "allowUserConfig" | "readOnly">,
 ): Record<string, string> {
   const env: Record<string, string> = {
-    PATH: store.env.PATH ?? "",
+    PATH: host.env.PATH ?? "",
     GIT_TERMINAL_PROMPT: "0",
-    // Git never looks for a repository above the knowledge folder.
-    GIT_CEILING_DIRECTORIES: knowledgeRoot(store.dataDir),
+    // Git never looks for a repository above the host's root: the knowledge folder, or the mirror's.
+    GIT_CEILING_DIRECTORIES: host.root ?? knowledgeRoot(host.dataDir),
     // A path is a path: a file a person named with `*` or `[` never matches another.
     GIT_LITERAL_PATHSPECS: "1",
   };
   if (options.allowUserConfig === true) {
-    if (store.env.HOME !== undefined) env.HOME = store.env.HOME;
-    if (store.env.XDG_CONFIG_HOME !== undefined) env.XDG_CONFIG_HOME = store.env.XDG_CONFIG_HOME;
+    if (host.env.HOME !== undefined) env.HOME = host.env.HOME;
+    if (host.env.XDG_CONFIG_HOME !== undefined) env.XDG_CONFIG_HOME = host.env.XDG_CONFIG_HOME;
   } else {
     env.GIT_CONFIG_GLOBAL = NO_CONFIG;
     env.GIT_CONFIG_NOSYSTEM = "1";
   }
   if (options.readOnly === true) env.GIT_OPTIONAL_LOCKS = "0";
   if (options.identity !== undefined) {
+    const committer = options.committer ?? options.identity;
     env.GIT_AUTHOR_NAME = options.identity.name;
     env.GIT_AUTHOR_EMAIL = options.identity.email;
-    env.GIT_COMMITTER_NAME = options.identity.name;
-    env.GIT_COMMITTER_EMAIL = options.identity.email;
+    env.GIT_COMMITTER_NAME = committer.name;
+    env.GIT_COMMITTER_EMAIL = committer.email;
   }
   return env;
 }
@@ -446,31 +452,32 @@ function configArgs(repo: string | null): string[] {
  * exception is a global configuration lookup that finds no value, which git reports as exit 1.
  */
 export function runGit(
-  store: KnowledgeStore,
+  host: GitHost,
   repo: string | null,
   args: string[],
   options: GitOptions & { quiet?: boolean },
 ): { stdout: string; exitCode: number } {
   // A lease lost to another writer stops the operation before it touches the repository again.
-  store.renew?.();
+  host.renew?.();
   const subcommand = args.find((arg) => !arg.startsWith("-")) ?? args[0] ?? "";
   const fail = (reason: string, timedOut = false): never => {
-    const message = `git ${subcommand} in ${repo ?? store.dataDir} failed: ${clip(reason.trim(), STDERR_MAX)}`;
+    const message = `git ${subcommand} in ${repo ?? host.dataDir} failed: ${clip(reason.trim(), STDERR_MAX)}`;
     const error = timedOut ? new GitTimeoutError(message) : new KnowledgeError("git", message);
-    if (options.quiet !== true) logError(`knowledge.${options.operation}`, error, store.dataDir);
+    if (options.quiet !== true) logError(`knowledge.${options.operation}`, error, host.dataDir);
     throw error;
   };
 
-  const git = Bun.which("git", { PATH: store.env.PATH ?? "" });
+  const git = Bun.which("git", { PATH: host.env.PATH ?? "" });
   if (git === null) return fail("git was not found on PATH");
   const location = repo === null ? [] : ["--git-dir", join(repo, ".git"), "--work-tree", repo];
-  const timeout = options.timeoutMs ?? store.gitTimeoutMs;
-  const cwd = repo ?? store.dataDir;
+  const timeout = options.timeoutMs ?? host.gitTimeoutMs;
+  const cwd = repo ?? host.dataDir;
   let result: ReturnType<typeof Bun.spawnSync>;
   try {
-    result = Bun.spawnSync([git, ...location, ...configArgs(repo), ...args], {
+    // The host's extra settings come after the runner's own, so the subcommand lookup above still holds.
+    result = Bun.spawnSync([git, ...location, ...configArgs(repo), ...(host.extraConfig ?? []), ...args], {
       ...(existsSync(cwd) ? { cwd } : {}),
-      env: gitEnv(store, options),
+      env: gitEnv(host, options),
       stdin: "ignore",
       stdout: "pipe",
       stderr: "pipe",
@@ -903,36 +910,38 @@ export function statusOf(store: KnowledgeStore, repo: Repo, paths: string[]): st
 }
 
 export function stagePaths(
-  store: KnowledgeStore,
-  repo: Repo,
+  host: GitHost,
+  repo: { path: string },
   paths: string[],
   operation: string,
 ): void {
-  runGit(store, repo.path, ["add", "--", ...paths], { operation });
+  runGit(host, repo.path, ["add", "--", ...paths], { operation });
 }
 
 /** Stages the removal of files, also ones a person already deleted from the disk. */
 export function removePaths(
-  store: KnowledgeStore,
-  repo: Repo,
+  host: GitHost,
+  repo: { path: string },
   paths: string[],
   operation: string,
 ): void {
-  runGit(store, repo.path, ["rm", "-q", "--", ...paths], { operation });
+  runGit(host, repo.path, ["rm", "-q", "--", ...paths], { operation });
 }
 
-/** Commits the given paths and nothing else that may be staged. */
+/** Commits the given paths and nothing else that may be staged; the committer is the author unless given. */
 export function commitPaths(
-  store: KnowledgeStore,
-  repo: Repo,
+  host: GitHost,
+  repo: { path: string },
   paths: string[],
   message: string,
   identity: Identity,
   operation: string,
+  committer?: Identity,
 ): void {
-  runGit(store, repo.path, ["commit", "-q", "--only", "-m", message, "--", ...paths], {
+  runGit(host, repo.path, ["commit", "-q", "--only", "-m", message, "--", ...paths], {
     operation,
     identity,
+    ...(committer === undefined ? {} : { committer }),
   });
 }
 

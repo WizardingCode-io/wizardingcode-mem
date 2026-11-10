@@ -21,10 +21,26 @@ export type Writer = PersonWriter | AgentWriter;
 export type Identity = { name: string; email: string };
 
 /**
- * What every function of the store is given. `env` is the only environment git ever sees,
- * `now` the only clock, so a test controls both.
+ * What the git runner needs of whoever calls it: the store, or the team server's mirror.
+ * `env` is the only environment git ever sees; `root` is the folder git never looks above
+ * (the store's `knowledge/` when absent); `extraConfig` are `-c` settings appended after the
+ * runner's own, for a host whose repositories another user owns.
  */
-export interface KnowledgeStore {
+export interface GitHost {
+  dataDir: string;
+  env: Record<string, string | undefined>;
+  gitTimeoutMs: number;
+  /** Extends the leases the running operation holds; null outside one. Throws when one was lost. */
+  renew: (() => void) | null;
+  root?: string;
+  extraConfig?: readonly string[];
+}
+
+/**
+ * What every function of the store is given. `env` is the only environment git ever sees,
+ * `now` the only clock, so a test controls both. A store is a `GitHost`.
+ */
+export interface KnowledgeStore extends GitHost {
   db: Db;
   dataDir: string;
   env: Record<string, string | undefined>;
