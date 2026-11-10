@@ -1,8 +1,20 @@
 // The team server in a test: a fresh data directory, a clock and timers the test drives, the
 // bootstrap code captured, the log lines kept, and the HTTP calls as the client would make them.
+import { randomUUID } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { renderEntry } from "../../src/modules/knowledge/entry.ts";
+import { hashOf } from "../../src/modules/knowledge/repo.ts";
+import { memoryHash } from "../../src/sharing/hash.ts";
+import {
+  entryUid,
+  memoryUid,
+  type OutgoingEntry,
+  type OutgoingMemory,
+} from "../../src/sharing/types.ts";
+import type { Bucket } from "../../src/team/limits.ts";
+import type { PushItem, PushResult } from "../../src/team/push.ts";
 import {
   LIMITS,
   type ServerOptions,
@@ -202,6 +214,26 @@ export async function invite(
   return answer.body.code as string;
 }
 
+/** A member named `name`, joined with one device labelled `label`. */
+export async function memberOf(
+  t: TestServer,
+  adminToken: string,
+  name: string,
+  label = "laptop",
+): Promise<Joined> {
+  return joinAs(t.server, await invite(t, adminToken, { role: "member", name }), label);
+}
+
+/** A second device of `member`. */
+export async function deviceOf(
+  t: TestServer,
+  adminToken: string,
+  member: Joined,
+  label = "desktop",
+): Promise<Joined> {
+  return joinAs(t.server, await invite(t, adminToken, { forMember: member.memberId }), label);
+}
+
 /** The JSON log lines of one event. */
 export function eventsOf(t: TestServer, event: string): Record<string, unknown>[] {
   return t.lines
@@ -213,6 +245,154 @@ export function eventsOf(t: TestServer, event: string): Record<string, unknown>[
       }
     })
     .filter((entry): entry is Record<string, unknown> => entry !== null && entry.event === event);
+}
+
+// --- Payloads ---------------------------------------------------------------------------
+
+export const newUuid = (): string => randomUUID();
+
+export interface EntryInput {
+  scope: "workspace" | "shared" | "project";
+  uuid?: string;
+  remoteAlias?: string | null;
+  slug: string;
+  title?: string;
+  area?: string;
+  kind?: string;
+  body?: string;
+  version?: number;
+  author?: string;
+  /** The frontmatter's `id`, when it must differ from the uid's UUID. */
+  id?: string;
+}
+
+/** Splits a rendered file at the end of its frontmatter block, the closing `---` line included. */
+export function splitEntryText(text: string): { frontmatter: string; body: string } {
+  const end = text.indexOf("\n---\n", 3) + "\n---\n".length;
+  return { frontmatter: text.slice(0, end), body: text.slice(end) };
+}
+
+/** An entry as part 4's client would send it: rendered by part 1, hashed by part 1. */
+export function entryPayload(input: EntryInput): OutgoingEntry {
+  const uuid = input.uuid ?? newUuid();
+  const remoteAlias =
+    input.scope === "project" ? (input.remoteAlias ?? ALIAS_A) : (input.remoteAlias ?? null);
+  const text = renderEntry({
+    id: input.id ?? uuid,
+    slug: input.slug,
+    title: input.title ?? "A title",
+    kind: input.kind ?? "knowledge",
+    area: input.area ?? "code",
+    context: "",
+    subject: "",
+    status: "active",
+    author: input.author ?? "Ana",
+    version: input.version ?? 1,
+    created: null,
+    updated: null,
+    supersedes: null,
+    pinned: false,
+    body: input.body ?? "The body.",
+    extra: [],
+    problem: null,
+  });
+  const { frontmatter, body } = splitEntryText(text);
+  return {
+    kind: "entry",
+    uid: entryUid(input.scope, remoteAlias, uuid),
+    scope: input.scope,
+    slug: input.slug,
+    remoteAlias,
+    frontmatter,
+    body,
+    version: input.version ?? 1,
+    hash: hashOf(Buffer.from(text, "utf8")),
+  };
+}
+
+/** The payload with its hash recomputed after the test changed a text field. */
+export function rehashed(payload: OutgoingEntry): OutgoingEntry {
+  return { ...payload, hash: hashOf(Buffer.from(payload.frontmatter + payload.body, "utf8")) };
+}
+
+export interface MemoryInput {
+  uid?: string;
+  generation?: string;
+  rowId?: number;
+  remoteAlias?: string;
+  title?: string;
+  body?: string;
+  memoryKind?: string;
+  importance?: number;
+  status?: string;
+  createdAt?: number;
+  updatedAt?: number;
+  version?: number;
+}
+
+export function memoryPayload(input: MemoryInput = {}): OutgoingMemory {
+  const fields = {
+    memoryKind: input.memoryKind ?? "decision",
+    importance: input.importance ?? 3,
+    status: input.status ?? "active",
+    title: input.title ?? "We chose SQLite",
+    body: input.body ?? "One file, one process, no daemon.",
+  };
+  return {
+    kind: "memory",
+    uid: input.uid ?? memoryUid(input.generation ?? "g1a2b3c4", input.rowId ?? 1),
+    remoteAlias: input.remoteAlias ?? ALIAS_A,
+    ...fields,
+    createdAt: input.createdAt ?? 1_699_000_000_000,
+    updatedAt: input.updatedAt ?? 1_699_000_000_000,
+    version: input.version ?? 1,
+    hash: memoryHash(fields),
+  };
+}
+
+/** The memory payload with its hash recomputed after a change. */
+export function rehashedMemory(payload: OutgoingMemory): OutgoingMemory {
+  return { ...payload, hash: memoryHash(payload) };
+}
+
+export type PushInput = Partial<PushItem> & { payload?: unknown };
+
+/** A send of `payload` on base 0 unless the item says otherwise. */
+export function sendOf(
+  payload: OutgoingEntry | OutgoingMemory,
+  base: { baseRevision?: number; baseHash?: string } = {},
+): PushInput {
+  return { op: "send", kind: payload.kind, uid: payload.uid, payload, ...base };
+}
+
+/** `items` is anything: the envelope tests send malformed ones on purpose. */
+export async function push(
+  server: TeamServer,
+  token: string,
+  items: readonly unknown[],
+  epoch: number | null = 1,
+): Promise<ApiAnswer> {
+  return api(server, token, "POST", "/v1/push", { epoch, items });
+}
+
+/** Empties a bucket's key: takes ever smaller amounts until a single token is refused. */
+export function drainBucket(bucket: Bucket, key: string): void {
+  for (let amount = 1 << 26; amount >= 1; amount = Math.floor(amount / 2)) {
+    while (bucket.take(key, amount).ok) {
+      // keep taking
+    }
+  }
+}
+
+export async function pushOne(
+  server: TeamServer,
+  token: string,
+  item: PushInput,
+): Promise<PushResult> {
+  const answer = await push(server, token, [item]);
+  if (answer.status !== 200)
+    throw new Error(`push failed: ${answer.status} ${JSON.stringify(answer.body)}`);
+  return answer.body.results[0] as PushResult;
 }
 
 export { LIMITS };

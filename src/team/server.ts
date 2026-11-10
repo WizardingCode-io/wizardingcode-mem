@@ -62,6 +62,8 @@ export interface TeamServer {
   options: { idleTimeout: number; maxRequestBodySize: number };
   db: Db;
   signalFired(): number;
+  /** The rate buckets, for a test that drains one. */
+  buckets: Buckets;
 }
 
 export async function startTeamServer(options: ServerOptions): Promise<TeamServer> {
@@ -197,5 +199,6 @@ export async function startTeamServer(options: ServerOptions): Promise<TeamServe
     options: { idleTimeout: IDLE_TIMEOUT_S, maxRequestBodySize: MAX_REQUEST_BODY },
     db,
     signalFired: () => signal.fired(),
+    buckets,
   };
 }

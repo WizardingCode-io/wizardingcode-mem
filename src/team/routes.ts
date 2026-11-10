@@ -9,7 +9,7 @@ import type { Db } from "./db.ts";
 import { HttpError } from "./errors.ts";
 import { newHexId, REQUEST_ID } from "./ids.ts";
 import type { Buckets } from "./limits.ts";
-import type { TeamLog } from "./log.ts";
+import type { RequestLine, TeamLog } from "./log.ts";
 import {
   checkExpiry,
   checkLabel,
@@ -27,6 +27,14 @@ import {
   rotateToken,
   setRole,
 } from "./members.ts";
+import {
+  type Actor,
+  applyPush,
+  reinstateByAdmin,
+  summarizePush,
+  tombstoneMemberItems,
+  withdrawByAdmin,
+} from "./push.ts";
 import type { ChangeSignal } from "./signal.ts";
 
 export interface Limits {
@@ -57,18 +65,12 @@ export interface Context {
   log: TeamLog;
   /** After a route wrote a feed or an audit row: the high-water file always, the signal and the mirror timer when `feed`. */
   onWrite: (what: { feed: boolean }) => void;
-  /** Phase C and D fill these; until then the routes answer 501. */
-  push?: (
-    ctx: Context,
-    caller: Caller,
-    body: Record<string, unknown>,
-    request: Request,
-  ) => Promise<unknown>;
-  pull?: (ctx: Context, caller: Caller, url: URL) => Promise<unknown>;
-  withdraw?: (ctx: Context, caller: Caller, kind: string, uid: string) => unknown;
-  reinstate?: (ctx: Context, caller: Caller, kind: string, uid: string) => unknown;
-  tombstoneMemberItems?: (ctx: Context, memberId: string, caller: Caller) => number;
+  /** Phase D fills this; until then the route answers 501. */
+  pull?: (ctx: Context, caller: Caller, url: URL, meta: Meta) => Promise<unknown>;
 }
+
+/** What a handler adds to the request's log line. */
+export type Meta = Partial<Pick<RequestLine, "deviceId" | "memberId" | "held" | "pull" | "push">>;
 
 const IDS_ON = new Set([401, 403, 409, 410]);
 
@@ -101,6 +103,7 @@ type Handler = (
   request: Request,
   params: Params,
   address: string,
+  meta: Meta,
 ) => Promise<Response> | Response;
 interface Route {
   method: string;
@@ -151,15 +154,33 @@ async function readBody(ctx: Context, request: Request): Promise<Record<string, 
 
 const ids = (ctx: Context) => ({ serverId: ctx.serverId, instance: ctx.instance() });
 
-async function withCaller(ctx: Context, request: Request, admin: boolean): Promise<Caller> {
+async function withCaller(
+  ctx: Context,
+  request: Request,
+  admin: boolean,
+  meta: Meta,
+): Promise<Caller> {
   checkContract(request);
   const caller = authenticate(ctx.db, request, ctx.now());
+  meta.deviceId = caller.device.id;
+  meta.memberId = caller.member.id;
   const taken = ctx.buckets.devices.take(caller.device.id);
   if (!taken.ok) {
     throw new HttpError(429, { error: "rate limited", retryAfterSec: taken.retryAfterSec });
   }
   if (admin) requireAdmin(caller);
   return caller;
+}
+
+const actorOf = (caller: Caller): Actor => ({
+  memberId: caller.member.id,
+  deviceId: caller.device.id,
+});
+
+/** The `:kind` of an item route; anything else names nothing. */
+function itemKind(raw: string): "entry" | "memory" {
+  if (raw !== "entry" && raw !== "memory") throw new HttpError(404, { error: "unknown" });
+  return raw;
 }
 
 const notImplemented = () => problem(501, "not implemented");
@@ -220,8 +241,8 @@ const ROUTES: Route[] = [
     }
   }),
 
-  route("GET", "/v1/me", async (ctx, request) => {
-    const caller = await withCaller(ctx, request, false);
+  route("GET", "/v1/me", async (ctx, request, _params, _address, meta) => {
+    const caller = await withCaller(ctx, request, false, meta);
     return json({
       member: { id: caller.member.id, name: caller.member.name, role: caller.member.role },
       device: { id: caller.device.id, alias: caller.device.alias, label: caller.device.label },
@@ -232,8 +253,8 @@ const ROUTES: Route[] = [
     });
   }),
 
-  route("POST", "/v1/devices/me/rotate", async (ctx, request, _params, address) => {
-    const caller = await withCaller(ctx, request, false);
+  route("POST", "/v1/devices/me/rotate", async (ctx, request, _params, address, meta) => {
+    const caller = await withCaller(ctx, request, false, meta);
     const token = rotateToken(ctx.db, caller.device.id);
     audit(ctx.db, {
       at: ctx.now(),
@@ -247,21 +268,22 @@ const ROUTES: Route[] = [
     return json({ token });
   }),
 
-  route("POST", "/v1/push", async (ctx, request) => {
-    const caller = await withCaller(ctx, request, false);
-    if (ctx.push === undefined) return notImplemented();
+  route("POST", "/v1/push", async (ctx, request, _params, _address, meta) => {
+    const caller = await withCaller(ctx, request, false, meta);
     const body = await readBody(ctx, request);
-    return json(await ctx.push(ctx, caller, body, request));
+    const results = applyPush(ctx, caller, body);
+    meta.push = summarizePush(results);
+    return json({ results });
   }),
 
-  route("GET", "/v1/pull", async (ctx, request) => {
-    const caller = await withCaller(ctx, request, false);
+  route("GET", "/v1/pull", async (ctx, request, _params, _address, meta) => {
+    const caller = await withCaller(ctx, request, false, meta);
     if (ctx.pull === undefined) return notImplemented();
-    return json(await ctx.pull(ctx, caller, new URL(request.url)));
+    return json(await ctx.pull(ctx, caller, new URL(request.url), meta));
   }),
 
-  route("POST", "/v1/invitations", async (ctx, request, _params, address) => {
-    const caller = await withCaller(ctx, request, true);
+  route("POST", "/v1/invitations", async (ctx, request, _params, address, meta) => {
+    const caller = await withCaller(ctx, request, true, meta);
     const body = await readBody(ctx, request);
     const now = ctx.now();
     const expiresInHours = checkExpiry(body.expiresInHours);
@@ -309,13 +331,13 @@ const ROUTES: Route[] = [
     );
   }),
 
-  route("GET", "/v1/invitations", async (ctx, request) => {
-    await withCaller(ctx, request, true);
+  route("GET", "/v1/invitations", async (ctx, request, _params, _address, meta) => {
+    await withCaller(ctx, request, true, meta);
     return json({ invitations: listInvitations(ctx.db, ctx.now()) });
   }),
 
-  route("POST", "/v1/invitations/:id/revoke", async (ctx, request, params, address) => {
-    const caller = await withCaller(ctx, request, true);
+  route("POST", "/v1/invitations/:id/revoke", async (ctx, request, params, address, meta) => {
+    const caller = await withCaller(ctx, request, true, meta);
     const now = ctx.now();
     if (!revokeInvitation(ctx.db, params.id as string, now))
       throw new HttpError(404, { error: "invitation unknown" });
@@ -331,19 +353,19 @@ const ROUTES: Route[] = [
     return json({ id: params.id, revokedAt: now });
   }),
 
-  route("GET", "/v1/members", async (ctx, request) => {
-    await withCaller(ctx, request, true);
+  route("GET", "/v1/members", async (ctx, request, _params, _address, meta) => {
+    await withCaller(ctx, request, true, meta);
     return json({ members: listMembers(ctx.db) });
   }),
 
-  route("GET", "/v1/devices", async (ctx, request) => {
-    await withCaller(ctx, request, true);
+  route("GET", "/v1/devices", async (ctx, request, _params, _address, meta) => {
+    await withCaller(ctx, request, true, meta);
     const member = new URL(request.url).searchParams.get("member");
     return json({ devices: listDevices(ctx.db, member ?? undefined) });
   }),
 
-  route("POST", "/v1/devices/:id/revoke", async (ctx, request, params, address) => {
-    const caller = await withCaller(ctx, request, true);
+  route("POST", "/v1/devices/:id/revoke", async (ctx, request, params, address, meta) => {
+    const caller = await withCaller(ctx, request, true, meta);
     const now = ctx.now();
     revokeDevice(ctx.db, params.id as string, now);
     audit(ctx.db, {
@@ -358,16 +380,14 @@ const ROUTES: Route[] = [
     return json({ id: params.id, revokedAt: now });
   }),
 
-  route("POST", "/v1/members/:id/disable", async (ctx, request, params, address) => {
-    const caller = await withCaller(ctx, request, true);
+  route("POST", "/v1/members/:id/disable", async (ctx, request, params, address, meta) => {
+    const caller = await withCaller(ctx, request, true, meta);
     const body = await readBody(ctx, request);
     const now = ctx.now();
     const id = params.id as string;
     const { devices } = disableMember(ctx.db, id, now);
     const withdrawn =
-      body.withdraw === true && ctx.tombstoneMemberItems !== undefined
-        ? ctx.tombstoneMemberItems(ctx, id, caller)
-        : 0;
+      body.withdraw === true ? tombstoneMemberItems(ctx.db, id, now, actorOf(caller)) : 0;
     audit(ctx.db, {
       at: now,
       source: "api",
@@ -381,8 +401,8 @@ const ROUTES: Route[] = [
     return json({ id, disabledAt: now, devices, withdrawn });
   }),
 
-  route("POST", "/v1/members/:id/enable", async (ctx, request, params, address) => {
-    const caller = await withCaller(ctx, request, true);
+  route("POST", "/v1/members/:id/enable", async (ctx, request, params, address, meta) => {
+    const caller = await withCaller(ctx, request, true, meta);
     const now = ctx.now();
     enableMember(ctx.db, params.id as string);
     audit(ctx.db, {
@@ -397,8 +417,8 @@ const ROUTES: Route[] = [
     return json({ id: params.id });
   }),
 
-  route("POST", "/v1/members/:id/role", async (ctx, request, params, address) => {
-    const caller = await withCaller(ctx, request, true);
+  route("POST", "/v1/members/:id/role", async (ctx, request, params, address, meta) => {
+    const caller = await withCaller(ctx, request, true, meta);
     const body = await readBody(ctx, request);
     const role = checkRole(body.role);
     const now = ctx.now();
@@ -416,20 +436,46 @@ const ROUTES: Route[] = [
     return json({ id: params.id, role });
   }),
 
-  route("POST", "/v1/items/:kind/:uid/withdraw", async (ctx, request, params) => {
-    const caller = await withCaller(ctx, request, true);
-    if (ctx.withdraw === undefined) return notImplemented();
-    return json(ctx.withdraw(ctx, caller, params.kind as string, params.uid as string));
+  route("POST", "/v1/items/:kind/:uid/withdraw", async (ctx, request, params, address, meta) => {
+    const caller = await withCaller(ctx, request, true, meta);
+    const kind = itemKind(params.kind as string);
+    const uid = params.uid as string;
+    const now = ctx.now();
+    const { revision } = withdrawByAdmin(ctx.db, kind, uid, now, actorOf(caller));
+    audit(ctx.db, {
+      at: now,
+      source: "api",
+      deviceId: caller.device.id,
+      address,
+      action: "item withdrawn",
+      target: uid,
+      detail: `${kind} revision ${revision}`,
+    });
+    ctx.onWrite({ feed: true });
+    return json({ uid, revision });
   }),
 
-  route("POST", "/v1/items/:kind/:uid/reinstate", async (ctx, request, params) => {
-    const caller = await withCaller(ctx, request, true);
-    if (ctx.reinstate === undefined) return notImplemented();
-    return json(ctx.reinstate(ctx, caller, params.kind as string, params.uid as string));
+  route("POST", "/v1/items/:kind/:uid/reinstate", async (ctx, request, params, address, meta) => {
+    const caller = await withCaller(ctx, request, true, meta);
+    const kind = itemKind(params.kind as string);
+    const uid = params.uid as string;
+    const now = ctx.now();
+    reinstateByAdmin(ctx.db, kind, uid);
+    audit(ctx.db, {
+      at: now,
+      source: "api",
+      deviceId: caller.device.id,
+      address,
+      action: "item reinstated",
+      target: uid,
+      detail: kind,
+    });
+    ctx.onWrite({ feed: false });
+    return json({ uid });
   }),
 
-  route("GET", "/v1/audit", async (ctx, request) => {
-    await withCaller(ctx, request, true);
+  route("GET", "/v1/audit", async (ctx, request, _params, _address, meta) => {
+    await withCaller(ctx, request, true, meta);
     const limit = new URL(request.url).searchParams.get("limit");
     return json({ rows: readAudit(ctx.db, limit === null ? undefined : Number(limit)) });
   }),
@@ -448,6 +494,7 @@ export async function handle(
   const segments = url.pathname.split("/").filter((part) => part !== "");
   const address = clientAddress(request, server, ctx.trustProxy);
   const routeName = `${request.method} ${url.pathname}`;
+  const meta: Meta = {};
   let response: Response;
   try {
     const sameRoute = ROUTES.filter((candidate) => match(candidate.pattern, segments) !== null);
@@ -463,6 +510,7 @@ export async function handle(
         request,
         match(found.pattern, segments) as Params,
         address,
+        meta,
       );
     }
   } catch (error) {
@@ -488,6 +536,7 @@ export async function handle(
     status: response.status,
     ms: ctx.now() - started,
     address,
+    ...meta,
   });
   return response;
 }

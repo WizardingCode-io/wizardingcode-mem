@@ -330,6 +330,384 @@ export function countMembers(db: Db): number {
   return db.query<{ n: number }, []>("SELECT count(*) AS n FROM members").get()?.n ?? 0;
 }
 
+// --- Entries ----------------------------------------------------------------------------
+
+export interface EntryRow {
+  uuid: string;
+  scope: string;
+  remote_alias: string | null;
+  slug: string;
+  created_by_member: string;
+  revision: number;
+  hash: string;
+  size: number;
+  writer_member: string;
+  writer_device: string;
+  updated_at: number;
+  withdrawn_at: number | null;
+  locked_by_admin: number;
+  mirror_revision: number;
+}
+
+const ENTRY_COLUMNS =
+  "uuid, scope, remote_alias, slug, created_by_member, revision, hash, size, writer_member, writer_device, updated_at, withdrawn_at, locked_by_admin, mirror_revision";
+
+export function entryByUuid(db: Db, uuid: string): EntryRow | null {
+  return db
+    .query<EntryRow, [string]>(`SELECT ${ENTRY_COLUMNS} FROM entries WHERE uuid = ?`)
+    .get(uuid);
+}
+
+/** Inserts the row or replaces its attributes; `created_by_member` and `mirror_revision` stay. A send clears the tombstone. */
+export function upsertEntry(
+  db: Db,
+  row: {
+    uuid: string;
+    scope: string;
+    remoteAlias: string | null;
+    slug: string;
+    createdByMember: string;
+    revision: number;
+    hash: string;
+    size: number;
+    writerMember: string;
+    writerDevice: string;
+    updatedAt: number;
+  },
+): void {
+  db.run(
+    `INSERT INTO entries (uuid, scope, remote_alias, slug, created_by_member, revision, hash, size, writer_member, writer_device, updated_at, withdrawn_at, locked_by_admin)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 0)
+     ON CONFLICT(uuid) DO UPDATE SET
+       scope = excluded.scope, remote_alias = excluded.remote_alias, slug = excluded.slug,
+       revision = excluded.revision, hash = excluded.hash, size = excluded.size,
+       writer_member = excluded.writer_member, writer_device = excluded.writer_device,
+       updated_at = excluded.updated_at, withdrawn_at = NULL, locked_by_admin = 0`,
+    [
+      row.uuid,
+      row.scope,
+      row.remoteAlias,
+      row.slug,
+      row.createdByMember,
+      row.revision,
+      row.hash,
+      row.size,
+      row.writerMember,
+      row.writerDevice,
+      row.updatedAt,
+    ],
+  );
+}
+
+/** The tombstone: the revision moves on, the hash stays; `lock` also sets the admin's lock. */
+export function setEntryWithdrawn(
+  db: Db,
+  uuid: string,
+  row: { revision: number; withdrawnAt: number; lock: boolean },
+): void {
+  db.run(
+    "UPDATE entries SET revision = ?, withdrawn_at = ?, locked_by_admin = CASE WHEN ? THEN 1 ELSE locked_by_admin END WHERE uuid = ?",
+    [row.revision, row.withdrawnAt, row.lock ? 1 : 0, uuid],
+  );
+}
+
+export function setEntryLock(db: Db, uuid: string, locked: boolean): void {
+  db.run("UPDATE entries SET locked_by_admin = ? WHERE uuid = ?", [locked ? 1 : 0, uuid]);
+}
+
+export interface RevisionRow {
+  uuid: string;
+  revision: number;
+  seq: number;
+  op: "send" | "withdraw";
+  scope: string;
+  remote_alias: string | null;
+  slug: string;
+  frontmatter: string;
+  body: string;
+  hash: string;
+  writer_member: string;
+  writer_device: string;
+  client_epoch: number | null;
+  at: number;
+}
+
+const REVISION_COLUMNS =
+  "uuid, revision, seq, op, scope, remote_alias, slug, frontmatter, body, hash, writer_member, writer_device, client_epoch, at";
+
+export function insertRevision(
+  db: Db,
+  row: {
+    uuid: string;
+    revision: number;
+    seq: number;
+    op: "send" | "withdraw";
+    scope: string;
+    remoteAlias: string | null;
+    slug: string;
+    frontmatter: string;
+    body: string;
+    hash: string;
+    writerMember: string;
+    writerDevice: string;
+    clientEpoch: number | null;
+    at: number;
+  },
+): void {
+  db.run(
+    `INSERT INTO entry_revisions (${REVISION_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      row.uuid,
+      row.revision,
+      row.seq,
+      row.op,
+      row.scope,
+      row.remoteAlias,
+      row.slug,
+      row.frontmatter,
+      row.body,
+      row.hash,
+      row.writerMember,
+      row.writerDevice,
+      row.clientEpoch,
+      row.at,
+    ],
+  );
+}
+
+/** The newest `send` revision of the entry by that device with those bytes and attributes; null when none. */
+export function revisionMatching(
+  db: Db,
+  uuid: string,
+  hash: string,
+  scope: string,
+  remoteAlias: string | null,
+  slug: string,
+  writerDevice: string,
+): number | null {
+  return (
+    db
+      .query<{ revision: number }, [string, string, string, string, string | null, string]>(
+        `SELECT revision FROM entry_revisions
+          WHERE uuid = ? AND hash = ? AND writer_device = ? AND op = 'send'
+            AND scope = ? AND remote_alias IS ? AND slug = ?
+          ORDER BY revision DESC LIMIT 1`,
+      )
+      .get(uuid, hash, writerDevice, scope, remoteAlias, slug)?.revision ?? null
+  );
+}
+
+export function revisionsOf(db: Db, uuid: string): RevisionRow[] {
+  return db
+    .query<RevisionRow, [string]>(
+      `SELECT ${REVISION_COLUMNS} FROM entry_revisions WHERE uuid = ? ORDER BY revision`,
+    )
+    .all(uuid);
+}
+
+export function revisionAt(db: Db, uuid: string, revision: number): RevisionRow | null {
+  return db
+    .query<RevisionRow, [string, number]>(
+      `SELECT ${REVISION_COLUMNS} FROM entry_revisions WHERE uuid = ? AND revision = ?`,
+    )
+    .get(uuid, revision);
+}
+
+/** The member's live workspace entries. */
+export function workspaceEntriesOf(db: Db, memberId: string): EntryRow[] {
+  return db
+    .query<EntryRow, [string]>(
+      `SELECT ${ENTRY_COLUMNS} FROM entries
+        WHERE scope = 'workspace' AND created_by_member = ? AND withdrawn_at IS NULL ORDER BY uuid`,
+    )
+    .all(memberId);
+}
+
+// --- Memories ---------------------------------------------------------------------------
+
+export interface MemoryRow {
+  device_id: string;
+  uid: string;
+  remote_alias: string;
+  payload: string;
+  hash: string;
+  size: number;
+  revision: number;
+  updated_at: number;
+  member_id: string;
+  received_at: number;
+  withdrawn_at: number | null;
+  locked_by_admin: number;
+}
+
+const MEMORY_COLUMNS =
+  "device_id, uid, remote_alias, payload, hash, size, revision, updated_at, member_id, received_at, withdrawn_at, locked_by_admin";
+
+export function memoryByKey(db: Db, deviceId: string, uid: string): MemoryRow | null {
+  return db
+    .query<MemoryRow, [string, string]>(
+      `SELECT ${MEMORY_COLUMNS} FROM memories WHERE device_id = ? AND uid = ?`,
+    )
+    .get(deviceId, uid);
+}
+
+/** Inserts or replaces the device's row; a send clears the tombstone and the lock. */
+export function upsertMemory(
+  db: Db,
+  row: {
+    deviceId: string;
+    uid: string;
+    remoteAlias: string;
+    payload: string;
+    hash: string;
+    size: number;
+    revision: number;
+    updatedAt: number;
+    memberId: string;
+    receivedAt: number;
+  },
+): void {
+  db.run(
+    `INSERT INTO memories (device_id, uid, remote_alias, payload, hash, size, revision, updated_at, member_id, received_at, withdrawn_at, locked_by_admin)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 0)
+     ON CONFLICT(device_id, uid) DO UPDATE SET
+       remote_alias = excluded.remote_alias, payload = excluded.payload, hash = excluded.hash,
+       size = excluded.size, revision = excluded.revision, updated_at = excluded.updated_at,
+       received_at = excluded.received_at, withdrawn_at = NULL, locked_by_admin = 0`,
+    [
+      row.deviceId,
+      row.uid,
+      row.remoteAlias,
+      row.payload,
+      row.hash,
+      row.size,
+      row.revision,
+      row.updatedAt,
+      row.memberId,
+      row.receivedAt,
+    ],
+  );
+}
+
+export function setMemoryWithdrawn(
+  db: Db,
+  deviceId: string,
+  uid: string,
+  row: { revision: number; withdrawnAt: number; lock: boolean },
+): void {
+  db.run(
+    "UPDATE memories SET revision = ?, withdrawn_at = ?, locked_by_admin = CASE WHEN ? THEN 1 ELSE locked_by_admin END WHERE device_id = ? AND uid = ?",
+    [row.revision, row.withdrawnAt, row.lock ? 1 : 0, deviceId, uid],
+  );
+}
+
+export function setMemoryLock(db: Db, deviceId: string, uid: string, locked: boolean): void {
+  db.run("UPDATE memories SET locked_by_admin = ? WHERE device_id = ? AND uid = ?", [
+    locked ? 1 : 0,
+    deviceId,
+    uid,
+  ]);
+}
+
+/** The live memories of the given devices. */
+export function memoriesOfDevices(db: Db, deviceIds: readonly string[]): MemoryRow[] {
+  if (deviceIds.length === 0) return [];
+  const marks = deviceIds.map(() => "?").join(", ");
+  return db
+    .query<MemoryRow, string[]>(
+      `SELECT ${MEMORY_COLUMNS} FROM memories WHERE device_id IN (${marks}) AND withdrawn_at IS NULL ORDER BY device_id, uid`,
+    )
+    .all(...deviceIds);
+}
+
+// --- The feed ---------------------------------------------------------------------------
+
+export type ChangeOp = "upsert" | "tombstone" | "purge";
+
+export interface ChangeRow {
+  seq: number;
+  kind: "entry" | "memory";
+  uid: string;
+  key: string;
+  op: ChangeOp;
+  scope: string;
+  remote_alias: string | null;
+  revision: number;
+  hash: string;
+  moved_to: string | null;
+  member_id: string;
+  device_id: string;
+  client_epoch: number | null;
+  at: number;
+  current: number;
+}
+
+const CHANGE_COLUMNS =
+  "seq, kind, uid, key, op, scope, remote_alias, revision, hash, moved_to, member_id, device_id, client_epoch, at, current";
+
+/** Writes the key's new current row and retires its older one; returns the new `seq`. */
+export function insertChange(
+  db: Db,
+  row: {
+    kind: "entry" | "memory";
+    uid: string;
+    key: string;
+    op: ChangeOp;
+    scope: string;
+    remoteAlias: string | null;
+    revision: number;
+    hash: string;
+    movedTo: string | null;
+    memberId: string;
+    deviceId: string;
+    clientEpoch: number | null;
+    at: number;
+  },
+): number {
+  db.run("UPDATE changes SET current = 0 WHERE key = ? AND current = 1", [row.key]);
+  const inserted = db.run(
+    `INSERT INTO changes (kind, uid, key, op, scope, remote_alias, revision, hash, moved_to, member_id, device_id, client_epoch, at, current)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+    [
+      row.kind,
+      row.uid,
+      row.key,
+      row.op,
+      row.scope,
+      row.remoteAlias,
+      row.revision,
+      row.hash,
+      row.movedTo,
+      row.memberId,
+      row.deviceId,
+      row.clientEpoch,
+      row.at,
+    ],
+  );
+  return Number(inserted.lastInsertRowid);
+}
+
+/** The key's current row; null when it never had one. */
+export function currentChangeOf(db: Db, key: string): ChangeRow | null {
+  return db
+    .query<ChangeRow, [string]>(
+      `SELECT ${CHANGE_COLUMNS} FROM changes WHERE key = ? AND current = 1 ORDER BY seq DESC LIMIT 1`,
+    )
+    .get(key);
+}
+
+// --- Purged keys ------------------------------------------------------------------------
+
+export function insertPurged(db: Db, key: string, at: number): void {
+  db.run("INSERT OR IGNORE INTO purged (key, at) VALUES (?, ?)", [key, at]);
+}
+
+export function isPurged(db: Db, key: string): boolean {
+  return (
+    db.query<{ key: string }, [string]>("SELECT key FROM purged WHERE key = ?").get(key) !== null
+  );
+}
+
 // --- The audit --------------------------------------------------------------------------
 
 export interface AuditRow {
