@@ -43,6 +43,26 @@ jobs:
           name: binaries
           path: dist/
           if-no-files-found: error
+      # The team server's image (ADR 0026), built for this runner's architecture from dist/
+      # and run as the compose file runs it: hardened, as user 10001, healthy, stopping clean.
+      - name: The image builds, starts, answers health and stops with exit 0
+        run: |
+          set -eu
+          docker build -t wizardingcode-mem:ci .
+          docker run --rm wizardingcode-mem:ci --version
+          docker run -d --name wcm --init --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges:true -v wcm-data:/data wizardingcode-mem:ci
+          healthy=0
+          for _ in $(seq 1 30); do
+            if docker exec wcm wizardingcode-mem serve health; then healthy=1; break; fi
+            sleep 1
+          done
+          test "$healthy" = 1
+          test "$(docker exec wcm id -u)" = 10001
+          docker stop -t 30 wcm
+          test "$(docker inspect -f '{{.State.ExitCode}}' wcm)" = 0
+          docker logs wcm
+          docker rm wcm
+          docker volume rm wcm-data
 
   # Every binary is executed on the platform it targets: it must start, and the
   # platform probes (FTS5, startup latency, WAL, detached child, .env isolation, MCP) must pass.
