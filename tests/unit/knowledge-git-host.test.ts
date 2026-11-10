@@ -44,7 +44,9 @@ describe("the git runner's host", () => {
     const repo = ensureRepo(fx.store(), WORKSPACE);
     const slow = stubGit(join(fx.dir, "slow-git"), { sleepMs: 300 });
     const host = fx.store({ env: { PATH: fx.pathWith(slow) }, gitTimeoutMs: 50 });
-    const byHost = thrown(() => runGit(host, repo.path, ["status", "--porcelain"], { operation: "test", readOnly: true }));
+    const byHost = thrown(() =>
+      runGit(host, repo.path, ["status", "--porcelain"], { operation: "test", readOnly: true }),
+    );
     expect(byHost.message).toContain("timed out after 50 ms");
     const answer = runGit(host, repo.path, ["status", "--porcelain"], {
       operation: "test",
@@ -85,7 +87,15 @@ describe("the git runner's host", () => {
     const repo = ensureRepo(store, WORKSPACE);
     writeFileSync(join(repo.path, "entries", "a.md"), "one\n");
     runGit(store, repo.path, ["add", "--", "entries/a.md"], { operation: "test" });
-    commitPaths(store, { path: repo.path }, ["entries/a.md"], "team: send x", author, "test", server);
+    commitPaths(
+      store,
+      { path: repo.path },
+      ["entries/a.md"],
+      "team: send x",
+      author,
+      "test",
+      server,
+    );
     expect(realGit(repo.path, "log", "-1", "--format=%an|%ae|%cn|%ce").trim()).toBe(
       `${author.name}|${author.email}|${server.name}|${server.email}`,
     );
