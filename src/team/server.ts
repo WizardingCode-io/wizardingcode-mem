@@ -6,7 +6,7 @@ import { freeBytes as diskFreeBytes } from "./disk.ts";
 import { isLoopback } from "./ids.ts";
 import { checkRestore, currentMarks, writeHighWater } from "./instance.ts";
 import { holdLease, SERVE_LEASE, SERVE_RENEW_MS, SERVE_TTL_MS } from "./lease.ts";
-import { Bucket, type Buckets } from "./limits.ts";
+import { type Buckets, createBuckets } from "./limits.ts";
 import { createTeamLog, installLogSink } from "./log.ts";
 import { BOOTSTRAP_VALID_HOURS, bootstrapIfEmpty } from "./members.ts";
 import { scheduleMirror, spawnMirror } from "./mirror.ts";
@@ -115,11 +115,7 @@ export async function startTeamServer(options: ServerOptions): Promise<TeamServe
     timers,
     options.mirrorChild ?? ((dir, abort) => spawnMirror(dir, log, abort)),
   );
-  const buckets: Buckets = {
-    devices: new Bucket(LIMITS.requestsPerMinute, LIMITS.requestsPerMinute / 60, now),
-    joins: new Bucket(LIMITS.joinsPerMinute, LIMITS.joinsPerMinute / 60, now),
-    bytes: new Bucket(LIMITS.payloadBytesPerHour, LIMITS.payloadBytesPerHour / 3600, now),
-  };
+  const buckets: Buckets = createBuckets(LIMITS, now);
 
   let exit: number | null = null;
   let stopping: Promise<void> | null = null;
@@ -170,9 +166,18 @@ export async function startTeamServer(options: ServerOptions): Promise<TeamServe
       timers.clearInterval(hourly);
       await server.stop();
       await mirror.stop();
-      lease.release();
+      // A stop never throws: a database already closed (a test, a fault) still lets the process end.
+      try {
+        lease.release();
+      } catch (error) {
+        log.error("team.stop", error);
+      }
       uninstall();
-      db.close();
+      try {
+        db.close();
+      } catch {
+        // Already closed.
+      }
       resolveStopped();
     })();
     return stopping;

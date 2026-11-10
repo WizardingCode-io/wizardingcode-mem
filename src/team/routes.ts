@@ -136,13 +136,50 @@ function match(pattern: string[], segments: string[]): Params | null {
   return params;
 }
 
+const tooLarge = () => new HttpError(413, { error: "body too large" });
+
+/**
+ * Reads what is left of a body and drops it, so the 413 reaches a client still sending
+ * instead of a closed socket. Bounded by `Bun.serve`'s own `maxRequestBodySize`.
+ */
+async function discardRest(reader: { read(): Promise<{ done: boolean }> }): Promise<void> {
+  try {
+    for (;;) {
+      const { done } = await reader.read();
+      if (done) return;
+    }
+  } catch {
+    // The client gave up first.
+  }
+}
+
+/** The body's bytes, counted as they arrive: a chunked body past the cap is refused where it crosses it. */
+export async function readBounded(request: Request, cap: number): Promise<Uint8Array> {
+  if (request.body === null) return new Uint8Array(0);
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > cap) {
+      await discardRest(reader);
+      throw tooLarge();
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks);
+}
+
 /** Reads a JSON object body, refusing one over the cap by what it reads, not only by its header. */
 async function readBody(ctx: Context, request: Request): Promise<Record<string, unknown>> {
   const declared = Number(request.headers.get("content-length") ?? "0");
-  if (declared > ctx.limits.bodyBytes) throw new HttpError(413, { error: "body too large" });
-  const bytes = await request.arrayBuffer();
-  if (bytes.byteLength > ctx.limits.bodyBytes)
-    throw new HttpError(413, { error: "body too large" });
+  if (declared > ctx.limits.bodyBytes) {
+    if (request.body !== null) await discardRest(request.body.getReader());
+    throw tooLarge();
+  }
+  const bytes = await readBounded(request, ctx.limits.bodyBytes);
   const parsed = await jsonObject(new Request(request.url, { method: "POST", body: bytes }));
   if (parsed instanceof Response) {
     const body = (await parsed.json()) as { error: string };

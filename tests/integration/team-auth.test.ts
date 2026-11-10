@@ -4,10 +4,16 @@ import {
   adminOf,
   api,
   cleanTestDirs,
+  drainBucket,
+  entryPayload,
   eventsOf,
   invite,
   joinAs,
   LIMITS,
+  memberOf,
+  pull,
+  pushOne,
+  sendOf,
   startTestServer,
   type TestServer,
 } from "../helpers/team.ts";
@@ -445,5 +451,182 @@ describe("the lease", () => {
     await again.server.stopped();
     expect(again.server.exitCode()).toBe(1);
     expect(eventsOf(again, "lease-lost")).toHaveLength(1);
+  });
+});
+
+const auditCount = (t: TestServer) =>
+  t.server.db.query<{ n: number }, []>("SELECT count(*) AS n FROM audit").get()?.n ?? 0;
+
+describe("limits, the proxy, the request id, the body cap, a thrown error", () => {
+  test("the eleventh join from one address in a minute is 429 with Retry-After and writes no audit row; health is never limited", async () => {
+    const t = await start();
+    await adminOf(t);
+    const bad = { code: `wci1_${"A".repeat(26)}`, label: "x" };
+    for (let i = 0; i < 9; i++) {
+      expect((await api(t.server, null, "POST", "/v1/join", bad)).status).toBe(404);
+    }
+    const audited = auditCount(t);
+    const eleventh = await api(t.server, null, "POST", "/v1/join", bad);
+    expect(eleventh.status).toBe(429);
+    expect(eleventh.body).toEqual({ error: "rate limited" });
+    expect(eleventh.headers.get("retry-after")).toMatch(/^\d+$/);
+    expect(Number(eleventh.headers.get("retry-after"))).toBeGreaterThanOrEqual(1);
+    expect(auditCount(t)).toBe(audited);
+    expect((await api(t.server, null, "GET", "/v1/health")).status).toBe(200);
+    t.clock.advance(60_000);
+    expect((await api(t.server, null, "POST", "/v1/join", bad)).status).toBe(404);
+  });
+
+  test("the 601st request of a device in a minute is 429; a held pull counts once", async () => {
+    const t = await start();
+    const admin = await adminOf(t);
+    const ana = await memberOf(t, admin.token, "Ana");
+    // Exactly two tokens for the admin's device (the bucket drained, the clock refilling 200 ms
+    // at 10 a second): a held pull, one more request, then the refusal.
+    drainBucket(t.server.buckets.devices, admin.deviceId);
+    t.clock.advance(200);
+    const held = pull(t.server, admin.token, { since: 0, wait: 5 });
+    await Bun.sleep(50);
+    await pushOne(t.server, ana.token, sendOf(entryPayload({ scope: "shared", slug: "wake" })));
+    expect((await held).status).toBe(200);
+    expect((await api(t.server, admin.token, "GET", "/v1/me")).status).toBe(200);
+    const refused = await api(t.server, admin.token, "GET", "/v1/me");
+    expect(refused.status).toBe(429);
+    expect(refused.body).toEqual({ error: "rate limited" });
+    expect(refused.headers.get("retry-after")).toBe("1");
+    expect((await api(t.server, null, "GET", "/v1/health")).status).toBe(200);
+    // Ana's device is untouched.
+    expect((await api(t.server, ana.token, "GET", "/v1/me")).status).toBe(200);
+  });
+
+  test("health is 503 with free disk just under 100 MiB and 200 just above", async () => {
+    const t = await start();
+    t.freeBytes.value = LIMITS.minFreeBytesHealth - 1;
+    const low = await api(t.server, null, "GET", "/v1/health");
+    expect(low.status).toBe(503);
+    expect(low.body).toEqual({ ok: false, error: "low disk" });
+    t.freeBytes.value = LIMITS.minFreeBytesHealth + 1;
+    expect((await api(t.server, null, "GET", "/v1/health")).body).toEqual({ ok: true });
+    t.freeBytes.value = null;
+    expect((await api(t.server, null, "GET", "/v1/health")).status).toBe(200);
+  });
+
+  test("behind a trusted proxy the address is the last hop, https is required except for health, and a join without it spends no invitation", async () => {
+    const t = await start({ trustProxy: true });
+    const proxied = { "x-forwarded-proto": "https", "x-forwarded-for": "1.2.3.4, 10.0.0.1" };
+    const plain = await api(t.server, null, "POST", "/v1/join", { code: t.code, label: "x" });
+    expect(plain.status).toBe(400);
+    expect(plain.body).toEqual({ error: "https required" });
+    const joined = await api(
+      t.server,
+      null,
+      "POST",
+      "/v1/join",
+      { code: t.code, label: "x", name: "André" },
+      proxied,
+    );
+    expect(joined.status).toBe(200);
+    const token = joined.body.token as string;
+    const rows = t.server.db
+      .query<{ address: string | null }, []>("SELECT address FROM audit WHERE action = 'join'")
+      .all();
+    expect(rows).toEqual([{ address: "10.0.0.1" }]);
+    const unproxied = await api(t.server, token, "GET", "/v1/me");
+    expect(unproxied.status).toBe(400);
+    expect(unproxied.body).toEqual({ error: "https required" });
+    expect((await api(t.server, token, "GET", "/v1/me", undefined, proxied)).status).toBe(200);
+    expect((await api(t.server, null, "GET", "/v1/health")).status).toBe(200);
+    // Without the forwarded header the socket's address stands.
+    const direct = await api(
+      t.server,
+      null,
+      "POST",
+      "/v1/join",
+      { code: "wci1_x", label: "x" },
+      { "x-forwarded-proto": "https" },
+    );
+    expect(direct.status).toBe(404);
+    const refusedRows = t.server.db
+      .query<{ address: string | null }, []>(
+        "SELECT address FROM audit WHERE action = 'join refused'",
+      )
+      .all();
+    expect(refusedRows).toEqual([{ address: "127.0.0.1" }]);
+  });
+
+  test("a host outside loopback without trust-proxy logs plain-http once", async () => {
+    const exposed = await start({ host: "0.0.0.0" });
+    expect(eventsOf(exposed, "plain-http")).toHaveLength(1);
+    expect(eventsOf(exposed, "plain-http")[0]).toMatchObject({ level: "warn", host: "0.0.0.0" });
+    const proxied = await start({ host: "0.0.0.0", trustProxy: true });
+    expect(eventsOf(proxied, "plain-http")).toHaveLength(0);
+  });
+
+  test("X-Request-Id is on every answer: a valid client id is echoed, an invalid one replaced", async () => {
+    const t = await start();
+    const minted = await api(t.server, null, "GET", "/v1/health");
+    expect(minted.headers.get("x-request-id")).toMatch(HEX16);
+    const echoed = await api(t.server, null, "GET", "/v1/health", undefined, {
+      "x-request-id": "req-1_A",
+    });
+    expect(echoed.headers.get("x-request-id")).toBe("req-1_A");
+    const tooLong = await api(t.server, null, "GET", "/v1/health", undefined, {
+      "x-request-id": "a".repeat(65),
+    });
+    expect(tooLong.headers.get("x-request-id")).toMatch(HEX16);
+    const spaced = await api(t.server, null, "GET", "/v1/nothing", undefined, {
+      "x-request-id": "has space",
+    });
+    expect(spaced.status).toBe(404);
+    expect(spaced.headers.get("x-request-id")).toMatch(HEX16);
+    const line = eventsOf(t, "request").find((row) => row.requestId === "req-1_A");
+    expect(line).toMatchObject({ route: "GET /v1/health", status: 200 });
+  });
+
+  test("a Content-Length of 1.5 MiB is 413 with a request id, and so is a chunked body of 1.5 MiB", async () => {
+    const t = await start();
+    const admin = await adminOf(t);
+    const body = JSON.stringify({ epoch: 1, items: [], pad: "x".repeat(1.5 * 1024 * 1024) });
+    const declared = await api(t.server, admin.token, "POST", "/v1/push", body);
+    expect(declared.status).toBe(413);
+    expect(declared.body).toEqual({ error: "body too large" });
+    expect(declared.headers.get("x-request-id")).toMatch(HEX16);
+    const bytes = new TextEncoder().encode(body);
+    const half = Math.floor(bytes.length / 2);
+    const chunked = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(bytes.slice(0, half));
+        controller.enqueue(bytes.slice(half));
+        controller.close();
+      },
+    });
+    const streamed = await fetch(`${t.server.origin}/v1/push`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${admin.token}`, "content-type": "application/json" },
+      body: chunked,
+      duplex: "half",
+    });
+    expect(streamed.status).toBe(413);
+    expect(streamed.headers.get("x-request-id")).toMatch(HEX16);
+    expect(eventsOf(t, "request").filter((row) => row.status === 413)).toHaveLength(2);
+  });
+
+  test("a route that throws answers internal error with the request id in the body, the header and an error log line; stop still works", async () => {
+    const t = await start();
+    const admin = await adminOf(t);
+    t.server.db.close();
+    const answer = await api(t.server, admin.token, "GET", "/v1/me");
+    expect(answer.status).toBe(500);
+    const id = answer.headers.get("x-request-id") as string;
+    expect(id).toMatch(HEX16);
+    expect(answer.body).toEqual({ error: "internal error", requestId: id });
+    const line = eventsOf(t, "error").find((row) => row.requestId === id);
+    expect(line).toMatchObject({ level: "error", scope: "team.request" });
+    expect(String(line?.message)).not.toContain(admin.token.slice(5));
+    expect(eventsOf(t, "request").find((row) => row.requestId === id)).toMatchObject({
+      status: 500,
+    });
+    await t.server.stop();
+    expect(t.server.exitCode()).toBe(0);
   });
 });

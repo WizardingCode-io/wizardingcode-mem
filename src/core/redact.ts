@@ -55,6 +55,10 @@ const PATTERNS: PatternRule[] = [
     pattern: /\b[a-z][a-z0-9+.-]{0,30}:\/\/([^/\s:@]*:[^/\s]+)@/dgi,
     group: 1,
   },
+  // The team server's device token and invitation code (ADR 0026), ahead of the header rules
+  // so a bearer token is named as what it is.
+  { rule: "team-token", pattern: /\bwcm1_[A-Za-z0-9_-]{43}/dg },
+  { rule: "team-invitation", pattern: /\bwci1_[A-Z2-7]{26}/dg },
   {
     rule: "auth-header",
     pattern: /\b(?:Bearer|Basic)[ \t]+([A-Za-z0-9._~+/=-]{16,})/dgi,
@@ -78,6 +82,9 @@ const PATTERNS: PatternRule[] = [
     group: 1,
   },
 ];
+
+/** The shape rules in the order they are tried: a test pins where a rule sits and its flags. */
+export const PATTERN_RULES: readonly Pick<PatternRule, "rule" | "pattern">[] = PATTERNS;
 
 // `--password value`: the value follows a space. (`--password=value` is an assignment.)
 const CLI_FLAG =
