@@ -567,22 +567,33 @@ export function workspaceEntriesOf(db: Db, memberId: string): EntryRow[] {
     .all(memberId);
 }
 
-/** The entries with a revision the mirror has not exported, through the partial index. */
-export function entriesPendingMirror(db: Db): EntryRow[] {
-  return db
-    .query<EntryRow, []>(
-      `SELECT ${ENTRY_COLUMNS} FROM entries WHERE mirror_revision < revision ORDER BY uuid`,
-    )
-    .all();
+/** Rows a replay or an export reads per batch: a read snapshot spans one batch, never the history. */
+export const REVISION_BATCH = 200;
+
+/** A revision the mirror has not exported, with its entry's creator. */
+export type PendingRow = RevisionRow & { creator: string };
+
+/**
+ * The pending revisions after `seq` in feed order: the entries through the partial index as the
+ * outer loop (`CROSS JOIN` fixes it), their revisions past the exported mark, at most `LIMIT`.
+ */
+const PENDING_SQL = `SELECT ${REVISION_COLUMNS.split(", ")
+  .map((column) => `r.${column}`)
+  .join(", ")}, e.created_by_member AS creator
+   FROM entries e CROSS JOIN entry_revisions r ON r.uuid = e.uuid
+   WHERE e.mirror_revision < e.revision AND r.revision > e.mirror_revision AND r.seq > ?
+   ORDER BY r.seq LIMIT ?`;
+
+/** The revisions the mirror has not exported, after `seq`, in feed order, at most `limit`. */
+export function pendingRevisionsAfter(db: Db, seq: number, limit: number): PendingRow[] {
+  return db.query<PendingRow, [number, number]>(PENDING_SQL).all(seq, limit);
 }
 
 /** The planner's lines for the pending query: a test reads them for the partial index's name. */
 export function explainPendingMirror(db: Db): string[] {
   return db
-    .query<{ detail: string }, []>(
-      `EXPLAIN QUERY PLAN SELECT ${ENTRY_COLUMNS} FROM entries WHERE mirror_revision < revision ORDER BY uuid`,
-    )
-    .all()
+    .query<{ detail: string }, [number, number]>(`EXPLAIN QUERY PLAN ${PENDING_SQL}`)
+    .all(0, REVISION_BATCH)
     .map((row) => row.detail);
 }
 
@@ -595,20 +606,33 @@ export function resetMirrorRevisions(db: Db): void {
   db.run("UPDATE entries SET mirror_revision = 0");
 }
 
-/** Every revision of every entry, in the order the feed gave them. */
-export function allRevisions(db: Db): RevisionRow[] {
-  return db
-    .query<RevisionRow, []>(`SELECT ${REVISION_COLUMNS} FROM entry_revisions ORDER BY seq`)
-    .all();
+/**
+ * Every revision in feed order, `REVISION_BATCH` rows a read: a replay never holds the whole
+ * history, nor one read snapshot across its git calls; `false` from `fn` ends the walk.
+ */
+export function forEachRevision(db: Db, fn: (revision: RevisionRow) => boolean | undefined): void {
+  let after = 0;
+  for (;;) {
+    const rows = db
+      .query<RevisionRow, [number, number]>(
+        `SELECT ${REVISION_COLUMNS} FROM entry_revisions WHERE seq > ? ORDER BY seq LIMIT ?`,
+      )
+      .all(after, REVISION_BATCH);
+    if (rows.length === 0) return;
+    for (const revision of rows) {
+      if (fn(revision) === false) return;
+      after = revision.seq;
+    }
+  }
 }
 
-/** Every revision in feed order, one at a time: a replay never holds the whole history. */
-export function forEachRevision(db: Db, fn: (revision: RevisionRow) => boolean | undefined): void {
-  for (const revision of db
-    .query<RevisionRow, []>(`SELECT ${REVISION_COLUMNS} FROM entry_revisions ORDER BY seq`)
-    .iterate()) {
-    if (fn(revision) === false) return;
-  }
+/**
+ * A truncating checkpoint: the log's frames go into the file and the log is cut to nothing,
+ * so text a purge erased does not outlive it there; false when a reader held the log.
+ */
+export function checkpointWal(db: Db): boolean {
+  const row = db.query<{ busy: number }, []>("PRAGMA wal_checkpoint(TRUNCATE)").get();
+  return row !== null && row.busy === 0;
 }
 
 /** Deletes the entry's revisions; the count. Run before `deleteEntry`: the foreign key is on. */
@@ -891,11 +915,14 @@ export interface AuditRow {
   detail: string;
 }
 
+/** Who caused an audit row: a request, the operator's shell, the first start, or the server itself. */
+export type AuditSource = "api" | "cli" | "bootstrap" | "system";
+
 export function insertAudit(
   db: Db,
   row: {
     at: number;
-    source: string;
+    source: AuditSource;
     deviceId?: string | null;
     address?: string | null;
     action: string;

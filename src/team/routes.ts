@@ -2,7 +2,7 @@
 // contract, the authentication, the problem shape, the log line.
 import type { Server } from "bun";
 import { json, problem } from "../http/respond.ts";
-import { audit, readAudit } from "./audit.ts";
+import { readAudit } from "./audit.ts";
 import { authenticate, type Caller, checkContract, requireAdmin } from "./auth.ts";
 import { CONTRACT } from "./contract.ts";
 import { HttpError } from "./errors.ts";
@@ -31,6 +31,7 @@ import {
   summarizePush,
   withdrawByAdmin,
 } from "./push.ts";
+import { insertAudit } from "./store.ts";
 import type { Context, Meta } from "./types.ts";
 
 const IDS_ON = new Set([401, 403, 409, 410]);
@@ -219,7 +220,7 @@ const ROUTES: Route[] = [
     const now = ctx.now();
     try {
       const joined = join(ctx.db, { code, label, now, ...(name === undefined ? {} : { name }) });
-      audit(ctx.db, {
+      insertAudit(ctx.db, {
         at: now,
         source: "api",
         deviceId: joined.device.id,
@@ -242,7 +243,7 @@ const ROUTES: Route[] = [
     } catch (error) {
       if (error instanceof HttpError && (error.status === 404 || error.status === 410)) {
         // The address, never the code.
-        audit(ctx.db, {
+        insertAudit(ctx.db, {
           at: now,
           source: "api",
           address,
@@ -270,7 +271,7 @@ const ROUTES: Route[] = [
   route("POST", "/v1/devices/me/rotate", async (ctx, request, _params, address, meta) => {
     const caller = await withCaller(ctx, request, false, address, meta);
     const token = rotateToken(ctx.db, caller.device.id);
-    audit(ctx.db, {
+    insertAudit(ctx.db, {
       at: ctx.now(),
       source: "api",
       deviceId: caller.device.id,
@@ -314,7 +315,7 @@ const ROUTES: Route[] = [
     const body = await readBody(ctx, request);
     const now = ctx.now();
     const made = inviteFrom(ctx.db, body, caller.device.id, now);
-    audit(ctx.db, {
+    insertAudit(ctx.db, {
       at: now,
       source: "api",
       deviceId: caller.device.id,
@@ -347,7 +348,7 @@ const ROUTES: Route[] = [
     const now = ctx.now();
     if (!revokeInvitation(ctx.db, params.id as string, now))
       throw new HttpError(404, { error: "invitation unknown" });
-    audit(ctx.db, {
+    insertAudit(ctx.db, {
       at: now,
       source: "api",
       deviceId: caller.device.id,
@@ -374,7 +375,7 @@ const ROUTES: Route[] = [
     const caller = await withCaller(ctx, request, true, address, meta);
     const now = ctx.now();
     revokeDevice(ctx.db, params.id as string, now);
-    audit(ctx.db, {
+    insertAudit(ctx.db, {
       at: now,
       source: "api",
       deviceId: caller.device.id,
@@ -392,7 +393,7 @@ const ROUTES: Route[] = [
     const now = ctx.now();
     const id = params.id as string;
     const done = disableWithItems(ctx.db, id, now, body.withdraw === true, actorOf(caller));
-    audit(ctx.db, {
+    insertAudit(ctx.db, {
       at: now,
       source: "api",
       deviceId: caller.device.id,
@@ -409,7 +410,7 @@ const ROUTES: Route[] = [
     const caller = await withCaller(ctx, request, true, address, meta);
     const now = ctx.now();
     enableMember(ctx.db, params.id as string);
-    audit(ctx.db, {
+    insertAudit(ctx.db, {
       at: now,
       source: "api",
       deviceId: caller.device.id,
@@ -427,7 +428,7 @@ const ROUTES: Route[] = [
     const role = checkRole(body.role);
     const now = ctx.now();
     setRole(ctx.db, params.id as string, role, now);
-    audit(ctx.db, {
+    insertAudit(ctx.db, {
       at: now,
       source: "api",
       deviceId: caller.device.id,
@@ -446,7 +447,7 @@ const ROUTES: Route[] = [
     const uid = params.uid as string;
     const now = ctx.now();
     const { revision } = withdrawByAdmin(ctx.db, kind, uid, now, actorOf(caller));
-    audit(ctx.db, {
+    insertAudit(ctx.db, {
       at: now,
       source: "api",
       deviceId: caller.device.id,
@@ -465,7 +466,7 @@ const ROUTES: Route[] = [
     const uid = params.uid as string;
     const now = ctx.now();
     reinstateByAdmin(ctx.db, kind, uid);
-    audit(ctx.db, {
+    insertAudit(ctx.db, {
       at: now,
       source: "api",
       deviceId: caller.device.id,

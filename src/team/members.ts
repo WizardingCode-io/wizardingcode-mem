@@ -1,6 +1,5 @@
 // Members, devices, invitations and roles (D-2, D-3, D-4, D-5, D-9, D-14, D-19, D-23).
 import { authorNameProblem } from "../settings/settings.ts";
-import { audit } from "./audit.ts";
 import type { Db } from "./db.ts";
 import { HttpError } from "./errors.ts";
 import {
@@ -19,6 +18,7 @@ import {
   type DeviceRow,
   deviceById,
   type InvitationRow,
+  insertAudit,
   insertDevice,
   insertInvitation,
   insertMember,
@@ -79,7 +79,7 @@ export const LAST_ADMIN_HINT =
 const LABEL_MAX = 80;
 const EXPIRY_DEFAULT_HOURS = 72;
 const EXPIRY_MAX_HOURS = 720;
-const BOOTSTRAP_HOURS = 24;
+export const BOOTSTRAP_HOURS = 24;
 const HOUR_MS = 3_600_000;
 
 export const toMember = (row: MemberRow): Member => ({
@@ -389,7 +389,7 @@ export function bootstrapIfEmpty(db: Db, now: number, print: (code: string) => v
     expiresInHours: BOOTSTRAP_HOURS,
     now,
   });
-  audit(db, {
+  insertAudit(db, {
     at: now,
     source: "bootstrap",
     action: "bootstrap",
@@ -398,5 +398,3 @@ export function bootstrapIfEmpty(db: Db, now: number, print: (code: string) => v
   print(code);
   return true;
 }
-
-export const BOOTSTRAP_VALID_HOURS = BOOTSTRAP_HOURS;

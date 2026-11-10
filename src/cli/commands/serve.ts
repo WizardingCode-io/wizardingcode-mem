@@ -2,7 +2,7 @@
 // (ADR 0026). The server logs to standard output; every subcommand sends the log to standard
 // error, so its own output stands alone on standard output.
 import { SchemaTooNewError } from "../../store/db.ts";
-import { audit, readAudit } from "../../team/audit.ts";
+import { readAudit } from "../../team/audit.ts";
 import { type Db, openTeamExisting, openTeamForWrite, teamPaths } from "../../team/db.ts";
 import {
   HttpError,
@@ -31,14 +31,14 @@ import { purgeItem, runMirror } from "../../team/mirror.ts";
 import { disableWithItems, reinstateByAdmin, withdrawByAdmin } from "../../team/push.ts";
 import { startTeamServer } from "../../team/server.ts";
 import { readStatus, renderStatus } from "../../team/status.ts";
-import { sequenceHighWater } from "../../team/store.ts";
+import { insertAudit, sequenceHighWater } from "../../team/store.ts";
 import { defaultDataDir } from "../../util/paths.ts";
 import { EXIT_USAGE } from "../exit.ts";
 
 const USAGE = `Usage: wizardingcode-mem serve [--data <dir>] [--host <addr>] [--port <n>] [--trust-proxy]
        wizardingcode-mem serve [--data <dir>] <subcommand> ...
 
-Subcommands (every one takes --data <dir> as well):
+Subcommands (each takes --data <dir> as well; health takes --url alone):
        invite --role admin|member --name <name> [--expires <hours>]
        invite --for <member id> [--expires <hours>]
        invitations
@@ -244,7 +244,7 @@ function write<T>(
   try {
     const { result, audit: row } = fn(db);
     if (row !== null) {
-      audit(db, {
+      insertAudit(db, {
         at: shell.now,
         source: "cli",
         action: row.action,
@@ -504,16 +504,9 @@ async function purge(shell: Shell, argv: string[]): Promise<number> {
       kind,
       uid,
       shell.now,
-      OPERATOR,
     );
     writeHighWater(teamPaths(shell.dir).feedFile, currentMarks(db));
-    emit({
-      event: "purged",
-      uid,
-      revisions: result.revisions,
-      feedRows: result.feedRows,
-      errors: result.errors,
-    });
+    emit({ event: "purged", uid, ...result });
     return result.errors.length === 0 ? 0 : 1;
   } finally {
     db.close();

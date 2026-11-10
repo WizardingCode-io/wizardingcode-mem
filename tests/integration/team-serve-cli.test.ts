@@ -254,6 +254,7 @@ describe("items from the shell", () => {
       revisions: 1,
       feedRows: 1,
       errors: [],
+      wal: "truncated",
     });
     expect(entryByUuid(t.server.db, gone.uid.slice(-36))).toBeNull();
     expect(auditCount(t)).toBe(before + 1);
@@ -272,6 +273,7 @@ describe("items from the shell", () => {
       revisions: 1,
       feedRows: 1,
       errors: [],
+      wal: "truncated",
     });
   });
 });

@@ -17,29 +17,32 @@ import {
 } from "../modules/knowledge/repo.ts";
 import type { Identity } from "../modules/knowledge/types.ts";
 import { entryUid } from "../sharing/types.ts";
-import { audit } from "./audit.ts";
 import { type Db, teamPaths } from "./db.ts";
 import { HttpError } from "./errors.ts";
 import { OPERATOR, splitMemoryKey } from "./ids.ts";
 import { holdLease, MIRROR_LEASE, MIRROR_TTL_MS } from "./lease.ts";
 import type { TeamLog } from "./log.ts";
-import { type Actor, parseFeedUid } from "./push.ts";
+import { memoryFeedUid, parseFeedUid } from "./push.ts";
 import type { Timers } from "./signal.ts";
 import {
+  checkpointWal,
   clearMeta,
   deleteEntry,
   deleteMemory,
   deleteRevisions,
   deviceById,
-  entriesPendingMirror,
   entryByUuid,
   forEachRevision,
   getMeta,
+  insertAudit,
   insertChange,
   insertPurged,
   markPurged,
   memberById,
   memoryByKey,
+  type PendingRow,
+  pendingRevisionsAfter,
+  REVISION_BATCH,
   type RevisionRow,
   resetMirrorRevisions,
   revisionAt,
@@ -348,38 +351,48 @@ function foldersOf(
   return folders;
 }
 
-interface Pending {
-  revision: RevisionRow;
-  creator: string;
-}
-
-/** The revisions the mirror has not exported, in the order of their `seq`. */
-function pendingRevisions(db: Db): Pending[] {
-  const pending: Pending[] = [];
-  for (const entry of entriesPendingMirror(db)) {
-    for (const revision of revisionsOf(db, entry.uuid)) {
-      if (revision.revision > entry.mirror_revision) {
-        pending.push({ revision, creator: entry.created_by_member });
-      }
+/** The revisions the mirror has not exported, in the order of their `seq`, read batch by batch. */
+function* pendingRevisions(db: Db): Generator<PendingRow> {
+  let after = 0;
+  for (;;) {
+    const rows = pendingRevisionsAfter(db, after, REVISION_BATCH);
+    if (rows.length === 0) return;
+    for (const row of rows) {
+      yield row;
+      after = row.seq;
     }
   }
-  return pending.sort((a, b) => a.revision.seq - b.revision.seq);
 }
 
 /** Set while a rebuild removes the repositories and resets the marks; a run that finds it finishes the rebuild. */
 const REBUILD_MARK = "mirror.rebuild";
+/**
+ * The folders a purge owes a replay, written in the erasure's transaction and cleared once the
+ * replay is whole; a run that finds it replays them before it exports anything.
+ */
+const REPLAY_MARK = "mirror.replay";
+
+type Owed = [string, RepoMeta][];
+
+function owedReplay(db: Db): Map<string, RepoMeta> | null {
+  const raw = getMeta(db, REPLAY_MARK);
+  return raw === null ? null : new Map(JSON.parse(raw) as Owed);
+}
 
 const summary = (errors: MirrorRun["errors"]) =>
   errors.length === 0
     ? null
     : errors.map((error) => `${error.folder}: ${error.message}`).join("; ");
 
-/** Takes the mirror lease and gives a host whose every git call renews it, or stops the run. */
+/**
+ * Takes the mirror lease and gives a host whose every git call renews it, or stops the run;
+ * `record` runs last, with the failures, whether `fn` returned or threw.
+ */
 function underMirrorLease<T>(
   ctx: MirrorContext,
-  fn: (host: GitHost, errors: MirrorRun["errors"]) => T,
-  record: (result: T | null, errors: MirrorRun["errors"]) => void,
-): T {
+  fn: (host: GitHost, failures: MirrorRun["errors"]) => T,
+  record: (failures: MirrorRun["errors"]) => void,
+): { result: T; failures: MirrorRun["errors"] } {
   const lease = holdLease(ctx.db, MIRROR_LEASE, "mirror", MIRROR_TTL_MS, ctx.now);
   const host: GitHost = {
     ...mirrorHost(ctx.dataDir, ctx.env, ctx.gitPath),
@@ -387,21 +400,20 @@ function underMirrorLease<T>(
       if (!lease.renew()) throw new MirrorLeaseLostError();
     },
   };
-  const errors: MirrorRun["errors"] = [];
-  let result: T | null = null;
+  const failures: MirrorRun["errors"] = [];
   try {
-    result = fn(host, errors);
-    return result;
+    return { result: fn(host, failures), failures };
   } finally {
-    record(result, errors);
+    record(failures);
     lease.release();
   }
 }
 
 /**
- * The export: every pending revision in `seq` order, each as commits; a repository that
- * fails is recorded and skipped for the rest of the run, the others go on; a lost lease
- * ends the run. `rebuild` removes every repository first and replays from the start.
+ * The export: an owed replay first, then every pending revision in `seq` order, each as
+ * commits; a repository that fails is recorded and skipped for the rest of the run, the others
+ * go on; a lost lease ends the run. `rebuild` removes every repository first and replays from
+ * the start.
  */
 export async function runMirror(
   ctx: MirrorContext,
@@ -409,21 +421,26 @@ export async function runMirror(
 ): Promise<MirrorRun> {
   const root = teamPaths(ctx.dataDir).repos;
   let commits = 0;
-  const errors = underMirrorLease(
+  const { failures: errors } = underMirrorLease(
     ctx,
     (host, failures) => {
       // A rebuild cut between the removal and the reset would leave every revision marked
-      // exported with no repository: the marker makes the next run finish it.
+      // exported with no repository: the marker makes the next run finish it. A rebuild replays
+      // everything, so nothing stays owed beside it.
       if (options.rebuild || getMeta(ctx.db, REBUILD_MARK) !== null) {
         setMeta(ctx.db, REBUILD_MARK, String(ctx.now()));
         rmSync(root, { recursive: true, force: true });
         resetMirrorRevisions(ctx.db);
+        clearMeta(ctx.db, REPLAY_MARK);
         clearMeta(ctx.db, REBUILD_MARK);
       }
-      const failed = new Set<string>();
+      const owed = owedReplay(ctx.db);
+      if (owed !== null) replayOwed(ctx, host, owed, failures);
+      const failed = new Set(failures.map((failure) => failure.folder));
       const skipped = new Set<string>();
-      for (const { revision, creator } of pendingRevisions(ctx.db)) {
+      for (const revision of pendingRevisions(ctx.db)) {
         if (skipped.has(revision.uuid)) continue;
+        const creator = revision.creator;
         const previous =
           revision.revision > 1 ? revisionAt(ctx.db, revision.uuid, revision.revision - 1) : null;
         const folders = foldersOf(ctx.db, revision, previous, creator);
@@ -457,9 +474,8 @@ export async function runMirror(
           break;
         }
       }
-      return failures;
     },
-    (_result, failures) => {
+    (failures) => {
       setMeta(
         ctx.db,
         "mirror.last",
@@ -525,103 +541,131 @@ function replayFolders(
   }
 }
 
+/** The owed replay, under the caller's lease: the mark is cleared only when no failure was added. */
+function replayOwed(
+  ctx: MirrorContext,
+  host: GitHost,
+  folders: ReadonlyMap<string, RepoMeta>,
+  failures: MirrorRun["errors"],
+): void {
+  const before = failures.length;
+  replayFolders(ctx, host, folders, failures);
+  if (failures.length === before) clearMeta(ctx.db, REPLAY_MARK);
+}
+
 const unknown = () => new HttpError(404, { error: "unknown" });
 
+interface Erased {
+  revisions: number;
+  feedRows: number;
+}
+
+/** The entry's rows gone and the folders its revisions touched noted; the feed's purge rows; the key kept. */
+function eraseEntry(db: Db, uuid: string, touched: Map<string, RepoMeta>, now: number): Erased {
+  const row = entryByUuid(db, uuid);
+  if (row === null) throw unknown();
+  for (const revision of revisionsOf(db, row.uuid)) {
+    const place = placeOf(db, revision, row.created_by_member);
+    touched.set(place.relative, place.meta);
+  }
+  const revisions = deleteRevisions(db, row.uuid);
+  deleteEntry(db, row.uuid);
+  const feedRows = markPurged(db, row.uuid);
+  insertChange(db, {
+    kind: "entry",
+    uid: entryUid(row.scope as "workspace" | "shared" | "project", row.remote_alias, row.uuid),
+    key: row.uuid,
+    op: "purge",
+    scope: row.scope,
+    remoteAlias: row.remote_alias,
+    revision: row.revision,
+    hash: "",
+    movedTo: null,
+    memberId: OPERATOR.memberId,
+    deviceId: OPERATOR.deviceId,
+    clientEpoch: null,
+    at: now,
+  });
+  insertPurged(db, row.uuid, now);
+  return { revisions, feedRows };
+}
+
+/** The memory's row gone; the feed's purge rows; the key kept. */
+function eraseMemory(db: Db, key: string, now: number): Erased {
+  const { deviceId, uid } = splitMemoryKey(key);
+  const row = memoryByKey(db, deviceId, uid);
+  if (row === null) throw unknown();
+  deleteMemory(db, deviceId, uid);
+  const feedRows = markPurged(db, key);
+  insertChange(db, {
+    kind: "memory",
+    uid: memoryFeedUid(deviceById(db, deviceId)?.alias ?? "", uid),
+    key,
+    op: "purge",
+    scope: "project",
+    remoteAlias: row.remote_alias,
+    revision: row.revision,
+    hash: "",
+    movedTo: null,
+    memberId: OPERATOR.memberId,
+    deviceId: OPERATOR.deviceId,
+    clientEpoch: null,
+    at: now,
+  });
+  insertPurged(db, key, now);
+  return { revisions: 1, feedRows };
+}
+
+export interface PurgeResult extends Erased {
+  /** Whether the write-ahead log was cut to nothing after the erasure, or a reader held it. */
+  wal: "truncated" | "busy";
+  errors: MirrorRun["errors"];
+}
+
 /**
- * Erasure (D-24), under the mirror lease from the first step, so a run in progress is refused
- * before anything is erased: one transaction removes the item's row (and an entry's
- * revisions), turns its feed rows into `purge` rows, writes one more `purge` row, records the
- * key and writes the audit row; then, for an entry, every repository its revisions touched
- * is removed and replayed without it. A replay that fails is recorded in `meta.mirror.last`
- * and in the result, never silently.
+ * Erasure (D-24), the operator's, under the mirror lease from the first step, so a run in
+ * progress is refused before anything is erased: one transaction removes the item's row (and
+ * an entry's revisions), turns its feed rows into `purge` rows, writes one more `purge` row,
+ * records the key, notes the folders a replay is owed to and writes the audit row; a
+ * truncating checkpoint then cuts the write-ahead log; then every repository the entry's
+ * revisions touched is removed and replayed without it, the note is cleared once that replay
+ * is whole, and the log is cut again once the lease is released. A replay that fails is
+ * recorded in `meta.mirror.last` and in the result, and the next run finishes it.
  */
 export async function purgeItem(
   ctx: MirrorContext,
   kind: "entry" | "memory",
   uid: string,
   now: number,
-  actor: Actor,
-): Promise<{ revisions: number; feedRows: number; errors: MirrorRun["errors"] }> {
+): Promise<PurgeResult> {
   const { db } = ctx;
   const named = parseFeedUid(db, kind, uid, null);
   if (named === null) throw unknown();
   const touched = new Map<string, RepoMeta>();
-  let result: { revisions: number; feedRows: number } | null = null;
-  const errors = underMirrorLease(
+  const { result, failures: errors } = underMirrorLease(
     ctx,
     (host, failures) => {
-      result = transaction(db, () => {
-        const erased = (() => {
-          if (kind === "entry") {
-            const row = entryByUuid(db, named.key);
-            if (row === null) throw unknown();
-            for (const revision of revisionsOf(db, row.uuid)) {
-              const place = placeOf(db, revision, row.created_by_member);
-              touched.set(place.relative, place.meta);
-            }
-            const revisions = deleteRevisions(db, row.uuid);
-            deleteEntry(db, row.uuid);
-            const feedRows = markPurged(db, row.uuid);
-            insertChange(db, {
-              kind: "entry",
-              uid: entryUid(
-                row.scope as "workspace" | "shared" | "project",
-                row.remote_alias,
-                row.uuid,
-              ),
-              key: row.uuid,
-              op: "purge",
-              scope: row.scope,
-              remoteAlias: row.remote_alias,
-              revision: row.revision,
-              hash: "",
-              movedTo: null,
-              memberId: actor.memberId,
-              deviceId: actor.deviceId,
-              clientEpoch: null,
-              at: now,
-            });
-            insertPurged(db, row.uuid, now);
-            return { revisions, feedRows };
-          }
-          const { deviceId, uid: memoryUid } = splitMemoryKey(named.key);
-          const row = memoryByKey(db, deviceId, memoryUid);
-          if (row === null) throw unknown();
-          deleteMemory(db, deviceId, memoryUid);
-          const feedRows = markPurged(db, named.key);
-          const alias = deviceById(db, deviceId)?.alias ?? "";
-          insertChange(db, {
-            kind: "memory",
-            uid: `remote:${alias}:${memoryUid}`,
-            key: named.key,
-            op: "purge",
-            scope: "project",
-            remoteAlias: row.remote_alias,
-            revision: row.revision,
-            hash: "",
-            movedTo: null,
-            memberId: actor.memberId,
-            deviceId: actor.deviceId,
-            clientEpoch: null,
-            at: now,
-          });
-          insertPurged(db, named.key, now);
-          return { revisions: 1, feedRows };
-        })();
-        audit(db, {
+      const erased = transaction(db, () => {
+        const counts =
+          kind === "entry"
+            ? eraseEntry(db, named.key, touched, now)
+            : eraseMemory(db, named.key, now);
+        if (touched.size > 0) setMeta(db, REPLAY_MARK, JSON.stringify([...touched]));
+        insertAudit(db, {
           at: now,
-          source: actor.memberId === OPERATOR.memberId ? "cli" : "api",
-          deviceId: actor.memberId === OPERATOR.memberId ? null : actor.deviceId,
+          source: "cli",
           action: "purged",
           target: uid,
-          detail: `${kind}: ${erased.revisions} revisions, ${erased.feedRows} feed rows`,
+          detail: `${kind}: ${counts.revisions} revisions, ${counts.feedRows} feed rows`,
         });
-        return erased;
+        return counts;
       });
-      if (touched.size > 0) replayFolders(ctx, host, touched, failures);
-      return failures;
+      // Cut once here, so the purged frames do not wait for the replay.
+      const cut = checkpointWal(db);
+      if (touched.size > 0) replayOwed(ctx, host, touched, failures);
+      return { ...erased, cut };
     },
-    (_result, failures) => {
+    (failures) => {
       if (failures.length > 0) {
         setMeta(
           ctx.db,
@@ -632,7 +676,10 @@ export async function purgeItem(
     },
   );
   for (const error of errors) ctx.log.line({ level: "error", event: "mirror-replay", ...error });
-  return { ...(result as unknown as { revisions: number; feedRows: number }), errors };
+  // And once more with the lease released: the note's clearing and the release wrote frames of their own.
+  const { cut, ...counts } = result;
+  const wal: PurgeResult["wal"] = checkpointWal(db) && cut ? "truncated" : "busy";
+  return { ...counts, wal, errors };
 }
 
 // --- The child and its schedule --------------------------------------------------------

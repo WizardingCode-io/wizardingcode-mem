@@ -14,6 +14,7 @@ import {
   entryPayload,
   eventsOf,
   type Joined,
+  LIMITS,
   memberOf,
   memoryPayload,
   newUuid,
@@ -255,6 +256,20 @@ describe("entry sends: revisions, idempotency, stale, appliedAs", () => {
       hash: payload.hash,
     });
     expect(feedOf(t).filter((row) => row.seq === seqBefore)).toHaveLength(1);
+    // Not charged: after a second's refill, more retries than that refill could pay for still
+    // leave the room for one fresh item.
+    t.freeBytes.value = 10 * 1024 * 1024 * 1024;
+    t.clock.advance(1000);
+    const perItem = Buffer.byteLength(payload.frontmatter + payload.body);
+    const retries = Math.ceil((2 * LIMITS.payloadBytesPerHour) / 3600 / perItem) + 1;
+    for (let i = 0; i < retries; i++) {
+      expect((await pushOne(t.server, ana.token, sendOf(payload))).result).toBe("applied");
+    }
+    const fresh = entryPayload({ scope: "shared", slug: "fresh-after-retries" });
+    expect(await pushOne(t.server, ana.token, sendOf(fresh))).toMatchObject({
+      result: "applied",
+      revision: 1,
+    });
   });
 
   test("a second device's send on the current base is revision 2; an old base is stale; appliedAs names the device's own earlier revision", async () => {

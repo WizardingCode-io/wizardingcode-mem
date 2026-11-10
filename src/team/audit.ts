@@ -1,25 +1,9 @@
-// The audit: one row per act that changes who may do what, or what the server holds.
+// The audit's reader: the newest rows first, the limit clamped. The rows are written through
+// the store's `insertAudit`, with the sources the store names.
 import type { Db } from "./db.ts";
-import { type AuditRow, insertAudit, listAudit } from "./store.ts";
-
-export type AuditSource = "api" | "cli" | "bootstrap" | "system";
+import { type AuditRow, listAudit } from "./store.ts";
 
 export type { AuditRow };
-
-export function audit(
-  db: Db,
-  row: {
-    at: number;
-    source: AuditSource;
-    deviceId?: string | null;
-    address?: string | null;
-    action: string;
-    target?: string | null;
-    detail?: string;
-  },
-): void {
-  insertAudit(db, row);
-}
 
 const AUDIT_LIMIT_DEFAULT = 50;
 const AUDIT_LIMIT_MAX = 1000;

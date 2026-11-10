@@ -2,10 +2,16 @@
 // is told from the live one, and what happens when it is (D-13).
 import { readFileSync } from "node:fs";
 import { writeFileAtomic } from "../modules/knowledge/repo.ts";
-import { type AuditSource, audit } from "./audit.ts";
 import type { Db } from "./db.ts";
 import { newHexId } from "./ids.ts";
-import { advanceSequence, sequenceHighWater, setMeta, transaction } from "./store.ts";
+import {
+  type AuditSource,
+  advanceSequence,
+  insertAudit,
+  sequenceHighWater,
+  setMeta,
+  transaction,
+} from "./store.ts";
 
 /** The two `AUTOINCREMENT` high-waters the file records. */
 export type Marks = { changes: number; audit: number };
@@ -54,7 +60,7 @@ export function renewInstance(
   transaction(db, () => {
     setMeta(db, "server.instance", instance);
     advanceSequence(db, "changes", floor + SEQUENCE_MARGIN);
-    audit(db, { at: now, source, action: "instance renewed", target: instance, detail });
+    insertAudit(db, { at: now, source, action: "instance renewed", target: instance, detail });
   });
   writeHighWater(feedFile, currentMarks(db));
   return instance;
@@ -75,7 +81,7 @@ export function checkRestore(
   if (file.changes > current.changes || file.audit > current.audit) {
     const floor = Math.max(file.changes, current.changes);
     const detail = `file changes=${file.changes} audit=${file.audit}; database changes=${current.changes} audit=${current.audit}`;
-    audit(db, { at: now, source: "system", action: "restore detected", detail });
+    insertAudit(db, { at: now, source: "system", action: "restore detected", detail });
     renewInstance(db, feedFile, now, "system", floor, detail);
     return { renewed: true, file, db: current };
   }

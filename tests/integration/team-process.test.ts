@@ -163,6 +163,24 @@ describe("the serve process", () => {
       }),
     });
     expect(pushed.status).toBe(200);
+    // A code minted through the API, a join refused with a wrong code, and the code's own join:
+    // none of the three codes reaches the log.
+    const minted = await fetch(`${origin}/v1/invitations`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ role: "member", name: "Eva" }),
+    });
+    expect(minted.status).toBe(201);
+    const { code: evaCode } = (await minted.json()) as { code: string };
+    const wrongCode = `${evaCode.slice(0, -1)}${evaCode.endsWith("A") ? "B" : "A"}`;
+    const joinWith = (code: string) =>
+      fetch(`${origin}/v1/join`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ code, label: "eva laptop" }),
+      });
+    expect((await joinWith(wrongCode)).status).not.toBe(200);
+    expect((await joinWith(evaCode)).status).toBe(200);
     // The cursor past the pushed row, so the pull is held until the stop answers it.
     const held = fetch(`${origin}/v1/pull?since=1&wait=20`, {
       headers: { authorization: `Bearer ${token}` },
@@ -191,6 +209,8 @@ describe("the serve process", () => {
     expect(everything).toContain("request");
     expect(everything).not.toContain("PAYLOAD-MARKER-9f3c");
     expect(everything).not.toContain("id: ");
+    expect(everything).not.toContain(evaCode);
+    expect(everything).not.toContain(wrongCode);
     expect(out.raw.filter((line) => line.includes("wci1_"))).toHaveLength(1);
   });
 

@@ -75,16 +75,21 @@ function prepareWriter(db: Db): void {
   requireTeamSchema(db);
 }
 
-/** Opens or creates the team database and brings it to this binary's version. */
-export function openTeamDb(dir: string, busyTimeoutMs = 5000): Db {
+/** The writer's open: creates the file or brings it to the list's version, a copy taken before a migration. */
+function openWriter(dir: string, busyTimeoutMs: number, migrations: readonly Migration[]): Db {
   return openFile({
     dir,
     file: TEAM_DB_FILE,
     backups: teamBackups(dir),
-    migrations: TEAM_MIGRATIONS,
+    migrations,
     busyTimeoutMs,
     before: prepareWriter,
   });
+}
+
+/** Opens or creates the team database and brings it to this binary's version, with no look for a server: tests, and tools that know none runs. */
+export function openTeamDb(dir: string, busyTimeoutMs = 5000): Db {
+  return openWriter(dir, busyTimeoutMs, TEAM_MIGRATIONS);
 }
 
 /** Read-only, for the subcommands that inspect; null without the file. */
@@ -114,12 +119,5 @@ export function openTeamForWrite(
       probe.close();
     }
   }
-  return openFile({
-    dir,
-    file: TEAM_DB_FILE,
-    backups: teamBackups(dir),
-    migrations: options.migrations ?? TEAM_MIGRATIONS,
-    busyTimeoutMs: options.busyTimeoutMs ?? 5000,
-    before: prepareWriter,
-  });
+  return openWriter(dir, options.busyTimeoutMs ?? 5000, options.migrations ?? TEAM_MIGRATIONS);
 }

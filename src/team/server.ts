@@ -1,5 +1,6 @@
 // `wizardingcode-mem serve`: one process per data directory, over its own database, answering
 // the sync API; one lease, one change signal, one set of buckets, injected clock and timers.
+import { ENTRY_MAX_BYTES } from "../modules/knowledge/entry.ts";
 import { selfCommand } from "../util/self.ts";
 import { type Db, openTeamForWrite, teamPaths } from "./db.ts";
 import { freeBytes as diskFreeBytes } from "./disk.ts";
@@ -9,7 +10,7 @@ import { checkRestore, currentMarks, writeHighWater } from "./instance.ts";
 import { holdLease, SERVE_LEASE, SERVE_RENEW_MS, SERVE_TTL_MS } from "./lease.ts";
 import { type Buckets, createBuckets } from "./limits.ts";
 import { createTeamLog, installLogSink } from "./log.ts";
-import { BOOTSTRAP_VALID_HOURS, bootstrapIfEmpty } from "./members.ts";
+import { BOOTSTRAP_HOURS, bootstrapIfEmpty } from "./members.ts";
 import { scheduleMirror, spawnMirror } from "./mirror.ts";
 import { handle } from "./routes.ts";
 import { ChangeSignal, REAL_TIMERS, type Timers } from "./signal.ts";
@@ -21,7 +22,7 @@ export type { Timers };
 export const LIMITS: Limits = {
   bodyBytes: 1_048_576,
   itemsPerPush: 200,
-  itemBytes: 262_144,
+  itemBytes: ENTRY_MAX_BYTES,
   pullItems: 500,
   pullBytes: 2_097_152,
   pullWaitSeconds: 25,
@@ -39,6 +40,11 @@ const IDLE_TIMEOUT_S = 120;
 /** Above the published cap, so the handler's own 413 (with a request id) answers first. */
 const MAX_REQUEST_BODY = 2_097_152;
 const HOUR_MS = 3_600_000;
+
+/** The export child's command line: this binary, `serve mirror`, and the directory the server was given. */
+export function mirrorCommandFor(dataDir: string): string[] {
+  return selfCommand("serve", "mirror", "--data", dataDir);
+}
 
 export interface ServerOptions {
   dataDir: string;
@@ -114,15 +120,14 @@ export async function startTeamServer(options: ServerOptions): Promise<TeamServe
     });
   }
   bootstrapIfEmpty(db, now(), (code) => {
-    log.line({ event: "bootstrap", code, validHours: BOOTSTRAP_VALID_HOURS });
+    log.line({ event: "bootstrap", code, validHours: BOOTSTRAP_HOURS });
     options.onBootstrap?.(code);
   });
 
   const serverId = getMeta(db, "server.id") as string;
   const instance = () => getMeta(db, "server.instance") as string;
   const signal = new ChangeSignal(timers);
-  const command =
-    options.mirrorCommand ?? ((dir: string) => selfCommand("serve", "mirror", "--data", dir));
+  const command = options.mirrorCommand ?? mirrorCommandFor;
   const mirror = scheduleMirror(
     { dataDir: options.dataDir, log },
     timers,

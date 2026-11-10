@@ -1,4 +1,5 @@
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
+import { RESULT_SHAPES } from "../../src/team/contract.ts";
 import { hashSecret } from "../../src/team/ids.ts";
 import { getMeta, leaseOf } from "../../src/team/store.ts";
 import {
@@ -176,6 +177,38 @@ describe("authentication, me, rotation, the contract", () => {
       },
     });
     expect(typeof me.body.now).toBe("number");
+  });
+
+  test("the answers' keys are the contract's shapes: join, me, a refusal, a push result, a pull page and its items", async () => {
+    const t = await start();
+    const admin = await adminOf(t);
+    const shape = (name: string) => [...(RESULT_SHAPES[name] as readonly string[])];
+    const within = (keys: string[], name: string) => keys.every((key) => shape(name).includes(key));
+    const code = await invite(t, admin.token, { role: "member", name: "Eva" });
+    const joined = await api(t.server, null, "POST", "/v1/join", { code, label: "eva laptop" });
+    expect(joined.status).toBe(200);
+    expect(Object.keys(joined.body).sort()).toEqual(shape("join"));
+    const me = await api(t.server, joined.body.token, "GET", "/v1/me");
+    expect(Object.keys(me.body).sort()).toEqual(shape("me"));
+    const refused = await api(t.server, "wcm1_nope", "GET", "/v1/me");
+    expect(refused.status).toBe(401);
+    expect(Object.keys(refused.body).sort()).toEqual(shape("refusal"));
+    const payload = entryPayload({ scope: "shared", slug: "shape" });
+    const result = await pushOne(t.server, joined.body.token, sendOf(payload));
+    expect(within(Object.keys(result), "pushResult")).toBe(true);
+    const stale = await pushOne(
+      t.server,
+      joined.body.token,
+      sendOf(payload, { baseRevision: 9, baseHash: "zzz" }),
+    );
+    expect(within(Object.keys(stale), "pushResult")).toBe(true);
+    const page = await pull(t.server, admin.token, { since: 0 });
+    expect(page.status).toBe(200);
+    expect(Object.keys(page.body).sort()).toEqual(shape("pullPage"));
+    expect(page.body.items.length).toBeGreaterThan(0);
+    for (const item of page.body.items as Record<string, unknown>[]) {
+      expect(within(Object.keys(item), "feedItem")).toBe(true);
+    }
   });
 
   test("rotate answers a new token once; the old one is 401 from then on; the id and alias stay", async () => {

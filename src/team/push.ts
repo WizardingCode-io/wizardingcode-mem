@@ -150,7 +150,9 @@ function tombstoneEntry(
 }
 
 /** The feed form of a memory's uid: the owning device's alias, never its id. */
-const memoryFeedUid = (deviceAlias: string, uid: string) => `remote:${deviceAlias}:${uid}`;
+/** A memory's feed uid: the device's alias and the memory's own uid, as the devices read it. */
+export const memoryFeedUid = (deviceAlias: string, uid: string): string =>
+  `remote:${deviceAlias}:${uid}`;
 
 function tombstoneMemory(
   db: Db,
@@ -530,16 +532,20 @@ export interface PushSummary {
   refusals: { uid: string; reason: string; rule?: string }[];
 }
 
-/** What the request's log line carries: the counts and the refused uids with their reasons. */
+/** The most of a refused uid the log line keeps: until the shape check passes, a uid is a member's text. */
+export const LOGGED_UID_MAX = 256;
+
+/** What the request's log line carries: the counts and the refused uids, clipped, with their reasons. */
 export function summarizePush(results: readonly PushResult[]): PushSummary {
   const summary: PushSummary = { applied: 0, stale: 0, refused: 0, withdrawn: 0, refusals: [] };
   for (const result of results) {
     summary[result.result]++;
     if (result.result === "refused") {
+      const uid = result.uid.slice(0, LOGGED_UID_MAX);
       summary.refusals.push(
         result.rule === undefined
-          ? { uid: result.uid, reason: result.reason as string }
-          : { uid: result.uid, reason: result.reason as string, rule: result.rule },
+          ? { uid, reason: result.reason as string }
+          : { uid, reason: result.reason as string, rule: result.rule },
       );
     }
   }
