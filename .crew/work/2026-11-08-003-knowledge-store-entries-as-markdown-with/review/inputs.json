@@ -1,0 +1,13 @@
+{
+  "dependencies": [],
+  "phrases": [
+    {
+      "file": "src/modules/knowledge/resolve.ts",
+      "line": 182,
+      "phrase": "fall back to"
+    }
+  ],
+  "fingerprint": "sha256:32ee72e7f60bf48bf63014c64f3f5439b89e3382c88b6c3c1ae54f2cac2ec17c",
+  "at": "2026-11-09T14:20:53.703Z",
+  "captures": []
+}

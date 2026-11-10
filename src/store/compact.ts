@@ -1,6 +1,7 @@
 import { statSync } from "node:fs";
+import { KNOWLEDGE_MODULE, KNOWLEDGE_SCHEMA_VERSION } from "../modules/knowledge/migrations.ts";
 import { DEFAULTS } from "../settings/settings.ts";
-import { type Db, withWrite } from "./db.ts";
+import { type Db, moduleSchemaState, withWrite } from "./db.ts";
 import { anyLeaseActive } from "./meta.ts";
 
 // Keeps the database to what still serves a purpose. Memories are never touched here:
@@ -8,6 +9,9 @@ import { anyLeaseActive } from "./meta.ts";
 // how they came to be, once it is old: turns no memory points at, sessions left empty,
 // the long tail of hook timings. Turns read back from history stay while they are inside
 // the history window: they are what tells a later import that they are already known.
+// What a context was shown of the team's knowledge goes once its session or its
+// repository is gone: SQLite may give a deleted highest id to a new row, and a row keyed by
+// a reused session id would keep that session from being shown those entries.
 
 export const RETENTION_DAYS = 90;
 export const KEEP_HOOK_RUNS = 5000;
@@ -19,6 +23,8 @@ export interface CompactReport {
   turns: number;
   sessions: number;
   hookRuns: number;
+  /** `knowledge_shown` rows whose session or repository is gone; 0 without the table. */
+  knowledgeShown: number;
   bytesBefore: number;
   bytesAfter: number;
   dryRun: boolean;
@@ -39,6 +45,17 @@ export class CompactBusyError extends Error {
   constructor() {
     super("background work is running (a history run, a drain or a backup); compact when it ends");
   }
+}
+
+/** Whether the store has the tables the shown rows are pruned by: the knowledge module's. */
+function hasShownTables(db: Db): boolean {
+  const tables = ["knowledge_shown", "knowledge_repos"];
+  const n = db
+    .query<{ n: number }, string[]>(
+      "SELECT count(*) AS n FROM sqlite_master WHERE type = 'table' AND name IN (?, ?)",
+    )
+    .get(...tables)?.n;
+  return n === tables.length;
 }
 
 function fileSize(db: Db): number {
@@ -67,6 +84,13 @@ export function compact(db: Db, options: CompactOptions): CompactReport {
   // A session goes when nothing of it stays: no turn that is kept, and not seen lately.
   const emptySessions = `FROM sessions s WHERE s.last_seen_at < ?
      AND NOT EXISTS (SELECT 1 FROM turns t WHERE t.session_id = s.id AND NOT (${goes}))`;
+  // The shown rows that go: the repository is gone, or the session is gone or about to go.
+  // One condition joined by OR, so a row that meets both counts once, and the count taken
+  // before the sessions go is the number the delete after them removes.
+  const orphanShown = `FROM knowledge_shown AS k
+     WHERE NOT EXISTS (SELECT 1 FROM knowledge_repos r WHERE r.id = k.repo_id)
+        OR NOT EXISTS (SELECT 1 FROM sessions s WHERE s.id = k.session_id)
+        OR k.session_id IN (SELECT s.id ${emptySessions})`;
   const extraRuns = `FROM hook_runs WHERE id NOT IN (SELECT id FROM hook_runs ORDER BY id DESC LIMIT ?)`;
 
   const bytesBefore = fileSize(db);
@@ -74,6 +98,7 @@ export function compact(db: Db, options: CompactOptions): CompactReport {
     turns: 0,
     sessions: 0,
     hookRuns: 0,
+    knowledgeShown: 0,
     bytesBefore,
     bytesAfter: bytesBefore,
     dryRun,
@@ -86,11 +111,26 @@ export function compact(db: Db, options: CompactOptions): CompactReport {
     }
     // Sessions are counted after their turns went: that is what leaves them empty.
     report.sessions = n(`SELECT count(*) AS n ${emptySessions}`, [cutoff, ...turnParams]);
+    // The module's rule: a knowledge schema this binary does not know (too new, or behind)
+    // is left alone, rows included; the sessions still go.
+    const shownTables =
+      hasShownTables(db) &&
+      moduleSchemaState(db, KNOWLEDGE_MODULE, KNOWLEDGE_SCHEMA_VERSION) === "current";
+    if (shownTables) {
+      report.knowledgeShown = n(`SELECT count(*) AS n ${orphanShown}`, [cutoff, ...turnParams]);
+    }
     if (!dryRun) {
       db.run(`DELETE ${emptySessions.replace("FROM sessions s", "FROM sessions AS s")}`, [
         cutoff,
         ...turnParams,
       ]);
+      // In the same transaction as the sessions: no new session can take a freed id first.
+      if (shownTables) {
+        db.run(`DELETE FROM knowledge_shown WHERE rowid IN (SELECT k.rowid ${orphanShown})`, [
+          cutoff,
+          ...turnParams,
+        ]);
+      }
     }
     report.hookRuns = n(`SELECT count(*) AS n ${extraRuns}`, [KEEP_HOOK_RUNS]);
     if (!dryRun) db.run(`DELETE ${extraRuns}`, [KEEP_HOOK_RUNS]);

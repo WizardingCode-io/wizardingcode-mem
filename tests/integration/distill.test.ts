@@ -859,6 +859,7 @@ function recording(seen: DistillInput[], titleAt = 0): Judge {
       };
     },
     consolidate: async () => ({ source: "typesafe", perNeighbour: [] }),
+    relate: (input) => heuristicJudge.relate(input),
   };
 }
 
@@ -975,6 +976,7 @@ function judging(
       };
     },
     consolidate: async () => ({ source: "typesafe", perNeighbour: [] }),
+    relate: (input) => heuristicJudge.relate(input),
   };
 }
 

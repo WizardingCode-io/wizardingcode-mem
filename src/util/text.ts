@@ -6,3 +6,8 @@ export function clip(text: string, max: number, ellipsis = ""): string {
   if (last >= 0xd800 && last <= 0xdbff) end--;
   return text.slice(0, end) + ellipsis;
 }
+
+/** A count with its noun: `1 change`, `2 changes`; `1 entry`, `2 entries` with the plural given. */
+export function plural(n: number, singular: string, pluralForm = `${singular}s`): string {
+  return `${n} ${n === 1 ? singular : pluralForm}`;
+}

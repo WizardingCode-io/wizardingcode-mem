@@ -1,9 +1,11 @@
 import { lastBackup, restoreBackup, runBackup } from "../../backup/backup.ts";
 import { targetFor } from "../../backup/target.ts";
 import { loadSettings } from "../../settings/settings.ts";
+import { LEVEL_LABELS } from "../../sharing/types.ts";
 import { type Db, openDb } from "../../store/db.ts";
 import { logError } from "../../util/log.ts";
 import { resolvePaths } from "../../util/paths.ts";
+import { plural } from "../../util/text.ts";
 import { EXIT_USAGE } from "../exit.ts";
 
 const USAGE = "Usage: wizardingcode-mem backup [--list | --restore <name>]\n";
@@ -43,11 +45,16 @@ export async function run(argv: string[]): Promise<number> {
       process.stderr.write(`wizardingcode-mem backup: --restore takes a backup's name\n${USAGE}`);
       return EXIT_USAGE;
     }
-    const outcome = await restoreBackup({ storeDir, target, name, now: Date.now() });
+    const outcome = await restoreBackup({ storeDir, dataDir, target, name, now: Date.now() });
     if (outcome.ok) {
       process.stdout.write(
         `backup: restored ${name}; the previous database is ${outcome.replaced}\n`,
       );
+      if (outcome.sharingReset > 0) {
+        process.stdout.write(
+          `backup: sharing levels reset to ${LEVEL_LABELS.local} (${plural(outcome.sharingReset, "project")}); set them again\n`,
+        );
+      }
       if (outcome.historyRemoved) {
         process.stdout.write(
           "backup: history index removed; run wizardingcode-mem history index to rebuild it\n",

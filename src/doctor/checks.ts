@@ -1,8 +1,9 @@
 import { Database } from "bun:sqlite";
-import { accessSync, constants, existsSync, readFileSync } from "node:fs";
+import { accessSync, constants, existsSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { lastBackup } from "../backup/schedule.ts";
 import { semanticStatus } from "../embed/status.ts";
+import { moduleEnabled } from "../engine/modules.ts";
 import { ANTIGRAVITY } from "../install/antigravity.ts";
 import { CLAUDE_CODE } from "../install/claude-code.ts";
 import { claudeDesktopServer, hasClaudeDesktop } from "../install/claude-desktop.ts";
@@ -21,10 +22,55 @@ import { PLUGIN_MARKER } from "../install/opencode-plugin.ts";
 import { QWEN } from "../install/qwen.ts";
 import { Breaker } from "../judge/breaker.ts";
 import { keyFingerprint } from "../judge/key.ts";
+import { personAuthor } from "../modules/knowledge/author.ts";
+import { pinnedBlock, pinnedLine } from "../modules/knowledge/contribute.ts";
+import { KnowledgeError } from "../modules/knowledge/errors.ts";
+import { FOLDER_CAP, ftsCount, type Hit, readRepoFiles } from "../modules/knowledge/index-store.ts";
+import { KNOWLEDGE_MODULE, KNOWLEDGE_SCHEMA_VERSION } from "../modules/knowledge/migrations.ts";
+import { SESSION_START_SHARE } from "../modules/knowledge/policy.ts";
+import {
+  checkRepoConfig,
+  DECIDED_DIR,
+  ENTRIES_DIR,
+  GIT_MIN_VERSION,
+  GIT_TIMEOUT_MS,
+  gitTooOld,
+  kindAt,
+  knowledgeRoot,
+  MANIFEST_FILE,
+  namesIn,
+  OPEN_DIR,
+  parseGitVersion,
+  parseManifest,
+  readRegularFile,
+  refuseForeign,
+  refuseLinkedRoots,
+  repoPath,
+  runGit,
+  statusOf,
+  TAXONOMY_FILE,
+} from "../modules/knowledge/repo.ts";
+import { type FoundRepo, scanRepos } from "../modules/knowledge/resolve.ts";
+import type { KnowledgeStore } from "../modules/knowledge/types.ts";
 import { loadSettings } from "../settings/settings.ts";
+import { isDefault, loadPolicy } from "../sharing/policy.ts";
+import {
+  type Level,
+  type SharingPolicy,
+  shareListText,
+  TEAM_DESTINATION,
+} from "../sharing/types.ts";
 import { hookLatency } from "../status/report.ts";
-import { DB_FILE, type Db, LATEST_VERSION, openExisting, SchemaTooNewError } from "../store/db.ts";
+import {
+  DB_FILE,
+  type Db,
+  LATEST_VERSION,
+  moduleSchemaState,
+  openExisting,
+  SchemaTooNewError,
+} from "../store/db.ts";
 import { inspectTarget } from "../store/move.ts";
+import { plural } from "../util/text.ts";
 
 export interface Check {
   name: string;
@@ -55,6 +101,10 @@ export interface DoctorContext {
   claudeDesktopConfigPath?: string;
   /** SHIBAOX_* variables set in the environment: the names until 0.3.0. */
   legacyVariables?: string[];
+  /** The environment git is run with and the settings are read from; the process's when absent. */
+  env?: Record<string, string | undefined>;
+  /** The installed git's version, for a test; when absent, git is asked. */
+  gitVersion?: () => number[] | null;
 }
 
 // Folders that copy files behind SQLite's back, or cannot lock them properly.
@@ -528,6 +578,371 @@ function readingDb(name: string, db: Db | null, check: () => Check): Check {
   }
 }
 
+// --- Knowledge ------------------------------------------------------------------------
+
+/** A folder past this many files is close to the index's cap: said before files are left out. */
+const FOLDER_WARN = 4000;
+const LOCK_STALE_MS = 60_000;
+const PROBLEMS_NAMED = 5;
+
+const KNOWLEDGE_OFF = "knowledge is off (WIZARDINGCODE_MODULES)";
+
+/** Whether the modules setting turned knowledge off (`moduleEnabled`, the engine's one rule). */
+const knowledgeOff = (env: Record<string, string | undefined>, dataDir: string) =>
+  !moduleEnabled(KNOWLEDGE_MODULE, env, dataDir);
+
+/**
+ * The characters the pinned lines take at session start, in the block they are shown in
+ * (the wrapper and the intro); 0 with no pin. The order does not change the length.
+ */
+function pinnedChars(pins: Hit[]): number {
+  if (pins.length === 0) return 0;
+  return pinnedBlock(pins.map(pinnedLine)).length;
+}
+
+/**
+ * The fixed scopes' names with no database to map projects by: whatever is at each, a
+ * link or a file included, as the module finds them (`scanRepos`).
+ */
+function foldersByHand(dataDir: string): FoundRepo[] {
+  const found: FoundRepo[] = [];
+  for (const scope of ["workspace", "shared"] as const) {
+    const relative = `knowledge/${scope}`;
+    const path = repoPath(dataDir, relative);
+    if (kindAt(path) !== "absent") found.push({ ref: { scope }, path, relative });
+  }
+  return found;
+}
+
+/**
+ * Every name under `knowledge/projects/`, mapped or not, a link or a file included. Read
+ * with the module's own `namesIn` and `kindAt`: a folder that cannot be listed, or a name
+ * that cannot be looked at, is a refusal, which becomes this check's warning with or
+ * without a database, never a shorter list.
+ */
+function projectFolders(dataDir: string): string[] {
+  return namesIn(repoPath(dataDir, "knowledge/projects"))
+    .filter((name) => !name.startsWith("."))
+    .sort()
+    .map((name) => `knowledge/projects/${name}`)
+    .filter((relative) => kindAt(repoPath(dataDir, relative)) !== "absent");
+}
+
+/**
+ * The knowledge repositories, read by hand: the folders, the manifests, `.git` and the
+ * files. The database, read-only, answers four things only: the module's schema version,
+ * the files the index left out, the project aliases that map manifests, and the author
+ * setting. With git present, one `git status` per repository, taking no lock.
+ */
+function knowledgeRepositories(context: DoctorContext, db: Db | null): Check {
+  const name = "knowledge";
+  const env = context.env ?? process.env;
+  const off = knowledgeOff(env, context.dataDir);
+  // The module's own rule, before anything under these folders is listed or read.
+  refuseLinkedRoots(context.dataDir);
+  if (kindAt(knowledgeRoot(context.dataDir)) === "absent") {
+    // Said even with nothing written yet: the person may be about to write some.
+    return off
+      ? { name, status: "warn", detail: KNOWLEDGE_OFF }
+      : { name, status: "skip", detail: "no knowledge repository yet" };
+  }
+  const store: KnowledgeStore = {
+    // Read-only, and only where a database exists: `scanRepos` and nothing that writes.
+    db: db as Db,
+    dataDir: context.dataDir,
+    env,
+    now: () => context.now,
+    settings: loadSettings(env, context.dataDir),
+    gitTimeoutMs: GIT_TIMEOUT_MS,
+    renew: null,
+    report: null,
+  };
+  const warnings: string[] = off ? [KNOWLEDGE_OFF] : [];
+  const notes: string[] = [];
+
+  let git = context.which("git") !== null;
+  if (!git) {
+    warnings.push("git is not installed: knowledge cannot be written or checked for hand edits");
+  } else {
+    let version: number[] | null = null;
+    try {
+      version =
+        context.gitVersion !== undefined
+          ? context.gitVersion()
+          : parseGitVersion(
+              runGit(store, null, ["--version"], {
+                operation: "doctor",
+                readOnly: true,
+                quiet: true,
+              }).stdout,
+            );
+    } catch (error) {
+      if (!(error instanceof KnowledgeError)) throw error;
+    }
+    const wanted = GIT_MIN_VERSION.join(".").replace(/\.0$/, "");
+    if (version === null) {
+      git = false;
+      warnings.push(`git did not answer: knowledge needs git ${wanted} or newer`);
+    } else if (gitTooOld(version)) {
+      git = false;
+      warnings.push(`git ${version.join(".")} is older than ${wanted}, which knowledge needs`);
+    }
+  }
+
+  // With no database, or one whose knowledge tables do not exist yet, no project can be
+  // mapped: every folder is read as it is.
+  const unmapped = (): FoundRepo[] => [
+    ...foldersByHand(context.dataDir),
+    ...projectFolders(context.dataDir).map((relative) => ({
+      ref: { scope: "project", projectId: 0 } as const,
+      path: repoPath(context.dataDir, relative),
+      relative,
+    })),
+  ];
+  let found: FoundRepo[];
+  if (db === null) {
+    found = unmapped();
+    notes.push("no database: the checks that read it were skipped");
+  } else {
+    let scan: ReturnType<typeof scanRepos>;
+    try {
+      scan = scanRepos(store);
+    } catch (error) {
+      // Only tables that do not exist yet are a reason to read the folders unmapped; any
+      // other failure is a fault, and reaches the person as this check's warning.
+      if (!String((error as Error).message).includes("no such table: knowledge_")) throw error;
+      scan = { found: unmapped(), orphans: [], ambiguous: [], claimed: [] };
+    }
+    found = scan.found;
+    for (const entry of scan.ambiguous) {
+      warnings.push(
+        `ambiguous: project ${entry.projectId} matches ${entry.taken} and ${entry.others.join(", ")}`,
+      );
+    }
+    for (const claim of scan.claimed) {
+      warnings.push(
+        `ambiguous: ${claim.path} is claimed by projects ${claim.byProjectId} and ${claim.wantedBy}`,
+      );
+    }
+    if (moduleSchemaState(db, KNOWLEDGE_MODULE, KNOWLEDGE_SCHEMA_VERSION) === "too-new") {
+      warnings.push("the knowledge tables are newer than this wizardingcode-mem; upgrade it");
+    } else {
+      try {
+        const over = db
+          .query<{ path: string; over_cap: number }, []>(
+            "SELECT path, over_cap FROM knowledge_repos WHERE over_cap > 0 ORDER BY path",
+          )
+          .all();
+        for (const row of over) {
+          warnings.push(
+            `${row.path}: ${plural(row.over_cap, "file")} over the cap of ${FOLDER_CAP}`,
+          );
+        }
+      } catch (error) {
+        // The tables are created on the next write; there is nothing recorded to read.
+        if (!String((error as Error).message).includes("no such table: knowledge_")) throw error;
+      }
+      try {
+        // A gap in the index writer: the hooks and the tools search that table alone.
+        const { rows, active } = ftsCount(db);
+        if (rows !== active) {
+          warnings.push(`FTS rows ${rows}, active entries ${active}; run knowledge rebuild`);
+        }
+      } catch (error) {
+        if (!String((error as Error).message).includes("no such table: knowledge_")) throw error;
+      }
+    }
+    if (personAuthor(store).source === "default") {
+      warnings.push("no author configured: set WIZARDINGCODE_MEM_AUTHOR or a git user.name");
+    }
+  }
+
+  // Every name where a repository goes, mapped to a project or not. The module's own
+  // rule comes first, before anything under a name is looked at: a link or a file put
+  // there, or a folder the store did not make, is said by name, and neither read nor
+  // handed to git. Then a folder with no repository in it is said.
+  const folders = new Set([
+    ...found.map((repo) => repo.relative),
+    ...projectFolders(context.dataDir),
+  ]);
+  const unread = new Set<string>();
+  for (const relative of folders) {
+    const path = repoPath(context.dataDir, relative);
+    try {
+      refuseForeign(path);
+      if (kindAt(join(path, ".git")) === "folder") continue;
+      warnings.push(`${relative} is not a git repository`);
+    } catch (error) {
+      if (!(error instanceof KnowledgeError)) throw error;
+      warnings.push(`${relative}: ${error.message}`);
+    }
+    unread.add(relative);
+  }
+
+  let entries = 0;
+  let drafts = 0;
+  let open = 0;
+  // The repositories read: one the store refuses has its warning above, and is not counted.
+  let repositories = 0;
+  const problems: string[] = [];
+  // The workspace's and the shared repository's pins, which every project is shown.
+  const pins: Hit[] = [];
+  for (const repo of found) {
+    if (unread.has(repo.relative)) continue;
+    repositories++;
+    try {
+      // Never through a link, and never more than the cap: as the module reads every file.
+      const bytes = readRegularFile(join(repo.path, MANIFEST_FILE));
+      if (bytes === null) warnings.push(`${repo.relative}: ${MANIFEST_FILE} is missing`);
+      else {
+        const manifest = parseManifest(new TextDecoder().decode(bytes));
+        if ("problem" in manifest) warnings.push(`${repo.relative}: ${manifest.problem}`);
+      }
+    } catch (error) {
+      if (!(error instanceof KnowledgeError)) throw error;
+      warnings.push(`${repo.relative}: ${error.message}`);
+    }
+    try {
+      const age = context.now - statSync(join(repo.path, ".git", "index.lock")).mtimeMs;
+      if (age > LOCK_STALE_MS) {
+        warnings.push(
+          `${repo.relative}: .git/index.lock is ${Math.round(age / 1000)} s old; a git process died there, remove the file`,
+        );
+      }
+    } catch {
+      // No lock: nothing is writing.
+    }
+    let files: ReturnType<typeof readRepoFiles>;
+    try {
+      for (const folder of [ENTRIES_DIR, OPEN_DIR, DECIDED_DIR]) {
+        // None when the folder is not there: git does not track an empty one, so a fresh
+        // clone may not have it.
+        const count = namesIn(join(repo.path, ...folder.split("/"))).filter(
+          (file) => !file.startsWith("."),
+        ).length;
+        if (count > FOLDER_WARN) {
+          warnings.push(
+            `${repo.relative}: ${folder}/ holds ${count} files; the index keeps ${FOLDER_CAP}`,
+          );
+        }
+      }
+      files = readRepoFiles(store, { ...repo, id: 0 });
+    } catch (error) {
+      // A folder of entries or proposals that cannot be read is said by name, and never
+      // counted as an empty one. The other repositories are still checked.
+      if (!(error instanceof KnowledgeError)) throw error;
+      warnings.push(`${repo.relative}: ${error.message}`);
+      continue;
+    }
+    entries += files.entries.length;
+    drafts += files.entries.filter(({ entry }) => entry.status === "draft").length;
+    open += files.proposals.filter(({ path }) => path.startsWith(`${OPEN_DIR}/`)).length;
+    problems.push(
+      ...files.entries.filter(({ entry }) => entry.problem !== null).map(({ entry }) => entry.slug),
+    );
+    const { scope } = repo.ref;
+    if (scope !== "project") {
+      for (const { entry } of files.entries) {
+        if (!entry.pinned || entry.status !== "active" || entry.problem !== null) continue;
+        pins.push({ ...entry, repoId: 0, scope, hash: "", bm25: 0 });
+      }
+    }
+
+    if (!git) continue;
+    try {
+      // A repository whose own configuration could run a program is never handed to git.
+      checkRepoConfig(repo.path);
+      const changed = statusOf(store, { ...repo, id: 0 }, [
+        ENTRIES_DIR,
+        "proposals",
+        TAXONOMY_FILE,
+        MANIFEST_FILE,
+      ]).length;
+      if (changed > 0) {
+        warnings.push(
+          `${repo.relative}: ${changed} changed outside the engine; run wizardingcode-mem knowledge adopt`,
+        );
+      }
+    } catch (error) {
+      if (!(error instanceof KnowledgeError)) throw error;
+      warnings.push(`${repo.relative}: ${error.message}`);
+    }
+  }
+  const pinned = pinnedChars(pins);
+  if (pinned > SESSION_START_SHARE) {
+    warnings.push(
+      `pinned entries exceed the session-start share (${pinned} of ${SESSION_START_SHARE} characters); a project's own pins add to them in that project`,
+    );
+  }
+  if (problems.length > 0) {
+    const more = problems.length - PROBLEMS_NAMED;
+    warnings.push(
+      `${plural(problems.length, "entry has a problem", "entries have problems")}: ${problems
+        .slice(0, PROBLEMS_NAMED)
+        .join(", ")}${more > 0 ? ` and ${more} more` : ""}`,
+    );
+  }
+
+  const counts = [
+    `${plural(repositories, "repository", "repositories")}, ${plural(entries, "entry", "entries")}, ${plural(drafts, "draft")}, ${plural(open, "open proposal")}`,
+    ...notes,
+  ].join("; ");
+  return warnings.length === 0
+    ? { name, status: "ok", detail: counts }
+    : { name, status: "warn", detail: `${warnings.join("; ")} (${counts})` };
+}
+
+/** Contains its own errors: an unreadable folder or manifest is a warning, never a thrown error. */
+function knowledge(context: DoctorContext, db: Db | null): Check {
+  try {
+    return knowledgeRepositories(context, db);
+  } catch (error) {
+    return {
+      name: "knowledge",
+      status: "warn",
+      detail: `could not be checked: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
+// --- Sharing --------------------------------------------------------------------------
+
+/** How many projects stand at a level for the team, as the policy reads them now. */
+function countAtLevel(policy: SharingPolicy, level: Level): number {
+  return [...policy.levels.values()].filter(
+    (row) => row.destination === TEAM_DESTINATION && row.level === level,
+  ).length;
+}
+
+/**
+ * What may leave this machine, or every problem the policy's loader raised: an emptied
+ * list, an ignored environment value, a level that no longer holds, an inert area id, a hand
+ * edit nobody recorded, a level this version does not know, a newer sharing schema, a load
+ * that failed. It only looks: nothing is reconciled here. `loadPolicy` never throws: a store
+ * without the sharing tables reads every default, and a failure reads as a closed policy
+ * with its problem. Sharing chosen with no team server configured is no warning: there is
+ * nothing to fix.
+ */
+function sharing(context: DoctorContext, db: Db | null): Check {
+  const name = "sharing";
+  if (db === null) return { name, status: "skip", detail: "no database yet" };
+  const policy = loadPolicy(db, context.dataDir, context.env ?? process.env);
+  if (policy.problems.length > 0) {
+    return { name, status: "warn", detail: policy.problems.join(" · ") };
+  }
+  if (isDefault(policy)) {
+    return { name, status: "ok", detail: "nothing leaves this machine (every default)" };
+  }
+  const detail = [
+    `roots: ${shareListText([...policy.roots].sort())}`,
+    plural(policy.areas.size, "allowed area"),
+    `knowledge: ${plural(countAtLevel(policy, "knowledge"), "project")}`,
+    `knowledge and memories: ${plural(countAtLevel(policy, "all"), "project")}`,
+    `epoch ${policy.epoch}`,
+  ].join(" · ");
+  return { name, status: "ok", detail };
+}
+
 /** Looks, and changes nothing: no directory, database or setting is created or altered. */
 export function runChecks(context: DoctorContext): Check[] {
   const { check: databaseCheck, db } = database(context);
@@ -543,6 +958,8 @@ export function runChecks(context: DoctorContext): Check[] {
       readingDb("TypeSafe", db, () => typeSafe(context, db)),
       readingDb("semantic search", db, () => semanticSearch(context, db)),
       readingDb("backups", db, () => backups(context, db)),
+      knowledge(context, db),
+      sharing(context, db),
       // Claude Code is the host this started on: its absence is a warning, not a skip.
       hooksHost("Claude Code", CLAUDE_CODE, context.settingsPath, null, context),
       hooksHost("Codex", CODEX, context.codexHooksPath, "codex", context),

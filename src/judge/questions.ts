@@ -2,7 +2,7 @@ import type { MemoryKind } from "../core/types.ts";
 import { MEMORY_KINDS } from "../core/types.ts";
 import type { Answer, Question } from "./client.ts";
 import type {
-  ConsolidateInput,
+  ConsolidateTexts,
   ConsolidateVerdict,
   DistillInput,
   DistillVerdict,
@@ -216,24 +216,43 @@ export function distillVerdict(
   };
 }
 
-export function consolidateState(input: ConsolidateInput) {
+/** How the consolidation questions name the draft and what it may replace. */
+export interface ConsolidateWording {
+  noun: "memory" | "entry";
+  current: "current approach" | "current entry";
+}
+
+export const MEMORY_WORDING: ConsolidateWording = { noun: "memory", current: "current approach" };
+export const ENTRY_WORDING: ConsolidateWording = { noun: "entry", current: "current entry" };
+
+/** Memory's state carries the files; an entry has none, so knowledge's state has no such key. */
+export function consolidateState(input: ConsolidateTexts, wording = MEMORY_WORDING) {
+  const withFiles = wording.noun === "memory";
   return {
-    new_memory: { title: input.draft.title, body: input.draft.body, files: input.draft.files },
+    [`new_${wording.noun}`]: {
+      title: input.draft.title,
+      body: input.draft.body,
+      ...(withFiles ? { files: input.draft.files } : {}),
+    },
     existing: input.neighbours.map((neighbour, i) => ({
       index: i,
       title: neighbour.title,
       body: neighbour.body,
-      files: neighbour.files,
+      ...(withFiles ? { files: neighbour.files } : {}),
     })),
   };
 }
 
-export function consolidateQuestions(input: ConsolidateInput): Record<string, Question> {
+export function consolidateQuestions(
+  input: ConsolidateTexts,
+  wording = MEMORY_WORDING,
+): Record<string, Question> {
+  const draft = `new_${wording.noun}`;
   const questions: Record<string, Question> = {};
   input.neighbours.forEach((_, i) => {
     questions[`rel_${i}`] = {
       type: "score",
-      instructions: `How does the information in \`new_memory\` relate to \`existing[${i}]\`?`,
+      instructions: `How does the information in \`${draft}\` relate to \`existing[${i}]\`?`,
       criteria: [
         "They are about different things",
         "Same topic, but each carries information the other lacks",
@@ -242,9 +261,9 @@ export function consolidateQuestions(input: ConsolidateInput): Record<string, Qu
     };
     questions[`contra_${i}`] = {
       type: "noul",
-      instructions: `Does \`new_memory\` state something that makes \`existing[${i}]\` no longer true or no longer the current approach?`,
+      instructions: `Does \`${draft}\` state something that makes \`existing[${i}]\` no longer true or no longer the ${wording.current}?`,
       criteria: {
-        true: "The new memory reverses, replaces or corrects what the existing one says.",
+        true: `The new ${wording.noun} reverses, replaces or corrects what the existing one says.`,
         false: "Both can be true at the same time.",
       },
     };
@@ -253,7 +272,7 @@ export function consolidateQuestions(input: ConsolidateInput): Record<string, Qu
 }
 
 export function consolidateVerdict(
-  input: ConsolidateInput,
+  input: ConsolidateTexts,
   answers: Record<string, Answer>,
 ): ConsolidateVerdict {
   return {

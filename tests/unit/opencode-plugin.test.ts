@@ -17,12 +17,15 @@ let dir: string;
 let calls: Call[];
 let answers: Record<string, string>;
 let messages: unknown[];
+/** The runner's third argument, the timeout, kept apart so that the equalities on `calls` hold. */
+let timeouts: { name: string; timeoutMs: number | undefined }[];
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "wizardingcode-mem-opencode-plugin-"));
   calls = [];
   answers = {};
   messages = [];
+  timeouts = [];
 });
 afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
@@ -57,8 +60,9 @@ async function load(): Promise<Hooks> {
   const mod = (await import(path)) as {
     createPlugin: (deps: unknown) => (input: unknown) => Promise<Record<string, unknown>>;
   };
-  const run = async (args: string[], stdin: string) => {
+  const run = async (args: string[], stdin: string, timeoutMs?: number) => {
     calls.push({ args, stdin: JSON.parse(stdin) });
+    timeouts.push({ name: (args[1] === "hook" ? args[3] : args[2]) ?? "", timeoutMs });
     // [bin, "hook", "opencode", <event>] or [bin, "tool", <name>, ...]
     return answers[args[1] === "hook" ? (args[3] ?? "") : (args[2] ?? "")] ?? "";
   };
@@ -184,6 +188,9 @@ describe("the OpenCode plugin", () => {
     const hooks = await load();
     expect(Object.keys(hooks.tool).sort()).toEqual([
       "history_search",
+      "knowledge_get",
+      "knowledge_propose",
+      "knowledge_search",
       "memory_get",
       "memory_save",
       "memory_search",
@@ -219,6 +226,63 @@ describe("the OpenCode plugin", () => {
       args: [BIN, "tool", "history_search", "--project", "/Users/dev/project"],
       stdin: { query: "zebra", limit: 3 },
     });
+    const propose = hooks.tool.knowledge_propose;
+    if (propose === undefined) throw new Error("knowledge_propose missing");
+    const proposal = {
+      repo: "workspace",
+      title: "Pricing for agencies",
+      kind: "strategy",
+      area: "sales",
+      body: "Agencies pay per project.",
+    };
+    await propose.definition.execute(proposal, { sessionID: SESSION });
+    expect(calls.at(-1)).toEqual({
+      args: [BIN, "tool", "knowledge_propose", "--project", "/Users/dev/project"],
+      stdin: proposal,
+    });
+    // A plain string here: the bridge checks the id against the enum and the taxonomy.
+    const area = propose.definition.args.area as z.ZodType;
+    expect(area.safeParse("any-area-at-all").success).toBe(true);
+    expect(area.safeParse(3).success).toBe(false);
+    expect(Object.keys(propose.definition.args).sort()).toEqual([
+      "area",
+      "base_version",
+      "body",
+      "context",
+      "kind",
+      "repo",
+      "slug",
+      "subject",
+      "title",
+    ]);
+  });
+
+  test("knowledge_propose gets fifteen seconds, every other tool five", async () => {
+    const hooks = await load();
+    const tool = (name: string) => {
+      const found = hooks.tool[name];
+      if (found === undefined) throw new Error(`${name} missing`);
+      return found.definition;
+    };
+    await tool("knowledge_propose").execute(
+      { repo: "workspace", title: "T", kind: "knowledge", area: "code", body: "B" },
+      { sessionID: SESSION },
+    );
+    await tool("memory_search").execute({ query: "limit" }, { sessionID: SESSION });
+    await tool("knowledge_search").execute({ query: "pricing" }, { sessionID: SESSION });
+    await hooks["chat.message"](
+      { sessionID: SESSION },
+      { message: { id: "msg_1", role: "user" }, parts: [{ type: "text", text: "hello" }] },
+    );
+    expect(timeouts).toEqual([
+      { name: "knowledge_propose", timeoutMs: 15000 },
+      { name: "memory_search", timeoutMs: 5000 },
+      { name: "knowledge_search", timeoutMs: 5000 },
+      { name: "prompt", timeoutMs: undefined },
+    ]);
+    const source = pluginSource(BIN);
+    expect(source).toContain("const TIMEOUT_MS = 5000;");
+    expect(source).toContain("const PROPOSE_TIMEOUT_MS = 15000;");
   });
 });
 
@@ -229,5 +293,6 @@ describe("the generated OpenCode package", () => {
     ).text();
     expect(generated).toBe(pluginSource("npm"));
     expect(generated).toContain("project_links: toolApi({");
+    expect(generated).toContain("knowledge_propose: toolApi({");
   });
 });

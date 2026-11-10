@@ -35,5 +35,6 @@ export function doctorContext(dataDir: string, now = Date.now()): DoctorContext 
     legacyVariables: Object.keys(process.env)
       .filter((name) => name.startsWith("SHIBAOX_") && process.env[name] !== "")
       .sort(),
+    env: process.env,
   };
 }

@@ -3,12 +3,14 @@
 // with the search field first, one card per group (28px header: chevron, stage pill, count),
 // a 28px column header inside each card, 32px rows (letter tile, bold name, muted place). The
 // selected project opens in the app's 320px dock: its suggestions with their reasons and
-// Link / Reject, its confirmed links with Unlink, and a way to link one by hand.
+// Link / Reject, its confirmed links with Unlink, a way to link one by hand, and what it
+// shares with the team's server.
 import { computed, reactive, ref } from "vue";
-import { api, type LinkKind, type Project } from "../api";
+import { api, LEVEL_LABELS, LEVELS, type Level, type LinkKind, type Project, widens } from "../api";
 import { compact, day, hue } from "../format";
 import { projectGroups, projectLinks, projectPlace, signalParts, visibleFrom } from "../links";
-import { loadLinks, openCross, reload, state } from "../viewer";
+import { loadLinks, loadOverview, openCross, reload, state } from "../viewer";
+import Confirm from "./Confirm.vue";
 import Dock from "./Dock.vue";
 import DockProps from "./DockProps.vue";
 import Empty from "./Empty.vue";
@@ -110,6 +112,51 @@ async function linkByHand() {
     linking.value = false;
   }
 }
+// What the project shares: a wider level is previewed and confirmed; a narrower one is set.
+const sharingBusy = ref(false);
+const widening = ref<{ id: number; name: string; level: Level; description: string } | null>(null);
+const sharingLocked = computed(() => !selected.value || !selected.value.remote || selected.value.disabled);
+const LEVEL_ITEMS = LEVELS.map((level) => ({ label: LEVEL_LABELS[level], value: level }));
+/** Whatever failed, the person reads one plain sentence: no message, no path. */
+const notChanged = () => toast.add({ title: "Not changed", description: "The level could not be saved.", color: "error" });
+async function chooseLevel(level: Level) {
+  const p = selected.value;
+  if (!p || level === p.sharing) return;
+  if (!widens(p.sharing, level)) {
+    await setLevel(p.id, level, false);
+    return;
+  }
+  sharingBusy.value = true;
+  try {
+    const { report } = await api.sharingPreview({ level: { projectId: p.id, level } });
+    const own = report.perProject.find((row) => row.id === p.id) ?? report.counts;
+    const count = (n: number, one: string, many: string) => `${n.toLocaleString("en-GB")} ${n === 1 ? one : many}`;
+    widening.value = {
+      id: p.id,
+      name: p.name,
+      level,
+      description: `${count(own.entries, "knowledge entry", "knowledge entries")} and ${count(own.memories, "memory", "memories")} of ${p.name} would leave for your team's server once one is configured. Nothing is sent now.`,
+    };
+  } catch {
+    notChanged();
+  } finally {
+    sharingBusy.value = false;
+  }
+}
+async function setLevel(id: number, level: Level, confirm: boolean) {
+  sharingBusy.value = true;
+  try {
+    const changed = await api.setProjectSharing(id, level, confirm);
+    await loadOverview();
+    toast.add({ title: "Sharing changed", description: `${LEVEL_LABELS[changed.old]} → ${LEVEL_LABELS[changed.level]}`, color: "success" });
+  } catch {
+    notChanged();
+  } finally {
+    sharingBusy.value = false;
+    widening.value = null;
+  }
+}
+
 const RELATION_TONE = {
   "Same product": { bg: "var(--violet-soft)", fg: "var(--violet-text)" },
   Uses: { bg: "var(--blue-soft)", fg: "var(--blue-text)" },
@@ -172,7 +219,8 @@ const RELATION_TONE = {
                     <span v-if="linksCell(p).review" class="wz-status square flex-none" :style="{ background: 'var(--warn-soft)', color: 'var(--warn)' }">{{ linksCell(p).review }} to review</span>
                     <span v-if="linksCell(p).text" class="wz-meta flex-initial" :class="{ 'text-(--ink)!': !linksCell(p).muted }">{{ linksCell(p).text }}</span>
                     <span v-if="linksCell(p).more" class="wz-mono flex-none text-(--ink-muted)">+{{ linksCell(p).more }}</span>
-                    <span v-if="!linksCell(p).review && !linksCell(p).text" class="wz-meta">—</span>
+                    <span v-if="!linksCell(p).review && !linksCell(p).text && p.sharing === 'local'" class="wz-meta">—</span>
+                    <span v-if="p.sharing !== 'local'" class="wz-status flex-none" :style="{ background: 'var(--blue-soft)', color: 'var(--blue-text)' }">{{ LEVEL_LABELS[p.sharing] }}</span>
                   </span>
                   <template v-if="!docked">
                     <span role="cell" class="wz-mono text-(--ink-muted)">{{ compact(p.active) }}</span>
@@ -240,6 +288,23 @@ const RELATION_TONE = {
           <p class="m-0 pt-1 text-xs leading-4 text-(--ink-muted)">Same product: each reads the other. Uses: this one reads the library, never the reverse.</p>
         </section>
 
+        <section aria-label="Sharing" class="flex flex-col gap-2 border-t border-(--line) pt-3">
+          <div class="flex h-5 items-center gap-2"><h3 class="m-0 text-sm font-semibold">Sharing</h3><span class="wz-meta">{{ LEVEL_LABELS[selected.sharing] }}</span></div>
+          <URadioGroup
+            :model-value="selected.sharing"
+            :items="LEVEL_ITEMS"
+            value-key="value"
+            size="sm"
+            legend="What this project shares"
+            :disabled="sharingLocked || sharingBusy"
+            :ui="{ legend: 'sr-only', fieldset: 'gap-0', item: 'h-8 items-center' }"
+            @update:model-value="(level) => chooseLevel(level as Level)"
+          />
+          <p v-if="!selected.remote" class="m-0 text-xs leading-4 text-(--ink)">This project has no git remote. A team can only match projects by their remote.</p>
+          <p v-if="selected.disabled" class="m-0 text-xs leading-4 text-(--ink)">Memory is off for this project.</p>
+          <p class="m-0 text-xs leading-4 text-(--ink-muted)">Memories have no area: Knowledge and memories sends every active memory of this project that is not stale, branch-bound, imported or one of your rules.</p>
+        </section>
+
         <section aria-label="Link by hand" class="flex flex-col gap-2 border-t border-(--line) pt-3">
           <h3 class="m-0 h-5 text-sm font-semibold">Link by hand</h3>
           <USelectMenu v-model="target" :items="targets" value-key="value" placeholder="Choose a project" size="md" class="w-full" :search-input="{ placeholder: 'Find a project' }" />
@@ -254,5 +319,16 @@ const RELATION_TONE = {
         </section>
       </Dock>
     </div>
+    <Confirm
+      :open="widening !== null"
+      tone="warn"
+      icon="i-lucide-share-2"
+      :title="`Share more of ${widening?.name ?? ''}?`"
+      :description="widening?.description ?? ''"
+      action="Share"
+      :busy="sharingBusy"
+      @update:open="(o) => { if (!o) widening = null; }"
+      @confirm="widening && setLevel(widening.id, widening.level, true)"
+    />
   </div>
 </template>

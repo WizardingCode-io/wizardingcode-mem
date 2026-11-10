@@ -1,0 +1,29 @@
+# risk findings for 2026-11-09-001-knowledge-for-the-agent-mcp-tools-search
+reviewer: review-risk
+read: spec, plan, 14 files
+
+## Findings
+- F-1 · advisory · docs/adr/0024-knowledge-module.md:377 · The ADR's "Known limits of part 2" says `knowledge_propose` does not refuse a write when the `knowledge/` folder is gone and the index still holds repositories. The code does refuse it (`requireKnowledgeRoot(store, "written", "the agent")` at src/modules/knowledge/tools.ts:331, added in cc85251). An operator reading the record before a rollback or an incident would expect a second `<name>-2` folder and dropped rows, and that no longer happens. Nothing is lost, but this line of the record is false and should be corrected.
+- F-2 · advisory · docs/adr/0024-knowledge-module.md:197 · Part 1's known limit still says a failed module migration stops memory "over a module no hook reads in this part". This item adds migration 7 (an FTS5 virtual table plus `ALTER TABLE`s, src/modules/knowledge/migrations/0007_knowledge_agent.sql), and every opener applies it, hooks included. It also puts knowledge on the hook path and on by default. A failure of migration 7 on first open after upgrade stops memory for every project until the cause is fixed. The pre-upgrade backup in `openDb` (src/store/db.ts:142-143) is the way back, so this is not invisible or irreversible. The limit's own justification is now stale, and the ADR should restate it for part 2.
+- F-3 · advisory · .crew/work/2026-11-09-001-knowledge-for-the-agent-mcp-tools-search/spec.md:379 · Rollback depends on "Parts 1 to 3 ship in one release". The same assumption carries "migrations 6 and 7 apply together on an empty index" (spec.md:131) and the claim that no released store needs `knowledge rebuild`. Neither the plan nor the code enforces it, and package.json is still 0.6.0. The plan names no release step, owner or order, and no check stops a release cut from this branch before part 3. In that release, agent proposals would land with only the CLI (`knowledge accept/reject`) to decide them.
+- F-4 · advisory · src/cli/commands/distill.ts:55 · `refreshStale` runs in every drain whatever `WIZARDINGCODE_MODULES` says (ADR 0024:315 states this). With knowledge turned off, the drain still spawns git per known repository. It also rebuilds up to three repositories, and it unattendedly forgets the index rows of any repository whose folder is absent (src/modules/knowledge/index-store.ts:805-809). Before this item, forgetting rows was a person's `knowledge rebuild`. Part 1 says a non-git project's repository whose rows are lost comes back only as an orphan, so an unattended forget can detach it. The forget is logged nowhere; only the absent-root case is logged (index-store.ts:842). A log line per forgotten repository would make it visible in the first hour.
+- F-5 · advisory · src/modules/knowledge/tools.ts:365 · A wrong "same" from TypeSafe refuses an agent's proposal. The draft is not written anywhere, and the only trace is an error-log line under `knowledge.propose`. The person never sees the dropped draft, while a wrongly flagged contradiction does reach them. The agent does get the refusal naming the entry, so the effect is bounded. The tool's TypeSafe failures also open the breaker shared with distillation (stated in ADR 0024:358, logged). No `status` line shows `typesafe.tools.*`, so the cost and failure rate of tool calls is not visible in the first hour without reading meta.
+
+## Outside the change
+- src/store/compact.ts:85 · `compact` is the only path that prunes `knowledge_shown` by orphaned session. Other session deletes in the repository (project removal, a restore) leave rows that a reused highest session id could match, hiding pins from a new session until the next `compact`. This is pre-existing debt in how sessions are deleted, which this item's table inherits.
+- src/modules/knowledge/index-store.ts:805 · Part 1's rule that a non-git project whose index rows are lost reattaches only as an orphan predates this item (ADR 0024:183). F-4 is what this item adds to it.
+
+## Not answerable
+- Rubric Q6 (hands at deploy): what the release of parts 1 to 3 requires, who cuts it and in which order · neither the spec nor the plan has a release section. The only manual step named is `knowledge rebuild` once on a development store that ran migration 6 alone, with no owner.
+- Rubric Q2, the 0.6.0 rollback in practice · nothing in the diff or the logs shows a 0.6.0 binary run against a store at knowledge module version 7. "Ignores the tables and logs an unknown module id once per hook process" is asserted in spec.md:379 and ADR 0024:380, not measured.
+
+Sibling item: no finding falls in 2026-11-09-002's paths (src/sharing/, share.ts, src/ui/, ui/src/, backup.ts, ADR 0025).
+
+Files referenced (absolute):
+- /Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/docs/adr/0024-knowledge-module.md
+- /Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/.crew/work/2026-11-09-001-knowledge-for-the-agent-mcp-tools-search/spec.md
+- /Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/src/modules/knowledge/tools.ts
+- /Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/src/modules/knowledge/index-store.ts
+- /Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/src/cli/commands/distill.ts
+- /Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/src/store/compact.ts
+- /Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/src/store/db.ts

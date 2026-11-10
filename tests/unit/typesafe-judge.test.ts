@@ -397,6 +397,9 @@ describe("withFallback", () => {
     consolidate: async () => {
       throw error;
     },
+    relate: async () => {
+      throw error;
+    },
   });
   const working: Judge = {
     ...heuristicJudge,

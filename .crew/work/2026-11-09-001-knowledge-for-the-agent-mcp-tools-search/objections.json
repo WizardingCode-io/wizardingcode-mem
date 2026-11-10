@@ -1,0 +1,18 @@
+{
+  "objections": [
+    {
+      "id": "O-1",
+      "raisedBy": "gap-round",
+      "severity": "advisory",
+      "text": "The agent id on a proposal (proposed_by) is not authenticated: it comes from the MCP client's name in the handshake or a local --agent flag, which any local configuration can set; it tells an agent from a person, which is what part 1's guarantee needs, but it is not proof of which host proposed. The ADR states the boundary.",
+      "raisedAt": "2026-11-09T00:44:49.223Z"
+    },
+    {
+      "id": "O-2",
+      "raisedBy": "gap-round",
+      "severity": "advisory",
+      "text": "The TypeSafe breaker is shared between the tool path (a propose's judge call, 3 s, no retries) and the background distillation: a run of failures on one side opens the breaker for the other until it half-opens. Acceptable for one key and one service; said in the ADR.",
+      "raisedAt": "2026-11-09T00:44:51.595Z"
+    }
+  ]
+}

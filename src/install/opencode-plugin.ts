@@ -27,12 +27,14 @@ const BINARY = ${JSON.stringify(binary)};`;
   const defaults = npm ? "{ prepare: ensureBinary, standDown: directInstallPresent }" : "{}";
   return `${header}
 const TIMEOUT_MS = 5000;
+// A proposal's git calls and its judge take longer than a lookup.
+const PROPOSE_TIMEOUT_MS = 15000;
 
 /** Runs the binary with JSON on stdin and returns its stdout; on any failure, nothing. */
-async function spawn(args, stdin) {
+async function spawn(args, stdin, timeoutMs = TIMEOUT_MS) {
   try {
     const proc = Bun.spawn(args, { stdin: new TextEncoder().encode(stdin), stdout: "pipe", stderr: "ignore" });
-    const timer = setTimeout(() => proc.kill(), TIMEOUT_MS);
+    const timer = setTimeout(() => proc.kill(), timeoutMs);
     try {
       const [out] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
       return proc.exitCode === 0 ? out : "";
@@ -82,7 +84,12 @@ ${factoryExport}function createPlugin(deps) {
 
     const toolApi = deps.tool ?? (await import("@opencode-ai/plugin").then((m) => m.tool).catch(() => null));
     const call = (name, args, ctx) =>
-      run([BINARY, "tool", name, "--project", state(ctx?.sessionID).cwd], JSON.stringify(args ?? {}));
+      run(
+        [BINARY, "tool", name, "--project", state(ctx?.sessionID).cwd],
+        JSON.stringify(args ?? {}),
+        name === "knowledge_propose" ? PROPOSE_TIMEOUT_MS : TIMEOUT_MS,
+      );
+    const kinds = ["knowledge", "strategy", "persona", "pattern"];
     const tools = toolApi === null ? undefined : {
       memory_search: toolApi({
         description: "Search notes saved from earlier sessions in this project and its linked projects, by words and, when the optional model is installed, by meaning; returns one heading per note.",
@@ -126,6 +133,38 @@ ${factoryExport}function createPlugin(deps) {
           id: toolApi.schema.number().int().optional(),
         },
         execute: (args, ctx) => call("project_links", args, ctx),
+      }),
+      knowledge_search: toolApi({
+        description: "Search the team's curated knowledge (strategies, personas, patterns, facts kept on purpose) by words; one line per entry with its scope/slug, kind, area and version. Not for what happened in earlier sessions: that is memory_search.",
+        args: {
+          query: toolApi.schema.string(),
+          repo: toolApi.schema.enum(["all", "workspace", "project", "shared"]).optional(),
+          area: toolApi.schema.string().optional(),
+          kind: toolApi.schema.enum(kinds).optional(),
+          limit: toolApi.schema.number().int().optional(),
+        },
+        execute: (args, ctx) => call("knowledge_search", args, ctx),
+      }),
+      knowledge_get: toolApi({
+        description: "Read knowledge entries whole, by the scope/slug references knowledge_search returned.",
+        args: { refs: toolApi.schema.array(toolApi.schema.string()) },
+        execute: (args, ctx) => call("knowledge_get", args, ctx),
+      }),
+      knowledge_propose: toolApi({
+        description: "Propose a new knowledge entry, or a change to one (give its slug and base version). A person accepts it before it becomes knowledge; the area is one of the taxonomy's. Not for session facts, decisions or fixes: those are memory_save.",
+        args: {
+          repo: toolApi.schema.enum(["workspace", "project", "shared"]),
+          title: toolApi.schema.string(),
+          kind: toolApi.schema.enum(kinds),
+          // A plain string: the bridge checks it against the taxonomy's ids.
+          area: toolApi.schema.string(),
+          context: toolApi.schema.string().optional(),
+          subject: toolApi.schema.string().optional(),
+          body: toolApi.schema.string(),
+          slug: toolApi.schema.string().optional(),
+          base_version: toolApi.schema.number().int().optional(),
+        },
+        execute: (args, ctx) => call("knowledge_propose", args, ctx),
       }),
     };
 

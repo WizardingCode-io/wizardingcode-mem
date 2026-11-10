@@ -1,0 +1,20 @@
+# architects lead's validation of 2026-11-09-001-knowledge-for-the-agent-mcp-tools-search: spec
+verdict: returned
+## Returns
+- R-1 · .crew/work/2026-11-09-001-knowledge-for-the-agent-mcp-tools-search/spec.md:156 · This line still reads "A second copy of the lexical floor. Rejected: one evidence function over named fields serves both modules." That is the claim you withdrew in round 2. Spec.md:106 now says memory keeps its weighted rule and knowledge has its own `knowledgeEvidence` in `policy.ts`. Reword the line to say that only the primitives are shared (`namesIn`, `sharedStems`, `tellingOf`) and that each module decides on top of them.
+- R-2 · .crew/work/2026-11-09-001-knowledge-for-the-agent-mcp-tools-search/spec.md:182 and spec.md:168 · The rate limiter is now per agent id in `meta`, shared by the server and the `tool` bridge (spec.md:126). Two lines still describe the old in-memory counter.
+  - Line 182 says "20 per hour per server process".
+  - AC-8 says "the 21st proposal of a server process in an hour is `refused quota`".
+  - The criterion that a test names has to match the mechanism, so make it "the 21st `knowledge_propose` call of one agent id in an hour, across the server and the bridge". The AC-14 text at line 173 already counts calls, so keep the two consistent.
+- R-3 · .crew/work/2026-11-09-001-knowledge-for-the-agent-mcp-tools-search/plan.md:15 · The constants do not match the spec after the round-1 changes.
+  - `BM25_WEIGHTS = [4, 2, 2, 2, 1]` has five weights. Spec.md:106 and the seven-column `knowledge_fts` (spec.md:89) need `bm25(knowledge_fts, 4, 2, 2, 2, 1, 0, 0)`. With only five weights, SQLite would give the `repo_id` and `entry_id` columns a default weight of 1.0 and distort the ranking.
+  - `EVIDENCE: EvidenceRules = { minShared: 3, minTitle: 2 }` names an `EvidenceRules` type that no longer exists. `src/retrieve/evidence.ts` (plan.md:13) now exports only the three primitives.
+  - Make the weights the seven values, and type `EVIDENCE` as `{ minShared: number; minTitle: number }` inside `policy.ts`.
+- R-4 · .crew/work/2026-11-09-001-knowledge-for-the-agent-mcp-tools-search/plan.md:61 · Task 14 says the client name is "passed to the module's `tools(mode)` through a per-call `ToolCall.agentId`". That contradicts the R-4 fix, which says `tools(mode)` takes no id. Reword it so that `src/mcp/server.ts` reads `getClientVersion()` inside each tool call and puts the result in `ToolCall.agentId`.
+## Notes
+- Round-1 R-1 holds in substance. Spec.md:106 and plan.md:13-14 and 46 keep memory's weighted `hasEvidence`, `isRare` and `overlap` in `src/retrieve/prompt.ts`. They move only the primitives. They name `tests/unit/prompt-matches.test.ts` and `tests/unit/prompt-counts.test.ts` as the unchanged cases, and I confirmed both files exist. R-1 above is only a leftover sentence.
+- Round-1 R-2 holds. `tests/unit/settings.test.ts` is in the Modify list at plan.md:8 and task 8 at plan.md:49, together with the comments and the validation message in `settings.ts`.
+- Round-1 R-3 holds in design. `knowledge.rate:<id>` in `meta` is checked before the judge, with a test for both transports and the window reset at plan.md:62. R-2 above is only a leftover in the AC and Risks text.
+- Round-1 R-4 holds in the signatures. `knowledgeTools(mode)` takes no id (plan.md:19), and `src/engine/module.ts` is in the Modify list (plan.md:8).
+- The new FTS design is sound. `repo_id` and `entry_id` are searchable columns, and triggers delete by `MATCH` rather than by scan. The visible repositories sit inside the `MATCH`, there is a 2,000-entry rebuild gate, and the perf corpus has 30 non-visible repositories. `compact` prunes orphans in the same transaction. The stale mark is written once, and fails open. `relateState` redacts. The MATCH string is built from quoted tokens, and `knowledge_get` refs are resolved through the index.
+- AC-14 and AC-15 cover the security and data returns. I did not re-read `work.json`, so I could not check that its AC-1 to AC-15 match these texts. The session should confirm that AC-8's wording in `work.json` carries the R-2 change too.

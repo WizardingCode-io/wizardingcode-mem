@@ -1,0 +1,24 @@
+# data findings for 2026-11-09-001-knowledge-for-the-agent-mcp-tools-search
+reviewer: review-data
+read: 14 files, the schema and migrations read (src/store/migrations/0001_init.sql, src/modules/knowledge/migrations/0006_knowledge_store.sql, 0007_knowledge_agent.sql, migrations.ts, src/engine/module-schemas.ts, the module migration runner in src/store/db.ts), risk areas: data-migration, personal-data
+
+## Findings
+- F-1 · advisory · src/modules/knowledge/contribute.ts:176 · On a prompt, `searchEntries` runs inside the hook's `withWrite` (BEGIN IMMEDIATE), so the write lock is held for the whole FTS search. Its `f.repo_id IN (…)` (index-store.ts:1050) filters on an UNINDEXED column after the MATCH. So bm25 is computed and sorted over every repository's matching rows, the non-visible ones too, and the time the lock is held grows with the whole knowledge corpus rather than the visible repositories. It is measured inside the prompt budget at 3×2,000 visible entries plus 30×200 non-visible ones, so it is a cost to watch, not a loss (Q2 and Q6).
+- F-2 · advisory · src/modules/knowledge/index-store.ts:963 · `pinnedEntries` reads every entry row of the visible repositories through the primary key's `repo_id` prefix to find the few with `pinned = 1`, on every session start and inside the write transaction. A partial index on `knowledge_entries(repo_id) WHERE pinned = 1` would read only the pins. The perf test measures it at 3×2,000 entries with 10 pins each, within budget (Q2).
+- F-3 · advisory · src/modules/knowledge/propose.ts:87 · Nothing ever deletes the `meta` rows `knowledge.rate:<agent id>`. `mcp --agent` accepts any id that matches the pattern, so the number of these rows has no fixed bound. Each row is small and holds no personal data (Q6, growth).
+
+## Outside the change
+- src/store/migrations/0001_init.sql:20 · `sessions.id` is `INTEGER PRIMARY KEY` without AUTOINCREMENT, so SQLite can give a deleted highest id to a new session. That is why `alreadyShown`/`dropStaleShown` (contribute.ts:53-74) and the prune in compact.ts:87-133 have to guard keyed rows against a reused session id. The guards hold: the same `now` stamps `sessions.started_at` (sessions.ts:25) and `knowledge_shown.at`, and the prune shares a transaction with the session delete. Debt in the core schema, advisory.
+- src/modules/knowledge/migrations/0006_knowledge_store.sql:7-20 · Belongs to part 1 (item 2026-11-08-003), not this item; it is in this diff only because of where the base was cut. It drops the withdrawn module's tables. The comments give the reason (an index whose truth is files), and `migrateModules`' `backupVersion` (db.ts:305) takes a backup before it runs on a store that recorded knowledge versions 1 to 5. Not a defect; listed for attribution.
+- src/sharing/migrations/0001_sharing_policy.sql and the rest of src/sharing/, src/backup/backup.ts, src/ui/, ui/src/ · These are the sibling item 2026-11-09-002's (sharing policy), already reviewed under that item; not judged here.
+
+## Not answerable
+- none
+
+Rubric answers behind "none" above:
+- Q1: Migration 7 is additive only (ALTER ADD COLUMN with defaults, a new FTS5 table, a new table and its two indexes). It is forward-only, and migrations.ts:13 and ADR 0024 say why. Its order after 6 is fixed by the version, and the runner sorts by version and backs up when a recorded schema has a later migration pending. The 0.6.0 rollback probes cover the step back.
+- Q2: Search rows are deleted only by rowid: `DELETE_SEARCH_ROW` and `DELETE_REPO_SEARCH_ROWS` in resolve.ts:66. The orphan sweep's full scan (index-store.ts:767) runs only in `knowledge rebuild`. `knowledge_shown` reads use the primary key's `session_id` prefix, and `status` uses the `at` index.
+- Q3: The TypeSafe call in `judgeProposal` runs outside any transaction (tools.ts:366); the store writes afterwards under its own lease. Every index write (`settle`, `replaceRepoRows`, `dropRepoRows` callers) is inside one `withWrite`, so an entry row and its search row commit together. Every path that deletes a `knowledge_repos` row goes through `dropRepoRows` (index-store.ts:758, 807; resolve.ts:91).
+- Q4: `pinned` is read as `=== 1`, `contradicts` is parsed defensively as a JSON list, and `judge_version` is text both in the schema and in `Judge.versions`.
+- Q5: `on_behalf_of` falls under part 1's retention and erasure (ADR 0024:370), and the index column is rebuilt from the files. `knowledge_shown` holds ids, an event, a rule and a time, no personal text. It is kept as long as its session and pruned with it (ADR 0024:282). What goes to TypeSafe is titles and bodies only, redacted with the store's env and then clipped (propose.ts:162-192). No name is sent.
+- Q6: No backfill; migration 7 fills nothing. The rebuild's write transaction is measured at about 30 ms for 2,000 entries, against a 50 ms target.

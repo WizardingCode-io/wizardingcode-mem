@@ -5,6 +5,28 @@ import type { Model } from "../embed/model.ts";
 import { refreshMemoryVector } from "../embed/vectors.ts";
 import { explicitMatch } from "../retrieve/query.ts";
 import { fuseRanks, SEMANTIC_POOL, semanticCandidates } from "../retrieve/semantic.ts";
+import type { Env } from "../settings/settings.ts";
+import { policyInForce, sharingRefusal } from "../sharing/in-force.ts";
+import { isHostLedAlias, levelOf } from "../sharing/levels.ts";
+import { knownAreas, loadPolicy } from "../sharing/policy.ts";
+import { type PolicyChange, type Report, withChange, wouldLeave } from "../sharing/report.ts";
+import {
+  type ChangeRow,
+  lastChange,
+  type SetLevelRefusal,
+  setLevel,
+  setLevelMessage,
+} from "../sharing/store.ts";
+import {
+  isLevel,
+  isRoot,
+  type Level,
+  type Reason,
+  type Root,
+  SHARE_AREA,
+  type SharingPolicy,
+  TEAM_DESTINATION,
+} from "../sharing/types.ts";
 import { hookLatency } from "../status/report.ts";
 import { type Db, withWrite } from "../store/db.ts";
 import {
@@ -32,12 +54,41 @@ export interface ProjectSummary {
   superseded: number;
   stale: number;
   lastActivity: number | null;
+  /** What the project shares with the team's server, as the policy reads now. */
+  sharing: Level;
+  /** Why: `allowed` for a level in force, else what makes the project share nothing. */
+  sharingReason: Reason;
+  /**
+   * It has a host-led git remote (`isHostLedAlias`): the one name a team can match it by,
+   * which a level is bound to. A remote that is a local path or a `file://` origin is none.
+   */
+  remote: boolean;
+  /** Memory is off for it. */
+  disabled: boolean;
 }
 
-export function listProjects(db: Db): ProjectSummary[] {
+/**
+ * Every project with its counts and what it shares, most recently active first. The level
+ * is the one in force under the policy given, so a level its project can no longer hold
+ * (memory off, the remote gone) shows as Nothing, with the reason.
+ */
+export function listProjects(db: Db, policy: SharingPolicy): ProjectSummary[] {
+  type Counted = Omit<ProjectSummary, "sharing" | "sharingReason" | "remote" | "disabled"> & {
+    disabled: number;
+  };
+  // The one rule for "a name a team knows the project by" is isHostLedAlias (ADR 0025), so
+  // the remote aliases are read and judged in code, never by a pattern in SQL.
+  const named = new Set<number>();
+  for (const { projectId, alias } of db
+    .query<{ projectId: number; alias: string }, []>(
+      "SELECT project_id AS projectId, alias FROM project_aliases WHERE alias LIKE 'remote:%'",
+    )
+    .all()) {
+    if (isHostLedAlias(alias)) named.add(projectId);
+  }
   return db
-    .query<ProjectSummary, []>(
-      `SELECT p.id, p.name, p.key,
+    .query<Counted, []>(
+      `SELECT p.id, p.name, p.key, p.disabled,
               (SELECT count(*) FROM memories m WHERE m.project_id = p.id AND m.status = 'active') AS active,
               (SELECT count(*) FROM memories m WHERE m.project_id = p.id AND m.status = 'archived') AS archived,
               (SELECT count(*) FROM memories m WHERE m.project_id = p.id AND m.status = 'superseded') AS superseded,
@@ -47,7 +98,17 @@ export function listProjects(db: Db): ProjectSummary[] {
          FROM projects p
         ORDER BY lastActivity DESC NULLS LAST, p.id`,
     )
-    .all();
+    .all()
+    .map((row) => {
+      const { level, reason } = levelOf(policy, row.id, TEAM_DESTINATION);
+      return {
+        ...row,
+        sharing: level,
+        sharingReason: reason,
+        remote: named.has(row.id),
+        disabled: row.disabled === 1,
+      };
+    });
 }
 
 export interface MemoryItem {
@@ -813,4 +874,168 @@ export function dismissLinksOffer(db: Db): void {
   const max = (table: string) =>
     db.query<{ n: number | null }, []>(`SELECT max(id) AS n FROM ${table}`).get()?.n ?? 0;
   setMeta(db, LINKS_OFFER_SEEN, JSON.stringify({ link: max("project_links"), rule: max("rule_proposals") }));
+}
+
+// --- Sharing ------------------------------------------------------------------------------
+// What may leave this machine for the team's server, as the Sharing page and a project's
+// dock show it and change it. Nothing here sends anything.
+
+/** The policy in force and what would leave under it, as the Sharing page shows them. */
+export interface SharingView {
+  epoch: number;
+  /** The policy could not be loaded: nothing leaves, and `problems` says why. */
+  closed: boolean;
+  /** The roots in force. */
+  roots: Root[];
+  /** The areas in force: listed, and in their root's taxonomy. */
+  areas: string[];
+  /** The areas listed that no taxonomy holds: they allow nothing. */
+  inert: string[];
+  problems: string[];
+  lastChange: ChangeRow | null;
+  /** Each root's areas, ids and labels; null for a root with no taxonomy yet. */
+  taxonomies: Record<Root, { id: string; label: string }[] | null>;
+  /** How many projects are at each level. */
+  levels: Record<Level, number>;
+  report: Report;
+}
+
+/** An answer the server turns into a response: the status, and the JSON body. */
+type Answer<Status extends number> = { status: Status; body: unknown };
+
+const refused = <Status extends number>(status: Status, error: string): Answer<Status> => ({
+  status,
+  body: { error },
+});
+
+/**
+ * What the Sharing page shows: the policy in force (`policyInForce`, so this is where the
+ * viewer records what was pending), each root's taxonomy, how many projects are at each
+ * level, and what would leave, counted after the index is brought up to date with the
+ * repositories' files; with `list`, each item that would leave is named.
+ */
+export function sharingView(
+  db: Db,
+  dataDir: string,
+  env: Env,
+  now: number,
+  list: boolean,
+): SharingView {
+  const policy = policyInForce(db, dataDir, env, now);
+  const report = wouldLeave(db, dataDir, env, policy, { now, fresh: true, list });
+  const levels: Record<Level, number> = { local: 0, knowledge: 0, all: 0 };
+  for (const project of report.perProject) levels[project.level]++;
+  return {
+    epoch: policy.epoch,
+    closed: policy.closed,
+    roots: [...policy.roots],
+    areas: [...policy.areas],
+    inert: [...policy.inert],
+    problems: [...policy.problems],
+    lastChange: policy.closed ? null : lastChange(db),
+    taxonomies: knownAreas(dataDir),
+    levels,
+    report,
+  };
+}
+
+const isStrings = (value: unknown): value is string[] =>
+  Array.isArray(value) && value.every((item) => typeof item === "string");
+
+const NO_PROJECT = "no such project";
+
+/**
+ * What would leave once a change is made, for the dialog that asks before it is: a
+ * project's level, the roots, the areas, any of them together. The change is checked
+ * first: a project the store does not know, a level that is not one, a root or an area id
+ * that is not one are refused. Nothing is written, and no repository is read: the index is
+ * taken as the page's last look left it.
+ */
+export function sharingPreview(
+  db: Db,
+  dataDir: string,
+  env: Env,
+  now: number,
+  body: unknown,
+): Answer<200 | 400> {
+  if (body === null || typeof body !== "object" || Array.isArray(body)) {
+    return refused(400, "body must be an object");
+  }
+  const { level, roots, areas } = body as Record<string, unknown>;
+  const policy = loadPolicy(db, dataDir, env);
+  const change: PolicyChange = {};
+  if (level !== undefined) {
+    if (level === null || typeof level !== "object") {
+      return refused(400, "level must name a project and a level");
+    }
+    const asked = level as { projectId?: unknown; level?: unknown };
+    if (typeof asked.projectId !== "number" || !policy.projects.has(asked.projectId)) {
+      return refused(400, NO_PROJECT);
+    }
+    if (!isLevel(asked.level)) return refused(400, setLevelMessage("invalid"));
+    change.level = { projectId: asked.projectId, level: asked.level };
+  }
+  if (roots !== undefined) {
+    if (!isStrings(roots) || !roots.every(isRoot)) {
+      return refused(400, "roots must be a list of workspace and shared");
+    }
+    change.roots = roots;
+  }
+  if (areas !== undefined) {
+    if (!isStrings(areas) || !areas.every((id) => SHARE_AREA.test(id))) {
+      return refused(400, "areas must be a list of root-qualified ids such as workspace:sales");
+    }
+    change.areas = areas;
+  }
+  const previewed = withChange(policy, change, dataDir);
+  const report = wouldLeave(db, dataDir, env, previewed, { now, fresh: false });
+  return { status: 200, body: { report } };
+}
+
+/** The status each refusal to set a level is answered with. */
+const REFUSAL_STATUS: Record<SetLevelRefusal, 400 | 404 | 409> = {
+  invalid: 400,
+  "needs-confirm": 400,
+  "no-project": 404,
+  "no-remote": 409,
+  disabled: 409,
+};
+
+/**
+ * Sets what a project shares, from its dock. Refused in this order: a project the store
+ * does not know (404), a level that is not one (400), then what `setLevel` refuses, in its
+ * own order: memory off and no git remote (409) before a widening nobody confirmed (400),
+ * so nobody is asked to confirm what would then be refused. `confirm` is the request's own,
+ * passed on as it came: the widening is judged by `setLevel` under its write lock, against
+ * what the store holds by then. Answers the level, the one that was in force, and the
+ * remote alias the level is bound to, empty for Nothing.
+ */
+export function setProjectSharing(
+  db: Db,
+  dataDir: string,
+  env: Env,
+  projectId: number,
+  level: unknown,
+  confirm: boolean,
+  now: number,
+): Answer<200 | 400 | 404 | 409> {
+  const policy = loadPolicy(db, dataDir, env);
+  const closed = sharingRefusal(policy);
+  if (closed !== null) return refused(409, closed);
+  if (!policy.projects.has(projectId)) return refused(404, NO_PROJECT);
+  if (!isLevel(level)) return refused(400, setLevelMessage("invalid"));
+  const outcome = setLevel(db, {
+    projectId,
+    destination: TEAM_DESTINATION,
+    level,
+    source: "viewer",
+    now,
+    confirm,
+  });
+  if (!outcome.ok) {
+    const { reason } = outcome;
+    const why = reason === "no-project" ? NO_PROJECT : setLevelMessage(reason);
+    return refused(REFUSAL_STATUS[reason], why);
+  }
+  return { status: 200, body: { level, old: outcome.old, boundAlias: outcome.boundAlias } };
 }

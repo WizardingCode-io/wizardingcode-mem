@@ -13,13 +13,14 @@ export function run(argv: string[]): number {
   try {
     db = openExisting(storeDir);
     const project = db === null ? null : findProject(db, process.cwd());
-    const report = statusReport(db, project, dataDir);
+    const now = Date.now();
+    const report = statusReport(db, project, dataDir, { env: process.env, now });
     if (db !== null) {
       report.history = historyStatus(
         db,
         storeDir,
         { claudeCode: claudeCodeRoot(), codex: codexRoot() },
-        Date.now(),
+        now,
       );
     }
     process.stdout.write(

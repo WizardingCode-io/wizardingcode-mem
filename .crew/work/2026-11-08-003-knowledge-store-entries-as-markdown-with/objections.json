@@ -1,0 +1,11 @@
+{
+  "objections": [
+    {
+      "id": "O-1",
+      "raisedBy": "gap-round",
+      "severity": "advisory",
+      "text": "Migration 6 drops the withdrawn knowledge module's tables (knowledge_fts, knowledge_entries, knowledge_state, knowledge_shown, knowledge_proposals, promoted_memories) and its two indexes on injections where a store still holds them; that index of project-folder knowledge is lost on such a store. The module never shipped (ADR 0020), so only a development store can hold them, and the module migration pass takes a backup first when a module already had a version.",
+      "raisedAt": "2026-11-08T23:25:40.941Z"
+    }
+  ]
+}

@@ -1,12 +1,14 @@
 import type { MemoryKind } from "../core/types.ts";
 import { tokens } from "../util/words.ts";
 import type {
-  ConsolidateInput,
+  ConsolidateTexts,
   ConsolidateVerdict,
   DistillCandidate,
   DistillInput,
   DistillVerdict,
   Judge,
+  RelateInput,
+  RelateVerdict,
 } from "./types.ts";
 
 // The judge that needs no network and no key: rules over wording, in English and
@@ -215,7 +217,8 @@ function jaccard(a: Set<string>, b: Set<string>): number {
   return shared / (a.size + b.size - shared);
 }
 
-function consolidate(input: ConsolidateInput): ConsolidateVerdict {
+/** The one comparison: memory's `consolidate` and knowledge's `relate` both run it. */
+function consolidate(input: ConsolidateTexts): ConsolidateVerdict {
   const draftText = `${input.draft.title} ${input.draft.body}`;
   const draftTokens = tokens(draftText);
   const replaces = any(draftText, SUPERSEDES);
@@ -241,12 +244,30 @@ function consolidate(input: ConsolidateInput): ConsolidateVerdict {
   };
 }
 
+/** `consolidate` with no files on either side, each neighbour's `index` as its id. */
+function relate(input: RelateInput): RelateVerdict {
+  const verdict = consolidate({
+    draft: { title: input.draft.title, body: input.draft.body, files: [] },
+    neighbours: input.neighbours.map((n) => ({
+      id: n.index,
+      title: n.title,
+      body: n.body,
+      files: [],
+    })),
+  });
+  return {
+    source: verdict.source,
+    perNeighbour: verdict.perNeighbour.map(({ id, ...rest }) => ({ index: id, ...rest })),
+  };
+}
+
 export const heuristicJudge: Judge = {
   name: "heuristic",
   version: "2",
   versions: { heuristic: "2" },
   distill: async (input) => distill(input, true),
   consolidate: async (input) => consolidate(input),
+  relate: async (input) => relate(input),
 };
 
 /**
@@ -259,4 +280,5 @@ export const heuristicJudgeV1: Judge = {
   versions: { heuristic: "1" },
   distill: async (input) => distill(input, false),
   consolidate: async (input) => consolidate(input),
+  relate: async (input) => relate(input),
 };

@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "messages": [
+    {
+      "at": "2026-11-09T14:31:42.500Z",
+      "from": {
+        "workspace": "_alone",
+        "project": "ai-mem",
+        "item": "2026-11-08-003-knowledge-store-entries-as-markdown-with",
+        "agent": "session"
+      },
+      "hops": 0,
+      "opened": null,
+      "id": "M-2026-11-09-001-ai-mem",
+      "to": {
+        "workspace": "_alone",
+        "project": "ai-mem",
+        "item": null,
+        "agent": null
+      },
+      "type": "notice",
+      "priority": "normal",
+      "subject": "Lane journey/2026-11-08-001-j-knowledge-base-and-team-collab (2026-11-08-003-...",
+      "body": "Lane journey/2026-11-08-001-j-knowledge-base-and-team-collab (2026-11-08-003-knowledge-store-entries-as-markdown-with, proven) is proven: commit it, then merge it from the main checkout.",
+      "replyTo": null,
+      "status": "done",
+      "readAt": "2026-11-09T18:29:35.049Z"
+    }
+  ]
+}

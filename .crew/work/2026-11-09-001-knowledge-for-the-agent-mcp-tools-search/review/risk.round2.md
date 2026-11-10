@@ -1,0 +1,28 @@
+# risk findings for 2026-11-09-001-knowledge-for-the-agent-mcp-tools-search
+reviewer: review-risk
+read: spec, plan, 30 files
+
+## Findings
+- F-1 · advisory · src/status/report.ts:222 · The module is on by default (`DEFAULTS.modules` "memory,knowledge", src/settings/settings.ts:94), so from the first session after the upgrade an agent in any project can file proposals: up to 20 an hour per agent id, 5 open per target and 200 per repository. The `status` line counts entries, pins and entries shown, but not open proposals. Until part 3's viewer exists, a person sees them only in the agent's own answer, in `doctor`'s count or in `knowledge list`. Nothing is lost, since a proposal is a file a person rejects, but an agent that fills part 1's quota is refused `quota` and nobody is told why.
+- F-2 · advisory · src/modules/knowledge/contribute.ts:162 · Knowledge is asked before memory, and its `withWrite` (BEGIN IMMEDIATE) takes the write lock on every prompt in a project that sees any repository, even when nothing is shown. The full-text search and the floor run inside that lock. Memory then takes its own write (src/modules/memory/index.ts:71 and 96). Behind another writer, a prompt hook can therefore wait two busy timeouts (about 200 ms) where it waited one before. The perf budgets (prompt p95 56.7 ms against 80 ms in the newest gate log) were measured with no other writer. The failure is contained, memory still shows, and each one is logged as `hook … (module knowledge)`, so this is visible and stated (spec rule 4), not a defect.
+- F-3 · advisory · src/judge/index.ts:28 · TypeSafe calls from the tools are counted in `typesafe.tools.requests` and `typesafe.tools.input_tokens`, but no `status` line shows those two counters (ADR 0024, line 358). In the first hour, nobody can see what agents' proposals cost, except by reading `meta` rows. The cost is bounded in code: one request with at most 16 questions per propose, and 20 proposes an hour per agent id. Failures of these calls also open the breaker that distillation shares, and each failure is logged.
+- F-4 · advisory · .crew/work/2026-11-09-001-knowledge-for-the-agent-mcp-tools-search/spec.md:379 · Rollback (and spec line 131) depends on "parts 1 to 3 ship in one release". Nothing in the code enforces that, and the plan names no release step or owner. A release cut from the journey branch before part 3 would ship a module that is on by default, with agent proposals that only the CLI can decide. The spec states this dependency, so it is advisory (Q5 and Q6). The rollback itself is measured: the 0.6.0 code at its release tag, run against a store at module version 7, exits 0 in status, doctor and the hooks and changes no row (probes/rollback-to-0-6-0.md). Migration 7 is additive DDL, and every index row can be rebuilt from the git files.
+
+## Outside the change
+- src/engine/module-schemas.ts:1 · `openDb` applies module migrations on whichever process opens the database first, a hook included. The first hook after the upgrade therefore runs migration 6's DROPs and migration 7's DDL under its busy timeout. The mechanism is part 1's engine work. This item adds migration 7's ALTERs, the FTS5 table and `knowledge_shown` to that first open, which the spec states (NFR "Rollout").
+- docs/adr/0024-knowledge-module.md:376 · A project folder that is left with no repository (emptied by hand, or its `.git` deleted) keeps showing its last indexed rows on hooks and in the tools. This is part 1's stated limit, carried forward and recorded as not met.
+
+## Not answerable
+- Q1 (first hour: how much this change adds to hook latency) · probes/baseline-before-the-change.md records only pass counts (38 tests, 21 snapshots), with no per-moment timings before the change. The gate log gives the figures after it, all within budget, but not how much the change added to each hook moment.
+
+The rubric's defect conditions are not met. Writes are bounded in code (the rate counter, part 1's quotas, at most 3 refreshes per drain), and `compact` has a dry run. Migration 7 is additive, and 0.6.0 ignores it. A wrong or missing TypeSafe answer is handled: a 3 s deadline with no retries, the heuristic fallback, a refused duplicate that writes nothing, and a contradiction recorded for the person. Lock and schema failures on the hook are logged. None of the findings falls in the sibling item's paths (2026-11-09-002, the sharing policy).
+
+Files relevant to this report:
+- /Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/src/modules/knowledge/contribute.ts
+- /Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/src/modules/knowledge/tools.ts
+- /Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/src/modules/knowledge/propose.ts
+- /Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/src/modules/knowledge/index-store.ts
+- /Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/src/status/report.ts
+- /Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/src/judge/index.ts
+- /Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/.crew/work/2026-11-09-001-knowledge-for-the-agent-mcp-tools-search/spec.md
+- /Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/.crew/work/2026-11-09-001-knowledge-for-the-agent-mcp-tools-search/logs/test-_-1794256044201.txt

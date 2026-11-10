@@ -15,9 +15,12 @@ import { join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { createGunzip, createGzip } from "node:zlib";
 import { historyDbPath } from "../history/path.ts";
+import { counterOf, fileListsOf, resetLevels } from "../sharing/store.ts";
+import type { Root } from "../sharing/types.ts";
 import { DB_FILE, type Db, LATEST_VERSION } from "../store/db.ts";
 import { anyLeaseActive, BACKUP_LEASE, claimLease, releaseLease, setMeta } from "../store/meta.ts";
 import { logError } from "../util/log.ts";
+import { resolvePaths } from "../util/paths.ts";
 import { BACKUP_LAST, type LastBackup } from "./schedule.ts";
 import { type BackupTarget, backupName, parseBackupName } from "./target.ts";
 
@@ -91,19 +94,45 @@ export async function runBackup(options: BackupOptions): Promise<BackupOutcome> 
 
 export interface RestoreOptions {
   storeDir: string;
+  /** Where the env file is, whose sharing lists become the restored store's baseline. */
+  dataDir?: string;
   target: BackupTarget;
   name: string;
   now: number;
 }
 
 export type RestoreOutcome =
-  | { ok: true; replaced: string; historyRemoved: boolean }
+  | { ok: true; replaced: string; historyRemoved: boolean; sharingReset: number }
   | { ok: false; reason: "unknown" | "unsound" | "busy" | "failed"; detail: string };
+
+/**
+ * Puts every sharing level of the unpacked copy back to Nothing (`resetLevels`), with the
+ * counter past `counterFloor`, the replaced store's. A raw connection, never `openDb`, which
+ * would migrate a temporary file; journal mode DELETE, so no side file is left beside it.
+ * Returns how many levels it removed; throws what the reset throws.
+ */
+function resetSharingInCopy(
+  unpacked: string,
+  counterFloor: number,
+  fileLists: { roots: Root[]; areas: string[] },
+  now: number,
+): number {
+  const copy = new Database(unpacked);
+  try {
+    copy.run("PRAGMA journal_mode = DELETE");
+    return resetLevels(copy, now, counterFloor, fileLists);
+  } finally {
+    copy.close();
+  }
+}
 
 /**
  * Puts a backup in the database's place. The copy is unpacked and checked first; the
  * current file is kept, renamed `.replaced-<time>`. The caller must not hold the
- * database open (the viewer closes its connection and reopens it).
+ * database open (the viewer closes its connection and reopens it). Before the swap, with
+ * the current store frozen, the copy's sharing levels are reset: a level chosen when the
+ * copy was made says nothing about now. A reset that fails fails the restore, with nothing
+ * renamed.
  */
 export async function restoreBackup(options: RestoreOptions): Promise<RestoreOutcome> {
   const { storeDir, target, name, now } = options;
@@ -141,6 +170,12 @@ export async function restoreBackup(options: RestoreOptions): Promise<RestoreOut
       lock.run("PRAGMA wal_checkpoint(TRUNCATE)");
       lock.run("BEGIN IMMEDIATE");
       frozen = true;
+      const sharingReset = resetSharingInCopy(
+        unpacked,
+        counterOf(lock),
+        fileListsOf(options.dataDir ?? resolvePaths().dataDir),
+        now,
+      );
       const replaced = `${current}.replaced-${now}`;
       // The side files go with the file they belong to: the kept database stays whole.
       renameSync(current, replaced);
@@ -148,7 +183,12 @@ export async function restoreBackup(options: RestoreOptions): Promise<RestoreOut
         if (existsSync(current + suffix)) renameSync(current + suffix, replaced + suffix);
       }
       renameSync(unpacked, current);
-      return { ok: true, replaced, historyRemoved: removeHistoryIndex(storeDir) };
+      return {
+        ok: true,
+        replaced,
+        historyRemoved: removeHistoryIndex(storeDir),
+        sharingReset,
+      };
     } finally {
       if (frozen) {
         try {

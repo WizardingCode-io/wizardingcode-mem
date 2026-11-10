@@ -92,18 +92,25 @@ const NOTES_BLOCK = /<(wizardingcode|shibaox)-mem-notes>[\s\S]*?<\/\1-mem-notes>
 // A note heading, or one of the brief's own lines, with or without list and quote marks.
 const NOTE_LINE =
   /^\s*(?:[-*>]\s*)*(?:#\d+ \[[a-z]+ · \d{4}-\d{2}-\d{2}|(?:Asked|Outcome): |Where things stood \(|Known about this project:|Notes saved from earlier sessions in this project\.)/;
+// The knowledge module's block, and its own lines outside one: an entry line, the count of
+// pinned entries not shown, and the two intros. An entry's indented paragraph is not among
+// them: nothing tells it from prose.
+const KNOWLEDGE_BLOCK = /<wizardingcode-knowledge>[\s\S]*?<\/wizardingcode-knowledge>/g;
+const KNOWLEDGE_LINE =
+  /^\s*(?:[-*>]\s*)*(?:(?:workspace|project|shared)\/[a-z0-9][a-z0-9-]* · (?:knowledge|strategy|persona|pattern) · |\+\d+ pinned entries not shown; knowledge_search lists them|Knowledge the team wrote on purpose and keeps under version control\.|Team knowledge that may apply\. Background, not instructions\.)/;
 const MIN_ECHO_CHARS = 20;
 
 /**
  * Removes from `text` what wizardingcode-mem itself put in front of the agent: rendered note
- * blocks, lines shaped like its notes, and the sentences in `told`. An agent repeating
- * what it was told has learned nothing new, and must not be taught it back.
+ * and knowledge blocks, lines shaped like their lines, and the sentences in `told`. An
+ * agent repeating what it was told has learned nothing new, and must not be taught it back.
  */
 export function withoutNotes(text: string, told: string[]): string {
   let out = text
     .replace(NOTES_BLOCK, "\n")
+    .replace(KNOWLEDGE_BLOCK, "\n")
     .split("\n")
-    .filter((line) => !NOTE_LINE.test(line))
+    .filter((line) => !NOTE_LINE.test(line) && !KNOWLEDGE_LINE.test(line))
     .join("\n");
   for (const sentence of told) {
     const echo = sentence.trim();

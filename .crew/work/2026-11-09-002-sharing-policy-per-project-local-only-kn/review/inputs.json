@@ -1,0 +1,254 @@
+{
+  "dependencies": [],
+  "phrases": [
+    {
+      "file": "src/modules/knowledge/resolve.ts",
+      "line": 200,
+      "phrase": "fall back to"
+    }
+  ],
+  "fingerprint": "sha256:05656f0bf05aadd2d79f13acf18d9a90b13db04a106a021eace0a1c1e693a89e",
+  "at": "2026-11-09T21:20:43.272Z",
+  "captures": [
+    {
+      "page": "projects-dock",
+      "state": "confirm",
+      "file": "review/ui/projects-dock-confirm@1512.png",
+      "files": [
+        "review/ui/projects-dock-confirm@1512.png"
+      ],
+      "widths": [
+        1512
+      ],
+      "dark": false,
+      "console": "review/ui/console-projects-dock-confirm.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "projects-dock",
+      "state": "default",
+      "file": "review/ui/projects-dock-default@1512.png",
+      "files": [
+        "review/ui/projects-dock-default@1512.png"
+      ],
+      "widths": [
+        1512
+      ],
+      "dark": false,
+      "console": "review/ui/console-projects-dock-default.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "projects-dock",
+      "state": "success",
+      "file": "review/ui/projects-dock-success@1512.png",
+      "files": [
+        "review/ui/projects-dock-success@1512.png"
+      ],
+      "widths": [
+        1512
+      ],
+      "dark": false,
+      "console": "review/ui/console-projects-dock-success.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "projects-dock-memory",
+      "state": "off",
+      "file": "review/ui/projects-dock-memory-off@1512.png",
+      "files": [
+        "review/ui/projects-dock-memory-off@1512.png"
+      ],
+      "widths": [
+        1512
+      ],
+      "dark": false,
+      "console": "review/ui/console-projects-dock-memory-off.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "projects-dock-no",
+      "state": "remote",
+      "file": "review/ui/projects-dock-no-remote@1512.png",
+      "files": [
+        "review/ui/projects-dock-no-remote@1512.png"
+      ],
+      "widths": [
+        1512
+      ],
+      "dark": false,
+      "console": "review/ui/console-projects-dock-no-remote.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "projects-dock-not",
+      "state": "changed",
+      "file": "review/ui/projects-dock-not-changed@1512.png",
+      "files": [
+        "review/ui/projects-dock-not-changed@1512.png"
+      ],
+      "widths": [
+        1512
+      ],
+      "dark": false,
+      "console": "review/ui/console-projects-dock-not-changed.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "projects-row-pill",
+      "state": "knowledge",
+      "file": "review/ui/projects-row-pill-knowledge@1512.png",
+      "files": [
+        "review/ui/projects-row-pill-knowledge@1512.png"
+      ],
+      "widths": [
+        1512
+      ],
+      "dark": false,
+      "console": "review/ui/console-projects-row-pill-knowledge.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "settings-sharing",
+      "state": "confirm",
+      "file": "review/ui/settings-sharing-confirm@1512.png",
+      "files": [
+        "review/ui/settings-sharing-confirm@1512.png"
+      ],
+      "widths": [
+        1512
+      ],
+      "dark": false,
+      "console": "review/ui/console-settings-sharing-confirm.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "settings-sharing",
+      "state": "default",
+      "file": "review/ui/settings-sharing-default@1512.png",
+      "files": [
+        "review/ui/settings-sharing-default@1512.png"
+      ],
+      "widths": [
+        1512
+      ],
+      "dark": false,
+      "console": "review/ui/console-settings-sharing-default.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "settings-sharing",
+      "state": "error",
+      "file": "review/ui/settings-sharing-error@1512.png",
+      "files": [
+        "review/ui/settings-sharing-error@1512.png"
+      ],
+      "widths": [
+        1512
+      ],
+      "dark": false,
+      "console": "review/ui/console-settings-sharing-error.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "settings-sharing",
+      "state": "locked",
+      "file": "review/ui/settings-sharing-locked@1512.png",
+      "files": [
+        "review/ui/settings-sharing-locked@1512.png"
+      ],
+      "widths": [
+        1512
+      ],
+      "dark": false,
+      "console": "review/ui/console-settings-sharing-locked.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "settings-sharing",
+      "state": "problems",
+      "file": "review/ui/settings-sharing-problems@1512.png",
+      "files": [
+        "review/ui/settings-sharing-problems@1512.png"
+      ],
+      "widths": [
+        1512
+      ],
+      "dark": false,
+      "console": "review/ui/console-settings-sharing-problems.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "settings-sharing",
+      "state": "success",
+      "file": "review/ui/settings-sharing-success@1512.png",
+      "files": [
+        "review/ui/settings-sharing-success@1512.png"
+      ],
+      "widths": [
+        1512
+      ],
+      "dark": false,
+      "console": "review/ui/console-settings-sharing-success.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "settings-sharing-empty",
+      "state": "taxonomy",
+      "file": "review/ui/settings-sharing-empty-taxonomy@1512.png",
+      "files": [
+        "review/ui/settings-sharing-empty-taxonomy@1512.png"
+      ],
+      "widths": [
+        1512
+      ],
+      "dark": false,
+      "console": "review/ui/console-settings-sharing-empty-taxonomy.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "settings-sharing-inert",
+      "state": "area",
+      "file": "review/ui/settings-sharing-inert-area@1512.png",
+      "files": [
+        "review/ui/settings-sharing-inert-area@1512.png"
+      ],
+      "widths": [
+        1512
+      ],
+      "dark": false,
+      "console": "review/ui/console-settings-sharing-inert-area.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "settings-sharing-load",
+      "state": "error",
+      "file": "review/ui/settings-sharing-load-error@1512.png",
+      "files": [
+        "review/ui/settings-sharing-load-error@1512.png"
+      ],
+      "widths": [
+        1512
+      ],
+      "dark": false,
+      "console": "review/ui/console-settings-sharing-load-error.json",
+      "meta": null,
+      "by": "session"
+    }
+  ]
+}

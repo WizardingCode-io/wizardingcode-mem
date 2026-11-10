@@ -1,0 +1,806 @@
+{
+  "id": "2026-11-09-001-knowledge-for-the-agent-mcp-tools-search",
+  "title": "Knowledge for the agent: MCP tools (search, get, propose, update, taxonomy), the",
+  "input": "Knowledge for the agent: MCP tools (search, get, propose, update, taxonomy), the knowledge module in the composer so a new project's first session is shown the shared and workspace knowledge that bears on its task within its share of the budget, the judgements (cataloguing, duplicates, contradictions, relevance) through the Judge interface with TypeSafe opt-in and heuristics as the fallback; with no entries the pinned snapshots stay byte for byte.",
+  "type": "feature",
+  "route": "full",
+  "routeReasons": [
+    "risk areas: data-migration, public-api",
+    "personal data in lines not read for risk (test or excluded): email (tests/fixtures/knowledge-probe.ts), email (tests/helpers/knowledge.ts), email (tests/preload.ts), email (tests/unit/knowledge-author.test.ts), email (tests/unit/knowledge-index.test.ts), email (tests/unit/knowledge-module.test.ts), email (tests/unit/knowledge-repo.test.ts), email (tests/unit/knowledge-store.test.ts), email (tests/unit/knowledge-tools.test.ts)",
+    "the change's lines name personal data: email (src/modules/knowledge/author.ts) and 2 more"
+  ],
+  "riskAreas": [
+    "data-migration",
+    "public-api",
+    "auth",
+    "personal-data"
+  ],
+  "phase": "learn",
+  "awaiting": null,
+  "criteria": [
+    {
+      "id": "AC-1",
+      "kind": "behavior",
+      "text": "compose with a declared module that says nothing gives the remainder module the whole budget; with one that writes n characters gives it budget minus n minus 2; a declared module that throws or overruns charges nothing; the total never exceeds the budget; the output is joined in engine order."
+    },
+    {
+      "id": "AC-2",
+      "kind": "behavior",
+      "text": "openDb applies knowledge migration 7 after 6: knowledge_entries.pinned exists, knowledge_fts holds one row per active problem-free entry and follows an insert, an update (a row turned draft leaves it) and a delete through the triggers, knowledge_shown exists with its key, and every knowledge_repos row has head and fingerprint null; a store that ran 6 only migrates to 7 on open.",
+      "supersededBy": {
+        "id": "AC-18",
+        "at": "2026-11-09T17:15:20.421Z"
+      }
+    },
+    {
+      "id": "AC-3",
+      "kind": "behavior",
+      "text": "With two pinned workspace entries and one pinned shared entry, a session start of any project shows the three as '- <scope>/<slug> · <kind> · <area label> · <title>' after memory's brief inside the knowledge wrapper, records them in knowledge_shown with event session-start, version and hash, shows nothing for them on the next prompt of that context, and shows them again after a clear; with pinned entries whose lines exceed the share, the last line counts the ones not shown; with no repository the module adds nothing and runs one query.",
+      "supersededBy": {
+        "id": "AC-19",
+        "at": "2026-11-09T17:15:20.540Z"
+      }
+    },
+    {
+      "id": "AC-4",
+      "kind": "behavior",
+      "text": "A prompt sharing three telling words with an entry's body shows that entry with its first paragraph inside the share and records it with event prompt and the rule; a prompt naming a code name from the entry shows it; a prompt sharing one word shows nothing; a host prompt shows nothing; an entry already shown in the context is not shown again; the probe fixture brings every relevant prompt's entry first and at most 1 of 28 unrelated prompts injects; memory's own prompt notes are unchanged in the pinned snapshots.",
+      "supersededBy": {
+        "id": "AC-20",
+        "at": "2026-11-09T17:15:20.656Z"
+      }
+    },
+    {
+      "id": "AC-5",
+      "kind": "behavior",
+      "text": "A hook on a repository whose head or fingerprint differ sets knowledge.stale:<path> and shows the index as it is without a rebuild; the drain's refreshKnowledgeSafely rebuilds at most 3 stale repositories, clears their marks and never throws out of the drain; a module schema recorded too new keeps the module silent and logs once per process.",
+      "supersededBy": {
+        "id": "AC-21",
+        "at": "2026-11-09T17:15:20.775Z"
+      }
+    },
+    {
+      "id": "AC-6",
+      "kind": "behavior",
+      "text": "Inside a project the MCP tool list holds memory's tools then knowledge_search, knowledge_get, knowledge_propose with the descriptions and schemas of the spec (the area enum from the taxonomies, each option described by its label and root); with --global it holds knowledge_search and knowledge_get and GLOBAL_INSTRUCTIONS names them; with the modules setting memory the lists are the pinned ones byte for byte.",
+      "supersededBy": {
+        "id": "AC-22",
+        "at": "2026-11-09T17:15:20.889Z"
+      }
+    },
+    {
+      "id": "AC-7",
+      "kind": "behavior",
+      "text": "knowledge_search answers one line per matching active entry over the visible repositories, best first by bm25, never an open proposal, 'No knowledge matches.' otherwise; an empty query lists pinned entries first then newest; repo project with --global is refused; knowledge_get answers each ref's heading, fields and body, clipped at 8,000 characters with a note, the whole answer at most 32,000, and 'Not found: <ref>' for a missing ref.",
+      "supersededBy": {
+        "id": "AC-23",
+        "at": "2026-11-09T17:15:21.001Z"
+      }
+    },
+    {
+      "id": "AC-8",
+      "kind": "behavior",
+      "text": "knowledge_propose for a new entry writes a proposal through part 1's store with proposed_by agent:<id> and on_behalf_of <person>, answers 'proposed <scope>/<id> for <slug>', and knowledge list shows it open; with slug and base_version it proposes a change ('… changes v<n>'); a stale base version, an unknown area for the target root, an existing slug for a new entry and a part 1 quota each answer 'refused <code>: <message>' with part 1's code; the 21st proposal of a server process in an hour is refused quota.",
+      "supersededBy": {
+        "id": "AC-16",
+        "at": "2026-11-09T00:50:44.916Z"
+      }
+    },
+    {
+      "id": "AC-9",
+      "kind": "behavior",
+      "text": "The agent id is the mapping of the handshake's clientInfo.name (a client named claude-code proposes as agent:claude-code, Cursor as agent:cursor, an unknown name as agent:mcp), mcp --agent codex overrides it, an invalid --agent value is refused at start, and the tool bridge proposes as agent:opencode."
+    },
+    {
+      "id": "AC-10",
+      "kind": "behavior",
+      "text": "A proposal whose text states what a visible entry states is refused duplicate naming <scope>/<slug> (TypeSafe: a Score answer of 2 for that neighbour; heuristic: a Jaccard of 0.6 or more); one that states what an open proposal states names the proposal; one whose text contradicts an entry (TypeSafe: a Noul of 0.8; heuristic: a reversal phrase with an overlap between 0.5 and 0.9) is recorded with contradicts [<scope>/<slug>], judged_by, judge_version, and the answer says so; a neighbour both same and contradicting is recorded as a contradiction, not refused; a TypeSafe failure falls back to the heuristic and a judge without relate records judged_by none.",
+      "supersededBy": {
+        "id": "AC-24",
+        "at": "2026-11-09T17:15:21.113Z"
+      }
+    },
+    {
+      "id": "AC-11",
+      "kind": "behavior",
+      "text": "status prints the knowledge line with its counts; doctor warns for the module off by an explicit setting, pinned lines over the share, a stale repository and an FTS count that differs from the active entries; compact removes knowledge_shown rows of the sessions it removes.",
+      "supersededBy": {
+        "id": "AC-25",
+        "at": "2026-11-09T17:15:21.225Z"
+      }
+    },
+    {
+      "id": "AC-13",
+      "kind": "observed",
+      "text": "docs/adr/0024-knowledge-module.md gains its part 2: the reversal of ADR 0019's note, F5-prime as a ruling, D-9 to D-16 as rulings, the frontmatter key registry, the tool contract, the agent id's boundary, the shared breaker, the growth of knowledge_shown; CLAUDE.md and the README's Knowledge section say the module is on by default and how to turn it off.",
+      "supersededBy": {
+        "id": "AC-26",
+        "at": "2026-11-09T17:15:21.336Z"
+      }
+    },
+    {
+      "id": "AC-14",
+      "kind": "behavior",
+      "text": "The security returns hold: relateState redacts the draft and every neighbour's title and body with the store's env before they leave the machine (a stub TypeSafe receives none of a seeded API key); the per-hour limiter counts every knowledge_propose call that reaches the judge, whatever its result, and is checked before the judge call (21 refused duplicates make the 21st refused quota with no judge request); the FTS match is built from the query's tokens, each quoted, no operator passed through, so a query such as a double quote followed by OR title:x NEAR( answers normally; a global knowledge_get of a project ref answers Not found and refs are validated against the scope and slug patterns and resolved through the index, never as a file path; the wrapper's intro says the knowledge is information, not instructions.",
+      "supersededBy": {
+        "id": "AC-17",
+        "at": "2026-11-09T00:50:44.963Z"
+      }
+    },
+    {
+      "id": "AC-15",
+      "kind": "behavior",
+      "text": "The data returns hold: knowledge_fts keys its rows by searchable repo_id and entry_id columns and its triggers delete by MATCH on them, never by a scan; the prompt query confines the search to the visible repositories inside the MATCH; rebuildRepo on a 2,000-entry repository completes under 2 s on the gate machine with the triggers firing; the perf corpus holds 30 non-visible project repositories of 200 entries sharing words with the measured prompts and the hook budgets hold; a hook writes a stale mark only when none exists (one write, fail-open), never one per prompt; compact prunes knowledge_shown rows whose session or repository no longer exists in the same transaction as the session delete and counts them under dry-run, and deleting a repository's rows deletes its shown rows.",
+      "supersededBy": {
+        "id": "AC-27",
+        "at": "2026-11-09T17:15:21.448Z"
+      }
+    },
+    {
+      "id": "AC-16",
+      "kind": "behavior",
+      "text": "knowledge_propose for a new entry writes a proposal through part 1's store with proposed_by agent:<id> and on_behalf_of <person>, answers 'proposed <scope>/<id> for <slug>', and knowledge list shows it open; with slug and base_version it proposes a change ('… changes v<n>'); a stale base version, an unknown area for the target root, an existing slug for a new entry and a part 1 quota each answer 'refused <code>: <message>' with part 1's code; the per-hour counter lives in meta per agent id (knowledge.rate:<id>), counts every call that passes the schema whatever its result, is checked before the judge call, and is shared by the MCP server and the tool bridge: the 21st call of one agent id in an hour is refused quota with no judge request, another agent id proceeds, a schema-invalid call does not consume the window, an invalid-area refusal does, and the window resets after an hour.",
+      "supersededBy": {
+        "id": "AC-28",
+        "at": "2026-11-09T17:15:21.562Z"
+      }
+    },
+    {
+      "id": "AC-17",
+      "kind": "behavior",
+      "text": "The security returns hold: relateState redacts the draft and every neighbour's title and body with the store's env before they leave the machine (a stub TypeSafe receives none of a seeded API key); the FTS match is built from the query's tokens, each quoted, no operator passed through, so a query such as a double quote followed by OR title:x NEAR( answers normally; a global knowledge_get of a project ref answers Not found and refs are validated against the scope and slug patterns and resolved through the index, never as a file path; the wrapper's intro says the knowledge is information, not instructions.",
+      "supersededBy": {
+        "id": "AC-29",
+        "at": "2026-11-09T17:15:21.674Z"
+      }
+    },
+    {
+      "id": "AC-18",
+      "kind": "behavior",
+      "text": "`openDb` applies knowledge migration 7 after 6. `knowledge_entries` has `pinned` and `fts_rowid`; `knowledge_proposals` has `contradicts`, `on_behalf_of`, `judged_by` and `judge_version`; `knowledge_shown` exists with its key and its two indexes; `knowledge_fts` exists with its five text columns and its two unindexed id columns. The index writer keeps `knowledge_fts` at one row per active, problem-free entry through an insert, an update (an entry turned draft leaves it), a rename (the same id under a new slug leaves one row) and a delete. The entry and proposal formats read and write the five new keys, `contradicts` as a block list of entry ids. `knowledge write --pinned` and `--unpin` set `pinned`, both together are a usage error, and a write with neither keeps it."
+    },
+    {
+      "id": "AC-19",
+      "kind": "behavior",
+      "text": "with two pinned workspace entries and one pinned shared entry, a session start of any project shows the three as `- <scope>/<slug> · <kind> · <area id> · <title>` after memory's brief inside the knowledge wrapper, records them in `knowledge_shown` with `event: session-start`, shows nothing for them on the next prompt of that context, and shows them again after a clear. With pinned entries whose lines exceed the share, the last line counts the ones not shown, and the text with that line fits the share. With no repository the module adds nothing after two reads, the schema state and the visible repositories. On a file read and on a failed tool the module adds nothing."
+    },
+    {
+      "id": "AC-20",
+      "kind": "behavior",
+      "text": "a prompt sharing three distinct non-generic words with an entry's body shows that entry with its first paragraph inside the share and records it with `event: prompt` and the rule. A prompt naming a code name from the entry shows it. A prompt sharing two of the title's non-generic words plus one more shared word, a generic one, shows the entry and records `title`. A prompt sharing two title words and nothing else shows nothing. Two forms of one word in a prompt count as one shared word. A prompt sharing one word shows nothing. A host prompt shows nothing. An entry already shown in the context is not shown again. An entry with a 2,000-character first paragraph is shown, the paragraph clipped to 80 characters. Two entries whose lines are 86 characters each are both shown, under the prompt's one-line intro. An entry whose line and clipped paragraph do not fit what is left of the share is skipped, and the next candidate is tried. The probe fixture brings every relevant prompt's entry first, and at most 1 of 28 unrelated prompts injects. Memory's own prompt notes are unchanged in the pinned snapshots."
+    },
+    {
+      "id": "AC-21",
+      "kind": "behavior",
+      "text": "a hook reads no file and writes no mark: on a repository whose files changed it shows the index as it is. The drain's `refreshStale` compares each repository of `knowledge_repos` with the disk and rebuilds at most 3 that differ, each under its lease and in its own transaction; it passes over a repository whose lease is held; it forgets a repository whose folder is gone; with the knowledge root absent it forgets nothing; it never throws out of the drain. A module schema recorded too new keeps the module silent and logs once per process. When the write lock cannot be taken for knowledge's write, the hook shows memory's text and no knowledge block, and records nothing."
+    },
+    {
+      "id": "AC-22",
+      "kind": "behavior",
+      "text": "inside a project the MCP tool list holds memory's tools, then `knowledge_search`, `knowledge_get` and `knowledge_propose`, with the descriptions and schemas of this document. The `area` enum is the union of the workspace's and the shared taxonomy's ids, an id in both roots once, with the nine default ids for a root whose taxonomy file is missing or cannot be read; the field's one description lists `<id>: <label> (<root>)` per id. Listing the tools opens no database: the list is the same with the database locked and with its knowledge tables newer. With `--global` the list holds `knowledge_search` and `knowledge_get`, the `repo` option has no `project`, and the server's instructions are memory's text, one space, and knowledge's sentence. With the modules setting `memory`, the lists and the instructions are the pinned ones byte for byte. Through the `tool` bridge with knowledge off, each of the three names answers `knowledge is off (WIZARDINGCODE_MODULES)`. In a project the person turned off, each of the three tools answers `Knowledge is turned off for this project.` and reads and writes nothing."
+    },
+    {
+      "id": "AC-23",
+      "kind": "behavior",
+      "text": "`knowledge_search` answers one line per matching active entry over the visible repositories, best first by bm25, with the area's label, or its id when the taxonomy cannot give one; never an open proposal; `No knowledge matches.` otherwise. An empty query lists pinned entries first, then the newest. `repo: \"project\"` with `--global` is refused by the schema. `knowledge_get` answers each ref in the fixed shape: the line `# <scope>/<slug> (v<version>)`, nine `key: value` lines in the order id, title, kind, area, version, hash, author, updated, pinned, one blank line, the body. A body past 8,000 characters is cut there and followed by `[cut at 8,000 characters of <n>]`. Refs are separated by a line `---`. A missing ref answers `Not found: <ref>`. Past 32,000 characters the remaining refs are not rendered, and the last line is `[<n> more not shown: ask for them separately]`."
+    },
+    {
+      "id": "AC-24",
+      "kind": "behavior",
+      "text": "a proposal whose text states what a visible entry states is `refused duplicate` naming `<scope>/<slug>` (TypeSafe: a Score answer of 2 for that neighbour; heuristic: a Jaccard of 0.6 or more). One that states what an open proposal states names the proposal, in the target repository or in another visible one; the heuristic alone decides it (a Jaccard of 0.6 or more), also when TypeSafe is configured. A propose sends TypeSafe at most one request, with at most 8 neighbours, all entries, and at most 16 questions. A small edit to an entry, proposed as a change, is filed: its own base entry is not a neighbour. A proposal that contradicts an entry (TypeSafe: a Noul of 0.8 with a Score of 1; heuristic: a supersede phrase with an overlap of at least 0.5 and under 0.9) is recorded with that entry's id in `contradicts`, with `judged_by` and `judge_version`, and the answer names the entry as `<scope>/<slug>`. A contradiction needs both thresholds: 0.7 with a `relationScore` of 1 records, 0.7 with a `relationScore` of 0 does not, 0.69 does not. An open proposal the draft contradicts is not recorded. A neighbour both same and contradicting is recorded as a contradiction, not refused. A TypeSafe failure falls back to the heuristic."
+    },
+    {
+      "id": "AC-25",
+      "kind": "behavior",
+      "text": "`status` prints `knowledge <n> entries · <p> pinned · <s> shown in 24 h`, or `knowledge off` when the module is off. `doctor` warns `knowledge is off (WIZARDINGCODE_MODULES)` with the module off, also when there is no knowledge folder; it warns for pinned lines over the share and for a search-table count that differs from the active entries. `compact` prunes `knowledge_shown` as AC-15 states, and its report, its command and the viewer's route carry the count."
+    },
+    {
+      "id": "AC-26",
+      "kind": "observed",
+      "text": "`docs/adr/0024-knowledge-module.md` gains its part 2: the reversal of ADR 0019's note, F5′ as a ruling, D-9 to D-16 as rulings, the frontmatter keys, the tool contract, the agent id's boundary, the shared breaker, the growth of `knowledge_shown`, who keeps the search table, what a development store that ran migration 6 alone does, the two outcomes of a hand edit, `MIN_SHARED` as the constant to revisit with the team's real entries, and the requirement parts 4 to 6 inherit for an entry that arrives from outside this machine; `CLAUDE.md` and the README's Knowledge section say the module is on by default and how to turn it off."
+    },
+    {
+      "id": "AC-27",
+      "kind": "behavior",
+      "text": "the data returns hold. `knowledge_fts` stores `repo_id` and `entry_id` unindexed, and a write or a repository's rebuild deletes its search rows by rowid, never by a scan. Every search confines the repositories in SQL: an entry of a repository the project does not see is never a candidate. `rebuildRepo` on a committed 2,000-entry repository fills 2,000 search rows and completes under 2 s on the gate machine. Its write transaction, measured alone at 2,000 entries, takes under 50 ms, half the shortest hook busy timeout, and the perf test prints the figure. The perf corpus holds 30 non-visible project repositories of 200 entries sharing words with the measured prompts, and the hook budgets hold. `compact` prunes the `knowledge_shown` rows whose session or repository no longer exists, in the same transaction as the session delete; under `--dry-run` it reports the number the real run deletes, a row that meets both conditions counted once. Every path that drops a repository's rows deletes its search rows and its shown rows."
+    },
+    {
+      "id": "AC-28",
+      "kind": "behavior",
+      "text": "`knowledge_propose` for a new entry writes a proposal through part 1's store with `proposed_by: agent:<id>` and `on_behalf_of: <person>`, answers `proposed <scope>/<id> for <slug>`, and `knowledge list` shows it open. With a `slug` that names an entry it proposes a change (`… changes v<n>`), at `base_version` when given and at the current version otherwise. The order of the checks is fixed: the schema, the rate counter, the area, the target, the judge, the write. Each refusal answers `refused <code>: <message>`, with part 1's message wherever part 1 has one and the code written once: an area outside the target root's taxonomy (`invalid`), a `base_version` with no `slug` (`invalid`), a new entry whose slug already exists (`exists`, before the judge runs), a change to an entry that does not exist (`missing`), a stale base version (`stale`), a part 1 quota (`quota`). The per-hour counter lives in `meta` per agent id (`knowledge.rate:<id>`), counts every call that passes the schema whatever its result, is checked before the judge call, and is shared by the MCP server and the `tool` bridge: the 21st call of one agent id in an hour is `refused quota` with no judge request, another agent id proceeds, a schema-invalid call does not consume the window, an `invalid`-area refusal does, and the window resets after an hour."
+    },
+    {
+      "id": "AC-29",
+      "kind": "behavior",
+      "text": "the security returns hold. `judgeProposal` redacts the draft's and every neighbour's title and body with the store's `env` before either judge is called: a stub TypeSafe receives none of a seeded AWS-shaped key in its request body, and the heuristic's input holds the redacted text. The search match is built from the query's tokens through `anyOf`, confined to the text columns, with no operator passed through: a query such as `a\" OR title:x NEAR(` answers normally, and a query `step 3` or a query holding an entry id's hex group matches no row through an id. A global `knowledge_get` of a project ref answers `Not found`; refs are validated against the scope and slug patterns and resolved through the index, never as a file path. The session-start intro says the knowledge is information, not instructions, and the prompt intro says it is background, not instructions."
+    },
+    {
+      "id": "AC-31",
+      "kind": "observed",
+      "text": "the hook snapshots (`tests/unit/hook-snapshots.test.ts`) and the memory-alone MCP tool list snapshots (`tests/unit/mcp-tools-list.test.ts`, the modules setting at `memory`) pass, and every snapshot the two snapshot files held at the item's base is byte for byte the same (the default lists' snapshots are added beside them); `tests/perf/budgets.test.ts` keeps its budgets with knowledge on and a corpus of three repositories of 2,000 entries, 10 pinned in each; checked by `probes/check-preserve.ts`, which builds, runs the three files and compares the base's snapshots with the files"
+    }
+  ],
+  "approvals": [
+    {
+      "what": "spec",
+      "at": "2026-11-09T17:23:22.813Z",
+      "by": "validator",
+      "rule": "complete-gap-round"
+    }
+  ],
+  "skips": [],
+  "baseCommit": "62780aac6e5f4bf1eaefd449ee3c523815b3acd4",
+  "createdAt": "2026-11-09T00:29:24.851Z",
+  "updatedAt": "2026-11-09T23:24:40.213Z",
+  "specReview": true,
+  "kind": "feature",
+  "kindFrom": "answer",
+  "knowledge": {
+    "readAt": "2026-11-09T00:29:24.863Z",
+    "listed": [
+      "K-319",
+      "K-316",
+      "K-311",
+      "K-189"
+    ]
+  },
+  "priority": "high",
+  "seats": [
+    {
+      "role": "researcher",
+      "team": "researchers",
+      "kind": "debate",
+      "reason": "full route"
+    },
+    {
+      "role": "review-code-quality",
+      "team": "backend",
+      "kind": "gate",
+      "gate": "code-quality",
+      "reason": "full route"
+    },
+    {
+      "role": "review-test-quality",
+      "team": "qa",
+      "kind": "gate",
+      "gate": "test-quality",
+      "reason": "full route"
+    },
+    {
+      "role": "review-security",
+      "team": "security",
+      "kind": "gate",
+      "gate": "security",
+      "reason": "full route"
+    },
+    {
+      "role": "review-ui-ux",
+      "team": "frontend",
+      "kind": "gate",
+      "gate": "ui-ux",
+      "reason": "interface files: ui/src/components/ProjectsView.vue, ui/src/components/Settings.vue, ui/src/components/settings/Backups.vue, +2 more"
+    },
+    {
+      "role": "review-risk",
+      "team": "architects",
+      "kind": "gate",
+      "gate": "risk",
+      "reason": "full route"
+    },
+    {
+      "role": "review-architecture",
+      "team": "architects",
+      "kind": "gate",
+      "gate": "architecture",
+      "reason": "full route"
+    },
+    {
+      "role": "review-data",
+      "team": "etl",
+      "kind": "gate",
+      "gate": "data",
+      "reason": "risk area data-migration"
+    },
+    {
+      "role": "lead-qa",
+      "team": "qa",
+      "kind": "lead",
+      "reason": "full route"
+    },
+    {
+      "role": "lead-security",
+      "team": "security",
+      "kind": "lead",
+      "reason": "full route"
+    },
+    {
+      "role": "lead-architects",
+      "team": "architects",
+      "kind": "lead",
+      "reason": "full route"
+    },
+    {
+      "role": "lead-etl",
+      "team": "etl",
+      "kind": "lead",
+      "reason": "risk area data-migration"
+    },
+    {
+      "role": "lead-frontend",
+      "team": "frontend",
+      "kind": "lead",
+      "reason": "interface files: ui/src/components/ProjectsView.vue, ui/src/components/Settings.vue, ui/src/components/settings/Backups.vue, +2 more"
+    },
+    {
+      "role": "judge",
+      "team": null,
+      "kind": "debate",
+      "reason": "a gate is planned"
+    }
+  ],
+  "primaryTeam": "frontend",
+  "runtimes": [
+    "claude"
+  ],
+  "phaseAt": {
+    "understand": "2026-11-09T00:29:34.072Z",
+    "specify": "2026-11-09T00:38:59.119Z",
+    "conclave": "2026-11-09T00:44:13.514Z",
+    "plan": "2026-11-09T14:43:34.266Z",
+    "spec-review": "2026-11-09T14:44:56.590Z",
+    "build": "2026-11-09T17:23:55.000Z",
+    "gate": "2026-11-09T20:05:45.564Z",
+    "deliver": "2026-11-09T23:24:39.909Z",
+    "learn": "2026-11-09T23:24:40.033Z"
+  },
+  "decisions": [
+    {
+      "id": "D-1",
+      "question": "Is the knowledge module on by default (the modules setting defaulting to memory and knowledge) or opt-in?",
+      "default": "On by default. The mission's acceptance, that a new project's first session is shown the team's knowledge, cannot hold for an opt-in module; with no entries the module says nothing and costs one index lookup; the memory-alone snapshot tests set the modules setting to memory explicitly and keep their pinned text, and a person turns the module off with the same setting.",
+      "answer": "On by default. The mission's acceptance, that a new project's first session is shown the team's knowledge, cannot hold for an opt-in module; with no entries the module says nothing and costs one index lookup; the memory-alone snapshot tests set the modules setting to memory explicitly and keep their pinned text, and a person turns the module off with the same setting.",
+      "at": "2026-11-09T00:51:58.745Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    },
+    {
+      "id": "D-2",
+      "question": "What is a new project's first session shown at session start: the entries a person pinned in the workspace and the shared repositories, every active entry's heading, or a selection judged against the project in the background?",
+      "default": "The pinned entries (a new optional pinned field of the entry format), newest first, within the module's share of 840 characters, each once per context, and only at the project's first session. A person knows which personas and strategies every new project needs; everything would not fit and a judged selection needs a background pass that does not exist yet (a later improvement).",
+      "answer": "The pinned entries (a new optional pinned field of the entry format), newest first, within the module's share of 840 characters, each once per context, and only at the project's first session. A person knows which personas and strategies every new project needs; everything would not fit and a judged selection needs a background pass that does not exist yet (a later improvement).",
+      "at": "2026-11-09T00:52:00.872Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    },
+    {
+      "id": "D-3",
+      "question": "How is an entry's relevance to a prompt decided on the hook path: the exact lexical floor of ADR 0020 (a code name, three telling words, or two title words plus one), the judge, or nothing on prompts?",
+      "default": "The lexical floor, exact rules in code, at most two entries per prompt within the module's share, each once per context. A hook runs no process and no network, so the judge cannot answer there; the judge reranks in the search tool, where it may.",
+      "answer": "The lexical floor, exact rules in code, at most two entries per prompt within the module's share, each once per context. A hook runs no process and no network, so the judge cannot answer there; the judge reranks in the search tool, where it may.",
+      "at": "2026-11-09T00:52:02.600Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    },
+    {
+      "id": "D-4",
+      "question": "What happens to a proposal that states what an existing entry already states: refused naming the entry, or filed as a proposal flagged duplicate?",
+      "default": "Refused, naming the existing slug and pointing the agent to knowledge_update. A duplicate proposal only costs the person a decision; the agent has the tool for a change.",
+      "answer": "Refused, naming the existing slug and pointing the agent to knowledge_update. A duplicate proposal only costs the person a decision; the agent has the tool for a change.",
+      "at": "2026-11-09T00:52:04.236Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    },
+    {
+      "id": "D-5",
+      "question": "What happens to a proposal that contradicts an existing entry: recorded with the contradiction for the person, or refused?",
+      "default": "Recorded, with the contradicted entry's id in the proposal's frontmatter and said in the tool's answer; never refused. Whether the team's knowledge changed is the person's call, and a contradiction is often the news.",
+      "answer": "Recorded, with the contradicted entry's id in the proposal's frontmatter and said in the tool's answer; never refused. Whether the team's knowledge changed is the person's call, and a contradiction is often the news.",
+      "at": "2026-11-09T00:52:05.804Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    },
+    {
+      "id": "D-6",
+      "question": "How is a proposal without an area catalogued: the judge picks one (TypeSafe: a Choice over the taxonomy with a no-match option, taken at confidence 0.6 or more; heuristic: a lexicon per area in code), with a refusal asking for an area when neither can tell, or is the area always required of the agent?",
+      "default": "The judge picks when it can, the proposal records that the area was judged, and otherwise the agent is asked for one. An agent that knows the area gives it; one that does not should not guess, and a wrong area is a problem the person would have to fix.",
+      "answer": "The judge picks when it can, the proposal records that the area was judged, and otherwise the agent is asked for one. An agent that knows the area gives it; one that does not should not guess, and a wrong area is a problem the person would have to fix.",
+      "at": "2026-11-09T00:52:07.587Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    },
+    {
+      "id": "D-7",
+      "question": "How does the MCP server learn the host agent's id for an agent's proposals: an --agent flag written into each host's MCP command by the plugin generator (mcp by default), or an id the agent passes as a tool argument?",
+      "default": "The --agent flag, written per host by scripts/plugins.ts, mcp when absent. Part 1's guarantee needs the writer to come from the channel, never from the agent's own words.",
+      "answer": "The --agent flag, written per host by scripts/plugins.ts, mcp when absent. Part 1's guarantee needs the writer to come from the channel, never from the agent's own words.",
+      "at": "2026-11-09T00:52:09.255Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    },
+    {
+      "id": "D-8",
+      "question": "How does the composer share the budget once a second module exists: declared shares off the top (ADR 0019 F5), or memory gets the budget less what the declared modules actually wrote (ADR 0020 F5-prime)?",
+      "default": "F5-prime: memory gets the budget less what the other modules actually wrote plus the separators. With knowledge on by default, F5 would cut memory's brief by a fifth in every project even with no entries, and the pinned hook snapshots would change; F5-prime keeps them byte for byte while knowledge is silent.",
+      "answer": "F5-prime: memory gets the budget less what the other modules actually wrote plus the separators. With knowledge on by default, F5 would cut memory's brief by a fifth in every project even with no entries, and the pinned hook snapshots would change; F5-prime keeps them byte for byte while knowledge is silent.",
+      "at": "2026-11-09T00:52:11.169Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    },
+    {
+      "id": "D-9",
+      "question": "When are pinned entries shown: at every session start (once per context, within the share), or only at a project's first session?",
+      "default": "At every session start, once per context, within the module's share, a last line counting those that did not fit. A first-session rule reaches no project the store already knows, loses its one chance to a resume or a crash, and never shows an entry pinned later; the mission's first session is one case of every session.",
+      "answer": "At every session start, once per context, within the module's share, a last line counting those that did not fit. A first-session rule reaches no project the store already knows, loses its one chance to a resume or a crash, and never shows an entry pinned later; the mission's first session is one case of every session.",
+      "at": "2026-11-09T14:43:27.703Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-10",
+      "question": "How does a proposal get its area: a required enum in the tool's schema built from the taxonomies (the agent chooses), or a judge that catalogues a proposal without one?",
+      "default": "A required enum with the labels in its description; a judge that suggests an area waits for part 3, where a person writes in the viewer. A lexicon per area in code goes stale when a person adds an area, the taxonomy differs per root, and the calling agent can choose from a list.",
+      "answer": "A required enum with the labels in its description; a judge that suggests an area waits for part 3, where a person writes in the viewer. A lexicon per area in code goes stale when a person adds an area, the taxonomy differs per root, and the calling agent can choose from a list.",
+      "at": "2026-11-09T00:52:13.092Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    },
+    {
+      "id": "D-11",
+      "question": "How many tools, and in what shape do they answer: three (search, get, propose, a change being a propose with a slug and a base version) with fixed answer shapes and refusal codes, or five with prose answers?",
+      "default": "Three with fixed shapes: every entry named as scope/slug with its version, every refusal as a code from part 1 plus duplicate. Each tool's description is sent to the model in every session, and agents parse the answers.",
+      "answer": "Three with fixed shapes: every entry named as scope/slug with its version, every refusal as a code from part 1 plus duplicate. Each tool's description is sent to the model in every session, and agents parse the answers.",
+      "at": "2026-11-09T00:52:14.805Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    },
+    {
+      "id": "D-12",
+      "question": "Where does the MCP server take the host agent's id from: the MCP handshake's client name mapped in code (with an --agent override and mcp otherwise), or a flag written into every host's configuration?",
+      "default": "The handshake's client name, mapped in one table in code, --agent as an override, mcp when nothing matches; the OpenCode bridge is opencode by construction. The wrapper script drops arguments after mcp, direct installs write their own entries in five places, and existing installs would never get a flag.",
+      "answer": "The handshake's client name, mapped in one table in code, --agent as an override, mcp when nothing matches; the OpenCode bridge is opencode by construction. The wrapper script drops arguments after mcp, direct installs write their own entries in five places, and existing installs would never get a flag.",
+      "at": "2026-11-09T00:52:16.682Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    },
+    {
+      "id": "D-13",
+      "question": "Does knowledge_search rerank its candidates with TypeSafe in this part, or rank by bm25 only?",
+      "default": "bm25 only; a rerank by TypeSafe or by the local model is a later improvement once a measured search misses. The corpus is small, the gain unmeasured and the cost per call unbounded.",
+      "answer": "bm25 only; a rerank by TypeSafe or by the local model is a later improvement once a measured search misses. The corpus is small, the gain unmeasured and the cost per call unbounded.",
+      "at": "2026-11-09T00:52:18.354Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    },
+    {
+      "id": "D-14",
+      "question": "How are duplicates and contradictions judged: a knowledge-specific Judge method (relate) with its own questions and a heuristic without files, reusing memory's thresholds, or memory's consolidate as it is?",
+      "default": "A knowledge-specific relate method, index-keyed neighbours, questions worded for entries, the heuristic Jaccard without files, thresholds reused from src/distill/policy.ts, wrapped by withFallback. consolidate's input is memory-shaped and does not type-check for entries.",
+      "answer": "A knowledge-specific relate method, index-keyed neighbours, questions worded for entries, the heuristic Jaccard without files, thresholds reused from src/distill/policy.ts, wrapped by withFallback. consolidate's input is memory-shaped and does not type-check for entries.",
+      "at": "2026-11-09T00:52:20.374Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    },
+    {
+      "id": "D-15",
+      "question": "What does the global MCP server (Claude Desktop, no project) see: the workspace and the shared repositories only, or every project's repository too?",
+      "default": "The workspace and the shared repositories only. A global client would otherwise read every project's knowledge; a project's entries are read inside that project.",
+      "answer": "The workspace and the shared repositories only. A global client would otherwise read every project's knowledge; a project's entries are read inside that project.",
+      "at": "2026-11-09T00:52:21.932Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    },
+    {
+      "id": "D-16",
+      "question": "How does the index stay fresh for the hooks: hooks use the index as it is and mark a repository stale for the drain to rebuild, or hooks call ensureFresh?",
+      "default": "Hooks use the index as it is, mark a repository stale when its head or fingerprint differ, and the drain rebuilds stale repositories, bounded; the tools call ensureFresh. ensureFresh may spawn git, which a hook never does.",
+      "answer": "Hooks use the index as it is, mark a repository stale when its head or fingerprint differ, and the drain rebuilds stale repositories, bounded; the tools call ensureFresh. ensureFresh may spawn git, which a hook never does.",
+      "at": "2026-11-09T00:52:23.706Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    }
+  ],
+  "checklists": [
+    {
+      "kind": "endpoint",
+      "paths": [
+        "/Users/andreagroferreira/.local/share/wizardingcode-developer-crew/skills/crew/checklists/endpoint.md"
+      ],
+      "at": "2026-11-09T00:44:06.068Z"
+    },
+    {
+      "kind": "migration-or-restore",
+      "paths": [
+        "/Users/andreagroferreira/.local/share/wizardingcode-developer-crew/skills/crew/checklists/migration-or-restore.md"
+      ],
+      "at": "2026-11-09T00:44:06.115Z"
+    }
+  ],
+  "knowledgeFiles": [],
+  "knowledgeLabels": [],
+  "validations": [
+    {
+      "what": "spec",
+      "by": "lead-qa",
+      "verdict": "returned",
+      "returns": 3,
+      "round": 1,
+      "file": "conclave/lead-qa.md",
+      "hash": "sha256:2c603405bfcc615f6385d9411ae0630ee8a7d416144c22723765ff7aaa1d0b70",
+      "fileHash": "sha256:d252b077a6da715becb9397f49b36a2a59498be77d35697c86fa0e37f6e075ab",
+      "at": "2026-11-09T00:46:07.894Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-security",
+      "verdict": "returned",
+      "returns": 5,
+      "round": 1,
+      "file": "conclave/lead-security.md",
+      "hash": "sha256:2c603405bfcc615f6385d9411ae0630ee8a7d416144c22723765ff7aaa1d0b70",
+      "fileHash": "sha256:b6c721ab11db7ecdd4ad0edb4b695a46665175320a2c56fc7ca7f20b79ffad52",
+      "at": "2026-11-09T00:46:22.660Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-architects",
+      "verdict": "returned",
+      "returns": 4,
+      "round": 1,
+      "file": "conclave/lead-architects.md",
+      "hash": "sha256:502f9a618e156e20997560f64750e3a13698f194bfd239270f2dc848cccd0dff",
+      "fileHash": "sha256:e26b0f43ab6a3a267706e49acb4c9979eb5e1eccbcbe24c3377bb0311b9b0654",
+      "at": "2026-11-09T00:47:12.111Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-etl",
+      "verdict": "returned",
+      "returns": 4,
+      "round": 1,
+      "file": "conclave/lead-etl.md",
+      "hash": "sha256:ed8c1df7ff3976a1bc7e79c7e1798d81cf34829eff9bb5ae40e9199587f758aa",
+      "fileHash": "sha256:e8e1d99b3dc4f4ca36be6ab49a880b51fb01432ede6078c77061b19432d81127",
+      "at": "2026-11-09T00:48:30.292Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-qa",
+      "verdict": "returned",
+      "returns": 3,
+      "round": 2,
+      "file": "conclave/lead-qa-reply.md",
+      "hash": "sha256:ec92eb3d4d476cd2e387614062557da52b172d5776f7999c43321eb50aca368b",
+      "fileHash": "sha256:47418d1119c90724c54deb2370f2a90acb4cfc4c31ef3cdd268a6d0d06cde090",
+      "at": "2026-11-09T00:50:16.780Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-security",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 2,
+      "file": "conclave/lead-security-reply.md",
+      "hash": "sha256:43939e12c7ddc0b1c208ce29fb4f49cfb52ef4482b750d94a10eab4cacf45a53",
+      "fileHash": "sha256:ff95f8f12b59f6f00dc553fed2af152b525c141b392516b37437032f431a401b",
+      "at": "2026-11-09T00:50:53.709Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-etl",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 2,
+      "file": "conclave/lead-etl-reply.md",
+      "hash": "sha256:43939e12c7ddc0b1c208ce29fb4f49cfb52ef4482b750d94a10eab4cacf45a53",
+      "fileHash": "sha256:889cc9f9823e0c076317a3b1ed86fb8f60f153746caab0b377f38bbec4d09473",
+      "at": "2026-11-09T00:50:53.759Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-architects",
+      "verdict": "returned",
+      "returns": 4,
+      "round": 2,
+      "file": "conclave/lead-architects-reply.md",
+      "hash": "sha256:43939e12c7ddc0b1c208ce29fb4f49cfb52ef4482b750d94a10eab4cacf45a53",
+      "fileHash": "sha256:44259f75f67921e0151c2def7d9fd10d6d5576a67200b0caf7b90a8b285d399e",
+      "at": "2026-11-09T00:50:53.810Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-qa",
+      "verdict": "returned",
+      "returns": 1,
+      "round": 3,
+      "file": "conclave/lead-qa-reply.md",
+      "hash": "sha256:00ed1ca4bdd1ab87b5115cdc1e9029fbfc61cb104127964ed7a5a7784c80595c",
+      "fileHash": "sha256:cbb59273a4fbf82aba31eadf1c5f8eb696958898a0300efe4b2f6b23a32ce1dc",
+      "at": "2026-11-09T00:52:48.928Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-architects",
+      "verdict": "returned",
+      "returns": 1,
+      "round": 3,
+      "file": "conclave/lead-architects-reply.md",
+      "hash": "sha256:00ed1ca4bdd1ab87b5115cdc1e9029fbfc61cb104127964ed7a5a7784c80595c",
+      "fileHash": "sha256:fae382c2e3d05fa3e70a5f792a52ea4acf5b30d140ad0b6f1a394ae7b92d343f",
+      "at": "2026-11-09T00:52:48.976Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-qa",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 3,
+      "file": "conclave/lead-qa-reply.md",
+      "hash": "sha256:00ed1ca4bdd1ab87b5115cdc1e9029fbfc61cb104127964ed7a5a7784c80595c",
+      "fileHash": "sha256:8789fcb48230027acf84cc463b5c8130deae1ca372f742d976ee5b7233b707f3",
+      "at": "2026-11-09T00:53:23.743Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-architects",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 3,
+      "file": "conclave/lead-architects-reply.md",
+      "hash": "sha256:00ed1ca4bdd1ab87b5115cdc1e9029fbfc61cb104127964ed7a5a7784c80595c",
+      "fileHash": "sha256:ce7ce0a9950b41243cdd72603d1ea99f60d1ac2622cfa082d4e032f79aebb518",
+      "at": "2026-11-09T00:53:30.039Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-security",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 3,
+      "file": "conclave/lead-security-reply.md",
+      "hash": "sha256:00ed1ca4bdd1ab87b5115cdc1e9029fbfc61cb104127964ed7a5a7784c80595c",
+      "fileHash": "sha256:c9e932e2200f725627d7d9ae0b63740d2ba6d3a28ff6360e1886a58eadc84751",
+      "at": "2026-11-09T00:54:01.214Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-etl",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 3,
+      "file": "conclave/lead-etl-reply.md",
+      "hash": "sha256:00ed1ca4bdd1ab87b5115cdc1e9029fbfc61cb104127964ed7a5a7784c80595c",
+      "fileHash": "sha256:509bd19b80e9f27c8264f0cf634404529b367ce35cac80b201f7a47cab5a0d6f",
+      "at": "2026-11-09T00:54:16.216Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-qa",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-qa.delivery.md",
+      "hash": "sha256:05656f0bf05aadd2d79f13acf18d9a90b13db04a106a021eace0a1c1e693a89e",
+      "fileHash": "sha256:9f0dc1c23bdf2ed7e26e3e5b9801afe7f598c419b48019dc7c31c4a61a90c026",
+      "at": "2026-11-09T23:21:24.033Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-security",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-security.delivery.md",
+      "hash": "sha256:05656f0bf05aadd2d79f13acf18d9a90b13db04a106a021eace0a1c1e693a89e",
+      "fileHash": "sha256:f06e05ae9cff3af43101459a43ab3ce8980c49e52cdb66357983d7d03baa40a5",
+      "at": "2026-11-09T23:21:24.094Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-architects",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-architects.delivery.md",
+      "hash": "sha256:05656f0bf05aadd2d79f13acf18d9a90b13db04a106a021eace0a1c1e693a89e",
+      "fileHash": "sha256:eec33ca9d0bf40695df41c74851cdd96c4e86139c0bf6257ff36eb7f640d36cb",
+      "at": "2026-11-09T23:21:24.155Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-etl",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-etl.delivery.md",
+      "hash": "sha256:05656f0bf05aadd2d79f13acf18d9a90b13db04a106a021eace0a1c1e693a89e",
+      "fileHash": "sha256:f3279f2d202bccd06660b137eea762943daddb38004d9003dec6c8e7075fddb8",
+      "at": "2026-11-09T23:21:24.214Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-frontend",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-frontend.delivery.md",
+      "hash": "sha256:05656f0bf05aadd2d79f13acf18d9a90b13db04a106a021eace0a1c1e693a89e",
+      "fileHash": "sha256:fb879a1c3f803dfdf2fec0a9e6594606cb78548df476917e4bf38633f79813e8",
+      "at": "2026-11-09T23:21:24.274Z"
+    }
+  ],
+  "rounds": {
+    "judgement": 5,
+    "validation": 3,
+    "judgementCode": "sha256:05656f0bf05aadd2d79f13acf18d9a90b13db04a106a021eace0a1c1e693a89e"
+  },
+  "continued": [
+    {
+      "what": "validation",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-09T00:52:48.927Z",
+      "standing": true
+    },
+    {
+      "what": "judgement",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-09T20:52:43.782Z",
+      "standing": true
+    },
+    {
+      "what": "judgement",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-09T21:04:20.155Z",
+      "standing": true
+    },
+    {
+      "what": "judgement",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-09T21:32:45.808Z",
+      "standing": true
+    }
+  ],
+  "removedCriteria": [
+    {
+      "id": "AC-12",
+      "kind": "preserve",
+      "text": "The hook snapshots (tests/unit/hook-snapshots.test.ts) and the memory-alone MCP tool list snapshots (tests/unit/mcp-tools-list.test.ts, the modules setting at memory) keep passing unchanged; tests/perf/budgets.test.ts keeps its budgets with knowledge on and a corpus of three repositories of 2,000 entries, 10 pinned.",
+      "at": "2026-11-09T18:29:35.787Z"
+    },
+    {
+      "id": "AC-30",
+      "kind": "observed",
+      "text": "the hook snapshots (`tests/unit/hook-snapshots.test.ts`) and the memory-alone MCP tool list snapshots (`tests/unit/mcp-tools-list.test.ts`, the modules setting at `memory`) pass with their snapshot files unchanged since the item's base; `tests/perf/budgets.test.ts` keeps its budgets with knowledge on and a corpus of three repositories of 2,000 entries, 10 pinned in each; checked by `probes/check-preserve.ts`, which builds, runs the three files and compares the two snapshot files with the base",
+      "at": "2026-11-09T18:35:23.894Z"
+    }
+  ],
+  "learned": {
+    "at": "2026-11-09T23:24:40.213Z",
+    "entries": [
+      "K-343"
+    ],
+    "confirmed": []
+  }
+}

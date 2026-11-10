@@ -410,3 +410,653 @@ Usage: wizardingcode-mem tool <memory_search|memory_get|memory_save|history_sear
        wizardingcode-mem tool <memory_search|memory_get|memory_save|history_search|memory_projects> --global   (every project)
 "
 `;
+
+exports[`MCP tool list by default (memory and knowledge) inside a project, knowledge's three tools after memory's, with no taxonomy file 1`] = `
+{
+  "tools": [
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true,
+      },
+      "description": "Search notes saved from earlier sessions in this project and its linked projects, by words and, when the optional model is installed, by meaning; returns one heading per note.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "kind": {
+            "enum": [
+              "decision",
+              "fix",
+              "gotcha",
+              "convention",
+              "change",
+              "discovery",
+            ],
+            "type": "string",
+          },
+          "limit": {
+            "maximum": 25,
+            "minimum": 1,
+            "type": "integer",
+          },
+          "project": {
+            "description": "Only this project or one linked project (its name).",
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string",
+          },
+          "query": {
+            "description": "Words, symbols or file names. Empty lists the most important notes.",
+            "type": "string",
+          },
+        },
+        "required": [
+          "query",
+        ],
+        "type": "object",
+      },
+      "name": "memory_search",
+      "title": "Search memories",
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true,
+      },
+      "description": "Read saved notes in full, by the ids that memory_search returned.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "ids": {
+            "items": {
+              "maximum": 9007199254740991,
+              "minimum": -9007199254740991,
+              "type": "integer",
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "type": "array",
+          },
+        },
+        "required": [
+          "ids",
+        ],
+        "type": "object",
+      },
+      "name": "memory_get",
+      "title": "Read memories",
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false,
+      },
+      "description": "Save something worth knowing in later sessions: a decision and its reason, a rule the user stated, a pitfall, a fix.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "files": {
+            "description": "Project-relative paths it is about.",
+            "items": {
+              "type": "string",
+            },
+            "maxItems": 10,
+            "type": "array",
+          },
+          "importance": {
+            "maximum": 5,
+            "minimum": 1,
+            "type": "integer",
+          },
+          "kind": {
+            "enum": [
+              "decision",
+              "fix",
+              "gotcha",
+              "convention",
+              "change",
+              "discovery",
+            ],
+            "type": "string",
+          },
+          "text": {
+            "description": "Self-contained; the first sentence becomes the title.",
+            "minLength": 1,
+            "type": "string",
+          },
+        },
+        "required": [
+          "text",
+          "kind",
+        ],
+        "type": "object",
+      },
+      "name": "memory_save",
+      "title": "Save a memory",
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true,
+      },
+      "description": "Search what was said in this project's past agent sessions, word for word, including before wizardingcode-mem was installed. Use it when memory_search finds nothing and the user refers to an earlier conversation.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "limit": {
+            "maximum": 25,
+            "minimum": 1,
+            "type": "integer",
+          },
+          "query": {
+            "description": "Words, symbols or file names.",
+            "maxLength": 500,
+            "minLength": 1,
+            "type": "string",
+          },
+        },
+        "required": [
+          "query",
+        ],
+        "type": "object",
+      },
+      "name": "history_search",
+      "title": "Search past conversations",
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false,
+      },
+      "description": "List, link or unlink the projects whose notes this project reads (same product, or one it uses), and confirm or reject suggested links; only when the user asks.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "action": {
+            "enum": [
+              "list",
+              "link",
+              "unlink",
+              "confirm",
+              "reject",
+            ],
+            "type": "string",
+          },
+          "id": {
+            "description": "For confirm and reject: a suggestion's id from list.",
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer",
+          },
+          "kind": {
+            "description": "For link: product (one product, both see each other) or uses (this project uses it, one way).",
+            "enum": [
+              "product",
+              "uses",
+            ],
+            "type": "string",
+          },
+          "project": {
+            "description": "For link and unlink: the other project, by name or key.",
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string",
+          },
+        },
+        "required": [
+          "action",
+        ],
+        "type": "object",
+      },
+      "name": "project_links",
+      "title": "Link projects",
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true,
+      },
+      "description": "Search the team's curated knowledge (strategies, personas, patterns, facts kept on purpose) by words; one line per entry with its scope/slug, kind, area and version. Not for what happened in earlier sessions: that is memory_search.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "area": {
+            "description": "An area id.",
+            "type": "string",
+          },
+          "kind": {
+            "enum": [
+              "knowledge",
+              "strategy",
+              "persona",
+              "pattern",
+            ],
+            "type": "string",
+          },
+          "limit": {
+            "maximum": 25,
+            "minimum": 1,
+            "type": "integer",
+          },
+          "query": {
+            "description": "Words. Empty lists the pinned entries, then the newest.",
+            "type": "string",
+          },
+          "repo": {
+            "enum": [
+              "all",
+              "workspace",
+              "project",
+              "shared",
+            ],
+            "type": "string",
+          },
+        },
+        "required": [
+          "query",
+        ],
+        "type": "object",
+      },
+      "name": "knowledge_search",
+      "title": "Search knowledge",
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true,
+      },
+      "description": "Read knowledge entries whole, by the scope/slug references knowledge_search returned.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "refs": {
+            "description": "scope/slug references, as knowledge_search returns them.",
+            "items": {
+              "pattern": "^(workspace|shared|project)\\/[a-z0-9][a-z0-9-]{0,79}$",
+              "type": "string",
+            },
+            "maxItems": 10,
+            "minItems": 1,
+            "type": "array",
+          },
+        },
+        "required": [
+          "refs",
+        ],
+        "type": "object",
+      },
+      "name": "knowledge_get",
+      "title": "Read knowledge",
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false,
+      },
+      "description": "Propose a new knowledge entry, or a change to one (give its slug and base version). A person accepts it before it becomes knowledge; the area is one of the taxonomy's. Not for session facts, decisions or fixes: those are memory_save.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "area": {
+            "description": "code: Code (workspace, shared); management: Management (workspace, shared); marketing: Marketing (workspace, shared); sales: Sales (workspace, shared); video: Video (workspace, shared); design: Design (workspace, shared); operations: Operations (workspace, shared); finance: Finance (workspace, shared); people: People (workspace, shared)",
+            "enum": [
+              "code",
+              "management",
+              "marketing",
+              "sales",
+              "video",
+              "design",
+              "operations",
+              "finance",
+              "people",
+            ],
+            "type": "string",
+          },
+          "base_version": {
+            "description": "For a change: the entry's version the change is based on.",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer",
+          },
+          "body": {
+            "minLength": 1,
+            "type": "string",
+          },
+          "context": {
+            "maxLength": 120,
+            "type": "string",
+          },
+          "kind": {
+            "enum": [
+              "knowledge",
+              "strategy",
+              "persona",
+              "pattern",
+            ],
+            "type": "string",
+          },
+          "repo": {
+            "enum": [
+              "workspace",
+              "project",
+              "shared",
+            ],
+            "type": "string",
+          },
+          "slug": {
+            "description": "For a change: the entry's slug.",
+            "maxLength": 80,
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "type": "string",
+          },
+          "subject": {
+            "maxLength": 120,
+            "type": "string",
+          },
+          "title": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string",
+          },
+        },
+        "required": [
+          "repo",
+          "title",
+          "kind",
+          "area",
+          "body",
+        ],
+        "type": "object",
+      },
+      "name": "knowledge_propose",
+      "title": "Propose knowledge",
+    },
+  ],
+}
+`;
+
+exports[`MCP tool list by default (memory and knowledge) with --global, search and get, and search's repo has no project 1`] = `
+{
+  "tools": [
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true,
+      },
+      "description": "Search notes saved while working on any of the user's projects, by words and, when the optional model is installed, by meaning; each heading names its project.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "kind": {
+            "enum": [
+              "decision",
+              "fix",
+              "gotcha",
+              "convention",
+              "change",
+              "discovery",
+            ],
+            "type": "string",
+          },
+          "limit": {
+            "maximum": 25,
+            "minimum": 1,
+            "type": "integer",
+          },
+          "project": {
+            "description": "Only this project (its name); every project when left out.",
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string",
+          },
+          "query": {
+            "description": "Words, symbols or file names. Empty lists the most important notes.",
+            "type": "string",
+          },
+        },
+        "required": [
+          "query",
+        ],
+        "type": "object",
+      },
+      "name": "memory_search",
+      "title": "Search memories",
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true,
+      },
+      "description": "Read saved notes in full, by the ids that memory_search returned.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "ids": {
+            "items": {
+              "maximum": 9007199254740991,
+              "minimum": -9007199254740991,
+              "type": "integer",
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "type": "array",
+          },
+        },
+        "required": [
+          "ids",
+        ],
+        "type": "object",
+      },
+      "name": "memory_get",
+      "title": "Read memories",
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false,
+      },
+      "description": "Save something worth knowing later, into the project it belongs to: a decision and its reason, a rule the user stated, a pitfall.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "importance": {
+            "maximum": 5,
+            "minimum": 1,
+            "type": "integer",
+          },
+          "kind": {
+            "enum": [
+              "decision",
+              "fix",
+              "gotcha",
+              "convention",
+              "change",
+              "discovery",
+            ],
+            "type": "string",
+          },
+          "project": {
+            "description": "The project this belongs to, by name; memory_projects lists them.",
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string",
+          },
+          "text": {
+            "description": "Self-contained; the first sentence becomes the title.",
+            "minLength": 1,
+            "type": "string",
+          },
+        },
+        "required": [
+          "text",
+          "kind",
+        ],
+        "type": "object",
+      },
+      "name": "memory_save",
+      "title": "Save a memory",
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true,
+      },
+      "description": "Search what was said in any of the user's projects' past agent sessions, word for word, including before wizardingcode-mem was installed; each result names its project. Use it when memory_search finds nothing and the user refers to an earlier conversation.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "limit": {
+            "maximum": 25,
+            "minimum": 1,
+            "type": "integer",
+          },
+          "project": {
+            "description": "Only this project (its name); every project when left out.",
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string",
+          },
+          "query": {
+            "description": "Words, symbols or file names.",
+            "maxLength": 500,
+            "minLength": 1,
+            "type": "string",
+          },
+        },
+        "required": [
+          "query",
+        ],
+        "type": "object",
+      },
+      "name": "history_search",
+      "title": "Search past conversations",
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true,
+      },
+      "description": "List the user's projects, most recently active first, to pick one to save into.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "limit": {
+            "maximum": 50,
+            "minimum": 1,
+            "type": "integer",
+          },
+        },
+        "type": "object",
+      },
+      "name": "memory_projects",
+      "title": "List projects",
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true,
+      },
+      "description": "Search the team's curated knowledge (strategies, personas, patterns, facts kept on purpose) by words; one line per entry with its scope/slug, kind, area and version. Not for what happened in earlier sessions: that is memory_search.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "area": {
+            "description": "An area id.",
+            "type": "string",
+          },
+          "kind": {
+            "enum": [
+              "knowledge",
+              "strategy",
+              "persona",
+              "pattern",
+            ],
+            "type": "string",
+          },
+          "limit": {
+            "maximum": 25,
+            "minimum": 1,
+            "type": "integer",
+          },
+          "query": {
+            "description": "Words. Empty lists the pinned entries, then the newest.",
+            "type": "string",
+          },
+          "repo": {
+            "enum": [
+              "all",
+              "workspace",
+              "shared",
+            ],
+            "type": "string",
+          },
+        },
+        "required": [
+          "query",
+        ],
+        "type": "object",
+      },
+      "name": "knowledge_search",
+      "title": "Search knowledge",
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true,
+      },
+      "description": "Read knowledge entries whole, by the scope/slug references knowledge_search returned.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "refs": {
+            "description": "scope/slug references, as knowledge_search returns them.",
+            "items": {
+              "pattern": "^(workspace|shared|project)\\/[a-z0-9][a-z0-9-]{0,79}$",
+              "type": "string",
+            },
+            "maxItems": 10,
+            "minItems": 1,
+            "type": "array",
+          },
+        },
+        "required": [
+          "refs",
+        ],
+        "type": "object",
+      },
+      "name": "knowledge_get",
+      "title": "Read knowledge",
+    },
+  ],
+}
+`;

@@ -125,6 +125,22 @@ export function anyLeaseActive(db: Db, now: number): boolean {
     leaseActive(db, EMBED_LEASE, now) ||
     // A download ends in a backfill on this store: moving it mid-download would leave the
     // backfill a stale path.
-    leaseActive(db, EMBED_DOWNLOAD_LEASE, now)
+    leaseActive(db, EMBED_DOWNLOAD_LEASE, now) ||
+    knowledgeLeaseActive(db, now)
   );
+}
+
+/** One lease per knowledge repository being written: `knowledge.lease:<repository path>`. */
+export const KNOWLEDGE_LEASE_PREFIX = "knowledge.lease:";
+
+/** The first key after every key with the prefix: the prefix with its last character raised by one. */
+const KNOWLEDGE_LEASE_END = "knowledge.lease;";
+
+/** True while a write to any knowledge repository is under way. */
+function knowledgeLeaseActive(db: Db, now: number): boolean {
+  // A range on the primary key, which a pattern match could not use.
+  const keys = db
+    .query<{ key: string }, [string, string]>("SELECT key FROM meta WHERE key >= ? AND key < ?")
+    .all(KNOWLEDGE_LEASE_PREFIX, KNOWLEDGE_LEASE_END);
+  return keys.some((row) => leaseActive(db, row.key, now));
 }

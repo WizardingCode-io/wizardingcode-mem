@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { importClaudeMem } from "../../src/import/claude-mem.ts";
 import type { SystemOneRequest } from "../../src/judge/client.ts";
+import { heuristicJudge } from "../../src/judge/heuristic.ts";
 import { rejudge } from "../../src/judge/rejudge.ts";
 import type { Judge } from "../../src/judge/types.ts";
 import { TypeSafeJudge } from "../../src/judge/typesafe.ts";
@@ -67,6 +68,7 @@ function scripted(
       };
     },
     consolidate: async () => ({ source: "typesafe", perNeighbour: [] }),
+    relate: (input) => heuristicJudge.relate(input),
   };
 }
 

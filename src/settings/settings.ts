@@ -1,11 +1,17 @@
 // The product's settings: the environment first, then `<data dir>/env`, then the
 // defaults. Keys are named exactly like the environment variables, so the file reads
 // like a shell would. This runs on the hook path: node:fs only, one small file read.
+// The two sharing keys are the exception to "the environment first": the file is the
+// policy, and the environment can only narrow it (`effectiveSharing`).
 import { isAbsolute, join, win32 } from "node:path";
 import { keyFingerprint } from "../judge/key.ts";
+import { isRoot, NONE, type Root, SHARE_AREA, shareListText } from "../sharing/types.ts";
 import { ENV_FILE, readEnvFile, writeEnvFile } from "./env-file.ts";
 
 export { ENV_FILE };
+
+const SHARE_ROOTS = "WIZARDINGCODE_MEM_SHARE_ROOTS";
+const SHARE_AREAS = "WIZARDINGCODE_MEM_SHARE_AREAS";
 
 export const SETTING_KEYS = [
   "TYPESAFE_API_KEY",
@@ -16,6 +22,9 @@ export const SETTING_KEYS = [
   "WIZARDINGCODE_MEM_UI_AUTO_OPEN",
   "WIZARDINGCODE_MEM_STORE_DIR",
   "WIZARDINGCODE_MODULES",
+  SHARE_ROOTS,
+  SHARE_AREAS,
+  "WIZARDINGCODE_MEM_AUTHOR",
   "WIZARDINGCODE_MEM_BACKUP_TO",
   "WIZARDINGCODE_MEM_BACKUP_EVERY_HOURS",
   "WIZARDINGCODE_MEM_BACKUP_KEEP",
@@ -25,6 +34,10 @@ export const SETTING_KEYS = [
   "WIZARDINGCODE_MEM_BACKUP_S3_SECRET_KEY",
 ] as const;
 export type SettingKey = (typeof SETTING_KEYS)[number];
+
+/** The two lists that say what may leave this machine beside each project's own level. */
+export type SharingKey = typeof SHARE_ROOTS | typeof SHARE_AREAS;
+export const SHARING_KEYS: readonly SettingKey[] = [SHARE_ROOTS, SHARE_AREAS];
 
 /** Values that never leave the machine in full: the API shows a fingerprint. */
 const SECRET_KEYS: ReadonlySet<SettingKey> = new Set([
@@ -44,8 +57,18 @@ export interface Settings {
   uiAutoOpen: boolean;
   /** Where the database lives when it was moved away from the data directory. */
   storeDir: string | null;
-  /** The modules on, as the comma list it was given; null means the default (memory). */
+  /**
+   * The modules on, as the comma list it was given; null means the default,
+   * `memory,knowledge`. An explicit `memory` turns knowledge off.
+   */
   modules: string | null;
+  /**
+   * The roots and the root-qualified areas allowed to leave, as in force and sorted, and
+   * what was emptied or ignored while reading them, one sentence each.
+   */
+  sharing: { roots: Root[]; areas: string[]; problems: string[] };
+  /** The person's name on the knowledge they write; null falls back to the git name. */
+  author: string | null;
   backup: {
     /** A folder, or `s3://bucket/prefix`. */
     to: string | null;
@@ -68,7 +91,7 @@ export const DEFAULTS = {
   uiAutoOpen: true,
   backupEveryHours: 24,
   backupKeep: 10,
-  modules: "memory",
+  modules: "memory,knowledge",
 } as const;
 
 const RETENTION = { min: 7, max: 3650 };
@@ -78,14 +101,16 @@ const KEEP = { min: 1, max: 1000 };
 
 export type Source = "env" | "file" | "default";
 
-type Env = Record<string, string | undefined>;
+export type Env = Record<string, string | undefined>;
 
-/** The raw value of each key and where it came from. */
+/**
+ * The raw value of each key and where it came from, the environment winning over the file's
+ * parsed map. The two sharing keys are not read from here: see `effectiveSharing`.
+ */
 function rawSettings(
   env: Env,
-  dataDir: string,
+  file: Record<string, string | undefined>,
 ): Record<SettingKey, { value: string | null; source: Source }> {
-  const file = readEnvFile(join(dataDir, ENV_FILE));
   const out = {} as Record<SettingKey, { value: string | null; source: Source }>;
   for (const key of SETTING_KEYS) {
     const fromEnv = env[key]?.trim();
@@ -109,9 +134,121 @@ function integer(
   return n >= range.min && n <= range.max ? n : fallback;
 }
 
+const AUTHOR_MAX = 80;
+
+/**
+ * Why a text cannot be a person's author name; null when it can. A name starting with
+ * `agent:` is refused: that prefix is how an agent's change is told from a person's.
+ */
+export function authorNameProblem(value: string): string | null {
+  if (value.length === 0 || value.length > AUTHOR_MAX || /[\r\n]/.test(value)) {
+    return `a name of 1 to ${AUTHOR_MAX} characters, on one line`;
+  }
+  return value.startsWith("agent:") ? "a person's name cannot start with agent:" : null;
+}
+
+// --- The sharing lists ---------------------------------------------------------------
+
+/** What each sharing key lists: the noun a problem names, and the test a token must pass. */
+const SHARE_LISTS: Record<SharingKey, { noun: string; valid: (token: string) => boolean }> = {
+  [SHARE_ROOTS]: { noun: "root", valid: isRoot },
+  [SHARE_AREAS]: { noun: "root-qualified area id", valid: (token) => SHARE_AREA.test(token) },
+};
+
+/**
+ * A sharing list as written: trimmed, lower-cased, de-duplicated, sorted. `none`, an empty
+ * text and an absent value are the empty list. It fails closed: one token that is not what
+ * the key lists empties the whole list, and the problem names the token's position, never
+ * its value.
+ */
+export function parseShareList(
+  raw: string | null,
+  key: SharingKey,
+): { list: string[]; problem: string | null } {
+  const tokens = (raw ?? "").split(",").map((token) => token.trim().toLowerCase());
+  if (tokens.length === 1 && (tokens[0] === "" || tokens[0] === NONE)) {
+    return { list: [], problem: null };
+  }
+  const { noun, valid } = SHARE_LISTS[key];
+  const bad = tokens.findIndex((token) => !valid(token));
+  if (bad !== -1) {
+    return { list: [], problem: `${key}: token ${bad + 1} is not a ${noun}; the list was emptied` };
+  }
+  return { list: [...new Set(tokens)].sort(), problem: null };
+}
+
+/**
+ * The environment may only narrow a sharing list: an id it names beyond the file's list is
+ * ignored and counted, an id of the file's it leaves out is removed. A null environment
+ * says nothing, and the file's list stands.
+ */
+export function narrowOnly(
+  file: string[],
+  env: string[] | null,
+): { list: string[]; ignored: number; narrowed: boolean } {
+  if (env === null) return { list: [...file], ignored: 0, narrowed: false };
+  return {
+    list: file.filter((id) => env.includes(id)),
+    ignored: env.filter((id) => !file.includes(id)).length,
+    narrowed: file.some((id) => !env.includes(id)),
+  };
+}
+
+/** One sharing list in force, with the file's own list and how the two came apart. */
+export interface EffectiveShareList {
+  list: string[];
+  /** The file's own list, before any environment: what a person chose. */
+  fileList: string[];
+  /** `env` only when the environment removed an id of the file's. */
+  source: Source;
+  /** How many ids the environment named beyond the file's list. */
+  ignored: number;
+  problems: string[];
+}
+
+/**
+ * The two sharing lists in force. For these keys the file is the policy, so the file's
+ * parsed map and the environment are read apart: an environment value is honoured only
+ * where it narrows, and an empty variable is unset, as for every other key. An invalid token
+ * in the environment empties the environment's list, which removes every id of the file's.
+ * The problems come in a fixed order: the file's token, the environment's token, the count
+ * of the ids the environment named beyond the file's.
+ */
+export function effectiveSharing(
+  file: Record<string, string | undefined>,
+  env: Env,
+): Record<SharingKey, EffectiveShareList> {
+  const one = (key: SharingKey): EffectiveShareList => {
+    const inFile = parseShareList(file[key] ?? null, key);
+    const fromEnv = env[key]?.trim();
+    const inEnv = fromEnv ? parseShareList(fromEnv, key) : null;
+    const { list, ignored, narrowed } = narrowOnly(inFile.list, inEnv?.list ?? null);
+    const problems: string[] = [];
+    if (inFile.problem !== null) problems.push(inFile.problem);
+    if (inEnv !== null && inEnv.problem !== null) {
+      problems.push(`the environment's ${inEnv.problem}`);
+    }
+    if (ignored > 0) {
+      problems.push(`the environment's ${key} names ${ignored} more than the file; ignored`);
+    }
+    const source: Source = narrowed ? "env" : file[key] ? "file" : "default";
+    return { list, fileList: inFile.list, source, ignored, problems };
+  };
+  return { [SHARE_ROOTS]: one(SHARE_ROOTS), [SHARE_AREAS]: one(SHARE_AREAS) };
+}
+
 export function loadSettings(env: Env = process.env, dataDir: string): Settings {
-  const raw = rawSettings(env, dataDir);
+  const file = readEnvFile(join(dataDir, ENV_FILE));
+  return settingsFrom(rawSettings(env, file), effectiveSharing(file, env));
+}
+
+/** The settings from the raw values and the sharing lists, both read from one parse of the file. */
+function settingsFrom(
+  raw: Record<SettingKey, { value: string | null; source: Source }>,
+  sharing: Record<SharingKey, EffectiveShareList>,
+): Settings {
   const value = (key: SettingKey) => raw[key].value;
+  const author = value("WIZARDINGCODE_MEM_AUTHOR");
   return {
     typesafeKey: value("TYPESAFE_API_KEY"),
     typesafe: onOff(value("WIZARDINGCODE_MEM_TYPESAFE"), true) ? "on" : "off",
@@ -129,6 +266,12 @@ export function loadSettings(env: Env = process.env, dataDir: string): Settings 
     uiAutoOpen: onOff(value("WIZARDINGCODE_MEM_UI_AUTO_OPEN"), DEFAULTS.uiAutoOpen),
     storeDir: value("WIZARDINGCODE_MEM_STORE_DIR"),
     modules: value("WIZARDINGCODE_MODULES"),
+    sharing: {
+      roots: sharing[SHARE_ROOTS].list.filter(isRoot),
+      areas: sharing[SHARE_AREAS].list,
+      problems: [...sharing[SHARE_ROOTS].problems, ...sharing[SHARE_AREAS].problems],
+    },
+    author: author !== null && authorNameProblem(author) === null ? author : null,
     backup: {
       to: value("WIZARDINGCODE_MEM_BACKUP_TO"),
       everyHours: integer(
@@ -165,6 +308,17 @@ const moduleList = (value: string) =>
     .join(",");
 const S3_URL = /^s3:\/\/[a-z0-9][a-z0-9.-]{1,61}[a-z0-9](\/[^\s]*)?$/i;
 
+/** A sharing list as the file holds it: the parsed list as comma text, or `none`. */
+const shareList = (key: SharingKey) => (value: string) =>
+  shareListText(parseShareList(value, key).list);
+
+/** How a value is written when that is not the text as given. */
+const NORMALISED: Partial<Record<SettingKey, (value: string) => string>> = {
+  WIZARDINGCODE_MODULES: moduleList,
+  [SHARE_ROOTS]: shareList(SHARE_ROOTS),
+  [SHARE_AREAS]: shareList(SHARE_AREAS),
+};
+
 /** How each key is checked; the message never repeats the value. */
 const RULES: Record<SettingKey, (value: string) => string | null> = {
   TYPESAFE_API_KEY: (v) => (v === "" ? "the key cannot be empty; clear it instead" : null),
@@ -187,6 +341,15 @@ const RULES: Record<SettingKey, (value: string) => string | null> = {
       ? null
       : "memory is always on in this version: list it first, then the modules to add";
   },
+  [SHARE_ROOTS]: (v) =>
+    parseShareList(v, SHARE_ROOTS).problem === null
+      ? null
+      : "a comma list of workspace and shared, or none",
+  [SHARE_AREAS]: (v) =>
+    parseShareList(v, SHARE_AREAS).problem === null
+      ? null
+      : "a comma list of root-qualified area ids such as workspace:sales, or none",
+  WIZARDINGCODE_MEM_AUTHOR: authorNameProblem,
   WIZARDINGCODE_MEM_BACKUP_TO: (v) =>
     absolutePath(v) || S3_URL.test(v) ? null : "an absolute folder path or s3://bucket/prefix",
   WIZARDINGCODE_MEM_BACKUP_EVERY_HOURS: (v) =>
@@ -215,6 +378,9 @@ function asString(value: unknown): string | null {
   return null;
 }
 
+/** Every value is one line of the env file: a line break would write a second key. */
+const ONE_LINE = "a value on one line";
+
 export function validatePatch(patch: Patch): Validated {
   const changes: Partial<Record<SettingKey, string | null>> = {};
   const errors: Partial<Record<string, string>> = {};
@@ -234,9 +400,13 @@ export function validatePatch(patch: Patch): Validated {
       errors[key] = "a text value, a number or null";
       continue;
     }
+    if (/[\r\n]/.test(text)) {
+      errors[key] = ONE_LINE;
+      continue;
+    }
     const problem = RULES[settingKey](text);
     if (problem !== null) errors[key] = problem;
-    else changes[settingKey] = settingKey === "WIZARDINGCODE_MODULES" ? moduleList(text) : text;
+    else changes[settingKey] = NORMALISED[settingKey]?.(text) ?? text;
   }
   return Object.keys(errors).length > 0 ? { ok: false, errors } : { ok: true, changes };
 }
@@ -264,8 +434,10 @@ export type PublicSettings = Record<SettingKey, PublicSetting | PublicSecret>;
 
 /** Every setting with its source; secrets reduced to a fingerprint. Defaults are filled in. */
 export function publicSettings(env: Env = process.env, dataDir: string): PublicSettings {
-  const raw = rawSettings(env, dataDir);
-  const settings = loadSettings(env, dataDir);
+  const file = readEnvFile(join(dataDir, ENV_FILE));
+  const raw = rawSettings(env, file);
+  const sharing = effectiveSharing(file, env);
+  const settings = settingsFrom(raw, sharing);
   const defaults: Partial<Record<SettingKey, string>> = {
     WIZARDINGCODE_MEM_TYPESAFE: settings.typesafe,
     WIZARDINGCODE_MEM_SEMANTIC: settings.semantic,
@@ -286,6 +458,10 @@ export function publicSettings(env: Env = process.env, dataDir: string): PublicS
         fingerprint: value === null ? null : keyFingerprint(value),
         source,
       };
+    } else if (key === SHARE_ROOTS || key === SHARE_AREAS) {
+      // Not the environment's to win: the value is the list in force, and the source is
+      // the environment only where it narrowed the file's list.
+      out[key] = { value: shareListText(sharing[key].list), source: sharing[key].source };
     } else {
       out[key] = { value: value ?? defaults[key] ?? null, source };
     }

@@ -12,8 +12,8 @@ import History from "./settings/History.vue";
 import Judge from "./settings/Judge.vue";
 import Retention from "./settings/Retention.vue";
 import Semantic from "./settings/Semantic.vue";
+import Sharing from "./settings/Sharing.vue";
 import Storage from "./settings/Storage.vue";
-import Team from "./settings/Team.vue";
 import Viewer from "./settings/Viewer.vue";
 
 const checks = ref<Check[] | null>(null);
@@ -32,8 +32,8 @@ const AGENT_CHECKS = ["Claude Code", "Claude Desktop", "Codex", "Cursor", "OpenC
 const agentChecks = computed(() => (checks.value ?? []).filter((c) => AGENT_CHECKS.includes(c.name)));
 const healthChecks = computed(() => (checks.value ?? []).filter((c) => !AGENT_CHECKS.includes(c.name)));
 
-type Page = "agents" | "health" | "judge" | "retention" | "history" | "semantic" | "storage" | "backups" | "viewer" | "team" | "about";
-const PAGES: Page[] = ["agents", "health", "judge", "retention", "history", "semantic", "storage", "backups", "viewer", "team", "about"];
+type Page = "agents" | "health" | "judge" | "retention" | "history" | "semantic" | "storage" | "backups" | "viewer" | "sharing" | "about";
+const PAGES: Page[] = ["agents", "health", "judge", "retention", "history", "semantic", "storage", "backups", "viewer", "sharing", "about"];
 // #settings/<page> opens that page (a link from the offer, or from elsewhere).
 const linked = /^#settings\/([a-z]+)$/.exec(location.hash)?.[1] as Page | undefined;
 const page = ref<Page>(linked && PAGES.includes(linked) ? linked : "agents");
@@ -65,7 +65,7 @@ const GROUPS = computed<{ label: string; items: { id: Page; label: string; icon:
     label: "App",
     items: [
       { id: "viewer", label: "Viewer", icon: "i-lucide-monitor" },
-      { id: "team", label: "Collaboration", icon: "i-lucide-users", meta: "soon" },
+      { id: "sharing", label: "Sharing", icon: "i-lucide-share-2" },
       { id: "about", label: "About", icon: "i-lucide-info" },
     ],
   },
@@ -92,7 +92,7 @@ const GROUPS = computed<{ label: string; items: { id: Page; label: string; icon:
         </button>
       </div>
       <div class="flex-1" />
-      <p v-if="settingsState.view" class="m-0 px-2 text-[11.5px] leading-4 text-(--ink-muted)">Kept in the data directory, readable by you only. The environment always wins over the file.</p>
+      <p v-if="settingsState.view" class="m-0 px-2 text-[11.5px] leading-4 text-(--ink-muted)">Kept in the data directory, readable by you only. The environment wins over the file; for sharing it can only narrow.</p>
     </nav>
     <div class="min-h-0 min-w-0 flex-1 overflow-y-auto">
       <div class="flex max-w-[880px] flex-col gap-5 p-4 pb-8">
@@ -107,7 +107,7 @@ const GROUPS = computed<{ label: string; items: { id: Page; label: string; icon:
           <Storage v-else-if="page === 'storage'" />
           <Backups v-else-if="page === 'backups'" />
           <Viewer v-else-if="page === 'viewer'" />
-          <Team v-else-if="page === 'team'" />
+          <Sharing v-else-if="page === 'sharing'" />
           <About v-else />
         </template>
       </div>

@@ -27,12 +27,21 @@ function identify(cwd: string) {
   const git = readGitInfo(cwd);
   const root = git?.root ?? realpath(cwd);
   const remote = git?.originUrl ? normalizeRemote(git.originUrl) : null;
+  const remoteAlias = remote === null ? null : `remote:${remote}`;
   const aliases = [
-    ...(remote === null ? [] : [`remote:${remote}`]),
+    ...(remoteAlias === null ? [] : [remoteAlias]),
     ...(git === null ? [] : [`gitdir:${git.commonDir}`]),
     `path:${root}`,
   ];
-  return { git, root, remote, aliases };
+  return { git, root, remote, remoteAlias, aliases };
+}
+
+/**
+ * The `remote:` alias a working directory's repository gives its project, exactly as
+ * `resolveProject` records it in `project_aliases`; null without a git remote. Never writes.
+ */
+export function remoteAliasOf(cwd: string): string | null {
+  return identify(cwd).remoteAlias;
 }
 
 /** The project a working directory belongs to, if it is already known. Never writes. */
@@ -69,8 +78,7 @@ export function findProject(db: Db, cwd: string): ProjectRef | null {
  * project. Forks have different remotes and are different projects.
  */
 export function resolveProject(db: Db, cwd: string, now: number = Date.now()): ProjectRef {
-  const { git, root, remote, aliases } = identify(cwd);
-  const remoteAlias = remote === null ? null : `remote:${remote}`;
+  const { git, root, remote, remoteAlias, aliases } = identify(cwd);
 
   const owner = db.query<{ project_id: number }, [string]>(
     "SELECT project_id FROM project_aliases WHERE alias = ?",

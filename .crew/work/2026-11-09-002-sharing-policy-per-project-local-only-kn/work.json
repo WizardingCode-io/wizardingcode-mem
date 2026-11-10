@@ -1,0 +1,666 @@
+{
+  "id": "2026-11-09-002-sharing-policy-per-project-local-only-kn",
+  "title": "Sharing policy: per project local only, knowledge only, or knowledge and memory;",
+  "input": "Sharing policy: per project local only, knowledge only, or knowledge and memory; per knowledge area private or shared; settings in the data directory's env file and in the viewer's Settings; one predicate every sync reads so what is private never reaches the server; ADR 0025.",
+  "type": "feature",
+  "route": "full",
+  "routeReasons": [
+    "risk areas: personal-data, data-migration",
+    "personal data in lines not read for risk (test or excluded): email (tests/helpers/knowledge.ts), email (tests/preload.ts), email (tests/unit/knowledge-author.test.ts), email (tests/unit/knowledge-index.test.ts), email (tests/unit/knowledge-repo.test.ts), email (tests/unit/knowledge-store.test.ts)",
+    "personal data in lines not read for risk (test or excluded): email (tests/fixtures/knowledge-probe.ts), email (tests/helpers/knowledge.ts), email (tests/preload.ts), email (tests/unit/knowledge-author.test.ts), email (tests/unit/knowledge-index.test.ts), email (tests/unit/knowledge-module.test.ts), email (tests/unit/knowledge-repo.test.ts), email (tests/unit/knowledge-store.test.ts), email (tests/unit/knowledge-tools.test.ts)"
+  ],
+  "riskAreas": [
+    "personal-data",
+    "data-migration",
+    "auth"
+  ],
+  "phase": "learn",
+  "awaiting": "user",
+  "criteria": [
+    {
+      "id": "AC-1",
+      "kind": "behavior",
+      "text": "openDb on a fresh store leaves user_version at 7 and module_migrations holds ('sharing', 1, 'sharing_policy') beside knowledge's row; sharing_levels, sharing_ledger and sharing_changes exist with the spec's columns; a second open adds no row and no backup; moduleSchemaState(db, 'sharing', 1) is current; a store opened with moduleSchemas: [] has no sharing table and loadPolicy reads every default"
+    },
+    {
+      "id": "AC-2",
+      "kind": "behavior",
+      "text": "loadSettings reads the two sharing keys as sorted, de-duplicated, lower-cased lists; none and an absent key are empty; an invalid token empties that key's list and records a problem naming its position and not its value; with the file workspace and the environment workspace,shared the roots are workspace and a problem says the environment was ignored; with the environment none the roots are empty and publicSettings says source env; with the environment wider than the file the source is file; validatePatch refuses Sales, sales and workspace: for areas and all for roots with the rules' messages, and accepts 'shared:marketing, workspace:sales' as shared:marketing,workspace:sales"
+    },
+    {
+      "id": "AC-3",
+      "kind": "behavior",
+      "text": "loadPolicy gives every project the level local with no sharing_levels table, that is, a schema state of behind; a closed policy with a problem when the module row says version 2; the level local with reason disabled for a disabled project with a row; the level local with reason unbound-alias and a problem for a row whose bound_alias the project no longer has; the level local for a row whose project is gone; an inert id for an area not in its root's taxonomy and for a root with no taxonomy file; and a closed, logged policy when the database throws. decide on a closed policy is keep, policy-failed for every item"
+    },
+    {
+      "id": "AC-4",
+      "kind": "behavior",
+      "text": "for entries, decide answers send for an active, problem-free entry whose root or project is shared and whose root-qualified area is shared; keep with problem, status, root-off, level-local, no-project for project 0 or an orphan, area-private, area-inert, unknown-destination in the cases the spec names; a project repository's area is checked against the workspace's list and the shared repository's against the shared list"
+    },
+    {
+      "id": "AC-5",
+      "kind": "behavior",
+      "text": "for memories, decide answers send only at the level all for an active, non-stale, project-scoped, non-imported memory that is not a user rule, and keep with level-local, level-knowledge, status, stale, branch-scope, imported, user-rule otherwise; with a sent record of the same version and hash the answer is keep, already-sent; with a sent record of another version, send; with a sent record and a policy that no longer allows, withdraw with the reason; with that record withdrawn, keep; with a received record from this destination keep, received-same, from another keep, received-elsewhere; decide is pure: the same inputs give the same answer with no database"
+    },
+    {
+      "id": "AC-6",
+      "kind": "behavior",
+      "text": "setLevel refuses a project without a remote alias with no-remote, a disabled project with disabled, an unknown project with no-project and an unknown level with invalid; writes the row with the current directory's remote alias when it belongs to the project, else the first remote alias by name; logs project:<id> with the old and new levels and bumps sharing.epoch by one; reports widened true from local to knowledge and from knowledge to all, false the other way; the same level twice writes and logs nothing; the level local deletes the row; saveSharingSetting writes the file, logs roots or areas and bumps the epoch; resetLevels deletes every row, logs one levels change with source restore, returns the count, and does nothing with no row",
+      "supersededBy": {
+        "id": "AC-20",
+        "at": "2026-11-09T18:24:52.998Z"
+      }
+    },
+    {
+      "id": "AC-7",
+      "kind": "behavior",
+      "text": "wouldLeave counts the entries and memories decide sends, per root, per area and per project, from the index as it is with fresh false and after ensureFresh of the roots and the project repositories above local with fresh true, never refreshing a local project's repository; the memory candidates come from one query over the projects at all that excludes user_memories; list true returns the items capped at 500 with more; with no knowledge tables the entry counts are 0 and nothing throws",
+      "supersededBy": {
+        "id": "AC-21",
+        "at": "2026-11-09T18:24:53.125Z"
+      }
+    },
+    {
+      "id": "AC-8",
+      "kind": "behavior",
+      "text": "share project knowledge --yes in a project folder with a remote prints sharing: <name> → Knowledge and the row exists; without --yes and without a TTY it exits 1 saying widening needs --yes; share project local lowers without asking; in a folder that is not a known project it exits 1 with the sentence; in a project without a remote it exits 1 with the sentence; share roots workspace --yes and share areas workspace:sales --yes write the file, log and bump the epoch; share areas Sales exits 64 with the rule's message; share status prints the six lines with the counts and --list the items; share explain workspace/<slug> and share explain memory <id> print the answer, the reason and its sentence; share nonsense exits 64 with the usage"
+    },
+    {
+      "id": "AC-9",
+      "kind": "behavior",
+      "text": "GET /api/overview lists each project with sharing, remote and disabled; GET /api/sharing answers the policy, the taxonomies, the level counts and the report with the spec's counts; PUT /api/projects/<id>/sharing with level knowledge and no confirm is 400, with confirm true answers level, old and boundAlias and logs; the level local needs no confirm; a project without a remote is 409 with the sentence; PUT /api/settings with a sharing key logs the change and bumps the epoch, and the route stores what it is given while the viewer's save drops inert ids"
+    },
+    {
+      "id": "AC-10",
+      "kind": "behavior",
+      "text": "the built viewer has the Sharing page in place of the Collaboration card, with the texts of the design and no soon mark; the SettingKey union holds the two keys; the Across projects dock has the Sharing section with the segmented control and the two disabled sentences; the row pill appears only above Nothing; the texts are pinned by a unit test over the Vue sources"
+    },
+    {
+      "id": "AC-11",
+      "kind": "behavior",
+      "text": "status prints 'sharing   nothing leaves this machine (every default)' on a fresh store and the full line with the current project's label, the roots, the area count and the counts otherwise; status --json carries sharing; on a store whose sharing_levels table does not exist the line is the default one and nothing throws"
+    },
+    {
+      "id": "AC-12",
+      "kind": "behavior",
+      "text": "doctor prints a sharing check: skip with no database, ok with the default sentence or the summary, warn naming an emptied key and the token's position, an ignored environment value, a project whose bound alias is gone, and an inert area id; restoreBackup of a copy with two levels resets them, logs one restore change, answers sharingReset 2, and backup --restore prints the sentence; a copy without the tables answers sharingReset 0 and prints nothing about sharing"
+    },
+    {
+      "id": "AC-14",
+      "kind": "observed",
+      "text": "docs/adr/0025-sharing-policy.md records D-1 to D-20 as rulings with the superseded clauses, the meaning of all, the predicate's contract (item types, reasons, ledger, epoch, redaction at the edge), what accompanies an item and what never leaves, the identity rule and its reused-folder limit, restore and move, the boundary of an agent with a shell, and what parts 5 and 6 must do with it; the README gains a Sharing subsection under Privacy and your data; CLAUDE.md gains a bullet naming src/sharing/, the sharing namespace and the share command",
+      "supersededBy": {
+        "id": "AC-18",
+        "at": "2026-11-09T18:24:52.743Z"
+      }
+    },
+    {
+      "id": "AC-15",
+      "kind": "behavior",
+      "text": "the contract is pinned: the key sets of a sample EntryItem and MemoryItem equal the fixed lists of the design and nothing else; REASONS and the keys of REASON_TEXT are the same set; NEVER_LEAVES equals the design's list; redactForSend of a private block is [PRIVATE] and a seeded key in the text is replaced; levelKey of 3 and team is 3@team",
+      "supersededBy": {
+        "id": "AC-19",
+        "at": "2026-11-09T18:24:52.871Z"
+      }
+    },
+    {
+      "id": "AC-18",
+      "kind": "observed",
+      "text": "`docs/adr/0025-sharing-policy.md` (status draft, part 4 of the journey) records D-1 to D-20 as rulings with the superseded clauses, the meaning of `all`, the predicate's contract (the input and payload types, the memory hash's fields, the reasons, the ledger, the derived epoch, the generation and the device token, redaction at the edge as the only text-level protection, the received item written with its record in one transaction, the unchanged received version never echoed, the roots and areas bound to the `team` destination), what accompanies an item and what never leaves, the identity rule, the system reconcile and the reused-folder limit, restore (levels reset before the swap, counter monotonic, generation renewed, baseline reset, the ledger left to part 6's reconciliation) and `moveStore`, the hand edit recorded as source `file`, the boundary, and what parts 5 and 6 must do with it; the README gains a \"Sharing\" subsection under \"Privacy and your data\" (the three choices, the two keys, `share`, that nothing is sent until a team server exists, that lowering recalls nothing); `CLAUDE.md` gains a bullet naming `src/sharing/`, the `sharing` namespace and the command.; the ADR also states that a project put at Nothing loses its bound alias with its row, so part 6 computes withdrawals from the ledger's uids and never from the live binding, and that six types are pinned (the four items, `LedgerRecord` and `Decision`); `CLAUDE.md`'s settings line names the two sharing keys as the exception to \"the environment wins\"; checked by `probes/check-docs.ts`, which exits 1 when any part is missing"
+    },
+    {
+      "id": "AC-19",
+      "kind": "behavior",
+      "text": "the contract is pinned: the key sets of a sample `EntryItem`, `MemoryItem`, `OutgoingEntry` and `OutgoingMemory` equal the fixed lists of the design and nothing else; `memoryHash` is the SHA-256 prefix over `memoryKind`, `importance`, `status`, redacted `title`, redacted `body` in that order; `REASONS` and the keys of `REASON_TEXT` are the same set; `redactForSend(\"<private>x</private>\", env)` is `[PRIVATE]` and a seeded key in the text is replaced; `levelKey(3, \"team\")` is `3@team`; `entryUid` gives the three forms and `memoryUid(\"ab12cd34\", 7)` is `ab12cd34:7`.; the key sets of a sample `LedgerRecord` and a sample `Decision` equal `LEDGER_RECORD_KEYS` and `DECISION_KEYS` and nothing else"
+    },
+    {
+      "id": "AC-20",
+      "kind": "behavior",
+      "text": "`setLevel` refuses a project without a `remote:` alias (`no-remote`), a disabled project (`disabled`), an unknown project (`no-project`), an unknown level (`invalid`) and a widening without `confirm` (`needs-confirm`), reading the stored row and the project's state inside its transaction so a stale caller is still refused; writes the row with the current directory's remote alias when it belongs to the project, else the first remote alias by name; logs `project:<id>` with the effective old and the new levels and adds one to the counter; `previewLevel` reports `widened` true from `local` to `knowledge` and from `knowledge` to `all`, false the other way; the same effective level twice writes and logs nothing, except a row whose alias is gone, which is rebound and logged; `local` deletes the row and answers an empty `boundAlias`; `applySettingsPatch` refuses a widening without `confirm`, writes the file, logs `roots` or `areas`, adds one to the counter once and sets the baseline to the file's lists in one transaction, and with a file write that throws leaves no row, no counter change and the file as it was; `previewSettingsPatch` compares against the file's lists; `reconcileSettings` reads the file and the baseline inside its transaction, logs a hand edit with source `file`, adds one to the counter and clears the problem, treats a missing baseline as empty lists, does nothing when the lists match, and logs nothing when two processes with different environments look at one file and one baseline; `reconcileLevels` reads the rows and the projects inside its transaction, removes a row whose downgrade still holds, keeps one set again meanwhile, logs with source `system` and adds one to the counter; `resetLevels` deletes every row when the table exists, logs one `levels` change with source `restore` when rows were deleted, sets the counter to `max(floor, copy) + 1`, renews the generation, sets the baseline to the lists given, returns the count, and runs on a copy without the sharing tables.; `setLevel` binds only a host-led remote alias (one whose normalized remote starts with a host name, as `github.com/x/y` does), so a project whose remotes are all local paths or `file://` URLs is refused with `no-remote` and no row is written, and for a project with a host-led remote beside a path remote the bound alias is the host-led one"
+    },
+    {
+      "id": "AC-21",
+      "kind": "behavior",
+      "text": "`wouldLeave` counts the entries and memories `decide` sends, per root, per area and per project, from the index as it is with `fresh: false` and after `refresh` of the workspace, the shared and the project repositories above `local` (in that order, projects by id) with `fresh: true` (a repository of a `local` project is not refreshed; the refreshed set is asserted through an injected `refresh`; a `refresh` that throws is logged and the counts still answer); the memory candidates come from one query pre-filtered by the projects at `all` only, reading no title or body, and the counts equal `decide` over every memory of those projects; `ledgerRecords` scans the destination's rows of one kind and groups them by uid with no parameter list, so the 90,000-memory count runs with ledger rows present; the hash is computed only for candidates with a ledger record and for listed items, in chunks of 500 ids (checked through `memoryItems` and `withHashes`); `areaTotals` count every active problem-free entry per area whatever the area's state; `withChange` previews a level, roots and areas, alone or together, without writing; a count over 90,000 memories completes under 5,000 ms with the figure printed; `list: true` returns the items capped at 500 with `more`; with no knowledge tables the entry counts are 0 and nothing throws.; `readEntries` and `areaTotals` read the knowledge tables only when `moduleSchemaState(db, KNOWLEDGE_MODULE, KNOWLEDGE_SCHEMA_VERSION)` is `current`, and on a store whose knowledge module is behind or ahead the entry counts are 0, the area totals empty and nothing throws"
+    },
+    {
+      "id": "AC-22",
+      "kind": "behavior",
+      "text": "`validatePatch` refuses a value holding `\\r` or `\\n` under any key, with one message (`a value on one line`), so no value can write a second line into the env file; `PUT /api/settings` with such a value under `TYPESAFE_API_KEY` or `WIZARDINGCODE_MEM_BACKUP_S3_REGION` and no `confirm` is 400, writes nothing, and leaves the sharing lists as they were (the probe `probes/newline-in-a-setting.md` as a test)"
+    },
+    {
+      "id": "AC-23",
+      "kind": "behavior",
+      "text": "the viewer's Sharing page and the dock show a plain sentence when a save or a load fails (`Sharing not saved` with `The settings file could not be written.`; `Sharing could not be loaded.`; the dock's `Not changed` with `The level could not be saved.`), never the error's message or a path; the dock's level control shows its three labels in full at the dock's 320px, with no `truncate` (a vertical list or wrapping labels); the Save button is disabled while nothing changed; the five states the code reaches beyond the spec's earlier list are declared in the spec's state list and captured in `review/ui/` with a `manifest.json` row each (the problems alert, the load error, an inert-area row with Remove, the dock's `Not changed` toast, the row pill at Knowledge); pinned by the unit test over the Vue sources (the sentences present, `error.message` absent from the toasts, `truncate` absent from the level control)"
+    },
+    {
+      "id": "AC-24",
+      "kind": "observed",
+      "text": "`tests/unit/hook-snapshots.test.ts` and `tests/unit/mcp-tools-list.test.ts` pass, and every snapshot the two snapshot files held at the item's base is byte for byte the same (snapshots another item adds beside them are allowed); `tests/perf/budgets.test.ts` keeps its budgets; part 1's module migration test expects the two rows and gains the sharing row's case, its other assertions unchanged; checked by `probes/check-preserve.ts`, which runs the four files and compares the base's snapshots with the files"
+    },
+    {
+      "id": "AC-25",
+      "kind": "behavior",
+      "text": "A project's level refusal is what effectiveLevel gave, never rewritten: the ruling names the reason the level read local under (level-local, disabled, unbound-alias), and a row that reads local with reason allowed, a pair effectiveLevel never makes, is refused as a broken rule (decide throws, naming the project and the destination) instead of being read as Nothing."
+    }
+  ],
+  "approvals": [
+    {
+      "what": "spec",
+      "at": "2026-11-09T09:34:06.470Z",
+      "by": "user",
+      "relayed": true
+    }
+  ],
+  "skips": [],
+  "baseCommit": "62780aac6e5f4bf1eaefd449ee3c523815b3acd4",
+  "createdAt": "2026-11-09T00:54:46.071Z",
+  "updatedAt": "2026-11-10T10:39:23.924Z",
+  "specReview": true,
+  "kind": "feature",
+  "kindFrom": "answer",
+  "knowledge": {
+    "readAt": "2026-11-09T00:54:46.080Z",
+    "listed": [
+      "K-316",
+      "K-319",
+      "K-311"
+    ]
+  },
+  "priority": "high",
+  "seats": [
+    {
+      "role": "researcher",
+      "team": "researchers",
+      "kind": "debate",
+      "reason": "full route"
+    },
+    {
+      "role": "review-code-quality",
+      "team": "backend",
+      "kind": "gate",
+      "gate": "code-quality",
+      "reason": "full route"
+    },
+    {
+      "role": "review-test-quality",
+      "team": "qa",
+      "kind": "gate",
+      "gate": "test-quality",
+      "reason": "full route"
+    },
+    {
+      "role": "review-security",
+      "team": "security",
+      "kind": "gate",
+      "gate": "security",
+      "reason": "full route"
+    },
+    {
+      "role": "review-ui-ux",
+      "team": "frontend",
+      "kind": "gate",
+      "gate": "ui-ux",
+      "reason": "interface files: ui/src/components/ProjectsView.vue, ui/src/components/Settings.vue, ui/src/components/settings/Backups.vue, +2 more"
+    },
+    {
+      "role": "review-risk",
+      "team": "architects",
+      "kind": "gate",
+      "gate": "risk",
+      "reason": "full route"
+    },
+    {
+      "role": "review-architecture",
+      "team": "architects",
+      "kind": "gate",
+      "gate": "architecture",
+      "reason": "full route"
+    },
+    {
+      "role": "review-data",
+      "team": "etl",
+      "kind": "gate",
+      "gate": "data",
+      "reason": "risk area data-migration"
+    },
+    {
+      "role": "lead-qa",
+      "team": "qa",
+      "kind": "lead",
+      "reason": "full route"
+    },
+    {
+      "role": "lead-security",
+      "team": "security",
+      "kind": "lead",
+      "reason": "full route"
+    },
+    {
+      "role": "lead-architects",
+      "team": "architects",
+      "kind": "lead",
+      "reason": "full route"
+    },
+    {
+      "role": "lead-etl",
+      "team": "etl",
+      "kind": "lead",
+      "reason": "risk area data-migration"
+    },
+    {
+      "role": "lead-frontend",
+      "team": "frontend",
+      "kind": "lead",
+      "reason": "interface files: ui/src/components/ProjectsView.vue, ui/src/components/Settings.vue, ui/src/components/settings/Backups.vue, +2 more"
+    },
+    {
+      "role": "judge",
+      "team": null,
+      "kind": "debate",
+      "reason": "a gate is planned"
+    }
+  ],
+  "primaryTeam": "frontend",
+  "runtimes": [
+    "claude"
+  ],
+  "phaseAt": {
+    "understand": "2026-11-09T00:55:42.785Z",
+    "specify": "2026-11-09T01:10:00.515Z",
+    "conclave": "2026-11-09T01:25:59.206Z",
+    "plan": "2026-11-09T01:41:23.417Z",
+    "spec-review": "2026-11-09T01:41:27.826Z",
+    "build": "2026-11-09T14:39:24.540Z",
+    "gate": "2026-11-09T19:04:39.517Z",
+    "deliver": "2026-11-10T10:39:23.593Z",
+    "learn": "2026-11-10T10:39:23.732Z"
+  },
+  "decisions": [
+    {
+      "id": "D-1",
+      "question": "Where does a project's sharing level live: a column on the projects table (edited in the viewer's project rows and by the CLI), or a comma list in the env file?",
+      "default": "A column on projects (core migration 8), local by default; the env file keeps the two workspace-level keys (the workspace switch and the shared areas). The project list lives in the database and the viewer edits rows; a list of project keys in one env line would not scale and could not be edited per row.",
+      "answer": "A column on projects (core migration 8), local by default; the env file keeps the two workspace-level keys (the workspace switch and the shared areas). The project list lives in the database and the viewer edits rows; a list of project keys in one env line would not scale and could not be edited per row.",
+      "at": "2026-11-09T01:38:17.589Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    },
+    {
+      "id": "D-2",
+      "question": "What are the defaults: every project local, the workspace knowledge off and no shared area (nothing leaves until the person chooses), or something shared by default once a team exists?",
+      "default": "Everything local: every project local, the workspace switch off, the shared-areas list empty. Nothing leaves the machine until the person chooses, project by project and area by area.",
+      "answer": "Everything local: every project local, the workspace switch off, the shared-areas list empty. Nothing leaves the machine until the person chooses, project by project and area by area.",
+      "at": "2026-11-09T01:38:25.774Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    },
+    {
+      "id": "D-3",
+      "question": "Is the area policy a list of shared areas (private by default) or a list of private areas (shared by default)?",
+      "default": "A list of shared areas: an area leaves only when named. Private by default is the deny side, and a new area added later is private until the person shares it.",
+      "answer": "A list of shared areas: an area leaves only when named. Private by default is the deny side, and a new area added later is private until the person shares it.",
+      "at": "2026-11-09T01:39:23.326Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    },
+    {
+      "id": "D-4",
+      "question": "Do the author's own rules (user memories, ADR 0018) ever leave the machine in this part?",
+      "default": "Never in this part: a user rule is personal, kept with a project only as provenance; a later part may offer to share them. A memory leaves only when its project is set to all and it is not a user rule.",
+      "answer": "Never in this part: a user rule is personal, kept with a project only as provenance; a later part may offer to share them. A memory leaves only when its project is set to all and it is not a user rule.",
+      "at": "2026-11-09T01:39:30.376Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    },
+    {
+      "id": "D-5",
+      "question": "Is the shared scope repository (the team's) subject to the area list too, or does everything in it leave?",
+      "default": "Subject to the area list too: an entry in a private area never leaves, even from the shared repository. The person's choice of what is private holds everywhere; a later part may let the team's taxonomy say otherwise.",
+      "answer": "Subject to the area list too: an entry in a private area never leaves, even from the shared repository. The person's choice of what is private holds everywhere; a later part may let the team's taxonomy say otherwise.",
+      "at": "2026-11-09T01:39:48.811Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    },
+    {
+      "id": "D-6",
+      "question": "Which memories leave when a project is set to all: every active memory of the project that is not a user rule, or only memories above an importance?",
+      "default": "Every active memory of the project that is not a user rule; archived and superseded memories never. The level is the person's choice for the whole project; an importance filter is a later refinement if the team asks.",
+      "answer": "Every active memory of the project that is not a user rule; archived and superseded memories never. The level is the person's choice for the whole project; an importance filter is a later refinement if the team asks.",
+      "at": "2026-11-09T01:39:52.963Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    },
+    {
+      "id": "D-7",
+      "question": "Where does the person set the per-project level in the viewer: a selector in each row of the Across projects view (with the workspace switch and the areas in a Settings card), or everything in Settings?",
+      "default": "A selector in each project's row of the Across projects view, and a Sharing card in Settings for the workspace switch and the areas. The project list is already in that view; a Settings card cannot list ninety projects well.",
+      "answer": "A selector in each project's row of the Across projects view, and a Sharing card in Settings for the workspace switch and the areas. The project list is already in that view; a Settings card cannot list ninety projects well.",
+      "at": "2026-11-09T01:39:57.807Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    },
+    {
+      "id": "D-8",
+      "question": "Where do the per-project levels live: a column on projects by core migration 8, or tables in a sharing namespace of module_migrations so that user_version stays 7 and 0.6.0 still opens the database?",
+      "default": "In a sharing schema namespace registered in part 1's MODULE_SCHEMAS: user_version stays 7, no foreign keys to core tables, a missing row means local, the level's allowed values are checked in code. This keeps the rollback to 0.6.0 that parts 1 and 2 promised and avoids rebuilding projects to widen a CHECK.",
+      "answer": "In a sharing schema namespace registered in part 1's MODULE_SCHEMAS: user_version stays 7, no foreign keys to core tables, a missing row means local, the level's allowed values are checked in code. This keeps the rollback to 0.6.0 that parts 1 and 2 promised and avoids rebuilding projects to widen a CHECK.",
+      "at": "2026-11-09T01:40:07.580Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    },
+    {
+      "id": "D-9",
+      "question": "Is a project's level one value, or one value per destination (server), so that a second team configured later never inherits what was allowed for the first?",
+      "default": "One value per (project, destination). This part has one destination, named team, which the team server part binds to the one server the mission describes; a second destination starts with every level local; the predicate takes the destination as an argument and answers keep for an unknown one.",
+      "answer": "One value per (project, destination). This part has one destination, named team, which the team server part binds to the one server the mission describes; a second destination starts with every level local; the predicate takes the destination as an argument and answers keep for an unknown one.",
+      "at": "2026-11-09T01:40:12.422Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    },
+    {
+      "id": "D-10",
+      "question": "What leaves the machine for an allowed entry: the exported current content of that one entry, or the knowledge repository (a git push, carrying history, proposals and past versions)?",
+      "default": "The exported current content of one allowed item, never a repository: git history, proposals, drafts and archived entries never leave; the sync reads the bytes it sends after ensureFresh and a clean git status, never a stale index row. This is the rule the team server and the sync parts build against.",
+      "answer": "The exported current content of one allowed item, never a repository: git history, proposals, drafts and archived entries never leave; the sync reads the bytes it sends after ensureFresh and a clean git status, never a stale index row. This is the rule the team server and the sync parts build against.",
+      "at": "2026-11-09T01:40:17.227Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    },
+    {
+      "id": "D-11",
+      "question": "Does the predicate answer yes or no, or send, withdraw or keep with a reason, and does this part create the ledger of what left?",
+      "default": "Send, withdraw or keep, with a reason code and the policy epoch, reading the ledger record the caller passes for the item. The table sharing_ledger (destination, item kind, item uid, direction, version, hash, epoch, times) is created here and written by the server and sync parts; an item received from a destination is never sent to another and never back. A memory's uid is its row id on this machine (memories are never deleted); an entry's is its UUID.",
+      "answer": "Send, withdraw or keep, with a reason code and the policy epoch, reading the ledger record the caller passes for the item. The table sharing_ledger (destination, item kind, item uid, direction, version, hash, epoch, times) is created here and written by the server and sync parts; an item received from a destination is never sent to another and never back. A memory's uid is its row id on this machine (memories are never deleted); an entry's is its UUID.",
+      "at": "2026-11-09T01:40:25.338Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    },
+    {
+      "id": "D-12",
+      "question": "Is the area list one flat set of ids over both taxonomies, with the shared repository always shared, or are ids root-qualified with the roots that may leave named in their own list?",
+      "default": "Root-qualified ids (workspace:sales, shared:sales) in the areas key, the workspace's ids governing the workspace and every project repository; and a list of roots that may leave in a roots key (the two settings keys are named in the spec), default empty, so the shared repository leaves only when named, like the workspace. The area rule of D-5 stands; its always clause is superseded.",
+      "answer": "Root-qualified ids (workspace:sales, shared:sales) in the areas key, the workspace's ids governing the workspace and every project repository; and a list of roots that may leave in a roots key (the two settings keys are named in the spec), default empty, so the shared repository leaves only when named, like the workspace. The area rule of D-5 stands; its always clause is superseded.",
+      "at": "2026-11-09T01:40:31.125Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    },
+    {
+      "id": "D-13",
+      "question": "Do the two sharing keys follow the settings rule that the environment wins over the file, or can the environment only narrow what the file allows?",
+      "default": "The file is the policy; an environment value is honoured only when it narrows (an empty or shorter list), a widening value is ignored and doctor warns about it. A stray variable in a shell profile or a host's env block must never share from one process only.",
+      "answer": "The file is the policy; an environment value is honoured only when it narrows (an empty or shorter list), a widening value is ignored and doctor warns about it. A stray variable in a shell profile or a host's env block must never share from one process only.",
+      "at": "2026-11-09T01:40:36.452Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    },
+    {
+      "id": "D-14",
+      "question": "How does the policy load when something is wrong: a hand-edited value that does not parse, a missing table, an unreadable file, an area id that is in no taxonomy?",
+      "default": "Fail closed: any failure to load gives a policy where nothing leaves, logged once; one invalid token empties the whole area list and doctor names it; an id not in its root's current taxonomy is inert (never shared) and the viewer's next save drops it; both lists are parsed trimmed, lower-cased and de-duplicated, every token checked.",
+      "answer": "Fail closed: any failure to load gives a policy where nothing leaves, logged once; one invalid token empties the whole area list and doctor names it; an id not in its root's current taxonomy is inert (never shared) and the viewer's next save drops it; both lists are parsed trimmed, lower-cased and de-duplicated, every token checked.",
+      "at": "2026-11-09T01:40:41.380Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    },
+    {
+      "id": "D-15",
+      "question": "Which memories leave at the level all, given that memories carry stale, scope (project or branch) and origin (distilled, manual, imported) besides status and the user-rule mark?",
+      "default": "Exactly: status active, stale 0, scope project, origin not imported, and not one of the author's rules. The set is fixed in ADR 0025; a level with a different set is a new level name, so what left under all is never reinterpreted. Supersedes D-6's every active memory.",
+      "answer": "Exactly: status active, stale 0, scope project, origin not imported, and not one of the author's rules. The set is fixed in ADR 0025; a level with a different set is a new level name, so what left under all is never reinterpreted. Supersedes D-6's every active memory.",
+      "at": "2026-11-09T01:40:47.657Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    },
+    {
+      "id": "D-16",
+      "question": "What ties a level to a project's identity, so that adoption of an imported project, a reused folder, a remapped knowledge repository, a disabled project or a restored backup never hands a level to data the person did not choose?",
+      "default": "A level above local needs the project's remote alias and is bound to it; when the project no longer carries that alias the predicate answers local and doctor warns. A disabled project, a repository mapped to project 0, an orphan folder and an ambiguous manifest answer local. Restore resets every level to local and logs it; move keeps them. A folder reused by a repository without a remote keeps the old project id today, which the ADR names as a limit.",
+      "answer": "A level above local needs the project's remote alias and is bound to it; when the project no longer carries that alias the predicate answers local and doctor warns. A disabled project, a repository mapped to project 0, an orphan folder and an ambiguous manifest answer local. Restore resets every level to local and logs it; move keeps them. A folder reused by a repository without a remote keeps the old project id today, which the ADR names as a limit.",
+      "at": "2026-11-09T01:40:52.397Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    },
+    {
+      "id": "D-17",
+      "question": "Is a change of level, roots or areas recorded and confirmed, given that every host gives agents a shell and a widening is a privacy decision?",
+      "default": "Every change is recorded in a change log with its time, old value, new value and source (viewer, CLI, restore); a policy epoch in meta grows on every change, the predicate returns it, the ledger records it, and the sync re-reads the policy at every batch and stops when the epoch moved. A widening asks for confirmation: the viewer shows the counts it releases, the CLI asks on a TTY or needs --yes. The boundary stays part 1's: an agent with a shell can still do it, and the log is how a person finds out.",
+      "answer": "Every change is recorded in a change log with its time, old value, new value and source (viewer, CLI, restore); a policy epoch in meta grows on every change, the predicate returns it, the ledger records it, and the sync re-reads the policy at every batch and stops when the epoch moved. A widening asks for confirmation: the viewer shows the counts it releases, the CLI asks on a TTY or needs --yes. The boundary stays part 1's: an agent with a shell can still do it, and the log is how a person finds out.",
+      "at": "2026-11-09T01:40:58.705Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    },
+    {
+      "id": "D-18",
+      "question": "Does the viewer get a new Sharing card beside the existing Collaboration card, or does that card (which already promises opt-in per project, private blocks that never leave, and that it becomes the switch) become the Sharing page?",
+      "default": "The Collaboration card becomes the Sharing page: the roots, the areas as toggles with the count each releases, locked with Set by the environment when the environment narrowed them, the count of projects per level with a link to Across projects, and plain statements: the policy governs the team server only, memories have no area, new areas start private, a lowered level recalls nothing already sent, the first sync sends everything allowed with no further prompt. Product text carries no part numbers. Across projects shows each row's level and the project dock sets it with the confirmation. Supersedes D-7's separate card.",
+      "answer": "The Collaboration card becomes the Sharing page: the roots, the areas as toggles with the count each releases, locked with Set by the environment when the environment narrowed them, the count of projects per level with a link to Across projects, and plain statements: the policy governs the team server only, memories have no area, new areas start private, a lowered level recalls nothing already sent, the first sync sends everything allowed with no further prompt. Product text carries no part numbers. Across projects shows each row's level and the project dock sets it with the confirmation. Supersedes D-7's separate card.",
+      "at": "2026-11-09T01:41:04.105Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    },
+    {
+      "id": "D-19",
+      "question": "Which metadata accompanies an allowed item, what never leaves whatever the policy says, and is redaction at the edge part of the predicate's contract?",
+      "default": "With an allowed entry: its current frontmatter and body, its scope and its project's remote alias. With an allowed memory: redacted title and body, kind, importance, status, created and updated times, the project's remote alias. Never: turns, sessions, the history index, hook runs, injections, memory file paths, search terms, branch, commit sha, transcript paths, local path and gitdir aliases, the project key, commit e-mails. Every text that leaves passes redact at the edge, which keeps the private-block promise; it is a required step of the contract the server and sync parts implement.",
+      "answer": "With an allowed entry: its current frontmatter and body, its scope and its project's remote alias. With an allowed memory: redacted title and body, kind, importance, status, created and updated times, the project's remote alias. Never: turns, sessions, the history index, hook runs, injections, memory file paths, search terms, branch, commit sha, transcript paths, local path and gitdir aliases, the project key, commit e-mails. Every text that leaves passes redact at the edge, which keeps the private-block promise; it is a required step of the contract the server and sync parts implement.",
+      "at": "2026-11-09T01:41:09.970Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    },
+    {
+      "id": "D-20",
+      "question": "Which read-outs of the policy ship, and what does doctor warn about, given that nothing consumes the policy yet?",
+      "default": "A sharing line in status for the current project (its level, the roots, the shared areas, the entries and memories of this project that would leave); the viewer's counts through one GET route; one CLI, share, with project <level> [--yes], roots <list>, areas <list>, status [--list] (the items, not only counts) and explain <scope>/<slug> | memory <id> (the predicate's reason). Counts come from the knowledge index after ensureFresh and from memories by its existing index, never on the hook path. doctor is ok with the policy's summary and warns only for an invalid raw value, an ignored environment value, a level whose alias the project lost, and an inert area id; sharing configured but no team is not a warning.",
+      "answer": "A sharing line in status for the current project (its level, the roots, the shared areas, the entries and memories of this project that would leave); the viewer's counts through one GET route; one CLI, share, with project <level> [--yes], roots <list>, areas <list>, status [--list] (the items, not only counts) and explain <scope>/<slug> | memory <id> (the predicate's reason). Counts come from the knowledge index after ensureFresh and from memories by its existing index, never on the hook path. doctor is ok with the policy's summary and warns only for an invalid raw value, an ignored environment value, a level whose alias the project lost, and an inert area id; sharing configured but no team is not a warning.",
+      "at": "2026-11-09T01:41:15.929Z",
+      "by": "validator",
+      "mode": "dontAsk",
+      "rule": "stated-default"
+    },
+    {
+      "id": "D-21",
+      "question": "The frontend lead's delivery validation (conclave/lead-frontend.delivery.md, R-1 to R-5) asks what this item's UI evidence covers. The captures under review/ui/ are the session's (the standing e2e decision: the viewer's UI evidence is the session's captures), at one desktop width, 1512, in the dark scheme; the spec names no viewport, scheme or motion line; the sub-second loading and saving states and the Backups restore toast with sharingReset above 0 are not captured. Does this item's evidence stop there, with the light scheme, narrower viewports and the three uncaptured states carried to the viewer item (part 3) as advisories, or are those captured by hand now, before the delivery?",
+      "default": "It stops there. The spec's state list gains the viewport (1512, the viewer's desktop width), the scheme (dark; the frame is dark in both themes) and the motion thesis (none: no animation added) for this item's pages. The light scheme, narrower viewports, the loading and saving states and the restore toast are carried to the viewer item as advisories, and review/ui-evidence.json is not produced, since the engine writes it only from an e2e run the standing decision does not have.",
+      "answer": "1 (a evidência fica como está: as capturas da sessão a 1512 em tema escuro; tema claro, larguras estreitas e os três estados por capturar vão como avisos para o item do viewer)",
+      "at": "2026-11-10T10:35:00.801Z",
+      "by": "user",
+      "relayed": true
+    }
+  ],
+  "checklists": [
+    {
+      "kind": "migration-or-restore",
+      "paths": [
+        "/Users/andreagroferreira/.local/share/wizardingcode-developer-crew/skills/crew/checklists/migration-or-restore.md"
+      ],
+      "at": "2026-11-09T01:26:07.422Z"
+    },
+    {
+      "kind": "endpoint",
+      "paths": [
+        "/Users/andreagroferreira/.local/share/wizardingcode-developer-crew/skills/crew/checklists/endpoint.md"
+      ],
+      "at": "2026-11-09T01:26:10.524Z"
+    },
+    {
+      "kind": "screen",
+      "paths": [
+        "/Users/andreagroferreira/.local/share/wizardingcode-developer-crew/skills/crew/checklists/screen.md"
+      ],
+      "at": "2026-11-09T01:26:13.913Z"
+    }
+  ],
+  "knowledgeFiles": [],
+  "knowledgeLabels": [],
+  "validations": [
+    {
+      "what": "spec",
+      "by": "lead-qa",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-qa-reply.md",
+      "hash": "sha256:4a8ab5ffe382bebbef71290c29997328593a079ef629fd44573410640837927a",
+      "fileHash": "sha256:6a4702bf72cd68b327de14713fe441f5555b01399e3001d0e8c6764e13a8a4ab",
+      "at": "2026-11-09T01:39:35.091Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-security",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-security-reply.md",
+      "hash": "sha256:4a8ab5ffe382bebbef71290c29997328593a079ef629fd44573410640837927a",
+      "fileHash": "sha256:bb1c740afda179f27311875af72059a4387ee888bc95ad1470b6980e8b671d77",
+      "at": "2026-11-09T01:39:39.350Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-architects",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-architects-reply.md",
+      "hash": "sha256:4a8ab5ffe382bebbef71290c29997328593a079ef629fd44573410640837927a",
+      "fileHash": "sha256:3f3e4648f753d800623a0578e965d0cb9a047332336a0e7f1d648a1136f7c964",
+      "at": "2026-11-09T01:39:43.757Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-etl",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-etl-reply.md",
+      "hash": "sha256:4a8ab5ffe382bebbef71290c29997328593a079ef629fd44573410640837927a",
+      "fileHash": "sha256:2012a635f1dde4812b8069aa736d5852e1b55dc1d0719066f05eefcc3266c43c",
+      "at": "2026-11-09T01:40:02.761Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-qa",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-qa.delivery.md",
+      "hash": "sha256:05656f0bf05aadd2d79f13acf18d9a90b13db04a106a021eace0a1c1e693a89e",
+      "fileHash": "sha256:90c009141c1f6a7658630074a7a1fcdaaa8765b0cf9e4af24644236617d915ad",
+      "at": "2026-11-09T23:21:02.952Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-security",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-security.delivery.md",
+      "hash": "sha256:05656f0bf05aadd2d79f13acf18d9a90b13db04a106a021eace0a1c1e693a89e",
+      "fileHash": "sha256:cadba79d1eedb28479ee5c7f86efe2a1959dfd4abcb76e010af037dc0cbf1776",
+      "at": "2026-11-09T23:21:24.340Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-architects",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-architects.delivery.md",
+      "hash": "sha256:05656f0bf05aadd2d79f13acf18d9a90b13db04a106a021eace0a1c1e693a89e",
+      "fileHash": "sha256:36529748142a876ee74c784b45af3462e4a437250264a698efca7a6fc4bc954d",
+      "at": "2026-11-09T23:21:24.409Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-etl",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-etl.delivery.md",
+      "hash": "sha256:05656f0bf05aadd2d79f13acf18d9a90b13db04a106a021eace0a1c1e693a89e",
+      "fileHash": "sha256:027d0beddde9f56f0b5e2d8d9243c847da1ae2cc008c96e8acd4b8e89841f172",
+      "at": "2026-11-09T23:21:24.477Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-frontend",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-frontend.delivery-reply.md",
+      "hash": "sha256:05656f0bf05aadd2d79f13acf18d9a90b13db04a106a021eace0a1c1e693a89e",
+      "fileHash": "sha256:7e3414c2aef63ee6e8fc83af9f89e6a57bf0c979e2753c91b4d62b851870d1da",
+      "at": "2026-11-10T10:39:23.447Z"
+    }
+  ],
+  "rounds": {
+    "judgement": 4,
+    "validation": 1,
+    "judgementCode": "sha256:05656f0bf05aadd2d79f13acf18d9a90b13db04a106a021eace0a1c1e693a89e"
+  },
+  "removedCriteria": [
+    {
+      "id": "AC-16",
+      "kind": "observed",
+      "text": "the hook snapshots in tests/unit/hook-snapshots.test.ts and the MCP tool list snapshots in tests/unit/mcp-tools-list.test.ts keep passing unchanged (21 snapshots), tests/unit/module-migrations.test.ts and tests/perf/budgets.test.ts keep passing; the engine could not record a baseline because the item's base commit predates part 1, so the run before the change was taken by hand (probes/baseline-before-the-change.md) and the run after is observed",
+      "at": "2026-11-09T17:51:15.984Z"
+    },
+    {
+      "id": "AC-13",
+      "kind": "preserve",
+      "text": "the hook snapshots in tests/unit/hook-snapshots.test.ts and the MCP tool list snapshots in tests/unit/mcp-tools-list.test.ts pass unchanged; tests/perf/budgets.test.ts keeps its budgets; part 1's module migration test is updated to expect the two rows and nothing else in it changes",
+      "at": "2026-11-09T18:24:52.552Z"
+    },
+    {
+      "id": "AC-17",
+      "kind": "observed",
+      "text": "`tests/unit/hook-snapshots.test.ts` and `tests/unit/mcp-tools-list.test.ts` pass with their snapshot files unchanged since the item's base; `tests/perf/budgets.test.ts` keeps its budgets; part 1's module migration test expects the two rows and gains the sharing row's case, its other assertions unchanged; checked by `probes/check-preserve.ts`, which runs the four files and compares the two snapshot files with the base",
+      "at": "2026-11-09T18:35:24.016Z"
+    }
+  ],
+  "continued": [
+    {
+      "what": "judgement",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-09T21:14:14.558Z",
+      "standing": true
+    },
+    {
+      "what": "judgement",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-09T21:25:00.627Z",
+      "standing": true
+    }
+  ],
+  "learned": {
+    "at": "2026-11-10T10:39:23.924Z",
+    "entries": [
+      "K-346"
+    ],
+    "confirmed": []
+  }
+}

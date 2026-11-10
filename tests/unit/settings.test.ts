@@ -34,6 +34,8 @@ describe("loadSettings", () => {
       uiAutoOpen: true,
       storeDir: null,
       modules: null,
+      sharing: { roots: [], areas: [], problems: [] },
+      author: null,
       backup: {
         to: null,
         everyHours: 24,
@@ -53,6 +55,7 @@ describe("loadSettings", () => {
           "WIZARDINGCODE_MEM_RETENTION_DAYS=30",
           "WIZARDINGCODE_MEM_UI_AUTO_OPEN=off",
           "WIZARDINGCODE_MEM_STORE_DIR=/Volumes/Ext/mem",
+          "WIZARDINGCODE_MEM_AUTHOR=Zoë",
           "WIZARDINGCODE_MEM_BACKUP_TO=s3://bucket/mem",
           "WIZARDINGCODE_MEM_BACKUP_EVERY_HOURS=6",
           "WIZARDINGCODE_MEM_BACKUP_KEEP=3",
@@ -72,6 +75,8 @@ describe("loadSettings", () => {
       uiAutoOpen: false,
       storeDir: "/Volumes/Ext/mem",
       modules: null,
+      sharing: { roots: [], areas: [], problems: [] },
+      author: "Zoë",
       backup: {
         to: "s3://bucket/mem",
         everyHours: 6,
@@ -124,7 +129,7 @@ describe("WIZARDINGCODE_MODULES", () => {
 
   test("the viewer sees it with its default, and may set or clear it", () => {
     expect(publicSettings({}, dir()).WIZARDINGCODE_MODULES).toEqual({
-      value: "memory",
+      value: "memory,knowledge",
       source: "default",
     });
     expect(validatePatch({ WIZARDINGCODE_MODULES: " memory, knowledge " })).toEqual({
@@ -189,6 +194,20 @@ describe("validatePatch", () => {
         WIZARDINGCODE_MEM_BACKUP_S3_SECRET_KEY: "minio123",
       },
     });
+  });
+
+  test("refuses a value that holds a line break under any key, with one message", () => {
+    const smuggled = "x\nWIZARDINGCODE_MEM_SHARE_ROOTS=workspace,shared";
+    for (const key of ["TYPESAFE_API_KEY", "WIZARDINGCODE_MEM_BACKUP_S3_REGION"]) {
+      expect(validatePatch({ [key]: smuggled })).toEqual({
+        ok: false,
+        errors: { [key]: "a value on one line" },
+      });
+      expect(validatePatch({ [key]: "x\rWIZARDINGCODE_MEM_SHARE_ROOTS=shared" })).toEqual({
+        ok: false,
+        errors: { [key]: "a value on one line" },
+      });
+    }
   });
 
   test("null clears a key; absent keys are left alone", () => {
