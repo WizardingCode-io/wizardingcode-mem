@@ -25,6 +25,7 @@ import { NotATeamDatabaseError, SchemaBehindError } from "../../src/team/errors.
 import { checkRestore, readHighWater, writeHighWater } from "../../src/team/instance.ts";
 import {
   advanceSequence,
+  checkpointWal,
   claimLease,
   getMeta,
   listAudit,
@@ -198,6 +199,18 @@ const insertChange = (db: Db) =>
   );
 
 describe("the team database", () => {
+  test("checkpointWal with its own wait cuts the log and puts the connection's busy timeout back", () => {
+    const dir = tempDir();
+    const db = openTeamDb(dir);
+    const timeout = () => db.query<{ timeout: number }, []>("PRAGMA busy_timeout").get()?.timeout;
+    expect(timeout()).toBe(5000);
+    expect(checkpointWal(db, 200)).toBe(true);
+    expect(timeout()).toBe(5000);
+    expect(checkpointWal(db)).toBe(true);
+    expect(timeout()).toBe(5000);
+    db.close();
+  });
+
   test("openTeamDb creates team.db at team schema 1 with its tables and ids, and a second open changes nothing", () => {
     const dir = tempDir();
     const db = openTeamDb(dir);

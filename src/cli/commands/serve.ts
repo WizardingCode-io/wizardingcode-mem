@@ -472,7 +472,7 @@ function auditRows(shell: Shell, argv: string[]): number {
   return 0;
 }
 
-async function mirror(shell: Shell, argv: string[]): Promise<number> {
+function mirror(shell: Shell, argv: string[]): number {
   const parsed = parseFlags(argv, { rebuild: "flag" });
   if ("error" in parsed) return usage(parsed.error);
   const db = openTeamForWrite(shell.dir, shell.now);
@@ -488,7 +488,7 @@ async function mirror(shell: Shell, argv: string[]): Promise<number> {
   }
 }
 
-async function purge(shell: Shell, argv: string[]): Promise<number> {
+function purge(shell: Shell, argv: string[]): number {
   const parsed = parseFlags(argv, { yes: "flag" });
   if ("error" in parsed) return usage(parsed.error);
   const kind = itemKind(parsed.rest[0]);
@@ -594,9 +594,9 @@ export async function run(argv: string[]): Promise<number> {
       case "audit":
         return auditRows(shell, rest);
       case "mirror":
-        return await mirror(shell, rest);
+        return mirror(shell, rest);
       case "purge":
-        return await purge(shell, rest);
+        return purge(shell, rest);
       case "instance":
         if (rest[0] !== "renew") return usage(`unknown subcommand "instance ${rest[0] ?? ""}"`);
         return instanceRenew(shell);

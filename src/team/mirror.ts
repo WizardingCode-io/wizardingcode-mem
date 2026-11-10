@@ -40,7 +40,6 @@ import {
   memberById,
   memoryByKey,
   pendingRevisionsAfter,
-  REVISION_BATCH,
   type RevisionRow,
   resetMirrorRevisions,
   revisionAt,
@@ -361,12 +360,14 @@ interface PendingRow {
 function* pendingRevisions(db: Db): Generator<PendingRow> {
   let after = 0;
   for (;;) {
-    const keys = pendingRevisionsAfter(db, after, REVISION_BATCH);
+    const keys = pendingRevisionsAfter(db, after);
     if (keys.length === 0) return;
     for (const key of keys) {
       after = key.seq;
       const revision = revisionAt(db, key.uuid, key.revision);
-      if (revision !== null) yield { revision, creator: key.creator };
+      // Under the lease nothing deletes a revision, so a key without its row is a fault to see.
+      if (revision === null) throw new Error(`pending ${key.uuid}@${key.revision} has no row`);
+      yield { revision, creator: key.creator };
     }
   }
 }
@@ -674,30 +675,29 @@ export function purgeItem(
   const { db } = ctx;
   const named = parseFeedUid(db, kind, uid, null);
   if (named === null) throw unknownItem();
-  const touched = new Map<string, RepoMeta>();
-  let owed = new Map<string, RepoMeta>();
   const { result, failures: errors } = underMirrorLease(
     ctx,
     (host, failures) => {
-      const erased = transaction(db, () => {
-        const counts =
+      const { counts, owed } = transaction(db, () => {
+        const touched = new Map<string, RepoMeta>();
+        const erased =
           kind === "entry"
             ? eraseEntry(db, named.key, touched, now)
             : eraseMemory(db, named.key, now);
-        owed = noteOwed(db, touched, now);
+        const noted = noteOwed(db, touched, now);
         insertAudit(db, {
           at: now,
           source: "cli",
           action: "purged",
           target: uid,
-          detail: `${kind}: ${counts.rows} rows, ${counts.feedRows} feed rows`,
+          detail: `${kind}: ${erased.rows} rows, ${erased.feedRows} feed rows`,
         });
-        return counts;
+        return { counts: erased, owed: noted };
       });
       // Cut once here, so the purged frames do not wait for the replay.
       const cut = checkpointWal(db);
       if (owed.size > 0) replayOwed(ctx, host, owed, failures);
-      return { ...erased, cut };
+      return { ...counts, cut };
     },
     (failures) => {
       if (failures.length > 0) {

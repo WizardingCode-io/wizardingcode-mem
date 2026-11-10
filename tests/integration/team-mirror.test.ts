@@ -678,6 +678,9 @@ describe("isolation, the lease, the plan", () => {
     expect(JSON.parse(getMeta(t.server.db, "mirror.replay") ?? "null")).toEqual([
       ["shared", { scope: "shared" }],
     ]);
+    expect(
+      existsSync(join(sharedRepo(t), fileNameFor(uuidOf(keepShared.uid), "keep-shared"))),
+    ).toBe(false);
     // The second, in another folder and with git working, finishes the first's replay too.
     const second = purgeItem(mirrorCtx(t), "entry", goneA.uid, t.clock.now);
     expect(second.errors).toEqual([]);
@@ -706,6 +709,25 @@ describe("isolation, the lease, the plan", () => {
     expect(runMirror(mirrorCtx(t), { rebuild: false })).toEqual({ commits: 1, errors: [] });
     expect(getMeta(t.server.db, "mirror.replay")).toBeNull();
     expect(existsSync(join(sharedRepo(t), fileNameFor(uuidOf(p.uid), "p")))).toBe(true);
+  });
+
+  test("a purge over a note it cannot read replays its own folders and leaves a rebuild owed to the next run", async () => {
+    const { t, ana } = await team();
+    const keep = entryPayload({ scope: "shared", slug: "keep" });
+    const gone = entryPayload({ scope: "shared", slug: "gone" });
+    await pushOne(t.server, ana.token, sendOf(keep));
+    await pushOne(t.server, ana.token, sendOf(gone));
+    runMirror(mirrorCtx(t), { rebuild: false });
+    setMeta(t.server.db, "mirror.replay", "{not json");
+    const purged = purgeItem(mirrorCtx(t), "entry", gone.uid, t.clock.now);
+    expect(purged).toMatchObject({ rows: 1, errors: [] });
+    expect(getMeta(t.server.db, "mirror.replay")).toBeNull();
+    expect(getMeta(t.server.db, "mirror.rebuild")).not.toBeNull();
+    expect(readFileSync(join(sharedRepo(t), fileNameFor(uuidOf(keep.uid), "keep")), "utf8")).toBe(
+      keep.frontmatter + keep.body,
+    );
+    expect(runMirror(mirrorCtx(t), { rebuild: false })).toEqual({ commits: 1, errors: [] });
+    expect(getMeta(t.server.db, "mirror.rebuild")).toBeNull();
   });
 
   test("a throw outside the per-revision blocks is recorded in mirror.last, the lease released, the rebuild still owed", async () => {

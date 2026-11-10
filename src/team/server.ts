@@ -40,6 +40,8 @@ const IDLE_TIMEOUT_S = 120;
 /** Above the published cap, so the handler's own 413 (with a request id) answers first. */
 const MAX_REQUEST_BODY = 2_097_152;
 const HOUR_MS = 3_600_000;
+/** How long the hourly checkpoint waits for an outside reader of the log. */
+const CHECKPOINT_WAIT_MS = 200;
 
 /** The export child's command line: this binary, `serve mirror`, and the directory the server was given. */
 export function mirrorCommandFor(dataDir: string): string[] {
@@ -213,8 +215,18 @@ export async function startTeamServer(options: ServerOptions): Promise<TeamServe
     buckets.joins.sweep();
     buckets.bytes.sweep();
     buckets.auth.sweep();
-    // The log is cut while no export child reads it: a purge's `busy` checkpoint is finished here.
-    if (mirror.child() === null) checkpointWal(db);
+    // The log is cut while no export child reads it, so a purge's `busy` checkpoint is finished
+    // here; the wait for an outside reader is short, so the tick never holds the requests for
+    // long; a log still held is said, and a failure of this housekeeping never ends the process.
+    if (mirror.child() === null) {
+      try {
+        if (!checkpointWal(db, CHECKPOINT_WAIT_MS)) {
+          log.line({ level: "warn", event: "wal-checkpoint", busy: true });
+        }
+      } catch (error) {
+        log.error("team.checkpoint", error);
+      }
+    }
     mirror.hourly();
   }, HOUR_MS);
 

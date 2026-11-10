@@ -588,9 +588,9 @@ const PENDING_SQL = `SELECT r.seq, r.uuid, r.revision, e.created_by_member AS cr
    WHERE e.mirror_revision < e.revision AND r.revision > e.mirror_revision AND r.seq > ?
    ORDER BY r.seq LIMIT ?`;
 
-/** The keys of the revisions the mirror has not exported, after `seq`, in feed order, at most `limit`. */
-export function pendingRevisionsAfter(db: Db, seq: number, limit: number): PendingKey[] {
-  return db.query<PendingKey, [number, number]>(PENDING_SQL).all(seq, limit);
+/** The keys of the revisions the mirror has not exported, after `seq`, in feed order, one batch. */
+export function pendingRevisionsAfter(db: Db, seq: number): PendingKey[] {
+  return db.query<PendingKey, [number, number]>(PENDING_SQL).all(seq, REVISION_BATCH);
 }
 
 /** The planner's lines for the pending query: a test reads them for the partial index's name. */
@@ -634,9 +634,17 @@ export function forEachRevision(db: Db, fn: (revision: RevisionRow) => boolean |
  * A truncating checkpoint: the log's frames go into the file and the log is cut to nothing,
  * so text a purge erased does not outlive it there; false when a reader held the log.
  */
-export function checkpointWal(db: Db): boolean {
-  const row = db.query<{ busy: number }, []>("PRAGMA wal_checkpoint(TRUNCATE)").get();
-  return row !== null && row.busy === 0;
+export function checkpointWal(db: Db, waitMs?: number): boolean {
+  // With `waitMs`, the wait for a reader is that long instead of the connection's busy timeout,
+  // which is put back after: the server's own tick must not hold its requests for seconds.
+  const before = db.query<{ timeout: number }, []>("PRAGMA busy_timeout").get()?.timeout ?? 0;
+  if (waitMs !== undefined) db.run(`PRAGMA busy_timeout = ${Math.trunc(waitMs)}`);
+  try {
+    const row = db.query<{ busy: number }, []>("PRAGMA wal_checkpoint(TRUNCATE)").get();
+    return row !== null && row.busy === 0;
+  } finally {
+    if (waitMs !== undefined) db.run(`PRAGMA busy_timeout = ${before}`);
+  }
 }
 
 /** Deletes the entry's revisions; the count. Run before `deleteEntry`: the foreign key is on. */
