@@ -1,0 +1,234 @@
+{
+  "fingerprint": null,
+  "tdd": [],
+  "runs": [],
+  "verdict": "unproven",
+  "unproven": [
+    "gates have not run"
+  ],
+  "verifications": [
+    {
+      "what": "knowledge",
+      "ref": "K-319",
+      "question": "Does the entry `entries.k1` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.05
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-09T02:40:02.041Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-316",
+      "question": "Does the entry `entries.k2` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.14
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-09T02:40:02.041Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-311",
+      "question": "Does the entry `entries.k3` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.07
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-09T02:40:02.041Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-202",
+      "question": "Does the entry `entries.k4` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.25
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-09T02:40:02.041Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-201",
+      "question": "Does the entry `entries.k5` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.21
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-09T02:40:02.041Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-200",
+      "question": "Does the entry `entries.k6` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.19
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-09T02:40:02.041Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-199",
+      "question": "Does the entry `entries.k7` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.15
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-09T02:40:02.041Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-197",
+      "question": "Does the entry `entries.k8` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.14
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-09T02:40:02.041Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-179",
+      "question": "Does the entry `entries.k9` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.35
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-09T02:40:02.041Z"
+    }
+  ],
+  "roles": [
+    {
+      "agent": "goldfish-comprehension",
+      "agentId": "ac42007f708e33ffc",
+      "at": "2026-11-09T02:44:26.562Z",
+      "tokens": 108948,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-comprehension.md"
+    },
+    {
+      "agent": "goldfish-zoom-out",
+      "agentId": "aa28b3c09a8a1018d",
+      "at": "2026-11-09T02:44:39.676Z",
+      "tokens": 98923,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/brainstorm-goldfish-zoom-out.md"
+    },
+    {
+      "agent": "goldfish-structural",
+      "agentId": "a041dc22280bdf02f",
+      "at": "2026-11-09T02:44:53.601Z",
+      "tokens": 107390,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/brainstorm-goldfish-structural.md"
+    },
+    {
+      "agent": "goldfish-readiness",
+      "agentId": "a136831006445433d",
+      "at": "2026-11-09T02:45:59.810Z",
+      "tokens": 128250,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-readiness.md"
+    },
+    {
+      "agent": "goldfish-design",
+      "agentId": "aa7eb2ddd834c21fe",
+      "at": "2026-11-09T02:46:27.347Z",
+      "tokens": 114304,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-design.md"
+    },
+    {
+      "agent": "goldfish-codebase",
+      "agentId": "ad69c79f5bffc2c66",
+      "at": "2026-11-09T02:47:21.083Z",
+      "tokens": 165739,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-codebase.md"
+    },
+    {
+      "agent": "goldfish-comprehension",
+      "agentId": "a69f94291554982f5",
+      "at": "2026-11-09T02:51:35.386Z",
+      "tokens": 86142,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/brainstorm-goldfish-comprehension.md"
+    },
+    {
+      "agent": "goldfish-readiness",
+      "agentId": "a6763862bb8008efd",
+      "at": "2026-11-09T02:52:28.834Z",
+      "tokens": 164519,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/brainstorm-goldfish-readiness.md"
+    },
+    {
+      "agent": "goldfish-design",
+      "agentId": "a2c7a31631c778fba",
+      "at": "2026-11-09T02:52:55.901Z",
+      "tokens": 119233,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/brainstorm-goldfish-design.md"
+    },
+    {
+      "agent": "goldfish-codebase",
+      "agentId": "a2d91b11d8d0bb3ae",
+      "at": "2026-11-09T02:53:45.126Z",
+      "tokens": 137916,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/brainstorm-goldfish-codebase.md"
+    }
+  ],
+  "specReview": {
+    "rounds": [],
+    "agentIds": [
+      "a2c7a31631c778fba",
+      "a2d91b11d8d0bb3ae",
+      "aa28b3c09a8a1018d",
+      "a69f94291554982f5",
+      "a6763862bb8008efd",
+      "a041dc22280bdf02f"
+    ],
+    "brief": {
+      "hash": "6625be611af01a95420cd1c6b0d2796f4bdc91576d3ed5cca9c47fde8d7e31ad",
+      "agents": {
+        "goldfish-design": "a2c7a31631c778fba",
+        "goldfish-codebase": "a2d91b11d8d0bb3ae",
+        "goldfish-zoom-out": "aa28b3c09a8a1018d",
+        "goldfish-comprehension": "a69f94291554982f5",
+        "goldfish-readiness": "a6763862bb8008efd",
+        "goldfish-structural": "a041dc22280bdf02f"
+      },
+      "at": "2026-11-09T02:55:31.305Z"
+    }
+  }
+}

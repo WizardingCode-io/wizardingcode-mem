@@ -1,0 +1,40 @@
+# The team server behind Caddy on one VPS (ADR 0026). Copy .env.example to .env and set
+# SERVER_DOMAIN and WIZARDINGCODE_MEM_VERSION; DNS must point at this host and ports 80 and
+# 443 be open. The server's port is never published: Caddy is the only way in.
+services:
+  server:
+    image: ghcr.io/wizardingcode-io/wizardingcode-mem:${WIZARDINGCODE_MEM_VERSION:?set WIZARDINGCODE_MEM_VERSION in .env}
+    environment:
+      - WIZARDINGCODE_MEM_TEAM_TRUST_PROXY=on
+    volumes:
+      - data:/data
+    init: true
+    stop_grace_period: 30s
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  caddy:
+    image: caddy:2@sha256:ce773ec7a742ce15ee6bf2bb5f65882b9e2a4487b10733e6f1484f86e6b5d8bc
+    environment:
+      - SERVER_DOMAIN=${SERVER_DOMAIN:?set SERVER_DOMAIN in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - server
+    restart: unless-stopped
+
+volumes:
+  data:
+  caddy_data:
+  caddy_config:

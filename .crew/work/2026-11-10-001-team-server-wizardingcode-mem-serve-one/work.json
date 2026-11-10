@@ -1,0 +1,1190 @@
+{
+  "id": "2026-11-10-001-team-server-wizardingcode-mem-serve-one",
+  "title": "Team server: wizardingcode-mem serve, one Docker image with SQLite and the repos",
+  "input": "Team server: wizardingcode-mem serve, one Docker image with SQLite and the repositories on volumes, every request authenticated by a device token, invitations by an admin, one token per machine, roles admin and member, a sync API for knowledge versions and shared memories that refuses a stale version; a compose file with TLS by a reverse proxy; ADR 0026",
+  "type": "feature",
+  "route": "full",
+  "routeReasons": [
+    "risk areas: auth, personal-data, data-migration, infra, public-api",
+    "the change's lines were not read for personal data: no changed files",
+    "personal data in lines not read for risk (test or excluded): email (tests/unit/knowledge-git-host.test.ts)",
+    "personal data in lines not read for risk (test or excluded): email (tests/integration/team-mirror.test.ts), email (tests/unit/knowledge-git-host.test.ts)"
+  ],
+  "riskAreas": [
+    "auth",
+    "personal-data",
+    "data-migration",
+    "infra",
+    "public-api",
+    "secrets"
+  ],
+  "phase": "learn",
+  "awaiting": "role",
+  "criteria": [
+    {
+      "id": "AC-44",
+      "kind": "behavior",
+      "text": "`openTeamDb` on an empty directory creates `team.db` at team schema 1 with the tables above, mints `server.id`, `server.instance`, `server.created_at` and `team.schema`, and a second open changes nothing; a file at a newer team version is refused with `SchemaTooNewError`; a client store's file renamed `team.db`, and a file with a version and no `meta` table, are refused as \"not a team database\" before any migration runs, by `openTeamDb` and by `openTeamExisting` alike; `openDb` on a client store still applies `MIGRATIONS` and the module schemas as before, closes its handle when a module migration fails, restricts the files after both migrations, and its upgrade copies, the module schemas' included, still land in its own `backups/`; `openExisting` keeps its `allowNewer` and its busy timeout (the runner's split changes no behaviour); the way back across a bump holds: with a two-migration list `openFile` leaves `backups/team-<ms>-v1-<pid>.db`, the version-1 list then refuses the file with `SchemaTooNewError`, after the copy is put in place with `team.db-wal` and `team.db-shm` removed the version-1 list opens it, and a `feed.seq` ahead of it makes `checkRestore` renew the instance, advance the sequence (the `sqlite_sequence` row inserted when absent) and rewrite the file; the viewer's `json`, `problem` and `jsonObject` live in `src/http/respond.ts` and the viewer's tests pass unchanged; `setLogSink` routes `logError` to the sink and, unset, to the file as before; `gitEnv` and `runGit` take a `GitHost` that part 1's store satisfies as it is, a per-call `timeoutMs` keeps its precedence over the host's, the staging and commit helpers take a repository path and `commitPaths` a `committer`, part 1's tests pass unchanged, and `gitEnv` with a `committer` sets the committer variables apart from the author's."
+    },
+    {
+      "id": "AC-45",
+      "kind": "behavior",
+      "text": "a first start with no members logs one JSON line with `event: \"bootstrap\"` and a `wci1_` code, audits `bootstrap` and hands the code to `onBootstrap`; a second start within 24 hours prints nothing; `/v1/health` is 200 `{ ok: true }` without a token, carries no version, and is 503 `{ ok: false }` with free disk injected just under 100 MiB and 200 just above; every other route is 401 without a token, 403 `member disabled` for a disabled member's device (its devices revoked as well), 401 `device revoked` for a revoked device of an active member, each with `serverId` and `instance` in the body; `join` with the bootstrap code and `name: \"André\"` makes an admin named `André` (absent, `admin`) and answers a `wcm1_` token once with the device's id and alias, `serverId` and `instance`, and the same code again is 410 `invitation used`; `join` with an unknown, expired or revoked code is 404 or 410 and audited with the address and without the code, and a rate-limited address writes no audit row; a label over 80 characters or a bad name is 400; the eleventh join from one address in a minute is 429 with `Retry-After`; the 601st request of a device in a minute is 429, a held pull counts once, and an item that would take a device's applied payload past 64 MiB in an hour is `refused rate` while an idempotent retry is not charged; with `trustProxy` the address is the last `X-Forwarded-For` hop, an authenticated request without `X-Forwarded-Proto: https` is 400, and a `join` without it is 400 `https required` and spends no invitation; a host outside loopback without `trustProxy` logs `event: \"plain-http\"` at start and `127.0.0.2` does not; a token's hash is in `devices.token_hash` and the token itself nowhere in the database or the logs; `rotate` answers a new token once, the old one is 401 from then on, and the id and alias are unchanged; `X-WCM-Contract: 2` is 409 `contract` with `accepted: [1]` on `me` and is ignored on `join` and `health`; `GET /v1/me` answers the member, the device with its alias, `serverId`, `instance`, `contract: 1` and the limits (`pullWaitSeconds` 25 and `payloadBytesPerHour` among them); every answer the handler gives carries `X-Request-Id`, a client's valid `X-Request-Id` is echoed, a `Content-Length` above 1 MiB and a chunked body past 1 MiB are 413 with a request id, and a thrown error answers `{ error: \"internal error\", requestId }` with the message in a log line of the same id."
+    },
+    {
+      "id": "AC-46",
+      "kind": "behavior",
+      "text": "an admin's `POST /v1/invitations { role: \"member\", name: \"Ana Lopes\" }` makes a code a new member joins with, a name of 81 characters or beginning `agent:` is 400, and `expiresInHours` outside 1 to 720 is 400; `{ forMember }` makes a code that adds a device to that member and `GET /v1/me` on both devices shows one member id; a member calling any invitation or admin route is 403; `GET /v1/invitations` lists unused ones; `POST /v1/invitations/<id>/revoke` makes the code 410 `invitation revoked`; revoking a device cancels its unused invitations; the last active admin's disable, device revoke or demotion is 409 `the last admin stays` with a `hint`; `POST /v1/members/<id>/role { role: \"admin\" }` promotes; `POST /v1/members/<id>/disable { withdraw: true }` revokes the member's devices and tombstones their workspace entries and their devices' memories with one feed row each and no lock, and leaves a shared entry they created untouched; `POST /v1/members/<id>/enable` clears the disable, a device invitation joins the member again under the same id, and their re-send of a tombstoned workspace entry on the tombstone's base applies; `POST /v1/items/entry/<uid>/withdraw` with a URL-encoded project uid tombstones and locks and answers the revision, on an already withdrawn item it locks alone, `reinstate` unlocks and the owner's re-send then applies; every admin action and every CLI write writes an audit row (`source` `api` or `cli`), and the plan's route table's shapes and statuses hold for every admin route."
+    },
+    {
+      "id": "AC-47",
+      "kind": "behavior",
+      "text": "`push` applies an entry `send` with `baseRevision` 0 as revision 1 with the recomputed `hashOf`; a retry of the same payload is `applied` with revision 1 and changes nothing, whatever its `baseRevision`, when the item is locked by an admin, when the bytes bucket is empty and when free disk is below the floor; a second device's send on base 1 with the current hash is revision 2; a send on base 1 after that is `stale` with `current { revision: 2, hash }`; a retry by the first device whose payload equals revision 1's is `stale` with `appliedAs: 1`, and the same payload pushed by another device on an old base is `stale` without `appliedAs`; the same bytes pushed on the current base under another alias, and under the same alias with another slug, are new revisions (not retries) with their feed rows; a payload with an extra or missing key or a field of the wrong type (`frontmatter` a number, `version` a string: `refused shape`, never 500), a uid whose UUID fails part 1's `UUID` or whose alias fails `isHostLedAlias`, a `scope` or `remoteAlias` that disagrees with the uid, a frontmatter `id` other than the uid's UUID, or an `area` that fails `AREA_ID` or `AREA_MAX` is `refused shape`, and a slug that fails `checkSlug` is `refused slug`; a project entry with the alias `remote:github.com/acme/site` is `applied` and pulls under that alias; a `payload.hash` that is not `hashOf` of `frontmatter + body` is `refused hash`; a payload over 256 KiB is `refused size`; a payload carrying `sk-ant-api03-` and 40 letters is `refused secret` with `rule`; a send of a purged UUID is `refused purged`; a `workspace:` entry pushed by another member is `refused not-owner`, and so is another member's push of `shared:<the UUID of a workspace entry>` on its current base and another member's move of a shared entry into `workspace`, while the creator's move of their workspace entry to `shared` is `applied`; a `shared:` entry pushed by another member on the current base is `applied`; the same UUID pushed under another alias on the current base is a new revision of the same row with the new alias, and the feed gains a `tombstone` with `movedTo` in the alias it left; an item locked by an admin is `refused withdrawn-by-admin` until reinstated; a re-send on a tombstone's base (its revision and the kept hash) reinstates the entry; a `withdraw` with a stale base is `stale` and tombstones nothing; a `withdraw` by the creator on the current base is `withdrawn` without a lock, its retry with the revision before the tombstone is `withdrawn` again with nothing changed, the same retry by another member is `stale`, a withdraw by another member on the current base is `refused not-owner`, by an admin `withdrawn`; 201 items is 400 and a malformed item is 400 naming its index; a 1.1 MiB body is 413; with free disk under 200 MiB (injected) a new item is `refused storage` and a retry of an applied one is still `applied`; results come back in the order given and each item is its own transaction; after the push one change signal fired, the high-water file holds both marks, and the request's log line names the refused uids and reasons."
+    },
+    {
+      "id": "AC-48",
+      "kind": "behavior",
+      "text": "a memory `send` from its device with the alias `remote:github.com/acme/site` is `applied` with revision 1 and the recomputed `memoryHash`, a wrong `payload.hash` is `refused hash`, a field of the wrong type (`importance` a string, `updatedAt` not finite) or a `memoryKind` outside `^[a-z][a-z0-9_-]{0,31}$` is `refused shape` and never 500, a payload over 256 KiB is `refused size`, a send of a purged key is `refused purged`, the same hash and alias again is `applied` with revision 1 unchanged, a later `updatedAt` replaces as revision 2, an older one is `stale` with `current { revision, hash, updatedAt }`, the same hash with another `remoteAlias` replaces and leaves a `tombstone` with `movedTo` in the old alias, a memory locked by an admin is `refused withdrawn-by-admin` until reinstated, a body carrying a recognisable key is `refused secret`, another device's send of the same uid is a second row (not refused) and both pull as `remote:<alias>:<uid>` with each device's alias under scope `project`; `withdraw` by the owning device with `baseRevision` equal to the row's revision, by another device of the same member or by an admin through the feed form, tombstones it and answers `withdrawn`; with another `baseRevision` it is `stale` with `current`; its retry with the revision before the tombstone is `withdrawn` again with nothing changed; by another member it is `refused not-owner`; a `withdraw` of an unknown uid is `refused unknown`."
+    },
+    {
+      "id": "AC-49",
+      "kind": "behavior",
+      "text": "after two applied revisions of an entry and a withdraw of another, `serve mirror` (in-process through the test's mirror runner) writes `repos/shared/entries/<slug>--<8 hex>.md` with the second revision's bytes verbatim, three commits in order whose authors are the members, whose committer is the server and whose trailers are `Revision`, `Uid` and `Hash`, removes the withdrawn entry's file in a commit, sets each row's `mirror_revision`, and records `meta.mirror.last` with the count; a second run with nothing pending commits nothing; a slug change renames the file; a project repository's folder is `projects/<slugify of the alias>-<8 hex of projectFolderName>` and a member's folder `members/<id>-<slugify of the name>`, each with `knowledge.json` naming them, and members named `../x`, `a/b`, `.` and `-rf` and the alias `remote:github.com/acme/site` get folders directly under their parents; an entry moved to another alias has its file removed from the old repository in a commit there and written in the new one, and `--rebuild` replays each revision into the repository its scope names; with `stubGit` failing `commit` on the second revision after a first successful run the run records the error in `meta.mirror.last`, exports the other repositories, and the next run exports the failed one; a repository with `.git` and no HEAD is completed at the next run, and an `index.lock` left by a run whose lease is gone is removed before the next run's first git call; `--rebuild` on a repository deleted by hand rewrites it with one commit per revision in order and the same files, beside a running server; `serve purge entry <uid> --yes` removes the row and its revisions, marks its feed rows `purge` without payload reference, writes a feed row with op `purge`, records the key in `purged`, and no rebuilt repository holds the file in any commit; `serve purge memory remote:<alias>:<uid> --yes` removes the row, marks its feed rows and records the key; the repository has no hooks, no signing and no user config applied, `GIT_CEILING_DIRECTORIES` is the mirror's root, `--template=` is passed on init and `safe.directory` after the runner's own configuration (`stubGit` records the arguments); a second `serve mirror` while one holds `mirror.lease` refuses, a run renews the lease before every git call, and a run whose renewal finds another holder aborts and records the error; the pending query uses the partial index; the server runs the export after a quiet minute following a push and hourly (through the injected timers), never while its previous child is alive, forwards its lines to the log, and `stop()` signals a running child and waits for it; no request waits on git."
+    },
+    {
+      "id": "AC-50",
+      "kind": "behavior",
+      "text": "`pull` with `since` 0 and `projects` naming `remote:github.com/acme/site` answers the shared entries, every member's workspace entries and only that alias's project entries and memories, one current row per key, `snapshot: true`, `next` the last `seq` and `more` false; a second pull with `since` = `next` answers no items until a push lands; `limit` above 500 is clamped and a page over 2 MiB of payload stops early with `more` true and the next page continues it; a tombstone carries no payload, and a tombstone left by an entry's or a memory's move carries `movedTo`; a member's view carries `member { id, name }` and no device id, an admin's view carries `device`, and a CLI write's row carries `member { id: \"operator\", name: \"operator\" }`; `since` 0 with `scope=project` and one alias answers that alias's items alone; a `since` above the sequence is 410 `{ fullPull: true }` with `serverId` and `instance`; `AUTOINCREMENT` keeps `seq` from reusing a number after a deleted row; every answer, the empty wait page included, carries `serverId` and `instance`, `instance` changes after `serve instance renew` and at a start whose `feed.seq` is ahead of `sqlite_sequence` (a restored copy, from before a push, from before a revoke with no push between, and a copy that never had a feed row) with an audit row `restore detected`, the sequence advanced by at least 1,000,000 and the file rewritten so a second start detects nothing, and `serverId` never changes; the pull reads `current = 1` rows only (a key with three rows is served once, by its newest), `EXPLAIN QUERY PLAN` of the pull, of the single-alias snapshot and of the wait's emptiness check shows no `SCAN` of `changes`, and a seeded feed of 100,000 rows with three rows for the named alias answers that alias's pull in under 50 ms; `pull` with `wait=5` and nothing new answers within 1 s of a push made 200 ms later and carries that item; a tombstone written by another process is seen by a held pull within 5 s of the clock; with `wait=1` and no push it answers when the clock passes a second with no items, `next` equal to `since` and `snapshot` false; `wait=30` is clamped to 25; a pull that finds rows answers at once whatever `wait`; `stop()` answers a held pull with the empty page before draining."
+    },
+    {
+      "id": "AC-51",
+      "kind": "behavior",
+      "text": "with no flag and an environment of `PATH` and `HOME` alone `serve` listens on `127.0.0.1` and logs `listening` with its fields; with the environment host set it listens there; a second `serve` on the same directory exits 1 naming the lease, an expired lease is replaced, the lease is renewed every 10 s by the injected timer and carries a `serve-` owner and no pid, and a server whose renewal finds another owner exits 1 after answering its held pulls; SIGTERM answers held pulls, releases the lease and exits 0 within 2 s with the process gone (no timer keeps it alive); the logs are JSON lines with the fields of the design and never contain a token, a code (after the bootstrap line) or a payload; `options` shows `idleTimeout` 120 and `maxRequestBodySize` 2,097,152; `serve` and `serve health` skip the legacy data migration (a `WIZARDINGCODE_MEM_MIGRATE` unset and a seeded legacy home are untouched) and `USAGE` lists `serve`; a newer `team.db` makes `serve` exit 3 with the message; a writer subcommand of a newer schema refuses to migrate while the serve lease is fresh."
+    },
+    {
+      "id": "AC-52",
+      "kind": "behavior",
+      "text": "the CLI subcommands against `WIZARDINGCODE_MEM_TEAM_DATA`, their log on standard error and their own output on standard output as the plan's subcommand table gives: `serve invite --role member --name Ana` prints a `wci1_` code alone, usable by `join`, `--for <id>` binds it, and a bad name exits 64; `serve invitations` lists and `serve invitation revoke <id>` makes the code 410; `serve members` lists members and devices with aliases and last seen; `serve revoke <device id>` makes the device 401; `serve disable <member id> --withdraw` tombstones the member's workspace entries and memories and `serve enable <member id>` clears the disable; `serve role <id> admin` promotes; `serve withdraw entry <uid>` tombstones and locks and `serve reinstate entry <uid>` unlocks; `serve status` prints the fields of the design as `key: value` lines (`heads.<folder>: <sha>`) and `--json` the same as JSON, exit 0, and exit 1 with a message when the directory has no database; `serve audit --limit 5` prints the last five rows newest first; `serve health --url <origin>` exits 0 against a running server and 1 against a closed port; `serve instance renew` prints the new id and advances the sequence, and exits 1 with the compose form while a fresh serve lease is held; `serve mirror --rebuild` and `serve purge` run beside a fresh serve lease; `serve purge` without `--yes` exits 64; every writer updates `feed.seq` and writes one audit row, the readers write nothing; `serve nonsense` exits 64 with the usage."
+    },
+    {
+      "id": "AC-53",
+      "kind": "behavior",
+      "text": "`redact(\"token wcm1_\" + 43 base64url characters)` is `[REDACTED:team-token]`, `redact(\"code wci1_\" + 26 base32 characters)` is `[REDACTED:team-invitation]`, `redact(\"Authorization: Bearer wcm1_…\")` names `team-token`, the two rules carry the `d` and `g` flags and sit before `auth-header`, and the existing redact cases pass unchanged."
+    },
+    {
+      "id": "AC-54",
+      "kind": "observed",
+      "text": "the `Dockerfile` builds on the CI runner's architecture from `dist/` through its `pick` stage, `docker run --rm <image> --version` prints the version, the container started with `--init --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges:true` runs as uid 10001, `serve health` inside it exits 0 within 30 s of retries and the container's exit code after `docker stop -t 30` is 0; `compose.yml` (the `:?` interpolation of both variables, `SERVER_DOMAIN` passed into `caddy`), `Caddyfile` (`max_size 1MiB`, the HSTS header) and `.env.example` are as the design states; the release workflow's `docker` job depends on `sign`, has `packages: write`, checks the repository out and downloads the `binaries` artefact into `dist/`, builds with `context: .` and `file: Dockerfile`, uses `metadata-action` for the lower-case image name and the two tags with `latest` only for a tag without `-`, and `publish` depends on `docker`; the runbook step that makes the package public is named in the ADR."
+    },
+    {
+      "id": "AC-56",
+      "kind": "observed",
+      "text": "`docs/adr/0026-team-server.md` (status draft, part 5 of the journey) records D-1 to D-26 as rulings with the superseded clauses, the store boundary and what else binds the design to one process, the data model with the UUID as the entry's key and every revision kept, the API with its results, reason codes and the order of the push rules, idempotency over the hash and the attributes, the ownership rule against the stored row and the moves with their tombstones, the hash recomputation over the bytes received and the secret check with the rule skew between releases, the write rules (the creator withdraws, on the current base, with the one retry rule), the alias as part 4's `remote:` form, the alias filter as minimisation and not permission, the feed with its `current` flag, snapshots and the cursor rules, the wait, the server id and the instance id with the restore detection, the sequence margin and the one undetected case, the mirror as an export with its folders, fixed file names, leases and limits (history keeps withdrawn text unless purged; a rebuild runs beside the server and its time at the pilot's size), `purge` and its durability, the limits and the bytes bucket, the logs and the request id, the image and the compose file with the HSTS header, the contract and both directions of skew, the boundary (the volume, the container's log, the host), the rollback procedure in its compose form, the one-time step that makes the registry package public, the lease's 30-second window after a crash, what parts 6 and 7 must do with it, and the follow-ups D-25 names; `CLAUDE.md` gains a bullet naming `src/team/`, `serve`, the deployment files and the one-process assumption."
+    },
+    {
+      "id": "AC-57",
+      "kind": "behavior",
+      "text": "the plan's `team-store-boundary` test reads every file under `src/team/` but `store.ts` and `db.ts` and finds no import from `src/store/` and no `.query(`, `.run(`, `.prepare(` or `withWrite(`; `src/team/store.ts` exists, exports `transaction`, the wrapped lease functions and one function per statement, and imports nothing from `src/team/` but `db.ts` and `errors.ts`; the plan's `team-contract` test pins `CONTRACT_FINGERPRINT` over `OUTGOING_ENTRY_KEYS`, `OUTGOING_MEMORY_KEYS`, the result shapes and `PUSH_REASONS`, and fails when they change without `CONTRACT`."
+    },
+    {
+      "id": "AC-58",
+      "kind": "observed",
+      "text": "The hook snapshots (tests/unit/hook-snapshots.test.ts), the MCP tools list (tests/unit/mcp-tools-list.test.ts) and the perf budgets (tests/perf/budgets.test.ts) pass unchanged; the viewer's tests pass after the HTTP helpers move; the core store tests pass after the runner's split; part 1's knowledge tests pass after the runner-host seam; the redact tests pass with the two rules added. The baseline is the item's first gate run at its base (the whole suite green before any change); the proof after is the same files green on the final tree."
+    }
+  ],
+  "approvals": [
+    {
+      "what": "spec",
+      "at": "2026-11-10T12:59:32.574Z",
+      "by": "validator",
+      "rule": "complete-gap-round"
+    }
+  ],
+  "skips": [],
+  "baseCommit": "a91f5e02a598fa5d40cc7056ae9b1b340262bf90",
+  "createdAt": "2026-11-10T11:16:08.201Z",
+  "updatedAt": "2026-11-10T17:02:51.209Z",
+  "specReview": true,
+  "kind": "feature",
+  "kindFrom": "work_type feature",
+  "knowledge": {
+    "readAt": "2026-11-10T11:17:50.963Z",
+    "listed": [
+      "K-346",
+      "K-343",
+      "K-335",
+      "K-319",
+      "K-316",
+      "K-311",
+      "K-202",
+      "K-201",
+      "K-200",
+      "K-199"
+    ]
+  },
+  "priority": "high",
+  "seats": [
+    {
+      "role": "researcher",
+      "team": "researchers",
+      "kind": "debate",
+      "reason": "full route"
+    },
+    {
+      "role": "review-code-quality",
+      "team": "backend",
+      "kind": "gate",
+      "gate": "code-quality",
+      "reason": "full route"
+    },
+    {
+      "role": "review-test-quality",
+      "team": "qa",
+      "kind": "gate",
+      "gate": "test-quality",
+      "reason": "full route"
+    },
+    {
+      "role": "review-security",
+      "team": "security",
+      "kind": "gate",
+      "gate": "security",
+      "reason": "full route"
+    },
+    {
+      "role": "review-risk",
+      "team": "architects",
+      "kind": "gate",
+      "gate": "risk",
+      "reason": "full route"
+    },
+    {
+      "role": "review-architecture",
+      "team": "architects",
+      "kind": "gate",
+      "gate": "architecture",
+      "reason": "full route"
+    },
+    {
+      "role": "review-data",
+      "team": "etl",
+      "kind": "gate",
+      "gate": "data",
+      "reason": "risk area data-migration"
+    },
+    {
+      "role": "review-infra",
+      "team": "devops",
+      "kind": "gate",
+      "gate": "infra",
+      "reason": "risk area infra"
+    },
+    {
+      "role": "lead-qa",
+      "team": "qa",
+      "kind": "lead",
+      "reason": "full route"
+    },
+    {
+      "role": "lead-security",
+      "team": "security",
+      "kind": "lead",
+      "reason": "full route"
+    },
+    {
+      "role": "lead-architects",
+      "team": "architects",
+      "kind": "lead",
+      "reason": "full route"
+    },
+    {
+      "role": "lead-etl",
+      "team": "etl",
+      "kind": "lead",
+      "reason": "risk area data-migration"
+    },
+    {
+      "role": "lead-devops",
+      "team": "devops",
+      "kind": "lead",
+      "reason": "risk area infra"
+    },
+    {
+      "role": "judge",
+      "team": null,
+      "kind": "debate",
+      "reason": "a gate is planned"
+    }
+  ],
+  "primaryTeam": "backend",
+  "runtimes": [
+    "claude"
+  ],
+  "phaseAt": {
+    "understand": "2026-11-10T11:17:25.077Z",
+    "specify": "2026-11-10T11:45:32.617Z",
+    "conclave": "2026-11-10T11:45:32.764Z",
+    "plan": "2026-11-10T11:57:54.592Z",
+    "spec-review": "2026-11-10T11:58:13.477Z",
+    "build": "2026-11-10T12:59:32.700Z",
+    "gate": "2026-11-10T15:00:30.358Z",
+    "deliver": "2026-11-10T17:02:44.322Z",
+    "learn": "2026-11-10T17:02:50.997Z"
+  },
+  "decisions": [
+    {
+      "id": "D-1",
+      "question": "Where does the server keep its data: its own SQLite database and git repositories under its data directory, or a client's store schema reused on the server?",
+      "default": "Its own: a team database with its own migrations and one git repository per server scope under the data directory, never a client's store. The server's shape is the team's, not one machine's; a client's schema carries sessions, turns and hooks the server must never hold.",
+      "answer": "ok seguimos com sqlite (opção 1: SQLite, com a loja do servidor atrás de uma fronteira única que permita Postgres depois) (the person's answer of 2026-11-10 to this same question on item 2026-11-09-003, relayed)",
+      "at": "2026-11-10T11:18:20.607Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-2",
+      "question": "How are device tokens made and stored: random high-entropy secrets hashed at rest, or a password-style secret hashed with a slow function?",
+      "default": "A device token is 32 random bytes, shown once at join, stored as its SHA-256 digest only and compared in constant time; a high-entropy secret needs no slow hash, and a leaked database holds nothing that logs in. Revocation deletes nothing: revoked_at is set and the device refused.",
+      "answer": "o resto concordo com tudo (default aceite) (the person's answer of 2026-11-10 to this same question on item 2026-11-09-003, relayed)",
+      "at": "2026-11-10T11:18:20.669Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-3",
+      "question": "How is the first admin created: a one-time invitation the server prints at its first start, or a secret passed on the command line or in the environment?",
+      "default": "A one-time admin invitation minted at the first start with an empty database, printed once to standard output and written to a 0600 file in the data directory that is deleted when used, valid for 24 hours; nothing else answers until it is used. A secret in a flag or the environment would land in shell history and compose files.",
+      "answer": "o resto concordo com tudo (default aceite) (the person's answer of 2026-11-10 to this same question on item 2026-11-09-003, relayed)",
+      "at": "2026-11-10T11:18:20.730Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-4",
+      "question": "What is an invitation: a single-use code with a role and an expiry made by an admin, or an open sign-up or an e-mail flow?",
+      "default": "A single-use code of 128 bits (26 base32 characters) with a role and an expiry of 72 hours by default, made by an admin through the API or the server's CLI, stored hashed, consumed by one join; no open sign-up, no e-mail: the admin hands the code over however the team talks.",
+      "answer": "o resto concordo com tudo (default aceite) (the person's answer of 2026-11-10 to this same question on item 2026-11-09-003, relayed)",
+      "at": "2026-11-10T11:18:20.791Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-5",
+      "question": "What may each role do, and can the last admin be removed?",
+      "default": "A member pushes and pulls and sees every item of the server's one destination; an admin does the same and also creates invitations, lists members and devices, revokes a device, disables a member and withdraws any item; the last active admin cannot be revoked, disabled or demoted. Two roles only in this part.",
+      "answer": "o resto concordo com tudo (default aceite) (the person's answer of 2026-11-10 to this same question on item 2026-11-09-003, relayed)",
+      "at": "2026-11-10T11:18:20.851Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-6",
+      "question": "What is the sync API's shape: JSON over HTTP under a versioned prefix with a batch push answering per item and a pull by a monotonic cursor, or another transport?",
+      "default": "JSON over HTTP under /v1/: the push route takes up to 200 items with the client's policy epoch and answers each item applied, stale with the server's current version and hash, refused with a reason code from a fixed list, or withdrawn; the pull route takes the last sequence seen and answers the changes after it, 500 at most, with the next cursor and whether more follow; bodies capped at 1 MiB; a per-device rate limit of 600 requests a minute answered 429 with Retry-After. The same shape part 4's decide and ledger speak.",
+      "answer": "sim (default aceite, mais o wait da D-22 na rota de pull) (the person's answer of 2026-11-10 to this same question on item 2026-11-09-003, relayed)",
+      "at": "2026-11-10T11:18:20.911Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-7",
+      "question": "How is a conflict decided: an entry push carries the base version and hash it was made from and a mismatch is refused with the server's current ones, while memories belong to one device; or last write wins?",
+      "default": "Versions decide, never a silent overwrite: an entry push carries both the base version and the base hash the client built on; the server applies it only when both equal its current ones, else answers stale with the current version and hash; a first send of an unknown entry carries base version 0. A memory belongs to the device that first sent its uid: that device replaces or withdraws it, another device's push of the same uid is refused.",
+      "answer": "o resto concordo com tudo (default aceite) (the person's answer of 2026-11-10 to this same question on item 2026-11-09-003, relayed)",
+      "at": "2026-11-10T11:18:20.970Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-8",
+      "question": "What does the server store from a pushed item, and how does it check the shape?",
+      "default": "Exactly part 4's payload types, OutgoingEntry and OutgoingMemory, plus the member, the device, the server's version, the hash and the times; the payload is checked at the boundary against the key lists part 4's contract test pins, so an unknown or missing field is refused with the reason shape and adding a field changes both sides together. The server never asks for, and never keeps, anything else.",
+      "answer": "o resto concordo com tudo (default aceite) (the person's answer of 2026-11-10 to this same question on item 2026-11-09-003, relayed)",
+      "at": "2026-11-10T11:18:21.032Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-9",
+      "question": "How does a second machine join as the same member, and what identifies a device?",
+      "default": "An invitation may be bound to an existing member: an admin makes one for a member, or the member makes one from a device they already hold; a join with a bound invitation adds a device to that member, a join with an unbound one creates a member. A device id is an independent random value (12 base32 characters), never derived from the token, so a token can be rotated without changing the id.",
+      "answer": "o resto concordo com tudo (default aceite) (the person's answer of 2026-11-10 to this same question on item 2026-11-09-003, relayed)",
+      "at": "2026-11-10T11:18:21.094Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-10",
+      "question": "Which store is the authority for an applied item, and how do the git repositories relate to it?",
+      "default": "The team database is the authority: a push is applied in one transaction that stores the payload bytes as sent, the server's version, the hash, the owner and a change-feed row, and answers; the git repositories are a versioned mirror written after the commit by one in-process queue, one commit per applied item with the member as author and the server as committer, and a row still pending at start is mirrored then. The mission puts the repositories on the volume for the team's history; the sync never reads them.",
+      "answer": "o resto concordo com tudo (default aceite) (the person's answer of 2026-11-10 to this same question on item 2026-11-09-003, relayed)",
+      "at": "2026-11-10T11:18:21.156Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-11",
+      "question": "What does a device pull: every item of the server, or the shared and workspace knowledge plus the project items of the projects that machine works on?",
+      "default": "The shared repository's and the members' workspace entries always, and project-scoped entries and memories only for the remote aliases the device names in its pull; so a laptop never holds a project it does not work on, which is ADR 0018's rule carried across people. The pull answers one current row per uid since the cursor, tombstones included within their retention, 500 items or 2 MiB per page.",
+      "answer": "o resto concordo com tudo (default aceite) (the person's answer of 2026-11-10 to this same question on item 2026-11-09-003, relayed)",
+      "at": "2026-11-10T11:18:21.218Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-12",
+      "question": "Who may write and withdraw which items on the server?",
+      "default": "A shared or project entry is the team's: any member may push a new version on the current base, and the last writer is recorded; a member's workspace entry is written only by that member's devices; a memory is replaced only by the device that first sent it, applied only when its updatedAt is not older than the stored one. A withdraw is accepted from a device of the item's last writer, or from an admin; another member's withdraw is refused not-owner. An admin's withdraw locks the item until an admin reinstates it; the owner's re-send of an item it withdrew itself is a new version on the tombstone's base.",
+      "answer": "o resto concordo com tudo (default aceite) (the person's answer of 2026-11-10 to this same question on item 2026-11-09-003, relayed)",
+      "at": "2026-11-10T11:18:21.282Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-13",
+      "question": "How do withdrawals, retention, old cursors and a restored server behave for the pull feed?",
+      "default": "A withdraw tombstones the item and the feed keeps the tombstone 90 days; superseded feed rows are pruned after 90 days too; the sequence never reuses a number (AUTOINCREMENT); a pull whose cursor is older than the retained feed is answered 410 with the instruction to pull from zero; every pull and the me route carry the server's instance id, minted at first start and renewed by the runbook's restore step, so a client that sees a new instance pulls from zero and re-sends what the server lost. Withdrawn text stays in the git mirror's history, named as a limit.",
+      "answer": "o resto concordo com tudo (default aceite) (the person's answer of 2026-11-10 to this same question on item 2026-11-09-003, relayed)",
+      "at": "2026-11-10T11:18:21.346Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-14",
+      "question": "How are tokens and invitations kept safe over their life: a recognisable prefix, rotation, listing and revoking invitations, and what a revoked device's invitations become?",
+      "default": "A device token is wcm1_ followed by 43 base64url characters and an invitation code wci1_ followed by 26 base32 characters, so redact recognises both and a pasted token never becomes a memory; a device rotates its own token through the API and keeps its id; admins list and revoke invitations; revoking a device cancels every unused invitation it created; the join route is rate-limited per source address with the proxy's forwarded address trusted only when the server is told to trust its proxy.",
+      "answer": "o resto concordo com tudo (default aceite) (the person's answer of 2026-11-10 to this same question on item 2026-11-09-003, relayed)",
+      "at": "2026-11-10T11:18:21.408Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-15",
+      "question": "What are the limits on sizes, counts and rates, and where are they enforced?",
+      "default": "A request body of 1 MiB at most, enforced by the server before parsing and answered 413; 200 items per push, else 400; an entry payload of 256 KiB at most, part 1's file cap, else refused with the reason size; a pull page of 500 items or 2 MiB; 600 requests a minute per device and 10 joins a minute per source address, answered 429 with Retry-After; 5,000 applied items per device per day, else refused with the reason quota; names and labels of 80 characters. The limits are published in the me route so the client sizes its batches by bytes and by count.",
+      "answer": "o resto concordo com tudo (default aceite) (the person's answer of 2026-11-10 to this same question on item 2026-11-09-003, relayed)",
+      "at": "2026-11-10T11:18:21.470Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-16",
+      "question": "How is the server deployed: the image, the user, the volume, the proxy, the health probe and the binary's bind default?",
+      "default": "One image from debian bookworm-slim with git and ca-certificates and the Linux binary for the image's architecture (amd64 and arm64 through buildx), a fixed non-root user 10001 owning /data, a named volume for /data (a bind mount must be owned by that user), HEALTHCHECK through the binary's own probe subcommand, and the host set to all interfaces by the image's environment; the binary's own default is loopback and it refuses another address without an explicit flag. The compose file runs Caddy as the TLS-terminating proxy for a configured domain (ports 80 and 443, DNS at the host) with the server unpublished, init true and a 30 second stop grace. The release workflow builds and pushes the image to the GitHub container registry with the version tag, and latest for a release that is not a prerelease.",
+      "answer": "o resto concordo com tudo; ok seguimos com sqlite (default aceite) (the person's answer of 2026-11-10 to this same question on item 2026-11-09-003, relayed)",
+      "at": "2026-11-10T11:18:21.532Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-17",
+      "question": "How does the server open its database, fit the binary's command loop, and log?",
+      "default": "The core migration runner takes a file name and a migration list, so team.db has its own migrations under its own user_version with an upgrade backup and a too-new refusal and no module schemas; serve joins the lazy command table, skips the legacy data migration, and its run stays pending until a signal; SIGTERM and SIGINT stop accepting requests, finish the item in flight, drain the mirror queue for at most 20 seconds and close the database; the server logs JSON lines to standard output with a request id, the device id, the route, the status, the milliseconds and per-item counts, and never a token, a code after its first print, or a payload; the idle timeout is 120 seconds.",
+      "answer": "o resto concordo com tudo; ok seguimos com sqlite (default aceite) (the person's answer of 2026-11-10 to this same question on item 2026-11-09-003, relayed)",
+      "at": "2026-11-10T11:18:21.592Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-18",
+      "question": "How do the server and the clients stay compatible as the payload types grow?",
+      "default": "The me route carries a contract number, 1 in this part, and the server answers 409 with the reason contract to a client that names another; the payload check refuses an unknown field (shape), so the upgrade order is the server first and the clients after, which the ADR and the runbook state; part 4's pinned key lists are the one place both sides read.",
+      "answer": "o resto concordo com tudo (default aceite) (the person's answer of 2026-11-10 to this same question on item 2026-11-09-003, relayed)",
+      "at": "2026-11-10T11:18:21.654Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-19",
+      "question": "What happens to a departed member's items and devices?",
+      "default": "Disabling a member revokes every device of theirs and keeps their items attributed; the admin chooses, in the same call, whether to withdraw them all at once (tombstones the feed announces); nothing is deleted, and the text already in the git mirror's history stays, named as a limit. A memory of a revoked device can be withdrawn by an admin or by another device of the same member, never changed by anyone else.",
+      "answer": "o resto concordo com tudo (default aceite) (the person's answer of 2026-11-10 to this same question on item 2026-11-09-003, relayed)",
+      "at": "2026-11-10T11:18:21.718Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-20",
+      "question": "What does the server validate in a pushed entry, and what does it leave to the client?",
+      "default": "The server parses the frontmatter: the id must equal the uid's UUID, the scope must agree with the uid's prefix, the slug must pass part 1's rule before any path is built, the payload must fit 256 KiB and carry exactly the pinned keys; a failure is refused with shape, size or slug. The author field is informational (the commit author is the member); the area is checked against part 1's id pattern only, since the server holds no taxonomy in this part; the server never redacts (the client does at its edge) and never calls decide, storing the client's epoch with the feed row for the audit only.",
+      "answer": "o resto concordo com tudo (default aceite) (the person's answer of 2026-11-10 to this same question on item 2026-11-09-003, relayed)",
+      "at": "2026-11-10T11:18:21.781Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-21",
+      "question": "Does a person use one team server, or several, one per team or client (for example one for the WizardingCode projects and another for a client's), and what does that ask of the server and of the client?",
+      "default": "Several. Each server is one destination, independent of every other and knowing nothing of them: its own members, devices, tokens, instance id and contract. The client (part 6) holds a list of servers, each with its URL and its device token, binds each project to one server at most, and chooses its roots and areas per server, so a server never receives an item of a project bound to another and the person's workspace knowledge leaves only for the servers they choose. The sharing policy is already keyed by (project, destination) (ADR 0025 D-9); today only the destination team exists, and part 6 replaces it by the configured servers.",
+      "answer": "o user tem que conseguir adicionar vários servidores: para projectos da wizarding quero utilizar um servidor, para clubefashion quero utilizar outro servidor e por aí fora (default aceite) (the person's answer of 2026-11-10 to this same question on item 2026-11-09-003, relayed)",
+      "at": "2026-11-10T11:18:21.843Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-22",
+      "question": "How fast does a change on one machine reach the others: the client pulls on its own schedule, or the server tells a waiting client the moment a change lands?",
+      "default": "Within seconds while both machines are online, so the work is collaborative rather than a nightly exchange. The pull route takes a wait of up to 25 seconds: with nothing after the cursor the server holds the request and answers the moment a push is applied (one in-process signal, no polling of the database), or with an empty page when the wait ends; the client keeps one such pull open while a session or the viewer is active and pushes right after each local change the policy allows (after the drain writes a memory, after a knowledge write or accept), never on a hook path. One open connection per device, within D-15's rate limit since a held request counts once; the hold stays under D-17's idle timeout; a proxy must not buffer the route. The floor is the background drain, seconds after a turn, since hooks never touch the network.",
+      "answer": "sim (default aceite: pull com wait até 25 s, push logo após cada alteração local) (the person's answer of 2026-11-10 to this same question on item 2026-11-09-003, relayed)",
+      "at": "2026-11-10T11:18:21.903Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-23",
+      "question": "Do device tokens expire, and may an admin act as a member? (the auth checklist: session length, second factor, an admin acting as a user)",
+      "default": "No expiry: a device token lives until the device rotates it or an admin revokes it; serve members and GET /v1/devices show each device's last seen time so an admin can revoke an idle one; no second factor in this part (the invitation handed over in person is the second channel); an admin never acts as a member: an admin withdraws, reinstates, disables and purges in their own name, and every such act is an audit row, but never pushes or pulls as someone else.",
+      "answer": "sim (default aceite) (the person's answer of 2026-11-10 to this same question on item 2026-11-09-003, relayed)",
+      "at": "2026-11-10T11:18:21.964Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-24",
+      "question": "Which items may be erased from the server, by whom, and does erasure cover memories? (the deletion checklist: erasure or deactivation, which models may be hard-deleted, who holds the permission)",
+      "default": "Disabling a member is deactivation and a withdraw is a tombstone, both reversible and nothing deleted; erasure is only serve purge <entry|memory> <uid> --yes, run by the operator with a shell on the server and the server stopped, audited, covering an entry (its row, its revisions, its payload in the feed, its file in every commit of the mirror) and a memory (its row and its payload in the feed), since a memory may hold personal data and a tombstone keeps the bytes; no API route erases anything, and a member's own erasure request goes to the operator.",
+      "answer": "sim (default aceite) (the person's answer of 2026-11-10 to this same question on item 2026-11-09-003, relayed)",
+      "at": "2026-11-10T11:18:22.026Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-25",
+      "question": "After the six brainstorm lenses: does this part ship everything the spec had grown to, or a first slice that works as a team server, with the rest as named follow-ups?",
+      "default": "A first slice: members, devices, invitations, roles, revoke, disable and enable; push with revisions, stale, idempotency and the secret check; pull with a cursor, the project filter, snapshots and the wait; tombstones; the mirror as an export; the image, the compose file and the release. Deferred to named follow-up items in the ADR: the daily and per-member quotas (D-15 keeps the body, item, entry-size and rate limits and the disk floor), the feed's pruning and horizon (D-13 keeps the instance id and the restore detection), the two-phase rotation (rotation is single-phase), reinstating an earlier revision (reinstate unlocks only), serve backup (the runbook snapshots the volume). Purge deletes rows and rebuilds the repository; it never rewrites the repository's history in place.",
+      "answer": "sim concordo com as duas (A: a primeira fatia, default aceite)",
+      "at": "2026-11-10T11:31:06.670Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-26",
+      "question": "The repositories on the volume: a live mirror written by an in-process queue after each applied item (D-10 as first decided), or an export from the database, incremental, run by a child process hourly and on demand and rebuildable?",
+      "default": "An export: serve mirror, run by the server as a child process every hour and after a quiet minute following a push, and by the operator on demand, writes one commit per applied revision not yet exported (the entry's mirror_revision), in sequence order, with the member as author and the server as committer, through part 1's synchronous runner given a host (no twin runner); --rebuild rewrites every repository from entry_revisions. No per-item queue, no commit-trailer recovery, no backoff ladder; a failed run is recorded in the team's meta for serve status and retried at the next run. The database stays the authority and the sync never reads the mirror (D-10's substance); this supersedes D-10's mechanism.",
+      "answer": "sim concordo com as duas (B: o espelho por exportação, default aceite)",
+      "at": "2026-11-10T11:31:06.786Z",
+      "by": "user",
+      "relayed": true
+    }
+  ],
+  "checklists": [
+    {
+      "kind": "endpoint",
+      "paths": [
+        "/Users/andreagroferreira/.local/share/wizardingcode-developer-crew/skills/crew/checklists/endpoint.md"
+      ],
+      "at": "2026-11-10T11:18:22.088Z"
+    },
+    {
+      "kind": "auth",
+      "paths": [
+        "/Users/andreagroferreira/.local/share/wizardingcode-developer-crew/skills/crew/checklists/auth.md"
+      ],
+      "at": "2026-11-10T11:18:22.148Z"
+    },
+    {
+      "kind": "migration-or-restore",
+      "paths": [
+        "/Users/andreagroferreira/.local/share/wizardingcode-developer-crew/skills/crew/checklists/migration-or-restore.md"
+      ],
+      "at": "2026-11-10T11:18:22.208Z"
+    },
+    {
+      "kind": "deletion",
+      "paths": [
+        "/Users/andreagroferreira/.local/share/wizardingcode-developer-crew/skills/crew/checklists/deletion.md"
+      ],
+      "at": "2026-11-10T11:18:22.267Z"
+    },
+    {
+      "kind": "sync",
+      "paths": [
+        "/Users/andreagroferreira/.local/share/wizardingcode-developer-crew/skills/crew/checklists/sync.md"
+      ],
+      "at": "2026-11-10T11:18:22.327Z"
+    }
+  ],
+  "removedCriteria": [
+    {
+      "id": "AC-14",
+      "kind": "behavior",
+      "text": "tests/unit/team-store-boundary.test.ts reads every file under src/team/ but store.ts and db.ts and finds no db.query, db.run, db.prepare, withWrite and no template string that starts with an SQL keyword; src/team/store.ts exists, exports one function per statement and imports nothing from src/team/ but db.ts and errors.ts (D-1: every SQL statement behind one store boundary)",
+      "at": "2026-11-10T11:43:44.515Z"
+    },
+    {
+      "id": "AC-1",
+      "kind": "behavior",
+      "text": "openTeamDb on an empty directory creates team.db at team schema 1 with the spec's tables, mints server.instance, server.created_at and team.schema, and a second open changes nothing; a newer team version is refused with SchemaTooNewError and a client store renamed team.db is refused as not a team database; openDb still applies MIGRATIONS and the module schemas unchanged; json, problem and jsonObject live in src/http/respond.ts and the viewer's tests pass unchanged; setLogSink routes logError to the sink and, without a sink, to the file as before.",
+      "at": "2026-11-10T11:44:55.584Z"
+    },
+    {
+      "id": "AC-2",
+      "kind": "behavior",
+      "text": "A first start with no members prints one wci1_ invitation line, audits bootstrap and hands the code to onBootstrap; a second start within 24 hours prints nothing; /v1/health is 200 without a token, carries no version and is 503 under 100 MiB free; every other route is 401 without a token, 401 device revoked after a revoke, 403 member disabled after a disable; join with the bootstrap code makes an admin named admin and answers a wcm1_ token once with the device id and alias, and the same code again is 410 invitation used; unknown, expired or revoked codes are 404 or 410 and audited with the address and never the code; a label over 80 characters is 400; the eleventh join from one address in a minute and the 601st request of a device are 429 with Retry-After; with trust-proxy the address is the last X-Forwarded-For hop and an authenticated request without X-Forwarded-Proto https is 400; the token's hash is in devices.token_hash and the token itself nowhere in the database or the logs; rotate answers a new token, the old one stays valid until the new one is first used or ten minutes pass, and the id and alias are unchanged; X-WCM-Contract 2 is 409 contract with accepted 1; GET /v1/me answers the member, the device with its alias, the instance, contract 1 and the limits; every answer carries X-Request-Id and a thrown error answers internal error with the request id.",
+      "at": "2026-11-10T11:44:55.643Z"
+    },
+    {
+      "id": "AC-3",
+      "kind": "behavior",
+      "text": "An admin's POST /v1/invitations with role member and a name makes a code a new member joins with, and a name of 81 characters or beginning agent: is 400; forMember makes a code that adds a device to that member and GET /v1/me on both devices shows one member id; a member calling any invitation route is 403; GET /v1/invitations lists unused ones; revoking an invitation makes its code 410 invitation revoked; revoking a device cancels its unused invitations; the last active admin's disable, device revoke or demotion is 409 the last admin stays; the role route promotes; disable with withdraw true revokes the member's devices and tombstones every item of theirs with one feed row each; reinstate with a revision writes that revision's bytes as a new revision and unlocks; the admin routes are 403 for a member; every admin action and every CLI subcommand writes an audit row with source api or cli.",
+      "at": "2026-11-10T11:44:55.700Z"
+    },
+    {
+      "id": "AC-4",
+      "kind": "behavior",
+      "text": "push applies an entry send with baseRevision 0 as revision 1 with the recomputed hash; a second device's send on base 1 with the current hash is revision 2; a send on base 1 after that is stale with current revision 2 and hash; a retry whose payload hash equals the current one is applied with the current revision and changes nothing; a retry whose hash equals revision 1's hash after a third push is stale with appliedAs 1; an extra or missing key, a frontmatter id other than the uid's UUID, a scope that disagrees with the uid's prefix or an invalid area is refused shape, and a bad slug refused slug; a payload hash that is not the hash of the bytes is refused hash; over 256 KiB is refused size; a recognisable key in the text is refused secret; a workspace entry pushed by another member is refused not-owner while a shared entry by another member on the current base is applied; an item locked by an admin is refused withdrawn-by-admin until reinstated; an owner's send after its own withdraw with the tombstone's revision reinstates the entry; 201 items is 400; a 1.1 MiB body is 413 before parsing; the 20,001st applied item of a device in a UTC day and a member at 1 GiB of payload are refused quota; with free disk under 1 GiB the push is 507; results come back in the order given and each item is its own transaction.",
+      "at": "2026-11-10T11:44:55.758Z"
+    },
+    {
+      "id": "AC-5",
+      "kind": "behavior",
+      "text": "A memory send from its device is applied with the recomputed hash; a wrong payload hash is refused hash; a later updatedAt replaces and an older one is stale; the same hash is applied unchanged; a body carrying a recognisable key is refused secret; another device's send of the same uid is a second row and both pull as remote:alias:uid with each device's alias; withdraw by the owning device, by another device of the same member or by an admin tombstones it and answers withdrawn, and by another member it is refused not-owner; a withdraw of an unknown uid is refused unknown; a second withdraw is withdrawn with nothing changed.",
+      "at": "2026-11-10T11:44:55.815Z"
+    },
+    {
+      "id": "AC-6",
+      "kind": "behavior",
+      "text": "After an applied entry mirrorIdle resolves and the scope repository's entries/slug.md holds the payload bytes verbatim, HEAD has the member as author, the server as committer and the trailers Revision and Uid, and the row's mirror_revision equals the revision; a second uid with the same slug gets slug--8hex.md; a withdrawn entry's file is removed in a commit; a project repository's folder is the first 16 hex of the SHA-256 of the remote alias; with git failing commit once the row stays pending, the error is logged and shown by serve status, and the next nudge mirrors it; a row whose commit landed but whose mark was not written is marked without a second commit at the next start; a server started with pending rows mirrors them; serve repair on a deleted repository rewrites it with one commit per revision in order; serve purge removes the row, its revisions and the payload from the feed rows, writes a purge feed row, and the repository no longer holds the file in any commit; the repository has no hooks, signing or user config, gc.auto is 0 and safe.directory passed; repos/.feed holds the last mirrored seq; no request waits on git.",
+      "at": "2026-11-10T11:44:55.879Z"
+    },
+    {
+      "id": "AC-7",
+      "kind": "behavior",
+      "text": "pull with since 0 and projects naming one alias answers the shared entries, every member's workspace entries and only that alias's project entries and memories, one current row per uid, snapshot true, next the last seq and more false; a second pull from next answers no items until a push lands; limit above 500 is clamped and a page over 2 MiB stops early with more true; a tombstone carries no payload; a member's view carries member id and name and no device id while an admin's carries device; after the hourly pruning with a clock 91 days ahead the horizon is set and a cursor below it is 410 with fullPull true; instance equals server.instance, changes after serve instance renew, and changes at a start whose repos/.feed is ahead of the database's last seq, with an audit row restore detected; AUTOINCREMENT keeps seq from reusing a pruned number.",
+      "at": "2026-11-10T11:44:55.937Z"
+    },
+    {
+      "id": "AC-8",
+      "kind": "behavior",
+      "text": "With no flag and no environment serve listens on 127.0.0.1 port 8787; with the host environment variable set it listens there; a second serve on the same directory exits 1 naming the lock and a stale lock is replaced; SIGTERM with a pending mirror row drains the queue and exits 0 within 20 seconds removing the lock; SIGTERM with a mirror stuck exits 0 after 20 seconds with the row pending; the logs are JSON lines with the fields of the design and never contain a token, a code after the bootstrap line, or a payload; idleTimeout is 120 and maxRequestBodySize 1,048,576; serve and serve health skip the legacy data migration; a newer team.db makes serve exit 3 with the message.",
+      "at": "2026-11-10T11:44:55.995Z"
+    },
+    {
+      "id": "AC-9",
+      "kind": "behavior",
+      "text": "The serve subcommands against the team data directory: invite prints a wci1_ code usable by join, the for option binds it to a member, a bad name exits 64; members lists members and devices with aliases; revoke makes the device 401; disable with withdraw tombstones; role promotes; status prints the fields of the design and the json option the same as JSON, exit 0, and exit 1 with a message when the directory has no database; audit with limit 5 prints the last five rows newest first; health exits 0 against a running server and 1 against a closed port; instance renew prints the new id; repair, purge, backup and instance renew exit 1 with stop the server first while a live lock is held; backup writes a sound team-time.db with the same rows and the sidecar JSON; an unknown subcommand exits 64 with the usage.",
+      "at": "2026-11-10T11:44:56.054Z"
+    },
+    {
+      "id": "AC-10",
+      "kind": "behavior",
+      "text": "redact of a wcm1_ token with 43 base64url characters gives REDACTED team-token, of a wci1_ code with 26 base32 characters gives REDACTED team-invitation, a Bearer wcm1_ token names team-token, and the existing redact cases pass unchanged.",
+      "at": "2026-11-10T11:44:56.112Z"
+    },
+    {
+      "id": "AC-11",
+      "kind": "observed",
+      "text": "The Dockerfile builds on the CI runner from dist, docker run with the version flag prints the version, the container runs as uid 10001 with a read-only root filesystem, serve health inside a started container exits 0 and docker stop exits the container with 0 within the grace period; compose.yml, Caddyfile and .env.example are as the design states; the release workflow's docker job depends on sign, has packages write, buildx for the two platforms, the two tags, and latest only for a tag without a hyphen.",
+      "at": "2026-11-10T11:44:56.171Z"
+    },
+    {
+      "id": "AC-12",
+      "kind": "preserve",
+      "text": "tests/unit/hook-snapshots.test.ts, tests/unit/mcp-tools-list.test.ts and tests/perf/budgets.test.ts pass unchanged; the viewer's tests pass after the HTTP helpers move; the core store tests pass after the runner's split; the redact tests pass with the two rules added.",
+      "at": "2026-11-10T11:44:56.229Z"
+    },
+    {
+      "id": "AC-13",
+      "kind": "observed",
+      "text": "docs/adr/0026-team-server.md records D-1 to D-20 as rulings with the superseded clauses, the data model with every revision kept, the API with its results and reason codes, the hash recomputation and the secret check, the write rules, the alias filter as minimisation and not permission, the feed with its retention and horizon, the instance id and the restore detection, the mirror and its limits, repair and purge, the limits and quotas, the logs and the request id, the image and the compose file, the upgrade order and the contract header, the boundary, and what parts 6 and 7 must do; CLAUDE.md gains a bullet naming src/team, serve and the deployment files.",
+      "at": "2026-11-10T11:44:56.287Z"
+    },
+    {
+      "id": "AC-15",
+      "kind": "behavior",
+      "text": "probe: which id does a criterion added after a removal get",
+      "at": "2026-11-10T11:44:56.346Z"
+    },
+    {
+      "id": "AC-16",
+      "kind": "behavior",
+      "text": "`openTeamDb` on an empty directory creates `team.db` at team schema 1 with the tables above, mints `server.id`, `server.instance`, `server.created_at` and `team.schema`, and a second open changes nothing; a file at a newer team version is refused with `SchemaTooNewError`; a client store's file renamed `team.db` is refused as \"not a team database\" before any migration runs; `openDb` on a client store still applies `MIGRATIONS` and the module schemas as before (the runner's split changes no behaviour); the viewer's `json`, `problem` and `jsonObject` live in `src/http/respond.ts` and the viewer's tests pass unchanged; `setLogSink` routes `logError` to the sink and, unset, to the file as before; `gitEnv` and `runGit` take a `GitHost`, part 1's store satisfies it and part 1's tests pass unchanged, and `gitEnv` with a `committer` sets the committer variables apart from the author's.",
+      "at": "2026-11-10T12:30:36.590Z"
+    },
+    {
+      "id": "AC-17",
+      "kind": "behavior",
+      "text": "a first start with no members logs one JSON line with `event: \"bootstrap\"` and a `wci1_` code, audits `bootstrap` and hands the code to `onBootstrap`; a second start within 24 hours prints nothing; `/v1/health` is 200 `{ ok: true }` without a token, carries no version, and is 503 when free disk is under 100 MiB; every other route is 401 without a token, 401 `device revoked` after a revoke, 403 `member disabled` after a disable, each with `serverId` and `instance` in the body; `join` with the bootstrap code and `name: \"André\"` makes an admin named `André` (absent, `admin`) and answers a `wcm1_` token once with the device's id and alias, `serverId` and `instance`, and the same code again is 410 `invitation used`; `join` with an unknown, expired or revoked code is 404 or 410 and audited with the address and without the code; a label over 80 characters or a bad name is 400; the eleventh join from one address in a minute is 429 with `Retry-After`; with `trustProxy` the address is the last `X-Forwarded-For` hop and an authenticated request without `X-Forwarded-Proto: https` is 400; a non-loopback host without `trustProxy` logs `event: \"plain-http\"` at start; a token's hash is in `devices.token_hash` and the token itself nowhere in the database or the logs; `rotate` answers a new token once, the old one is 401 from then on, and the id and alias are unchanged; `X-WCM-Contract: 2` is 409 `contract` with `accepted: [1]`; `GET /v1/me` answers the member, the device with its alias, `serverId`, `instance`, `contract: 1` and the limits (`pullWaitSeconds` 25 among them); every answer the handler gives carries `X-Request-Id`, a client's valid `X-Request-Id` is echoed, a `Content-Length` above the cap is 413 with a request id, and a thrown error answers `{ error: \"internal error\", requestId }` with the message in a log line of the same id.",
+      "at": "2026-11-10T12:30:36.651Z"
+    },
+    {
+      "id": "AC-18",
+      "kind": "behavior",
+      "text": "an admin's `POST /v1/invitations { role: \"member\", name: \"Ana Lopes\" }` makes a code a new member joins with, and a name of 81 characters or beginning `agent:` is 400; `{ forMember }` makes a code that adds a device to that member and `GET /v1/me` on both devices shows one member id; a member calling any invitation or admin route is 403; `GET /v1/invitations` lists unused ones; `POST /v1/invitations/<id>/revoke` makes the code 410 `invitation revoked`; revoking a device cancels its unused invitations; the last active admin's disable, device revoke or demotion is 409 `the last admin stays` with a `hint`; `POST /v1/members/<id>/role { role: \"admin\" }` promotes; `POST /v1/members/<id>/disable { withdraw: true }` revokes the member's devices and tombstones their workspace entries and their devices' memories with one feed row each, and leaves a shared entry they created untouched; `POST /v1/members/<id>/enable` clears the disable and a device invitation joins the member again under the same id; `POST /v1/items/entry/<uid>/withdraw` tombstones and locks, `reinstate` unlocks and the owner's re-send then applies; every admin action and every CLI subcommand writes an audit row (`source` `api` or `cli`).",
+      "at": "2026-11-10T12:30:36.711Z"
+    },
+    {
+      "id": "AC-19",
+      "kind": "behavior",
+      "text": "`push` applies an entry `send` with `baseRevision` 0 as revision 1 with the recomputed `hashOf`; a retry of the same payload is `applied` with revision 1 and changes nothing, whatever its `baseRevision`, when the item is locked by an admin and when free disk is below the floor; a second device's send on base 1 with the current hash is revision 2; a send on base 1 after that is `stale` with `current { revision: 2, hash }`; a retry whose hash equals revision 1's hash after a third push is `stale` with `appliedAs: 1`; a payload with an extra or missing key, a uid whose UUID fails part 1's `UUID`, a frontmatter `id` other than the uid's UUID, a `scope` or `remoteAlias` that disagrees with the uid, a `slug` that differs from the frontmatter's, or an `area` that fails `AREA_ID` is `refused shape`, and a slug that fails `checkSlug` is `refused slug`; a `payload.hash` that is not `hashOf` of `frontmatter + body` is `refused hash`; a payload over 256 KiB is `refused size`; a payload carrying `sk-ant-api03-` and 40 letters is `refused secret` with `rule`; a `workspace:` entry pushed by another member is `refused not-owner`; a `shared:` entry pushed by another member on the current base is `applied`; the same UUID pushed under another alias on the current base is a new revision of the same row with the new alias; an item locked by an admin is `refused withdrawn-by-admin` until reinstated; a re-send on a tombstone's base reinstates the entry; a `withdraw` with a stale base is `stale` and tombstones nothing; a `withdraw` by the creator on the current base is `withdrawn`, by another member `refused not-owner`, by an admin `withdrawn`; 201 items is 400; a 1.1 MiB body is 413; with free disk under 200 MiB (injected) a new item is 507 and a retry of an applied one is still `applied`; results come back in the order given and each item is its own transaction; after the push one change signal fired, the high-water file holds the sequence, and the request's log line names the refused uids and reasons.",
+      "at": "2026-11-10T12:30:36.771Z"
+    },
+    {
+      "id": "AC-20",
+      "kind": "behavior",
+      "text": "a memory `send` from its device is `applied` with revision 1 and the recomputed `memoryHash`, a wrong `payload.hash` is `refused hash`, the same hash and alias again is `applied` with revision 1 unchanged, a later `updatedAt` replaces as revision 2, an older one is `stale` with `current { revision, hash, updatedAt }`, the same hash with another `remoteAlias` replaces, a body carrying a recognisable key is `refused secret`, another device's send of the same uid is a second row (not refused) and both pull as `remote:<alias>:<uid>` with each device's alias; `withdraw` by the owning device, by another device of the same member, or by an admin tombstones it and answers `withdrawn`; by another member it is `refused not-owner`; a `withdraw` of an unknown uid is `refused unknown`; a second withdraw is `withdrawn` with nothing changed.",
+      "at": "2026-11-10T12:30:36.829Z"
+    },
+    {
+      "id": "AC-21",
+      "kind": "behavior",
+      "text": "after two applied revisions of an entry and a withdraw of another, `serve mirror` (in-process through `mirrorChild`) writes `repos/shared/entries/<slug>.md` with the second revision's bytes verbatim, three commits in order whose authors are the members, whose committer is the server and whose trailers are `Revision`, `Uid` and `Hash`, removes the withdrawn entry's file in a commit, sets each row's `mirror_revision`, and records `meta.mirror.last` with the count; a second run with nothing pending commits nothing; a second UUID with the same slug gets `<slug>--<8 hex>.md` and a slug change renames the file; a project repository's folder is the alias and a member's folder the id and a name slug, each with `knowledge.json` naming them; with `stubGit` failing `commit` on one repository the run records the error in `meta.mirror.last`, exports the other repositories, and the next run exports the failed one; `--rebuild` on a repository deleted by hand rewrites it with one commit per revision in order and the same files, and refuses while the serve lease is fresh; `serve purge entry <uid> --yes` removes the row and its revisions, marks its feed rows `purge` without payload reference, writes a `purge` feed row, and the rebuilt repository no longer holds the file in any commit; `serve purge memory remote:<alias>:<uid> --yes` removes the row and marks its feed rows; the repository has no hooks, no signing and no user config applied, `GIT_CEILING_DIRECTORIES` is the mirror's root and `safe.directory` is passed; a second `serve mirror` while one holds `mirror.lease` refuses; the server spawns the export after a quiet minute following a push and forwards its lines to the log (asserted with `mirrorChild` recording the call); no request waits on git.",
+      "at": "2026-11-10T12:30:36.888Z"
+    },
+    {
+      "id": "AC-22",
+      "kind": "behavior",
+      "text": "`pull` with `since` 0 and `projects` naming one alias answers the shared entries, every member's workspace entries and only that alias's project entries and memories, one current row per key, `snapshot: true`, `next` the last `seq` and `more` false; a second pull with `since` = `next` answers no items until a push lands; `limit` above 500 is clamped and a page over 2 MiB of payload stops early with `more` true and the following page with `snapshot=1` continues it; a tombstone carries no payload; a member's view carries `member { id, name }` and no device id, an admin's view carries `device`; `since` 0 with `scope=project` and one alias answers that alias's items alone; a `since` above the sequence is 410 `{ fullPull: true }` with `serverId` and `instance`; `AUTOINCREMENT` keeps `seq` from reusing a number after a deleted row; every answer carries `serverId` and `instance`, `instance` changes after `serve instance renew` and at a start whose `feed.seq` is ahead of `sqlite_sequence` (a restored copy) with an audit row `restore detected`, and `serverId` never changes; the pull query reads `current = 1` rows only (a key with three rows is served once, by its newest); `pull` with `wait=5` and nothing new answers within 1 s of a push made 200 ms later and carries that item; a CLI tombstone written by another process is seen by a held pull within 5 s; with `wait=1` and no push it answers after about a second with no items and `next` equal to `since`; `wait=30` is clamped to 25; a pull that finds rows answers at once whatever `wait`; a held pull counts once in the device's bucket; `stop()` answers a held pull with the empty page before draining.",
+      "at": "2026-11-10T12:30:36.946Z"
+    },
+    {
+      "id": "AC-23",
+      "kind": "behavior",
+      "text": "with no flag and no environment `serve` listens on `127.0.0.1:8787`; with the environment host set it listens there; a second `serve` on the same directory exits 1 naming the lease, a stale lease (expired) is replaced, and the lease carries no pid; SIGTERM answers held pulls, releases the lease and exits 0 within 2 s with the process gone (no timer keeps it alive); the logs are JSON lines with the fields of the design and never contain a token, a code (after the bootstrap line) or a payload; `options` shows `idleTimeout` 120 and `maxRequestBodySize` 1,048,576; `serve` and `serve health` skip the legacy data migration (a `WIZARDINGCODE_MEM_MIGRATE` unset and a seeded legacy home are untouched); a newer `team.db` makes `serve` exit 3 with the message; a writer subcommand of a newer schema refuses to migrate while the serve lease is fresh.",
+      "at": "2026-11-10T12:30:37.005Z"
+    },
+    {
+      "id": "AC-24",
+      "kind": "behavior",
+      "text": "the CLI subcommands against `WIZARDINGCODE_MEM_TEAM_DATA`: `serve invite --role member --name Ana` prints a `wci1_` code usable by `join`, `--for <id>` binds it, and a bad name exits 64; `serve invitations` lists and `serve invitation revoke <id>` makes the code 410; `serve members` lists members and devices with aliases and last seen; `serve revoke <device id>` makes the device 401; `serve disable <member id> --withdraw` tombstones the member's workspace entries and memories and `serve enable <member id>` clears the disable; `serve role <id> admin` promotes; `serve withdraw entry <uid>` tombstones and locks and `serve reinstate entry <uid>` unlocks; `serve status` prints the fields of the design and `--json` the same as JSON, exit 0, and exit 1 with a message when the directory has no database; `serve audit --limit 5` prints the last five rows newest first; `serve health --url <origin>` exits 0 against a running server and 1 against a closed port; `serve instance renew` prints the new id; `serve mirror --rebuild`, `serve purge` and `serve instance renew` exit 1 with the compose form in the message while a fresh serve lease is held; a CLI write updates `feed.seq`; `serve nonsense` exits 64 with the usage.",
+      "at": "2026-11-10T12:30:37.062Z"
+    },
+    {
+      "id": "AC-25",
+      "kind": "behavior",
+      "text": "`redact(\"token wcm1_\" + 43 base64url characters)` is `[REDACTED:team-token]`, `redact(\"code wci1_\" + 26 base32 characters)` is `[REDACTED:team-invitation]`, `redact(\"Bearer wcm1_…\")` names `team-token`, the two rules carry the `d` and `g` flags, and the existing redact cases pass unchanged.",
+      "at": "2026-11-10T12:30:37.122Z"
+    },
+    {
+      "id": "AC-26",
+      "kind": "observed",
+      "text": "the `Dockerfile` builds on the CI runner's architecture from `dist/`, `docker run --rm <image> --version` prints the version, the container runs as uid 10001 with a read-only root filesystem and no init of its own, `serve health` inside a started container exits 0 and the container's exit code after `docker stop` is 0 within the grace period; `compose.yml`, `Caddyfile` (`max_size 1MiB`) and `.env.example` are as the design states; the release workflow's `docker` job depends on `sign`, has `packages: write`, downloads the `binaries` artefact, uses `metadata-action` for the lower-case image name and the two tags with `latest` only for a tag without `-`, and `publish` depends on `docker`; the runbook step that makes the package public is named in the ADR.",
+      "at": "2026-11-10T12:30:37.182Z"
+    },
+    {
+      "id": "AC-27",
+      "kind": "preserve",
+      "text": "`tests/unit/hook-snapshots.test.ts`, `tests/unit/mcp-tools-list.test.ts` and `tests/perf/budgets.test.ts` pass unchanged; the viewer's tests pass after the HTTP helpers move; the core store tests pass after the runner's split; part 1's tests pass after the `GitHost` seam; the redact tests pass with the two rules added.",
+      "at": "2026-11-10T12:30:37.240Z"
+    },
+    {
+      "id": "AC-28",
+      "kind": "observed",
+      "text": "`docs/adr/0026-team-server.md` (status draft, part 5 of the journey) records D-1 to D-26 as rulings with the superseded clauses, the store boundary and what else binds the design to one process, the data model with the UUID as the entry's key and every revision kept, the API with its results, reason codes and the order of the push rules, the hash recomputation over the bytes received and the secret check, the write rules (the creator withdraws, on the current base), the alias filter as minimisation and not permission, the feed with its `current` flag, snapshots and the cursor rules, the wait, the server id and the instance id with the restore detection and the 410, the mirror as an export with its folders and limits (history keeps withdrawn text unless purged), `purge`, the limits, the logs and the request id, the image and the compose file, the contract and the client's adaptation, the boundary (the volume, the container's log, the host), what parts 6 and 7 must do with it, and the follow-ups D-25 names; `CLAUDE.md` gains a bullet naming `src/team/`, `serve`, the deployment files and the one-process assumption.",
+      "at": "2026-11-10T12:30:37.297Z"
+    },
+    {
+      "id": "AC-29",
+      "kind": "behavior",
+      "text": "`tests/unit/team-store-boundary.test.ts` reads every file under `src/team/` but `store.ts` and `db.ts` and finds no import of `bun:sqlite` or of `src/store/db.ts` and no `.query(`, `.run(`, `.prepare(` or `withWrite(`; `src/team/store.ts` exists, exports `transaction` and one function per statement, and imports nothing from `src/team/` but `db.ts` and `errors.ts`; `tests/unit/team-contract.test.ts` pins `CONTRACT_FINGERPRINT` over `OUTGOING_ENTRY_KEYS`, `OUTGOING_MEMORY_KEYS`, the result shapes and `REASONS`, and fails when they change without `CONTRACT`.",
+      "at": "2026-11-10T12:30:37.356Z"
+    },
+    {
+      "id": "AC-30",
+      "kind": "behavior",
+      "text": "`openTeamDb` on an empty directory creates `team.db` at team schema 1 with the tables above, mints `server.id`, `server.instance`, `server.created_at` and `team.schema`, and a second open changes nothing; a file at a newer team version is refused with `SchemaTooNewError`; a client store's file renamed `team.db`, and a file with a version and no `meta` table, are refused as \"not a team database\" before any migration runs, by `openTeamDb` and by `openTeamExisting` alike; `openDb` on a client store still applies `MIGRATIONS` and the module schemas as before and its upgrade copies, the module schemas' included, still land in its own `backups/` (the runner's split changes no behaviour); the way back across a bump holds: with a two-migration list `openFile` leaves `backups/team-<ms>-v1-<pid>.db`, the version-1 list then refuses the file with `SchemaTooNewError`, after the copy is put in place with `team.db-wal` and `team.db-shm` removed the version-1 list opens it, and a `feed.seq` ahead of it makes `checkRestore` renew the instance; the viewer's `json`, `problem` and `jsonObject` live in `src/http/respond.ts` and the viewer's tests pass unchanged; `setLogSink` routes `logError` to the sink and, unset, to the file as before; `gitEnv` and `runGit` take a `GitHost` that part 1's store satisfies as it is, a per-call `timeoutMs` keeps its precedence over the host's, the staging and commit helpers take a repository path, part 1's tests pass unchanged, and `gitEnv` with a `committer` sets the committer variables apart from the author's.",
+      "at": "2026-11-10T12:59:04.208Z"
+    },
+    {
+      "id": "AC-31",
+      "kind": "behavior",
+      "text": "a first start with no members logs one JSON line with `event: \"bootstrap\"` and a `wci1_` code, audits `bootstrap` and hands the code to `onBootstrap`; a second start within 24 hours prints nothing; `/v1/health` is 200 `{ ok: true }` without a token, carries no version, and is 503 with free disk injected just under 100 MiB and 200 just above; every other route is 401 without a token, 401 `device revoked` after a revoke, 403 `member disabled` after a disable, each with `serverId` and `instance` in the body; `join` with the bootstrap code and `name: \"André\"` makes an admin named `André` (absent, `admin`) and answers a `wcm1_` token once with the device's id and alias, `serverId` and `instance`, and the same code again is 410 `invitation used`; `join` with an unknown, expired or revoked code is 404 or 410 and audited with the address and without the code, and a rate-limited address writes no audit row; a label over 80 characters or a bad name is 400; the eleventh join from one address in a minute is 429 with `Retry-After`; the 601st request of a device in a minute, and a push that takes a device's applied payload past 64 MiB in an hour, are 429, and a held pull counts once; with `trustProxy` the address is the last `X-Forwarded-For` hop, an authenticated request without `X-Forwarded-Proto: https` is 400, and a `join` without it is 400 `https required` and spends no invitation; a non-loopback host without `trustProxy` logs `event: \"plain-http\"` at start; a token's hash is in `devices.token_hash` and the token itself nowhere in the database or the logs; `rotate` answers a new token once, the old one is 401 from then on, and the id and alias are unchanged; `X-WCM-Contract: 2` is 409 `contract` with `accepted: [1]`; `GET /v1/me` answers the member, the device with its alias, `serverId`, `instance`, `contract: 1` and the limits (`pullWaitSeconds` 25 and `payloadBytesPerHour` among them); every answer the handler gives carries `X-Request-Id`, a client's valid `X-Request-Id` is echoed, a `Content-Length` above 1 MiB is 413 with a request id, and a thrown error answers `{ error: \"internal error\", requestId }` with the message in a log line of the same id.",
+      "at": "2026-11-10T12:59:04.266Z"
+    },
+    {
+      "id": "AC-32",
+      "kind": "behavior",
+      "text": "an admin's `POST /v1/invitations { role: \"member\", name: \"Ana Lopes\" }` makes a code a new member joins with, a name of 81 characters or beginning `agent:` is 400, and `expiresInHours` outside 1 to 720 is 400; `{ forMember }` makes a code that adds a device to that member and `GET /v1/me` on both devices shows one member id; a member calling any invitation or admin route is 403; `GET /v1/invitations` lists unused ones; `POST /v1/invitations/<id>/revoke` makes the code 410 `invitation revoked`; revoking a device cancels its unused invitations; the last active admin's disable, device revoke or demotion is 409 `the last admin stays` with a `hint`; `POST /v1/members/<id>/role { role: \"admin\" }` promotes; `POST /v1/members/<id>/disable { withdraw: true }` revokes the member's devices and tombstones their workspace entries and their devices' memories with one feed row each and no lock, and leaves a shared entry they created untouched; `POST /v1/members/<id>/enable` clears the disable, a device invitation joins the member again under the same id, and their re-send of a tombstoned workspace entry on the tombstone's base applies; `POST /v1/items/entry/<uid>/withdraw` tombstones and locks, `reinstate` unlocks and the owner's re-send then applies; every admin action and every CLI subcommand writes an audit row (`source` `api` or `cli`), and the plan's route table's shapes and statuses hold for every admin route.",
+      "at": "2026-11-10T12:59:04.324Z"
+    },
+    {
+      "id": "AC-33",
+      "kind": "behavior",
+      "text": "`push` applies an entry `send` with `baseRevision` 0 as revision 1 with the recomputed `hashOf`; a retry of the same payload is `applied` with revision 1 and changes nothing, whatever its `baseRevision`, when the item is locked by an admin and when free disk is below the floor; a second device's send on base 1 with the current hash is revision 2; a send on base 1 after that is `stale` with `current { revision: 2, hash }`; a retry by the first device whose hash equals revision 1's hash is `stale` with `appliedAs: 1`, and the same payload pushed by another device on an old base is `stale` without `appliedAs`; a payload with an extra or missing key or a field of the wrong type (`frontmatter` a number, `version` a string: `refused shape`, never 500), a uid whose UUID fails part 1's `UUID` or whose alias fails `isHostLedAlias`, a `scope` or `remoteAlias` that disagrees with the uid, a frontmatter `id` other than the uid's UUID, or an `area` that fails `AREA_ID` or `AREA_MAX` is `refused shape`, and a slug that fails `checkSlug` is `refused slug`; a project entry with the alias `remote:github.com/acme/site` is `applied` and pulls under that alias; a `payload.hash` that is not `hashOf` of `frontmatter + body` is `refused hash`; a payload over 256 KiB is `refused size`; a payload carrying `sk-ant-api03-` and 40 letters is `refused secret` with `rule`; a `workspace:` entry pushed by another member is `refused not-owner`, and so is another member's push of `shared:<the UUID of a workspace entry>` on its current base; a `shared:` entry pushed by another member on the current base is `applied`; the same UUID pushed under another alias on the current base is a new revision of the same row with the new alias, and the feed gains a `tombstone` with `movedTo` in the alias it left; an item locked by an admin is `refused withdrawn-by-admin` until reinstated; a re-send on a tombstone's base (its revision and the kept hash) reinstates the entry; a `withdraw` with a stale base is `stale` and tombstones nothing; a `withdraw` by the creator on the current base is `withdrawn` without a lock, its retry with the same base is `withdrawn` again with nothing changed, by another member it is `refused not-owner`, by an admin `withdrawn`; 201 items is 400; a 1.1 MiB body is 413; with free disk under 200 MiB (injected) a new item is `refused storage` and a retry of an applied one is still `applied`; results come back in the order given and each item is its own transaction; after the push one change signal fired, the high-water file holds both marks, and the request's log line names the refused uids and reasons.",
+      "at": "2026-11-10T12:59:04.380Z"
+    },
+    {
+      "id": "AC-34",
+      "kind": "behavior",
+      "text": "a memory `send` from its device with the alias `remote:github.com/acme/site` is `applied` with revision 1 and the recomputed `memoryHash`, a wrong `payload.hash` is `refused hash`, a field of the wrong type (`importance` a string, `updatedAt` not finite) or a `memoryKind` outside `^[a-z][a-z0-9_-]{0,31}$` is `refused shape` and never 500, a payload over 256 KiB is `refused size`, the same hash and alias again is `applied` with revision 1 unchanged, a later `updatedAt` replaces as revision 2, an older one is `stale` with `current { revision, hash, updatedAt }`, the same hash with another `remoteAlias` replaces, a body carrying a recognisable key is `refused secret`, another device's send of the same uid is a second row (not refused) and both pull as `remote:<alias>:<uid>` with each device's alias under scope `project`; `withdraw` by the owning device with `baseRevision` equal to the row's revision, by another device of the same member or by an admin through the feed form, tombstones it and answers `withdrawn`; with another `baseRevision` it is `stale` with `current`; its retry with the same base is `withdrawn` again with nothing changed; by another member it is `refused not-owner`; a `withdraw` of an unknown uid is `refused unknown`.",
+      "at": "2026-11-10T12:59:04.436Z"
+    },
+    {
+      "id": "AC-35",
+      "kind": "behavior",
+      "text": "after two applied revisions of an entry and a withdraw of another, `serve mirror` (in-process through the test's mirror runner) writes `repos/shared/entries/<slug>--<8 hex>.md` with the second revision's bytes verbatim, three commits in order whose authors are the members, whose committer is the server and whose trailers are `Revision`, `Uid` and `Hash`, removes the withdrawn entry's file in a commit, sets each row's `mirror_revision`, and records `meta.mirror.last` with the count; a second run with nothing pending commits nothing; a slug change renames the file; a project repository's folder is the alias's slug and hash and a member's folder the id and the name slug, each with `knowledge.json` naming them, and members named `../x`, `a/b`, `.` and `-rf` and the alias `remote:github.com/acme/site` get folders directly under their parents; an entry moved to another alias has its file removed from the old repository in a commit there and written in the new one, and `--rebuild` replays each revision into the repository its scope names; with `stubGit` failing `commit` on the second revision after a first successful run the run records the error in `meta.mirror.last`, exports the other repositories, and the next run exports the failed one; a repository with `.git` and no HEAD is completed at the next run; `--rebuild` on a repository deleted by hand rewrites it with one commit per revision in order and the same files, and refuses while the serve lease is fresh; `serve purge entry <uid> --yes` removes the row and its revisions, marks its feed rows `purge` without payload reference, writes a feed row with op `purge`, and no rebuilt repository holds the file in any commit; `serve purge memory remote:<alias>:<uid> --yes` removes the row and marks its feed rows; the repository has no hooks, no signing and no user config applied, `GIT_CEILING_DIRECTORIES` is the mirror's root and `safe.directory` is passed after the runner's own configuration; a second `serve mirror` while one holds `mirror.lease` refuses, and a run renews the lease after every commit; the pending query uses the partial index; the server runs the export after a quiet minute following a push and hourly (through the injected timers) and forwards its lines to the log; no request waits on git.",
+      "at": "2026-11-10T12:59:04.493Z"
+    },
+    {
+      "id": "AC-36",
+      "kind": "behavior",
+      "text": "`pull` with `since` 0 and `projects` naming `remote:github.com/acme/site` answers the shared entries, every member's workspace entries and only that alias's project entries and memories, one current row per key, `snapshot: true`, `next` the last `seq` and `more` false; a second pull with `since` = `next` answers no items until a push lands; `limit` above 500 is clamped and a page over 2 MiB of payload stops early with `more` true and the next page continues it; a tombstone carries no payload, and a tombstone left by a move carries `movedTo`; a member's view carries `member { id, name }` and no device id, an admin's view carries `device`, and a CLI write's row carries `member { id: \"operator\", name: \"operator\" }`; `since` 0 with `scope=project` and one alias answers that alias's items alone; a `since` above the sequence is 410 `{ fullPull: true }` with `serverId` and `instance`; `AUTOINCREMENT` keeps `seq` from reusing a number after a deleted row; every answer carries `serverId` and `instance`, `instance` changes after `serve instance renew` and at a start whose `feed.seq` is ahead of `sqlite_sequence` (a restored copy, from before a push and from before a revoke with no push between) with an audit row `restore detected`, the sequence advanced by at least 1,000,000 and the file rewritten so a second start detects nothing, and `serverId` never changes; the pull reads `current = 1` rows only (a key with three rows is served once, by its newest), `EXPLAIN QUERY PLAN` of the pull, of the single-alias snapshot and of the wait's emptiness check shows no `SCAN` of `changes`, and a seeded feed of 100,000 rows with three rows for the named alias answers that alias's pull in under 50 ms; `pull` with `wait=5` and nothing new answers within 1 s of a push made 200 ms later and carries that item; a tombstone written by another process is seen by a held pull within 5 s; with `wait=1` and no push it answers after about a second with no items, `next` equal to `since` and `snapshot` false; `wait=30` is clamped to 25; a pull that finds rows answers at once whatever `wait`; `stop()` answers a held pull with the empty page before draining.",
+      "at": "2026-11-10T12:59:04.550Z"
+    },
+    {
+      "id": "AC-37",
+      "kind": "behavior",
+      "text": "with no flag and no environment `serve` listens on `127.0.0.1:8787`; with the environment host set it listens there; a second `serve` on the same directory exits 1 naming the lease, an expired lease is replaced, the lease is renewed every 10 s by the injected timer and carries a `serve-` holder and no pid; SIGTERM answers held pulls, releases the lease and exits 0 within 2 s with the process gone (no timer keeps it alive); the logs are JSON lines with the fields of the design and never contain a token, a code (after the bootstrap line) or a payload; `options` shows `idleTimeout` 120 and `maxRequestBodySize` 2,097,152; `serve` and `serve health` skip the legacy data migration (a `WIZARDINGCODE_MEM_MIGRATE` unset and a seeded legacy home are untouched); a newer `team.db` makes `serve` exit 3 with the message; a writer subcommand of a newer schema refuses to migrate while the serve lease is fresh.",
+      "at": "2026-11-10T12:59:04.607Z"
+    },
+    {
+      "id": "AC-38",
+      "kind": "behavior",
+      "text": "the CLI subcommands against `WIZARDINGCODE_MEM_TEAM_DATA`: `serve invite --role member --name Ana` prints a `wci1_` code alone, usable by `join`, `--for <id>` binds it, and a bad name exits 64; `serve invitations` lists and `serve invitation revoke <id>` makes the code 410; `serve members` lists members and devices with aliases and last seen; `serve revoke <device id>` makes the device 401; `serve disable <member id> --withdraw` tombstones the member's workspace entries and memories and `serve enable <member id>` clears the disable; `serve role <id> admin` promotes; `serve withdraw entry <uid>` tombstones and locks and `serve reinstate entry <uid>` unlocks; `serve status` prints the fields of the design as `key: value` lines and `--json` the same as JSON, exit 0, and exit 1 with a message when the directory has no database; `serve audit --limit 5` prints the last five rows newest first; `serve health --url <origin>` exits 0 against a running server and 1 against a closed port; `serve instance renew` prints the new id and advances the sequence; `serve mirror --rebuild`, `serve purge` and `serve instance renew` exit 1 with the compose form in the message while a fresh serve lease is held; a CLI write updates `feed.seq` and its lines are JSON; `serve nonsense` exits 64 with the usage.",
+      "at": "2026-11-10T12:59:04.664Z"
+    },
+    {
+      "id": "AC-39",
+      "kind": "behavior",
+      "text": "`redact(\"token wcm1_\" + 43 base64url characters)` is `[REDACTED:team-token]`, `redact(\"code wci1_\" + 26 base32 characters)` is `[REDACTED:team-invitation]`, `redact(\"Authorization: Bearer wcm1_…\")` names `team-token`, the two rules carry the `d` and `g` flags and sit before `auth-header`, and the existing redact cases pass unchanged.",
+      "at": "2026-11-10T12:59:04.721Z"
+    },
+    {
+      "id": "AC-40",
+      "kind": "observed",
+      "text": "the `Dockerfile` builds on the CI runner's architecture from `dist/` through its `pick` stage, `docker run --rm <image> --version` prints the version, the container started with `--init --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges:true` runs as uid 10001, `serve health` inside it exits 0 within 30 s of retries and the container's exit code after `docker stop -t 30` is 0; `compose.yml` (the `:?` interpolation of both variables, `SERVER_DOMAIN` passed into `caddy`), `Caddyfile` (`max_size 1MiB`, the HSTS header) and `.env.example` are as the design states; the release workflow's `docker` job depends on `sign`, has `packages: write`, checks the repository out and downloads the `binaries` artefact into `dist/`, builds with `context: .` and `file: Dockerfile`, uses `metadata-action` for the lower-case image name and the two tags with `latest` only for a tag without `-`, and `publish` depends on `docker`; the runbook step that makes the package public is named in the ADR.",
+      "at": "2026-11-10T12:59:04.777Z"
+    },
+    {
+      "id": "AC-41",
+      "kind": "preserve",
+      "text": "`tests/unit/hook-snapshots.test.ts`, `tests/unit/mcp-tools-list.test.ts` and `tests/perf/budgets.test.ts` pass unchanged; the viewer's tests pass after the HTTP helpers move; the core store tests pass after the runner's split; part 1's tests pass after the `GitHost` seam; the redact tests pass with the two rules added.",
+      "at": "2026-11-10T12:59:04.837Z"
+    },
+    {
+      "id": "AC-42",
+      "kind": "observed",
+      "text": "`docs/adr/0026-team-server.md` (status draft, part 5 of the journey) records D-1 to D-26 as rulings with the superseded clauses, the store boundary and what else binds the design to one process, the data model with the UUID as the entry's key and every revision kept, the API with its results, reason codes and the order of the push rules, the ownership rule against the stored row and the moves with their tombstones, the hash recomputation over the bytes received and the secret check with the rule skew between releases, the write rules (the creator withdraws, on the current base, with the retry rule), the alias as part 4's `remote:` form, the alias filter as minimisation and not permission, the feed with its `current` flag, snapshots and the cursor rules, the wait, the server id and the instance id with the restore detection, the sequence margin and the one undetected case, the mirror as an export with its folders, fixed file names and limits (history keeps withdrawn text unless purged), `purge`, the limits and the bytes bucket, the logs and the request id, the image and the compose file with the HSTS header, the contract and both directions of skew, the boundary (the volume, the container's log, the host), the rollback procedure in its compose form, the one-time step that makes the registry package public, the lease's 30-second window after a crash, what parts 6 and 7 must do with it, and the follow-ups D-25 names; `CLAUDE.md` gains a bullet naming `src/team/`, `serve`, the deployment files and the one-process assumption.",
+      "at": "2026-11-10T12:59:04.895Z"
+    },
+    {
+      "id": "AC-43",
+      "kind": "behavior",
+      "text": "the plan's `team-store-boundary` test reads every file under `src/team/` but `store.ts` and `db.ts` and finds no import from `src/store/` and no `.query(`, `.run(`, `.prepare(` or `withWrite(`; `src/team/store.ts` exists, exports `transaction`, the wrapped lease functions and one function per statement, and imports nothing from `src/team/` but `db.ts` and `errors.ts`; the plan's `team-contract` test pins `CONTRACT_FINGERPRINT` over `OUTGOING_ENTRY_KEYS`, `OUTGOING_MEMORY_KEYS`, the result shapes and `PUSH_REASONS`, and fails when they change without `CONTRACT`.",
+      "at": "2026-11-10T12:59:04.952Z"
+    },
+    {
+      "id": "AC-55",
+      "kind": "preserve",
+      "text": "`tests/unit/hook-snapshots.test.ts`, `tests/unit/mcp-tools-list.test.ts` and `tests/perf/budgets.test.ts` pass unchanged; the viewer's tests pass after the HTTP helpers move; the core store tests pass after the runner's split; part 1's tests pass after the `GitHost` seam; the redact tests pass with the two rules added.",
+      "at": "2026-11-10T14:53:03.429Z"
+    }
+  ],
+  "knowledgeFiles": [],
+  "knowledgeLabels": [],
+  "validations": [
+    {
+      "what": "spec",
+      "by": "lead-qa",
+      "verdict": "returned",
+      "returns": 2,
+      "round": 1,
+      "file": "conclave/lead-qa.md",
+      "hash": "sha256:a5fb620ba1da793686b3a3ef32efaba576811377047c3edca0bc620cf0424b9f",
+      "fileHash": "sha256:5fbb4a408f8c17d67287fdaefbed4bfd0b77f3851aa7eef3539de8545a8d76dc",
+      "at": "2026-11-10T11:47:39.511Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-devops",
+      "verdict": "returned",
+      "returns": 4,
+      "round": 1,
+      "file": "conclave/lead-devops.md",
+      "hash": "sha256:a5fb620ba1da793686b3a3ef32efaba576811377047c3edca0bc620cf0424b9f",
+      "fileHash": "sha256:b8638c920151c005e9df62ed56499ddfb00732715e6c6977477d2308883edcb7",
+      "at": "2026-11-10T11:48:13.460Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-etl",
+      "verdict": "returned",
+      "returns": 5,
+      "round": 1,
+      "file": "conclave/lead-etl.md",
+      "hash": "sha256:a5fb620ba1da793686b3a3ef32efaba576811377047c3edca0bc620cf0424b9f",
+      "fileHash": "sha256:6d98ef3c0cf61dded49278064d1826a8cb753cdac0ff7c35e6ed6aaf947598f4",
+      "at": "2026-11-10T11:53:42.817Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-architects",
+      "verdict": "returned",
+      "returns": 2,
+      "round": 1,
+      "file": "conclave/lead-architects.md",
+      "hash": "sha256:a5fb620ba1da793686b3a3ef32efaba576811377047c3edca0bc620cf0424b9f",
+      "fileHash": "sha256:935fce84824883ed18788f7fbd15d31889cb2bc02a408b9fb738d7d89ba5700c",
+      "at": "2026-11-10T11:53:42.872Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-security",
+      "verdict": "returned",
+      "returns": 4,
+      "round": 1,
+      "file": "conclave/lead-security.md",
+      "hash": "sha256:a5fb620ba1da793686b3a3ef32efaba576811377047c3edca0bc620cf0424b9f",
+      "fileHash": "sha256:3d2ca0cd69f3a5399c9cd7c24ab155eb04dfc0f0b2094a64f40ac9898f7ae5ed",
+      "at": "2026-11-10T11:53:42.927Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-devops",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 2,
+      "file": "conclave/lead-devops-reply.md",
+      "hash": "sha256:bef13810744e38e0b47d741155a41ed6a654bea29b5c9c58004e07df0c6455fb",
+      "fileHash": "sha256:6e99708ae0f1758fb8966600f46483eb760de9ad76d375fe7b21e9ed116b155f",
+      "at": "2026-11-10T11:57:38.037Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-qa",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 2,
+      "file": "conclave/lead-qa-reply.md",
+      "hash": "sha256:bef13810744e38e0b47d741155a41ed6a654bea29b5c9c58004e07df0c6455fb",
+      "fileHash": "sha256:3e7fd67eabcaf950395609c67cd3e62909d4af83b42323b56b65b5473ec44763",
+      "at": "2026-11-10T11:57:54.293Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-security",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 2,
+      "file": "conclave/lead-security-reply.md",
+      "hash": "sha256:bef13810744e38e0b47d741155a41ed6a654bea29b5c9c58004e07df0c6455fb",
+      "fileHash": "sha256:b6cf812d81acb5ea7bd625bd63438e138770dd46a9433af05817fdada1190664",
+      "at": "2026-11-10T11:57:54.351Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-architects",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 2,
+      "file": "conclave/lead-architects-reply.md",
+      "hash": "sha256:bef13810744e38e0b47d741155a41ed6a654bea29b5c9c58004e07df0c6455fb",
+      "fileHash": "sha256:7edba25c843765aa2df93844ff18ccb49944516f0c5097f0f4bf01427ce49528",
+      "at": "2026-11-10T11:57:54.407Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-etl",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 2,
+      "file": "conclave/lead-etl-reply.md",
+      "hash": "sha256:bef13810744e38e0b47d741155a41ed6a654bea29b5c9c58004e07df0c6455fb",
+      "fileHash": "sha256:81843f81e4dbb2afcfc1b291c5ed45a630fd3821818f08660942c85ddcd11a80",
+      "at": "2026-11-10T11:57:54.463Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-devops",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-devops.delivery.md",
+      "hash": "sha256:fca5267fa1f5d0d5d7925f19dfcf3a215bad0fd86dd5938bd7825203b17b2fe4",
+      "fileHash": "sha256:01c35fc63ca8d974d5f33fe48c3a9b03cf35a208e9991b5607e0acee09408283",
+      "at": "2026-11-10T16:51:45.785Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-architects",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-architects.delivery.md",
+      "hash": "sha256:fca5267fa1f5d0d5d7925f19dfcf3a215bad0fd86dd5938bd7825203b17b2fe4",
+      "fileHash": "sha256:684e3b9efac2c1e035785115ccfa1d8b334accb9bb60c07b1211556a5d54f556",
+      "at": "2026-11-10T16:52:11.424Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-etl",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-etl.delivery.md",
+      "hash": "sha256:fca5267fa1f5d0d5d7925f19dfcf3a215bad0fd86dd5938bd7825203b17b2fe4",
+      "fileHash": "sha256:c5a80182d058461d1c228230eb1eca2e96893623a507167d94ee5610a0b82aa6",
+      "at": "2026-11-10T16:52:17.498Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-security",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-security.delivery.md",
+      "hash": "sha256:fca5267fa1f5d0d5d7925f19dfcf3a215bad0fd86dd5938bd7825203b17b2fe4",
+      "fileHash": "sha256:02475ae4b7857bca82aca4260f78ac5103baa72757c294fdbdd085af81b56964",
+      "at": "2026-11-10T16:52:28.987Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-qa",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-qa.delivery.md",
+      "hash": "sha256:fca5267fa1f5d0d5d7925f19dfcf3a215bad0fd86dd5938bd7825203b17b2fe4",
+      "fileHash": "sha256:909a0a2504306dba9c6c77b50d96b6c20f5ed2e85d292aaa1a7cd983b8000927",
+      "at": "2026-11-10T16:53:06.334Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-security",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 2,
+      "file": "conclave/lead-security.delivery-reply.md",
+      "hash": "sha256:11e4fef50a3119ec0fc7c40365eda1b681a1ae7a768ce06fbd427332355a2e2c",
+      "fileHash": "sha256:1db103d29835492f9c15ee85ccfe28fa901d6ec0fdf46628c6b77c429bcf184d",
+      "at": "2026-11-10T17:02:14.495Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-qa",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 2,
+      "file": "conclave/lead-qa.delivery-reply.md",
+      "hash": "sha256:11e4fef50a3119ec0fc7c40365eda1b681a1ae7a768ce06fbd427332355a2e2c",
+      "fileHash": "sha256:3e92170cd5bcdafdad4db2f9dd5afcc656ef09db76ef933ea175c72074a1c61b",
+      "at": "2026-11-10T17:02:35.246Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-devops",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 2,
+      "file": "conclave/lead-devops.delivery-reply.md",
+      "hash": "sha256:11e4fef50a3119ec0fc7c40365eda1b681a1ae7a768ce06fbd427332355a2e2c",
+      "fileHash": "sha256:b193a7e390da36e7473603f5a05ba0a1ea9798df5319be10fa9db3e3099a8410",
+      "at": "2026-11-10T17:02:44.050Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-etl",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 2,
+      "file": "conclave/lead-etl.delivery-reply.md",
+      "hash": "sha256:11e4fef50a3119ec0fc7c40365eda1b681a1ae7a768ce06fbd427332355a2e2c",
+      "fileHash": "sha256:ce15f799d25ff86f5320b45835b7144a1c56ef58b69441fd83f7a904957a71a9",
+      "at": "2026-11-10T17:02:44.115Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-architects",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 2,
+      "file": "conclave/lead-architects.delivery-reply.md",
+      "hash": "sha256:11e4fef50a3119ec0fc7c40365eda1b681a1ae7a768ce06fbd427332355a2e2c",
+      "fileHash": "sha256:dfd871a92a7f2253c565978b67027bc6f1cc0200776fa94993d32237a522a5dd",
+      "at": "2026-11-10T17:02:44.179Z"
+    }
+  ],
+  "rounds": {
+    "judgement": 6,
+    "validation": 2,
+    "judgementCode": "sha256:11e4fef50a3119ec0fc7c40365eda1b681a1ae7a768ce06fbd427332355a2e2c"
+  },
+  "pauses": [
+    {
+      "at": "2026-11-10T14:53:56.565Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-10T14:54:45.269Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-10T14:55:21.238Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-10T14:56:09.595Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-10T14:56:35.944Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-10T14:59:18.980Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-10T15:30:58.781Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-10T15:32:08.134Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-10T15:32:35.595Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-10T15:32:56.501Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-10T15:33:22.152Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-10T15:33:57.084Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-10T15:34:36.024Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-10T16:06:33.323Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-10T16:33:45.240Z",
+      "reason": "gate test failing",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-10T16:34:27.083Z",
+      "reason": "gate test failing",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-10T16:34:40.730Z",
+      "reason": "gate test failing",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-10T16:35:00.532Z",
+      "reason": "gate test failing",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-10T16:35:20.052Z",
+      "reason": "gate test failing",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-10T16:36:26.403Z",
+      "reason": "gate test failing",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-10T16:45:47.689Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-10T16:46:46.533Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-10T16:47:10.994Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-10T16:47:20.866Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-10T16:47:47.230Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-10T16:59:26.468Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-10T16:59:52.385Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-10T17:00:10.277Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-10T17:00:31.114Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    }
+  ],
+  "continued": [
+    {
+      "what": "judgement",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-10T16:13:03.341Z",
+      "standing": true
+    },
+    {
+      "what": "judgement",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-10T16:37:24.200Z",
+      "standing": true
+    },
+    {
+      "what": "judgement",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-10T16:48:30.405Z",
+      "standing": true
+    },
+    {
+      "what": "judgement",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-10T17:01:13.352Z",
+      "standing": true
+    }
+  ],
+  "learned": {
+    "at": "2026-11-10T17:02:51.208Z",
+    "entries": [
+      "K-363"
+    ],
+    "confirmed": []
+  }
+}

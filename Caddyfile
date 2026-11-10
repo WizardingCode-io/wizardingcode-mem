@@ -1,0 +1,9 @@
+# Automatic HTTPS for the team server's domain; HTTP is redirected. The body cap matches the
+# server's published limit, and HSTS is sent since Caddy does not add it on its own.
+{$SERVER_DOMAIN} {
+	request_body {
+		max_size 1MiB
+	}
+	header Strict-Transport-Security "max-age=31536000"
+	reverse_proxy server:8787
+}

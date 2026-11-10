@@ -1,5 +1,37 @@
 import { describe, expect, test } from "bun:test";
-import { findSecrets, redact } from "../../src/core/redact.ts";
+import { findSecrets, PATTERN_RULES, redact } from "../../src/core/redact.ts";
+
+describe("the team server's token and invitation code", () => {
+  const token = ["wcm1_", "A".repeat(20), "b".repeat(20), "0_-"].join("");
+  const code = ["wci1_", "B".repeat(13), "7".repeat(13)].join("");
+
+  test("a token and a code are redacted by name, a bearer token as the team's, not as a header", () => {
+    expect(String(redact(`token ${token}`))).toBe("token [REDACTED:team-token]");
+    expect(String(redact(`code ${code}`))).toBe("code [REDACTED:team-invitation]");
+    expect(findSecrets(`Authorization: Bearer ${token}`).map((match) => match.rule)).toEqual([
+      "team-token",
+    ]);
+    expect(String(redact(`Authorization: Bearer ${token}`))).toBe(
+      "Authorization: Bearer [REDACTED:team-token]",
+    );
+    expect(findSecrets(`a code of 25: wci1_${"B".repeat(25)}`)).toEqual([]);
+  });
+
+  test("the two rules carry the d and g flags and sit before auth-header", () => {
+    const names = PATTERN_RULES.map((rule) => rule.rule);
+    const tokenAt = names.indexOf("team-token");
+    const codeAt = names.indexOf("team-invitation");
+    const authAt = names.indexOf("auth-header");
+    expect(tokenAt).toBeGreaterThan(-1);
+    expect(codeAt).toBeGreaterThan(-1);
+    expect(tokenAt).toBeLessThan(authAt);
+    expect(codeAt).toBeLessThan(authAt);
+    for (const rule of PATTERN_RULES.filter((entry) => entry.rule.startsWith("team-"))) {
+      expect(rule.pattern.flags).toContain("d");
+      expect(rule.pattern.flags).toContain("g");
+    }
+  });
+});
 
 // Fake credentials are assembled at runtime so secret scanners never see them whole.
 const j = (...parts: string[]) => parts.join("");

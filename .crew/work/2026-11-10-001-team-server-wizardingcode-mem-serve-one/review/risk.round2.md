@@ -1,0 +1,22 @@
+# risk findings for 2026-11-10-001-team-server-wizardingcode-mem-serve-one
+reviewer: review-risk
+read: spec, ADR 0026 (the plan was not reread this round), 9 files
+
+## Round 1 defects upheld by the judge
+- R1 F-1 (src/team/mirror.ts:626, the child launched with `--data`) · fixed. `run` (src/cli/commands/serve.ts:567) now removes `--data <dir>` from the arguments with `takeData` (serve.ts:145-162) before it dispatches. Every subcommand takes `shell.dir` from that value (serve.ts:575), so the `serve mirror --data <dir>` line that server.ts:125 builds now parses. A failing export writes `meta.mirror.last` with its error (mirror.ts:462-468). tests/integration/team-mirror.test.ts:607 runs the real command line through spawnMirror, and team-serve-cli.test.ts:380 runs `mirror --data`. The `--help` path is fixed as well (serve.ts:563).
+- R1 F-2 (src/team/mirror.ts:552, the purge committed before it took the lease) · fixed. `purgeItem` now runs entirely inside `underMirrorLease` (mirror.ts:550). `holdLease` (mirror.ts:383) throws `LeaseHeldError` before the transaction, so while a run is in progress the CLI's "a mirror run is in progress" (serve.ts:183-185) is true and nothing has been erased. The audit row is written inside the erasure transaction (mirror.ts:611-618), so it can no longer be lost. A mirror run that starts after the purge is refused by the lease, so it cannot write revisions it loaded before the erasure.
+- Round 1 advisory F-4 (src/team/server.ts:81, migrating before the lease check) · fixed. The server and every writer subcommand now open through `openTeamForWrite` (src/team/db.ts:101-125), which first checks for a fresh `serve.lease` and refuses to migrate a database that is behind this binary.
+
+## Findings
+- F-1 · advisory · src/team/mirror.ts:485 · `replayFolders` removes every touched repository folder before replaying it, and nothing durable records that a replay is owed. If the operator's terminal is closed or the process is killed partway through (the spec, spec.md:335, puts a purge of a shared entry at about 35 minutes, the same length as a rebuild), or if the replay fails, `repos/shared` is left with part of its history. The next scheduled run only exports revisions above `mirror_revision`, so it never refills the folder, and its `meta.mirror.last` reports `error: null`, so `serve status` looks healthy. The database and the erasure are intact and `serve mirror --rebuild` repairs the mirror. But neither the ADR "Purge" section nor the runbook list in "What parts 6 and 7 must do" says to run it after an interrupted or failed purge. Unlike `runMirror`, which sets a REBUILD_MARK (mirror.ts:369-421), the purge sets no marker that would make the next run finish the replay.
+- F-2 · advisory · src/team/mirror.ts:670 · If the child fails before `runMirror` records anything (it cannot open the database, it finds the lease held by a long purge or a rebuild, or a startup error), the only trace is a `mirror-exit` warn line, and `serve status` keeps showing the previous run. Each of these heals on the next attempt and the database stays the authority, so this is visibility only.
+- F-3 · advisory · .github/workflows/release.yml:99 · Carried from round 1, unchanged. `publish` waits on the `docker` job, which pushes two platforms through QEMU, a step CI never runs, so the first tag is the first time it runs. A failure would show as a red job, and re-running the job or editing `needs` undoes it. ADR 0026 "Follow-ups" now names this limit.
+- F-4 · advisory · .env.example:4 · Carried from round 1, unchanged. `WIZARDINGCODE_MEM_VERSION=0.7.0` while package.json:3 is at 0.6.0. The release must carry tag 0.7.0, or a copied `.env` names an image that does not exist. This would show at `docker compose pull`.
+- F-5 · advisory · docs/adr/0026-team-server.md:98 · Carried from round 1 (spec.md:350). Rolling back across a schema bump is a manual restore of the copy taken before the migration. It relies on part 6 clients, which are not built yet, to re-push what that copy lacks. The procedure is written down, including removing the WAL and SHM files.
+- F-6 · advisory · .crew/work/2026-11-10-001-team-server-wizardingcode-mem-serve-one/spec.md:251 · Carried from round 1. Nothing consumes the HEALTHCHECK, so an unhealthy server (the 503 at low disk, for example) is seen only through `docker ps` or `serve status`. The spec states this.
+
+## Outside the change
+none
+
+## Not answerable
+none

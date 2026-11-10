@@ -1,0 +1,489 @@
+{
+  "id": "2026-11-09-003-team-server-wizardingcode-mem-serve-one",
+  "title": "Team server: wizardingcode-mem serve, one Docker image with SQLite and the repos",
+  "input": "Team server: wizardingcode-mem serve, one Docker image with SQLite and the repositories on volumes, every request authenticated by a device token, invitations by an admin, one token per machine, roles admin and member, a sync API for knowledge versions and shared memories that refuses a stale version; a compose file with TLS by a reverse proxy; ADR 0026",
+  "type": "feature",
+  "route": "full",
+  "routeReasons": [
+    "risk areas: auth, personal-data, data-migration, infra, public-api"
+  ],
+  "riskAreas": [
+    "auth",
+    "personal-data",
+    "data-migration",
+    "infra",
+    "public-api"
+  ],
+  "phase": "conclave",
+  "awaiting": "user",
+  "criteria": [
+    {
+      "id": "AC-1",
+      "kind": "behavior",
+      "text": "openTeamDb on an empty directory creates team.db at team schema 1 with the spec's tables, mints server.instance, server.created_at and team.schema, and a second open changes nothing; a newer team version is refused with SchemaTooNewError and a client store renamed team.db is refused as not a team database; openDb still applies MIGRATIONS and the module schemas unchanged; json, problem and jsonObject live in src/http/respond.ts and the viewer's tests pass unchanged; setLogSink routes logError to the sink and, without a sink, to the file as before."
+    },
+    {
+      "id": "AC-2",
+      "kind": "behavior",
+      "text": "A first start with no members prints one wci1_ invitation line, audits bootstrap and hands the code to onBootstrap; a second start within 24 hours prints nothing; /v1/health is 200 without a token, carries no version and is 503 under 100 MiB free; every other route is 401 without a token, 401 device revoked after a revoke, 403 member disabled after a disable; join with the bootstrap code makes an admin named admin and answers a wcm1_ token once with the device id and alias, and the same code again is 410 invitation used; unknown, expired or revoked codes are 404 or 410 and audited with the address and never the code; a label over 80 characters is 400; the eleventh join from one address in a minute and the 601st request of a device are 429 with Retry-After; with trust-proxy the address is the last X-Forwarded-For hop and an authenticated request without X-Forwarded-Proto https is 400; the token's hash is in devices.token_hash and the token itself nowhere in the database or the logs; rotate answers a new token, the old one stays valid until the new one is first used or ten minutes pass, and the id and alias are unchanged; X-WCM-Contract 2 is 409 contract with accepted 1; GET /v1/me answers the member, the device with its alias, the instance, contract 1 and the limits; every answer carries X-Request-Id and a thrown error answers internal error with the request id."
+    },
+    {
+      "id": "AC-3",
+      "kind": "behavior",
+      "text": "An admin's POST /v1/invitations with role member and a name makes a code a new member joins with, and a name of 81 characters or beginning agent: is 400; forMember makes a code that adds a device to that member and GET /v1/me on both devices shows one member id; a member calling any invitation route is 403; GET /v1/invitations lists unused ones; revoking an invitation makes its code 410 invitation revoked; revoking a device cancels its unused invitations; the last active admin's disable, device revoke or demotion is 409 the last admin stays; the role route promotes; disable with withdraw true revokes the member's devices and tombstones every item of theirs with one feed row each; reinstate with a revision writes that revision's bytes as a new revision and unlocks; the admin routes are 403 for a member; every admin action and every CLI subcommand writes an audit row with source api or cli."
+    },
+    {
+      "id": "AC-4",
+      "kind": "behavior",
+      "text": "push applies an entry send with baseRevision 0 as revision 1 with the recomputed hash; a second device's send on base 1 with the current hash is revision 2; a send on base 1 after that is stale with current revision 2 and hash; a retry whose payload hash equals the current one is applied with the current revision and changes nothing; a retry whose hash equals revision 1's hash after a third push is stale with appliedAs 1; an extra or missing key, a frontmatter id other than the uid's UUID, a scope that disagrees with the uid's prefix or an invalid area is refused shape, and a bad slug refused slug; a payload hash that is not the hash of the bytes is refused hash; over 256 KiB is refused size; a recognisable key in the text is refused secret; a workspace entry pushed by another member is refused not-owner while a shared entry by another member on the current base is applied; an item locked by an admin is refused withdrawn-by-admin until reinstated; an owner's send after its own withdraw with the tombstone's revision reinstates the entry; 201 items is 400; a 1.1 MiB body is 413 before parsing; the 20,001st applied item of a device in a UTC day and a member at 1 GiB of payload are refused quota; with free disk under 1 GiB the push is 507; results come back in the order given and each item is its own transaction."
+    },
+    {
+      "id": "AC-5",
+      "kind": "behavior",
+      "text": "A memory send from its device is applied with the recomputed hash; a wrong payload hash is refused hash; a later updatedAt replaces and an older one is stale; the same hash is applied unchanged; a body carrying a recognisable key is refused secret; another device's send of the same uid is a second row and both pull as remote:alias:uid with each device's alias; withdraw by the owning device, by another device of the same member or by an admin tombstones it and answers withdrawn, and by another member it is refused not-owner; a withdraw of an unknown uid is refused unknown; a second withdraw is withdrawn with nothing changed."
+    },
+    {
+      "id": "AC-6",
+      "kind": "behavior",
+      "text": "After an applied entry mirrorIdle resolves and the scope repository's entries/slug.md holds the payload bytes verbatim, HEAD has the member as author, the server as committer and the trailers Revision and Uid, and the row's mirror_revision equals the revision; a second uid with the same slug gets slug--8hex.md; a withdrawn entry's file is removed in a commit; a project repository's folder is the first 16 hex of the SHA-256 of the remote alias; with git failing commit once the row stays pending, the error is logged and shown by serve status, and the next nudge mirrors it; a row whose commit landed but whose mark was not written is marked without a second commit at the next start; a server started with pending rows mirrors them; serve repair on a deleted repository rewrites it with one commit per revision in order; serve purge removes the row, its revisions and the payload from the feed rows, writes a purge feed row, and the repository no longer holds the file in any commit; the repository has no hooks, signing or user config, gc.auto is 0 and safe.directory passed; repos/.feed holds the last mirrored seq; no request waits on git."
+    },
+    {
+      "id": "AC-7",
+      "kind": "behavior",
+      "text": "pull with since 0 and projects naming one alias answers the shared entries, every member's workspace entries and only that alias's project entries and memories, one current row per uid, snapshot true, next the last seq and more false; a second pull from next answers no items until a push lands; limit above 500 is clamped and a page over 2 MiB stops early with more true; a tombstone carries no payload; a member's view carries member id and name and no device id while an admin's carries device; after the hourly pruning with a clock 91 days ahead the horizon is set and a cursor below it is 410 with fullPull true; instance equals server.instance, changes after serve instance renew, and changes at a start whose repos/.feed is ahead of the database's last seq, with an audit row restore detected; AUTOINCREMENT keeps seq from reusing a pruned number."
+    },
+    {
+      "id": "AC-8",
+      "kind": "behavior",
+      "text": "With no flag and no environment serve listens on 127.0.0.1 port 8787; with the host environment variable set it listens there; a second serve on the same directory exits 1 naming the lock and a stale lock is replaced; SIGTERM with a pending mirror row drains the queue and exits 0 within 20 seconds removing the lock; SIGTERM with a mirror stuck exits 0 after 20 seconds with the row pending; the logs are JSON lines with the fields of the design and never contain a token, a code after the bootstrap line, or a payload; idleTimeout is 120 and maxRequestBodySize 1,048,576; serve and serve health skip the legacy data migration; a newer team.db makes serve exit 3 with the message."
+    },
+    {
+      "id": "AC-9",
+      "kind": "behavior",
+      "text": "The serve subcommands against the team data directory: invite prints a wci1_ code usable by join, the for option binds it to a member, a bad name exits 64; members lists members and devices with aliases; revoke makes the device 401; disable with withdraw tombstones; role promotes; status prints the fields of the design and the json option the same as JSON, exit 0, and exit 1 with a message when the directory has no database; audit with limit 5 prints the last five rows newest first; health exits 0 against a running server and 1 against a closed port; instance renew prints the new id; repair, purge, backup and instance renew exit 1 with stop the server first while a live lock is held; backup writes a sound team-time.db with the same rows and the sidecar JSON; an unknown subcommand exits 64 with the usage."
+    },
+    {
+      "id": "AC-10",
+      "kind": "behavior",
+      "text": "redact of a wcm1_ token with 43 base64url characters gives REDACTED team-token, of a wci1_ code with 26 base32 characters gives REDACTED team-invitation, a Bearer wcm1_ token names team-token, and the existing redact cases pass unchanged."
+    },
+    {
+      "id": "AC-11",
+      "kind": "observed",
+      "text": "The Dockerfile builds on the CI runner from dist, docker run with the version flag prints the version, the container runs as uid 10001 with a read-only root filesystem, serve health inside a started container exits 0 and docker stop exits the container with 0 within the grace period; compose.yml, Caddyfile and .env.example are as the design states; the release workflow's docker job depends on sign, has packages write, buildx for the two platforms, the two tags, and latest only for a tag without a hyphen."
+    },
+    {
+      "id": "AC-12",
+      "kind": "preserve",
+      "text": "tests/unit/hook-snapshots.test.ts, tests/unit/mcp-tools-list.test.ts and tests/perf/budgets.test.ts pass unchanged; the viewer's tests pass after the HTTP helpers move; the core store tests pass after the runner's split; the redact tests pass with the two rules added."
+    },
+    {
+      "id": "AC-13",
+      "kind": "observed",
+      "text": "docs/adr/0026-team-server.md records D-1 to D-20 as rulings with the superseded clauses, the data model with every revision kept, the API with its results and reason codes, the hash recomputation and the secret check, the write rules, the alias filter as minimisation and not permission, the feed with its retention and horizon, the instance id and the restore detection, the mirror and its limits, repair and purge, the limits and quotas, the logs and the request id, the image and the compose file, the upgrade order and the contract header, the boundary, and what parts 6 and 7 must do; CLAUDE.md gains a bullet naming src/team, serve and the deployment files."
+    }
+  ],
+  "approvals": [],
+  "skips": [],
+  "baseCommit": "62780aac6e5f4bf1eaefd449ee3c523815b3acd4",
+  "createdAt": "2026-11-09T02:40:01.786Z",
+  "updatedAt": "2026-11-10T11:16:08.123Z",
+  "specReview": true,
+  "kind": "feature",
+  "kindFrom": "answer",
+  "knowledge": {
+    "readAt": "2026-11-09T02:40:01.795Z",
+    "listed": [
+      "K-319",
+      "K-316",
+      "K-311",
+      "K-202",
+      "K-201",
+      "K-200",
+      "K-199",
+      "K-197",
+      "K-179"
+    ]
+  },
+  "priority": "high",
+  "seats": [
+    {
+      "role": "researcher",
+      "team": "researchers",
+      "kind": "debate",
+      "reason": "full route"
+    },
+    {
+      "role": "review-code-quality",
+      "team": "backend",
+      "kind": "gate",
+      "gate": "code-quality",
+      "reason": "full route"
+    },
+    {
+      "role": "review-test-quality",
+      "team": "qa",
+      "kind": "gate",
+      "gate": "test-quality",
+      "reason": "full route"
+    },
+    {
+      "role": "review-security",
+      "team": "security",
+      "kind": "gate",
+      "gate": "security",
+      "reason": "full route"
+    },
+    {
+      "role": "review-ui-ux",
+      "team": "frontend",
+      "kind": "gate",
+      "gate": "ui-ux",
+      "reason": "interface files: ui/src/components/ProjectsView.vue, ui/src/components/Settings.vue, ui/src/components/settings/Backups.vue, +2 more"
+    },
+    {
+      "role": "review-risk",
+      "team": "architects",
+      "kind": "gate",
+      "gate": "risk",
+      "reason": "full route"
+    },
+    {
+      "role": "review-architecture",
+      "team": "architects",
+      "kind": "gate",
+      "gate": "architecture",
+      "reason": "full route"
+    },
+    {
+      "role": "review-data",
+      "team": "etl",
+      "kind": "gate",
+      "gate": "data",
+      "reason": "risk area data-migration"
+    },
+    {
+      "role": "review-infra",
+      "team": "devops",
+      "kind": "gate",
+      "gate": "infra",
+      "reason": "risk area infra"
+    },
+    {
+      "role": "lead-qa",
+      "team": "qa",
+      "kind": "lead",
+      "reason": "full route"
+    },
+    {
+      "role": "lead-security",
+      "team": "security",
+      "kind": "lead",
+      "reason": "full route"
+    },
+    {
+      "role": "lead-architects",
+      "team": "architects",
+      "kind": "lead",
+      "reason": "full route"
+    },
+    {
+      "role": "lead-etl",
+      "team": "etl",
+      "kind": "lead",
+      "reason": "risk area data-migration"
+    },
+    {
+      "role": "lead-devops",
+      "team": "devops",
+      "kind": "lead",
+      "reason": "risk area infra"
+    },
+    {
+      "role": "lead-frontend",
+      "team": "frontend",
+      "kind": "lead",
+      "reason": "interface files: ui/src/components/ProjectsView.vue, ui/src/components/Settings.vue, ui/src/components/settings/Backups.vue, +2 more"
+    },
+    {
+      "role": "judge",
+      "team": null,
+      "kind": "debate",
+      "reason": "a gate is planned"
+    }
+  ],
+  "primaryTeam": "frontend",
+  "runtimes": [
+    "claude"
+  ],
+  "phaseAt": {
+    "understand": "2026-11-09T02:40:46.860Z",
+    "specify": "2026-11-09T02:55:37.345Z",
+    "conclave": "2026-11-09T03:11:09.314Z"
+  },
+  "decisions": [
+    {
+      "id": "D-1",
+      "question": "Where does the server keep its data: its own SQLite database and git repositories under its data directory, or a client's store schema reused on the server?",
+      "default": "Its own: a team database with its own migrations and one git repository per server scope under the data directory, never a client's store. The server's shape is the team's, not one machine's; a client's schema carries sessions, turns and hooks the server must never hold.",
+      "answer": "ok seguimos com sqlite (opção 1: SQLite, com a loja do servidor atrás de uma fronteira única que permita Postgres depois)",
+      "at": "2026-11-10T11:01:03.851Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-2",
+      "question": "How are device tokens made and stored: random high-entropy secrets hashed at rest, or a password-style secret hashed with a slow function?",
+      "default": "A device token is 32 random bytes, shown once at join, stored as its SHA-256 digest only and compared in constant time; a high-entropy secret needs no slow hash, and a leaked database holds nothing that logs in. Revocation deletes nothing: revoked_at is set and the device refused.",
+      "answer": "o resto concordo com tudo (default aceite)",
+      "at": "2026-11-10T10:55:48.925Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-3",
+      "question": "How is the first admin created: a one-time invitation the server prints at its first start, or a secret passed on the command line or in the environment?",
+      "default": "A one-time admin invitation minted at the first start with an empty database, printed once to standard output and written to a 0600 file in the data directory that is deleted when used, valid for 24 hours; nothing else answers until it is used. A secret in a flag or the environment would land in shell history and compose files.",
+      "answer": "o resto concordo com tudo (default aceite)",
+      "at": "2026-11-10T10:55:48.984Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-4",
+      "question": "What is an invitation: a single-use code with a role and an expiry made by an admin, or an open sign-up or an e-mail flow?",
+      "default": "A single-use code of 128 bits (26 base32 characters) with a role and an expiry of 72 hours by default, made by an admin through the API or the server's CLI, stored hashed, consumed by one join; no open sign-up, no e-mail: the admin hands the code over however the team talks.",
+      "answer": "o resto concordo com tudo (default aceite)",
+      "at": "2026-11-10T10:55:49.043Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-5",
+      "question": "What may each role do, and can the last admin be removed?",
+      "default": "A member pushes and pulls and sees every item of the server's one destination; an admin does the same and also creates invitations, lists members and devices, revokes a device, disables a member and withdraws any item; the last active admin cannot be revoked, disabled or demoted. Two roles only in this part.",
+      "answer": "o resto concordo com tudo (default aceite)",
+      "at": "2026-11-10T10:55:49.105Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-6",
+      "question": "What is the sync API's shape: JSON over HTTP under a versioned prefix with a batch push answering per item and a pull by a monotonic cursor, or another transport?",
+      "default": "JSON over HTTP under /v1/: the push route takes up to 200 items with the client's policy epoch and answers each item applied, stale with the server's current version and hash, refused with a reason code from a fixed list, or withdrawn; the pull route takes the last sequence seen and answers the changes after it, 500 at most, with the next cursor and whether more follow; bodies capped at 1 MiB; a per-device rate limit of 600 requests a minute answered 429 with Retry-After. The same shape part 4's decide and ledger speak.",
+      "answer": "sim (default aceite, mais o wait da D-22 na rota de pull)",
+      "at": "2026-11-10T11:02:07.708Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-7",
+      "question": "How is a conflict decided: an entry push carries the base version and hash it was made from and a mismatch is refused with the server's current ones, while memories belong to one device; or last write wins?",
+      "default": "Versions decide, never a silent overwrite: an entry push carries both the base version and the base hash the client built on; the server applies it only when both equal its current ones, else answers stale with the current version and hash; a first send of an unknown entry carries base version 0. A memory belongs to the device that first sent its uid: that device replaces or withdraws it, another device's push of the same uid is refused.",
+      "answer": "o resto concordo com tudo (default aceite)",
+      "at": "2026-11-10T10:55:49.164Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-8",
+      "question": "What does the server store from a pushed item, and how does it check the shape?",
+      "default": "Exactly part 4's payload types, OutgoingEntry and OutgoingMemory, plus the member, the device, the server's version, the hash and the times; the payload is checked at the boundary against the key lists part 4's contract test pins, so an unknown or missing field is refused with the reason shape and adding a field changes both sides together. The server never asks for, and never keeps, anything else.",
+      "answer": "o resto concordo com tudo (default aceite)",
+      "at": "2026-11-10T10:55:49.224Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-9",
+      "question": "How does a second machine join as the same member, and what identifies a device?",
+      "default": "An invitation may be bound to an existing member: an admin makes one for a member, or the member makes one from a device they already hold; a join with a bound invitation adds a device to that member, a join with an unbound one creates a member. A device id is an independent random value (12 base32 characters), never derived from the token, so a token can be rotated without changing the id.",
+      "answer": "o resto concordo com tudo (default aceite)",
+      "at": "2026-11-10T10:55:49.283Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-10",
+      "question": "Which store is the authority for an applied item, and how do the git repositories relate to it?",
+      "default": "The team database is the authority: a push is applied in one transaction that stores the payload bytes as sent, the server's version, the hash, the owner and a change-feed row, and answers; the git repositories are a versioned mirror written after the commit by one in-process queue, one commit per applied item with the member as author and the server as committer, and a row still pending at start is mirrored then. The mission puts the repositories on the volume for the team's history; the sync never reads them.",
+      "answer": "o resto concordo com tudo (default aceite)",
+      "at": "2026-11-10T10:55:49.341Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-11",
+      "question": "What does a device pull: every item of the server, or the shared and workspace knowledge plus the project items of the projects that machine works on?",
+      "default": "The shared repository's and the members' workspace entries always, and project-scoped entries and memories only for the remote aliases the device names in its pull; so a laptop never holds a project it does not work on, which is ADR 0018's rule carried across people. The pull answers one current row per uid since the cursor, tombstones included within their retention, 500 items or 2 MiB per page.",
+      "answer": "o resto concordo com tudo (default aceite)",
+      "at": "2026-11-10T10:55:49.400Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-12",
+      "question": "Who may write and withdraw which items on the server?",
+      "default": "A shared or project entry is the team's: any member may push a new version on the current base, and the last writer is recorded; a member's workspace entry is written only by that member's devices; a memory is replaced only by the device that first sent it, applied only when its updatedAt is not older than the stored one. A withdraw is accepted from a device of the item's last writer, or from an admin; another member's withdraw is refused not-owner. An admin's withdraw locks the item until an admin reinstates it; the owner's re-send of an item it withdrew itself is a new version on the tombstone's base.",
+      "answer": "o resto concordo com tudo (default aceite)",
+      "at": "2026-11-10T10:55:49.459Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-13",
+      "question": "How do withdrawals, retention, old cursors and a restored server behave for the pull feed?",
+      "default": "A withdraw tombstones the item and the feed keeps the tombstone 90 days; superseded feed rows are pruned after 90 days too; the sequence never reuses a number (AUTOINCREMENT); a pull whose cursor is older than the retained feed is answered 410 with the instruction to pull from zero; every pull and the me route carry the server's instance id, minted at first start and renewed by the runbook's restore step, so a client that sees a new instance pulls from zero and re-sends what the server lost. Withdrawn text stays in the git mirror's history, named as a limit.",
+      "answer": "o resto concordo com tudo (default aceite)",
+      "at": "2026-11-10T10:55:49.517Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-14",
+      "question": "How are tokens and invitations kept safe over their life: a recognisable prefix, rotation, listing and revoking invitations, and what a revoked device's invitations become?",
+      "default": "A device token is wcm1_ followed by 43 base64url characters and an invitation code wci1_ followed by 26 base32 characters, so redact recognises both and a pasted token never becomes a memory; a device rotates its own token through the API and keeps its id; admins list and revoke invitations; revoking a device cancels every unused invitation it created; the join route is rate-limited per source address with the proxy's forwarded address trusted only when the server is told to trust its proxy.",
+      "answer": "o resto concordo com tudo (default aceite)",
+      "at": "2026-11-10T10:55:49.577Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-15",
+      "question": "What are the limits on sizes, counts and rates, and where are they enforced?",
+      "default": "A request body of 1 MiB at most, enforced by the server before parsing and answered 413; 200 items per push, else 400; an entry payload of 256 KiB at most, part 1's file cap, else refused with the reason size; a pull page of 500 items or 2 MiB; 600 requests a minute per device and 10 joins a minute per source address, answered 429 with Retry-After; 5,000 applied items per device per day, else refused with the reason quota; names and labels of 80 characters. The limits are published in the me route so the client sizes its batches by bytes and by count.",
+      "answer": "o resto concordo com tudo (default aceite)",
+      "at": "2026-11-10T10:55:49.637Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-16",
+      "question": "How is the server deployed: the image, the user, the volume, the proxy, the health probe and the binary's bind default?",
+      "default": "One image from debian bookworm-slim with git and ca-certificates and the Linux binary for the image's architecture (amd64 and arm64 through buildx), a fixed non-root user 10001 owning /data, a named volume for /data (a bind mount must be owned by that user), HEALTHCHECK through the binary's own probe subcommand, and the host set to all interfaces by the image's environment; the binary's own default is loopback and it refuses another address without an explicit flag. The compose file runs Caddy as the TLS-terminating proxy for a configured domain (ports 80 and 443, DNS at the host) with the server unpublished, init true and a 30 second stop grace. The release workflow builds and pushes the image to the GitHub container registry with the version tag, and latest for a release that is not a prerelease.",
+      "answer": "o resto concordo com tudo; ok seguimos com sqlite (default aceite)",
+      "at": "2026-11-10T11:01:03.912Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-17",
+      "question": "How does the server open its database, fit the binary's command loop, and log?",
+      "default": "The core migration runner takes a file name and a migration list, so team.db has its own migrations under its own user_version with an upgrade backup and a too-new refusal and no module schemas; serve joins the lazy command table, skips the legacy data migration, and its run stays pending until a signal; SIGTERM and SIGINT stop accepting requests, finish the item in flight, drain the mirror queue for at most 20 seconds and close the database; the server logs JSON lines to standard output with a request id, the device id, the route, the status, the milliseconds and per-item counts, and never a token, a code after its first print, or a payload; the idle timeout is 120 seconds.",
+      "answer": "o resto concordo com tudo; ok seguimos com sqlite (default aceite)",
+      "at": "2026-11-10T11:01:03.974Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-18",
+      "question": "How do the server and the clients stay compatible as the payload types grow?",
+      "default": "The me route carries a contract number, 1 in this part, and the server answers 409 with the reason contract to a client that names another; the payload check refuses an unknown field (shape), so the upgrade order is the server first and the clients after, which the ADR and the runbook state; part 4's pinned key lists are the one place both sides read.",
+      "answer": "o resto concordo com tudo (default aceite)",
+      "at": "2026-11-10T10:55:49.697Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-19",
+      "question": "What happens to a departed member's items and devices?",
+      "default": "Disabling a member revokes every device of theirs and keeps their items attributed; the admin chooses, in the same call, whether to withdraw them all at once (tombstones the feed announces); nothing is deleted, and the text already in the git mirror's history stays, named as a limit. A memory of a revoked device can be withdrawn by an admin or by another device of the same member, never changed by anyone else.",
+      "answer": "o resto concordo com tudo (default aceite)",
+      "at": "2026-11-10T10:55:49.756Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-20",
+      "question": "What does the server validate in a pushed entry, and what does it leave to the client?",
+      "default": "The server parses the frontmatter: the id must equal the uid's UUID, the scope must agree with the uid's prefix, the slug must pass part 1's rule before any path is built, the payload must fit 256 KiB and carry exactly the pinned keys; a failure is refused with shape, size or slug. The author field is informational (the commit author is the member); the area is checked against part 1's id pattern only, since the server holds no taxonomy in this part; the server never redacts (the client does at its edge) and never calls decide, storing the client's epoch with the feed row for the audit only.",
+      "answer": "o resto concordo com tudo (default aceite)",
+      "at": "2026-11-10T10:55:49.819Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-21",
+      "question": "Does a person use one team server, or several, one per team or client (for example one for the WizardingCode projects and another for a client's), and what does that ask of the server and of the client?",
+      "default": "Several. Each server is one destination, independent of every other and knowing nothing of them: its own members, devices, tokens, instance id and contract. The client (part 6) holds a list of servers, each with its URL and its device token, binds each project to one server at most, and chooses its roots and areas per server, so a server never receives an item of a project bound to another and the person's workspace knowledge leaves only for the servers they choose. The sharing policy is already keyed by (project, destination) (ADR 0025 D-9); today only the destination team exists, and part 6 replaces it by the configured servers.",
+      "answer": "o user tem que conseguir adicionar vários servidores: para projectos da wizarding quero utilizar um servidor, para clubefashion quero utilizar outro servidor e por aí fora (default aceite)",
+      "at": "2026-11-10T10:55:49.936Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-22",
+      "question": "How fast does a change on one machine reach the others: the client pulls on its own schedule, or the server tells a waiting client the moment a change lands?",
+      "default": "Within seconds while both machines are online, so the work is collaborative rather than a nightly exchange. The pull route takes a wait of up to 25 seconds: with nothing after the cursor the server holds the request and answers the moment a push is applied (one in-process signal, no polling of the database), or with an empty page when the wait ends; the client keeps one such pull open while a session or the viewer is active and pushes right after each local change the policy allows (after the drain writes a memory, after a knowledge write or accept), never on a hook path. One open connection per device, within D-15's rate limit since a held request counts once; the hold stays under D-17's idle timeout; a proxy must not buffer the route. The floor is the background drain, seconds after a turn, since hooks never touch the network.",
+      "answer": "sim (default aceite: pull com wait até 25 s, push logo após cada alteração local)",
+      "at": "2026-11-10T11:02:07.650Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-23",
+      "question": "Do device tokens expire, and may an admin act as a member? (the auth checklist: session length, second factor, an admin acting as a user)",
+      "default": "No expiry: a device token lives until the device rotates it or an admin revokes it; serve members and GET /v1/devices show each device's last seen time so an admin can revoke an idle one; no second factor in this part (the invitation handed over in person is the second channel); an admin never acts as a member: an admin withdraws, reinstates, disables and purges in their own name, and every such act is an audit row, but never pushes or pulls as someone else.",
+      "answer": "sim (default aceite)",
+      "at": "2026-11-10T11:15:03.641Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-24",
+      "question": "Which items may be erased from the server, by whom, and does erasure cover memories? (the deletion checklist: erasure or deactivation, which models may be hard-deleted, who holds the permission)",
+      "default": "Disabling a member is deactivation and a withdraw is a tombstone, both reversible and nothing deleted; erasure is only serve purge <entry|memory> <uid> --yes, run by the operator with a shell on the server and the server stopped, audited, covering an entry (its row, its revisions, its payload in the feed, its file in every commit of the mirror) and a memory (its row and its payload in the feed), since a memory may hold personal data and a tombstone keeps the bytes; no API route erases anything, and a member's own erasure request goes to the operator.",
+      "answer": "sim (default aceite)",
+      "at": "2026-11-10T11:15:03.697Z",
+      "by": "user",
+      "relayed": true
+    }
+  ],
+  "knowledgeFiles": [],
+  "knowledgeLabels": [],
+  "checklists": [
+    {
+      "kind": "endpoint",
+      "paths": [
+        "/Users/andreagroferreira/.local/share/wizardingcode-developer-crew/skills/crew/checklists/endpoint.md"
+      ],
+      "at": "2026-11-09T03:11:10.039Z"
+    },
+    {
+      "kind": "auth",
+      "paths": [
+        "/Users/andreagroferreira/.local/share/wizardingcode-developer-crew/skills/crew/checklists/auth.md"
+      ],
+      "at": "2026-11-09T03:11:11.002Z"
+    },
+    {
+      "kind": "migration-or-restore",
+      "paths": [
+        "/Users/andreagroferreira/.local/share/wizardingcode-developer-crew/skills/crew/checklists/migration-or-restore.md"
+      ],
+      "at": "2026-11-09T03:11:11.953Z"
+    },
+    {
+      "kind": "deletion",
+      "paths": [
+        "/Users/andreagroferreira/.local/share/wizardingcode-developer-crew/skills/crew/checklists/deletion.md"
+      ],
+      "at": "2026-11-09T03:11:12.869Z"
+    },
+    {
+      "kind": "sync",
+      "paths": [
+        "/Users/andreagroferreira/.local/share/wizardingcode-developer-crew/skills/crew/checklists/sync.md"
+      ],
+      "at": "2026-11-09T03:11:13.721Z"
+    }
+  ],
+  "abandoned": {
+    "at": "2026-11-10T11:16:08.122Z",
+    "reason": "sim: the item's base commit (62780aa) predates the whole journey, so its gates and reviewers would read 583 files of the store, the knowledge and the sharing parts as this item's change; the engine fixes the base at start and has no command to move it. The person agreed on 2026-11-10 to reopen the same work as a new item at the current HEAD, carrying brief, spec, plan, concept and the 24 answers given today.",
+    "by": {
+      "by": "user",
+      "relayed": true
+    }
+  }
+}

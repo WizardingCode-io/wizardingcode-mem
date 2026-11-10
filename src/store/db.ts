@@ -32,6 +32,9 @@ export const DB_FILE = "wizardingcode-mem.db";
 const BACKUPS_DIR = "backups";
 const BACKUPS_KEPT = 2;
 
+/** Where a file's upgrade copies go, and how they are named: `<folder>/<prefix>-<ms>-v<n>-<pid>.db`. */
+export type Backups = { folder: string; prefix: string };
+
 /** The database was written by a newer wizardingcode-mem. Callers must leave it alone. */
 export class SchemaTooNewError extends Error {
   constructor(found: number, supported: number) {
@@ -67,18 +70,27 @@ export function restrict(path: string, mode: number): void {
   }
 }
 
-function backup(db: Db, dir: string, version: number): void {
-  const backups = join(dir, BACKUPS_DIR);
-  mkdirSync(backups, { recursive: true, mode: 0o700 });
-  // Timestamp first, so that sorting by name is sorting by age.
-  const target = join(backups, `wizardingcode-mem-${Date.now()}-v${version}-${process.pid}.db`);
+/**
+ * A copy of the file before an upgrade, in the backups folder itself, pruned to the newest
+ * few of the same prefix: a folder two stores share keeps each one's copies.
+ */
+function backup(db: Db, backups: Backups, version: number): void {
+  mkdirSync(backups.folder, { recursive: true, mode: 0o700 });
+  // The prefix, then the timestamp: among one prefix's files, sorting by name is sorting by age.
+  const target = join(
+    backups.folder,
+    `${backups.prefix}-${Date.now()}-v${version}-${process.pid}.db`,
+  );
   db.run(`VACUUM INTO '${target.replaceAll("'", "''")}'`);
   restrict(target, 0o600);
-  const old = readdirSync(backups)
-    .filter((name) => name.endsWith(".db"))
+  const own = new RegExp(
+    `^${backups.prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}-\\d+-v\\d+-\\d+\\.db$`,
+  );
+  const old = readdirSync(backups.folder)
+    .filter((name) => own.test(name))
     .sort()
     .slice(0, -BACKUPS_KEPT);
-  for (const name of old) rmSync(join(backups, name), { force: true });
+  for (const name of old) rmSync(join(backups.folder, name), { force: true });
 }
 
 /**
@@ -126,7 +138,7 @@ interface Upgrade {
  * cannot run inside a transaction, so it runs on the main connection, as a reader, while
  * the lock is held on the other.) An error rolls the whole upgrade back.
  */
-function upgrade(db: Db, path: string, dir: string, plan: Upgrade): void {
+function upgrade(db: Db, path: string, backups: Backups, plan: Upgrade): void {
   const lock = new Database(path);
   try {
     lock.run(`PRAGMA busy_timeout = ${UPGRADE_WAIT_MS}`);
@@ -140,7 +152,7 @@ function upgrade(db: Db, path: string, dir: string, plan: Upgrade): void {
       plan.prepare?.(lock);
       const pending = plan.pending(lock);
       const version = plan.backupVersion(lock);
-      if (version !== null) backup(db, dir, version);
+      if (version !== null) backup(db, backups, version);
       for (const migration of pending) {
         if (migration.sql !== undefined) lock.run(migration.sql);
         migration.run?.(lock);
@@ -162,21 +174,24 @@ function upgrade(db: Db, path: string, dir: string, plan: Upgrade): void {
 
 const byVersion = (a: Migration, b: Migration) => a.version - b.version;
 
-/** Brings the core schema to the latest version. */
-function migrate(
+/**
+ * Brings a file's own schema (its `user_version`) to the latest version of the list. The
+ * client store's list is `MIGRATIONS`; another file (the team server's `team.db`) brings its own.
+ */
+function migrateFile(
   db: Db,
   path: string,
-  dir: string,
-  migrations: readonly Migration[],
+  options: { migrations: readonly Migration[]; backups: Backups },
   busyTimeoutMs: number,
 ): void {
+  const { migrations, backups } = options;
   const latest = Math.max(0, ...migrations.map((migration) => migration.version));
   const current = userVersion(db);
   if (current > latest) throw new SchemaTooNewError(current, latest);
   if (current === latest) return;
   if (current === 0) enableWal(db, busyTimeoutMs);
 
-  upgrade(db, path, dir, {
+  upgrade(db, path, backups, {
     current: userVersion,
     latest,
     pending: (lock) => {
@@ -266,7 +281,12 @@ function prepareModuleMigrations(lock: Db): void {
  * included: with nothing pending it costs one query. A module version newer than this
  * binary's list is left alone.
  */
-function migrateModules(db: Db, path: string, dir: string, schemas: readonly ModuleSchema[]): void {
+function migrateModules(
+  db: Db,
+  path: string,
+  backups: Backups,
+  schemas: readonly ModuleSchema[],
+): void {
   const total = schemas.reduce((count, schema) => count + schema.migrations.length, 0);
   if (total === 0) return;
   const owner = new Map<Migration, string>();
@@ -290,7 +310,7 @@ function migrateModules(db: Db, path: string, dir: string, schemas: readonly Mod
   const applied = (conn: Db) => total - pending(conn).length;
   if (applied(db) >= total) return;
 
-  upgrade(db, path, dir, {
+  upgrade(db, path, backups, {
     current: applied,
     latest: total,
     prepare: prepareModuleMigrations,
@@ -309,18 +329,42 @@ function migrateModules(db: Db, path: string, dir: string, schemas: readonly Mod
   });
 }
 
-export function openDb(options: OpenOptions): Db {
-  const dir = options.dataDir ?? resolvePaths().storeDir;
-  mkdirSync(dir, { recursive: true, mode: 0o700 });
-  const path = join(dir, DB_FILE);
+export interface OpenFileOptions {
+  /** The directory of the file, created when missing. */
+  dir: string;
+  /** The file's name inside `dir`. */
+  file: string;
+  backups: Backups;
+  migrations: readonly Migration[];
+  busyTimeoutMs: number;
+  /** Runs before the migration, on the open connection: a check of what the file is. */
+  before?: (db: Db) => void;
+  /** Runs after the migration, inside the same guard: what else the file needs before it is handed out. */
+  after?: (db: Db) => void;
+}
+
+/**
+ * Opens (or creates) a database file and brings it to its list's version: the pragmas every
+ * connection needs, `before`, the migration, `after`, then the 0600 modes. An error anywhere
+ * closes the connection and is rethrown. `openDb` is this with the client store's names.
+ */
+export function openFile(options: OpenFileOptions): Db {
+  mkdirSync(options.dir, { recursive: true, mode: 0o700 });
+  const path = join(options.dir, options.file);
   const db = new Database(path, { create: true });
   try {
     // busy_timeout first: every later statement on this connection depends on it.
     db.run(`PRAGMA busy_timeout = ${Math.max(0, Math.trunc(options.busyTimeoutMs))}`);
     db.run("PRAGMA foreign_keys = ON");
     db.run("PRAGMA synchronous = NORMAL");
-    migrate(db, path, dir, options.migrations ?? MIGRATIONS, options.busyTimeoutMs);
-    migrateModules(db, path, dir, options.moduleSchemas ?? MODULE_SCHEMAS);
+    options.before?.(db);
+    migrateFile(
+      db,
+      path,
+      { migrations: options.migrations, backups: options.backups },
+      options.busyTimeoutMs,
+    );
+    options.after?.(db);
   } catch (error) {
     db.close();
     throw error;
@@ -329,32 +373,63 @@ export function openDb(options: OpenOptions): Db {
   return db;
 }
 
+export function openDb(options: OpenOptions): Db {
+  const dir = options.dataDir ?? resolvePaths().storeDir;
+  const backups: Backups = { folder: join(dir, BACKUPS_DIR), prefix: "wizardingcode-mem" };
+  return openFile({
+    dir,
+    file: DB_FILE,
+    backups,
+    migrations: options.migrations ?? MIGRATIONS,
+    busyTimeoutMs: options.busyTimeoutMs,
+    after: (db) =>
+      migrateModules(db, join(dir, DB_FILE), backups, options.moduleSchemas ?? MODULE_SCHEMAS),
+  });
+}
+
 /** Runs `fn` in a transaction that takes the write lock up front, so `busy_timeout` applies. */
 export function withWrite<T>(db: Db, fn: () => T): T {
   return db.transaction(fn).immediate();
 }
 
 /**
- * Opens the database for reading only, without creating or migrating anything.
- * Null when there is no database yet. For commands that inspect: status and doctor.
+ * Opens a database file for reading only, without creating or migrating anything. Null when
+ * the file is not there. `before` runs first (a check of what the file is); with `latest`
+ * given, a file above it is refused with `SchemaTooNewError`; without it, no version check.
  */
-export function openExisting(
-  dataDir: string = resolvePaths().storeDir,
-  options: { allowNewer?: boolean } = {},
+export function openExistingFile(
+  dir: string,
+  file: string,
+  options: { before?: (db: Db) => void; latest?: number; busyTimeoutMs?: number } = {},
 ): Db | null {
-  const path = join(dataDir, DB_FILE);
+  const path = join(dir, file);
   if (!existsSync(path)) return null;
   const db = new Database(path, { readonly: true });
   try {
-    db.run("PRAGMA busy_timeout = 2000");
-    const found = userVersion(db);
-    // `allowNewer`: for a caller that reads only the meta table, the same in every version.
-    if (found > LATEST_VERSION && options.allowNewer !== true) {
-      throw new SchemaTooNewError(found, LATEST_VERSION);
+    db.run(`PRAGMA busy_timeout = ${Math.max(0, Math.trunc(options.busyTimeoutMs ?? 2000))}`);
+    options.before?.(db);
+    if (options.latest !== undefined) {
+      const found = userVersion(db);
+      if (found > options.latest) throw new SchemaTooNewError(found, options.latest);
     }
   } catch (error) {
     db.close();
     throw error;
   }
   return db;
+}
+
+/**
+ * Opens the client store for reading only, without creating or migrating anything.
+ * Null when there is no database yet. For commands that inspect: status and doctor.
+ * `allowNewer`: for a caller that reads only the meta table, the same in every version.
+ */
+export function openExisting(
+  dataDir: string = resolvePaths().storeDir,
+  options: { allowNewer?: boolean } = {},
+): Db | null {
+  return openExistingFile(dataDir, DB_FILE, {
+    ...(options.allowNewer === true ? {} : { latest: LATEST_VERSION }),
+    busyTimeoutMs: 2000,
+  });
 }

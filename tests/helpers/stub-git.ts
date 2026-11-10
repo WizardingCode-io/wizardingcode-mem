@@ -13,6 +13,8 @@ export interface StubBehaviour {
   version?: string;
   /** The script writes its environment here on every call. */
   dumpEnvTo?: string;
+  /** The script appends its arguments here on every call: one line per call, tab-separated. */
+  recordArgsTo?: string;
   /** Arguments put ahead of the caller's on every call that reaches the real git. */
   prepend?: string[];
 }
@@ -35,6 +37,9 @@ export function stubGit(dir: string, behaviour: StubBehaviour): string {
   const lines = ["#!/bin/sh"];
   if (behaviour.sleepMs !== undefined) lines.push(`sleep ${behaviour.sleepMs / 1000}`);
   if (behaviour.dumpEnvTo !== undefined) lines.push(`env > ${quoted(behaviour.dumpEnvTo)}`);
+  if (behaviour.recordArgsTo !== undefined) {
+    lines.push(`{ printf '%s\\t' "$@"; printf '\\n'; } >> ${quoted(behaviour.recordArgsTo)}`);
+  }
   if (behaviour.version !== undefined) {
     // The caller's `-c` settings come before `--version`, so every argument is looked at.
     lines.push(

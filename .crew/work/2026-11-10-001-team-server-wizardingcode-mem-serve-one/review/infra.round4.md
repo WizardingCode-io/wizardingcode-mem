@@ -1,0 +1,28 @@
+# infra findings for 2026-11-10-001-team-server-wizardingcode-mem-serve-one
+reviewer: review-infra
+read: 11 files. I read these pipeline and deployment files in full: Dockerfile, compose.yml, .github/workflows/release.yml, .github/workflows/ci.yml. I also read: .crew/profile.json; review/files.txt; review/infra.round3.md; docs/adr/0026-team-server.md ("Purge", "The image and the compose file", "Rollback", "The one-time step", "The lease's 30-second window", "Follow-ups"); src/team/server.ts (mirrorCommandFor, the lease, stop, the hourly tick); src/team/mirror.ts (noteOwed, underMirrorLease, runMirror, replayFolders, replayOwed, purgeItem, spawnMirror, scheduleMirror); src/team/store.ts (checkpointWal); src/cli/commands/serve.ts (exitFor, runServer, mirror, purge). Commit 982ac11 did not touch .dockerignore, Caddyfile or .env.example, so I did not re-read them this round.
+
+## Findings
+- F-1 · advisory · .github/workflows/release.yml:89 · Unchanged since round 3. The `docker` job pushes the version tag and moves `latest` before `publish` runs, so a failed `publish` leaves an image with no release. The undo is stated in ADR 0026 "Follow-ups", and compose requires `WIZARDINGCODE_MEM_VERSION`, so a deployment does not move onto that image by itself (rubric Q4).
+- F-2 · advisory · .github/workflows/release.yml:93 · Unchanged since round 3. The `linux/amd64,linux/arm64` image is pushed without being run once. CI's smoke step (.github/workflows/ci.yml:48) runs only the amd64 image, so the arm64 image first runs on a host. ADR 0026 "Follow-ups" names this (rubric Q1).
+- F-3 · advisory · Dockerfile:19 · Unchanged since round 3. The base image is pinned by digest, but `apt-get install git ca-certificates` installs whatever Debian serves on the day of the build. ADR 0026 "Follow-ups" names this (rubric Q6).
+- F-4 · advisory · src/team/server.ts:217 · New in 982ac11. The hourly `checkpointWal(db)` runs `PRAGMA wal_checkpoint(TRUNCATE)` on the server's own connection, inside the timer callback, with no try/catch.
+  - **It can stall the server.** It is skipped only when the server's own export child is running (`mirror.child() === null`). A reader the server did not start, such as an operator's `docker compose exec server wizardingcode-mem serve mirror --rebuild` (the runbook step ADR 0026 names after a database restore), makes it wait for the connection's 5 s busy timeout. That blocks the event loop, and with it every request and held pull, for up to 5 s once an hour.
+  - **The ADR is now out of date.** docs/adr/0026-team-server.md:78 still says that wait happens "twice per purge: bounded, and only on the operator's command".
+  - **A throw kills the process.** If the checkpoint ever throws (an I/O error; busy comes back as a row value, not a throw), the exception escapes the interval. The process exits without `stop()`, so the lease is not released, and `restart: unless-stopped` then waits out the 30-second lease window.
+  - Rubric Q4/Q5: the stop and the restart path are stated, but not this wait or this exit.
+
+No defects.
+
+Commit 982ac11 changed no deployment file. The process changes it made keep the deployment as reviewed in round 3:
+- **The mirror child.** Its command is still `selfCommand("serve", "mirror", "--data", dataDir)` (src/team/server.ts:46): the image's own binary under uid 10001, with no host path and no wider identity.
+- **The synchronous `runMirror`.** It runs in that child, not in the server's event loop. The child installs no SIGTERM handler, so on stop the signal ends it at once. The `mirror.rebuild` and `mirror.replay` marks, and the 30 s lease TTL the ADR states, cover a run cut short. Compose's 30 s grace is above the server's 20 s wait for the child (`MIRROR_STOP_WAIT_MS`).
+- **The synchronous `purgeItem`.** It runs as the operator's command inside the container and writes only under `/data`. The replay note is written inside the erasure's transaction (src/team/mirror.ts:687), merged with an earlier purge's note (`noteOwed`, mirror.ts:396), and cleared only when the replay is whole (mirror.ts:587). A purge killed mid-way is therefore finished by the next purge or run. Purge stays an intended, irreversible erasure behind `--yes`, and ADR 0026 "Purge" says what it does not reach (`backups/`, volume clones), which is the rollback position for rubric Q4.
+- **The `(run)` record.** A throw that is not a refusal is pushed as `(run)` and recorded in `meta.mirror.last` in `finally`, and then the lease is released (mirror.ts:434-446). `serve` turns a held mirror lease into exit 1 with a named message (serve.ts:183).
+- **The rest still holds.** The gates run before the push (`bun run check` and `bun run build` in `build`, then `sign`, `docker`, `publish`). `docker` narrows its permissions to `contents: read, packages: write` and logs in with `GITHUB_TOKEN`. No secret is in the image, a default or a comment. The container runs as uid 10001 with a read-only root, tmpfs `/tmp`, `cap_drop ALL` and `no-new-privileges`, and publishes no port. The schema-bump rollback is in ADR 0026 "Rollback". CI checks a clean stop exits 0. No host-specific path, name or address appears.
+
+## Outside the change
+- /Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/.crew/profile.json:72 · Carried over (debt). The proposed health command `curl -fsS http://localhost:80/` reaches Caddy, which serves only `{$SERVER_DOMAIN}` and redirects HTTP to HTTPS, so it does not report the server's health on a local compose run. The check this change provides is `serve health` inside the `server` container.
+
+## Not answerable
+none

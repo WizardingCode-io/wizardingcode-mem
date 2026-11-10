@@ -1,0 +1,46 @@
+{
+  "objections": [
+    {
+      "id": "O-1",
+      "raisedBy": "gap-round",
+      "severity": "advisory",
+      "text": "The pull's alias filter is minimisation, not permission: any member reads any item of the server (the shared entries, every member's workspace entries, any project's items). A person who does not want their workspace knowledge read by the team keeps the workspace root off (part 4's roots). The ADR says it; the Sharing page already says a shared item reaches the team.",
+      "raisedAt": "2026-11-10T11:19:08.807Z"
+    },
+    {
+      "id": "O-2",
+      "raisedBy": "gap-round",
+      "severity": "advisory",
+      "text": "The first admin's code is printed to the container's log and stays there until the log rotates. It is single-use and expires in 24 hours; the runbook says to rotate the first admin's token after joining and how to rotate Docker's logs.",
+      "raisedAt": "2026-11-10T11:19:08.867Z"
+    },
+    {
+      "id": "O-3",
+      "raisedBy": "gap-round",
+      "severity": "advisory",
+      "text": "Withdrawn text stays in entry_revisions and in the mirror's history until purged, and a tombstone keeps a memory's bytes. serve purge is the erasure path (D-24) and the ADR says when to use it.",
+      "raisedAt": "2026-11-10T11:19:08.929Z"
+    },
+    {
+      "id": "O-4",
+      "raisedBy": "gap-round",
+      "severity": "advisory",
+      "text": "Any member may push a new revision of any shared or project entry (D-12). A vandalised entry is rolled back by an admin's reinstate of an earlier revision, and the last writer is recorded.",
+      "raisedAt": "2026-11-10T11:19:08.990Z"
+    },
+    {
+      "id": "O-5",
+      "raisedBy": "gap-round",
+      "severity": "advisory",
+      "text": "Memories hold personal data (a developer's titles and bodies name people and projects): the server stores them verbatim for a project set to Knowledge and memories, redaction is the client's edge, and the server refuses recognisable secrets only. The ADR names the boundary, as part 4's did.",
+      "raisedAt": "2026-11-10T11:19:09.049Z"
+    },
+    {
+      "id": "O-6",
+      "raisedBy": "gap-round",
+      "severity": "advisory",
+      "text": "A waiting pull is one open connection per device; at the team's scale it is nothing, and a proxy with a short response timeout would cut it (Caddy's default has none). The runbook names it.",
+      "raisedAt": "2026-11-10T11:19:09.108Z"
+    }
+  ]
+}

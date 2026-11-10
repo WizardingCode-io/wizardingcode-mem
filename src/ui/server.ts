@@ -18,6 +18,7 @@ import { replaceAllImports, restoreImports } from "../backfill/replace.ts";
 import { openHistoryDb } from "../history/db.ts";
 import { forgetHistoryIndex } from "../history/run-state.ts";
 import { historyReadFailure, recentHistory, searchHistory } from "../history/search.ts";
+import { json, jsonObject, problem } from "../http/respond.ts";
 import {
   HISTORY_LEASE,
   HISTORY_OFFER_DISMISSED,
@@ -159,13 +160,6 @@ export function pageCsp(html: string): string {
 }
 const PAGE_CSP = pageCsp(page as unknown as string);
 
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
-  });
-const problem = (status: number, detail: string) => json({ error: detail }, status);
-
 /** Sessions seen in the last five minutes: a move is best done between them. */
 function recentSessionCount(db: Db, now: number): number {
   return (
@@ -173,20 +167,6 @@ function recentSessionCount(db: Db, now: number): number {
       .query<{ n: number }, [number]>("SELECT count(*) AS n FROM sessions WHERE last_seen_at > ?")
       .get(now - 5 * 60_000)?.n ?? 0
   );
-}
-
-/** A JSON object from the request, or the 400 to answer with. */
-async function jsonObject(request: Request): Promise<Record<string, unknown> | Response> {
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return problem(400, "body must be JSON");
-  }
-  if (body === null || typeof body !== "object" || Array.isArray(body)) {
-    return problem(400, "body must be an object");
-  }
-  return body as Record<string, unknown>;
 }
 
 /** Opens the page in the user's browser; `WIZARDINGCODE_MEM_UI_BROWSER=none` keeps it closed. */
