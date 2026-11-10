@@ -9,6 +9,7 @@ import { holdLease, SERVE_LEASE, SERVE_RENEW_MS, SERVE_TTL_MS } from "./lease.ts
 import { Bucket, type Buckets } from "./limits.ts";
 import { createTeamLog, installLogSink } from "./log.ts";
 import { BOOTSTRAP_VALID_HOURS, bootstrapIfEmpty } from "./members.ts";
+import { scheduleMirror, spawnMirror } from "./mirror.ts";
 import { type Context, handle, type Limits } from "./routes.ts";
 import { ChangeSignal, REAL_TIMERS, type Timers } from "./signal.ts";
 import { getMeta } from "./store.ts";
@@ -46,7 +47,8 @@ export interface ServerOptions {
   freeBytes?: (path: string) => number | null;
   stdout?: (line: string) => void;
   gitPath?: string;
-  mirrorChild?: (dataDir: string) => Promise<void>;
+  /** What runs the export: the child process by default; a test's function. `signal` ends it early. */
+  mirrorChild?: (dataDir: string, signal: AbortSignal) => Promise<void>;
 }
 
 export interface TeamServer {
@@ -108,6 +110,11 @@ export async function startTeamServer(options: ServerOptions): Promise<TeamServe
   const serverId = getMeta(db, "server.id") as string;
   const instance = () => getMeta(db, "server.instance") as string;
   const signal = new ChangeSignal(timers);
+  const mirror = scheduleMirror(
+    { dataDir: options.dataDir, log },
+    timers,
+    options.mirrorChild ?? ((dir, abort) => spawnMirror(dir, log, abort)),
+  );
   const buckets: Buckets = {
     devices: new Bucket(LIMITS.requestsPerMinute, LIMITS.requestsPerMinute / 60, now),
     joins: new Bucket(LIMITS.joinsPerMinute, LIMITS.joinsPerMinute / 60, now),
@@ -135,7 +142,10 @@ export async function startTeamServer(options: ServerOptions): Promise<TeamServe
     log,
     onWrite: ({ feed }) => {
       writeHighWater(paths.feedFile, currentMarks(db));
-      if (feed) signal.fire();
+      if (feed) {
+        signal.fire();
+        mirror.afterPush();
+      }
     },
   };
 
@@ -159,6 +169,7 @@ export async function startTeamServer(options: ServerOptions): Promise<TeamServe
       timers.clearInterval(renewal);
       timers.clearInterval(hourly);
       await server.stop();
+      await mirror.stop();
       lease.release();
       uninstall();
       db.close();
@@ -177,6 +188,7 @@ export async function startTeamServer(options: ServerOptions): Promise<TeamServe
     buckets.devices.sweep();
     buckets.joins.sweep();
     buckets.bytes.sweep();
+    mirror.hourly();
   }, HOUR_MS);
 
   log.line({

@@ -23,7 +23,6 @@ import {
   pullAll,
   pushOne,
   rehashed,
-  rehashedMemory,
   seedFeed,
   sendOf,
   startTestServer,

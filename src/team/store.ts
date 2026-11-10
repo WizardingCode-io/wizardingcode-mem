@@ -523,6 +523,50 @@ export function workspaceEntriesOf(db: Db, memberId: string): EntryRow[] {
     .all(memberId);
 }
 
+/** The entries with a revision the mirror has not exported, through the partial index. */
+export function entriesPendingMirror(db: Db): EntryRow[] {
+  return db
+    .query<EntryRow, []>(
+      `SELECT ${ENTRY_COLUMNS} FROM entries WHERE mirror_revision < revision ORDER BY uuid`,
+    )
+    .all();
+}
+
+/** The planner's lines for the pending query: a test reads them for the partial index's name. */
+export function explainPendingMirror(db: Db): string[] {
+  return db
+    .query<{ detail: string }, []>(
+      `EXPLAIN QUERY PLAN SELECT ${ENTRY_COLUMNS} FROM entries WHERE mirror_revision < revision ORDER BY uuid`,
+    )
+    .all()
+    .map((row) => row.detail);
+}
+
+export function setMirrorRevision(db: Db, uuid: string, revision: number): void {
+  db.run("UPDATE entries SET mirror_revision = ? WHERE uuid = ?", [revision, uuid]);
+}
+
+/** Every entry pending again: what `--rebuild` does before it replays. */
+export function resetMirrorRevisions(db: Db): void {
+  db.run("UPDATE entries SET mirror_revision = 0");
+}
+
+/** Every revision of every entry, in the order the feed gave them. */
+export function allRevisions(db: Db): RevisionRow[] {
+  return db
+    .query<RevisionRow, []>(`SELECT ${REVISION_COLUMNS} FROM entry_revisions ORDER BY seq`)
+    .all();
+}
+
+/** Deletes the entry's revisions; the count. Run before `deleteEntry`: the foreign key is on. */
+export function deleteRevisions(db: Db, uuid: string): number {
+  return db.run("DELETE FROM entry_revisions WHERE uuid = ?", [uuid]).changes;
+}
+
+export function deleteEntry(db: Db, uuid: string): void {
+  db.run("DELETE FROM entries WHERE uuid = ?", [uuid]);
+}
+
 // --- Memories ---------------------------------------------------------------------------
 
 export interface MemoryRow {
@@ -607,6 +651,10 @@ export function setMemoryLock(db: Db, deviceId: string, uid: string, locked: boo
     deviceId,
     uid,
   ]);
+}
+
+export function deleteMemory(db: Db, deviceId: string, uid: string): void {
+  db.run("DELETE FROM memories WHERE device_id = ? AND uid = ?", [deviceId, uid]);
 }
 
 /** The live memories of the given devices. */
@@ -755,12 +803,12 @@ export function explainHasChanges(db: Db, query: FeedQuery): string[] {
   return explainChangesSince(db, { ...query, limit: 1 });
 }
 
-/** Turns every row of a key, its move tombstones included, into a `purge` row with no hash. */
-export function markPurged(db: Db, key: string): void {
-  db.run(
+/** Turns every row of a key, its move tombstones included, into a `purge` row with no hash; the count. */
+export function markPurged(db: Db, key: string): number {
+  return db.run(
     "UPDATE changes SET op = 'purge', hash = '', moved_to = NULL WHERE key = ? OR substr(key, 1, length(?) + 1) = ? || '@'",
     [key, key, key],
-  );
+  ).changes;
 }
 
 // --- Purged keys ------------------------------------------------------------------------
