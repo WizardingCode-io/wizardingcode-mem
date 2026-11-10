@@ -7,6 +7,7 @@ import { authenticate, type Caller, checkContract, requireAdmin } from "./auth.t
 import { CONTRACT } from "./contract.ts";
 import type { Db } from "./db.ts";
 import { HttpError } from "./errors.ts";
+import { parsePullQuery, pullWithWait } from "./feed.ts";
 import { newHexId, REQUEST_ID } from "./ids.ts";
 import type { Buckets } from "./limits.ts";
 import type { RequestLine, TeamLog } from "./log.ts";
@@ -65,8 +66,6 @@ export interface Context {
   log: TeamLog;
   /** After a route wrote a feed or an audit row: the high-water file always, the signal and the mirror timer when `feed`. */
   onWrite: (what: { feed: boolean }) => void;
-  /** Phase D fills this; until then the route answers 501. */
-  pull?: (ctx: Context, caller: Caller, url: URL, meta: Meta) => Promise<unknown>;
 }
 
 /** What a handler adds to the request's log line. */
@@ -183,8 +182,6 @@ function itemKind(raw: string): "entry" | "memory" {
   return raw;
 }
 
-const notImplemented = () => problem(501, "not implemented");
-
 const ROUTES: Route[] = [
   route("GET", "/v1/health", (ctx) => {
     const free = ctx.freeBytes(ctx.dataDir);
@@ -278,8 +275,16 @@ const ROUTES: Route[] = [
 
   route("GET", "/v1/pull", async (ctx, request, _params, _address, meta) => {
     const caller = await withCaller(ctx, request, false, meta);
-    if (ctx.pull === undefined) return notImplemented();
-    return json(await ctx.pull(ctx, caller, new URL(request.url), meta));
+    const query = parsePullQuery(new URL(request.url), ctx.limits);
+    const page = await pullWithWait(ctx, query, { admin: caller.member.role === "admin" }, meta);
+    meta.pull = {
+      since: query.since,
+      next: page.next,
+      projects: query.projects.length,
+      items: page.items.length,
+      snapshot: page.snapshot,
+    };
+    return json(page);
   }),
 
   route("POST", "/v1/invitations", async (ctx, request, _params, address, meta) => {

@@ -696,6 +696,73 @@ export function currentChangeOf(db: Db, key: string): ChangeRow | null {
     .get(key);
 }
 
+/** What a pull asks for: the scopes it reads and the aliases it names. */
+export interface FeedQuery {
+  since: number;
+  limit: number;
+  projects: readonly string[];
+  /** `all`: shared, every workspace and the named aliases; `project`: the one named alias alone. */
+  scope: "all" | "project";
+}
+
+/**
+ * One indexed range per scope (`changes_scope`: scope, alias, current, seq), each ordered and
+ * bounded on its own, merged by `seq` and bounded again: no range scans the table.
+ */
+function feedSql(query: FeedQuery): { sql: string; params: (string | number)[] } | null {
+  const ranges: string[] = [];
+  const params: (string | number)[] = [];
+  const range = (where: string) =>
+    `SELECT * FROM (SELECT ${CHANGE_COLUMNS} FROM changes WHERE ${where} AND current = 1 AND seq > ? ORDER BY seq LIMIT ?)`;
+  if (query.scope === "all") {
+    ranges.push(range("scope = 'shared' AND remote_alias IS NULL"));
+    params.push(query.since, query.limit);
+    ranges.push(range("scope = 'workspace' AND remote_alias IS NULL"));
+    params.push(query.since, query.limit);
+  }
+  for (const alias of query.projects) {
+    ranges.push(range("scope = 'project' AND remote_alias = ?"));
+    params.push(alias, query.since, query.limit);
+  }
+  if (ranges.length === 0) return null;
+  params.push(query.limit);
+  return { sql: `${ranges.join(" UNION ALL ")} ORDER BY seq LIMIT ?`, params };
+}
+
+/** The current rows after `since` in the query's ranges, oldest first, at most `limit`. */
+export function changesSince(db: Db, query: FeedQuery): ChangeRow[] {
+  const built = feedSql(query);
+  if (built === null) return [];
+  return db.query<ChangeRow, (string | number)[]>(built.sql).all(...built.params);
+}
+
+/** Whether any current row after `since` is visible to the query: the same ranges, limit one. */
+export function hasChanges(db: Db, query: FeedQuery): boolean {
+  return changesSince(db, { ...query, limit: 1 }).length > 0;
+}
+
+/** The query planner's lines for the pull's statement: a test reads them for a `SCAN`. */
+export function explainChangesSince(db: Db, query: FeedQuery): string[] {
+  const built = feedSql(query);
+  if (built === null) return [];
+  return db
+    .query<{ detail: string }, (string | number)[]>(`EXPLAIN QUERY PLAN ${built.sql}`)
+    .all(...built.params)
+    .map((row) => row.detail);
+}
+
+export function explainHasChanges(db: Db, query: FeedQuery): string[] {
+  return explainChangesSince(db, { ...query, limit: 1 });
+}
+
+/** Turns every row of a key, its move tombstones included, into a `purge` row with no hash. */
+export function markPurged(db: Db, key: string): void {
+  db.run(
+    "UPDATE changes SET op = 'purge', hash = '', moved_to = NULL WHERE key = ? OR substr(key, 1, length(?) + 1) = ? || '@'",
+    [key, key, key],
+  );
+}
+
 // --- Purged keys ------------------------------------------------------------------------
 
 export function insertPurged(db: Db, key: string, at: number): void {

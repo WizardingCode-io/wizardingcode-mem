@@ -13,6 +13,7 @@ import {
   type OutgoingEntry,
   type OutgoingMemory,
 } from "../../src/sharing/types.ts";
+import type { Db } from "../../src/team/db.ts";
 import type { Bucket } from "../../src/team/limits.ts";
 import type { PushItem, PushResult } from "../../src/team/push.ts";
 import {
@@ -90,10 +91,16 @@ export const ALIAS_B = "remote:github.com/acme/docs";
 
 const dirs: string[] = [];
 
-export async function startTestServer(overrides: Partial<ServerOptions> = {}): Promise<TestServer> {
+export const CLOCK_START = 1_700_000_000_000;
+
+/** `startAt` moves the fake clock: a restart after a restore must outlive the copied lease. */
+export async function startTestServer(
+  overrides: Partial<ServerOptions> = {},
+  extra: { startAt?: number } = {},
+): Promise<TestServer> {
   const dir = overrides.dataDir ?? mkdtempSync(join(tmpdir(), "wcm-team-"));
   dirs.push(dir);
-  const clock: Clock = { now: 1_700_000_000_000, advance: () => undefined };
+  const clock: Clock = { now: extra.startAt ?? CLOCK_START, advance: () => undefined };
   const timers = fakeTimers(clock);
   const freeBytes = { value: (10 * 1024 * 1024 * 1024) as number | null };
   const lines: string[] = [];
@@ -393,6 +400,74 @@ export async function pushOne(
   if (answer.status !== 200)
     throw new Error(`push failed: ${answer.status} ${JSON.stringify(answer.body)}`);
   return answer.body.results[0] as PushResult;
+}
+
+// --- Pull -------------------------------------------------------------------------------
+
+export interface PullInput {
+  since?: number;
+  limit?: number;
+  projects?: readonly string[];
+  wait?: number;
+  scope?: "all" | "project";
+}
+
+/** The query string of a pull, each alias URL-encoded by `URLSearchParams`. */
+export function pullQuery(input: PullInput): string {
+  const params = new URLSearchParams();
+  params.set("since", String(input.since ?? 0));
+  if (input.limit !== undefined) params.set("limit", String(input.limit));
+  if (input.projects !== undefined) params.set("projects", input.projects.join(","));
+  if (input.wait !== undefined) params.set("wait", String(input.wait));
+  if (input.scope !== undefined) params.set("scope", input.scope);
+  return params.toString();
+}
+
+export function pull(server: TeamServer, token: string, input: PullInput): Promise<ApiAnswer> {
+  return api(server, token, "GET", `/v1/pull?${pullQuery(input)}`);
+}
+
+export interface PullPageBody {
+  serverId: string;
+  instance: string;
+  next: number;
+  more: boolean;
+  snapshot: boolean;
+  // biome-ignore lint/suspicious/noExplicitAny: the tests read whatever the server answered
+  items: any[];
+}
+
+/** A pull that must answer 200; the page. */
+export async function pullAll(
+  server: TeamServer,
+  token: string,
+  input: PullInput,
+): Promise<PullPageBody> {
+  const answer = await pull(server, token, input);
+  if (answer.status !== 200)
+    throw new Error(`pull failed: ${answer.status} ${JSON.stringify(answer.body)}`);
+  return answer.body as PullPageBody;
+}
+
+/**
+ * A large feed: `rows` current entry rows under other aliases and `aliasRows` under `alias`,
+ * written straight into `changes` (no payload rows: the pull test that reads them asks for
+ * tombstones). For the query-plan and the timing cases.
+ */
+export function seedFeed(db: Db, rows: number, alias: string, aliasRows: number): void {
+  const insert = db.prepare(
+    `INSERT INTO changes (kind, uid, key, op, scope, remote_alias, revision, hash, moved_to, member_id, device_id, client_epoch, at, current)
+     VALUES ('entry', ?, ?, 'tombstone', 'project', ?, 1, 'h', NULL, 'm', 'd', NULL, 1, 1)`,
+  );
+  db.transaction(() => {
+    for (let i = 0; i < rows; i++) {
+      const other = `remote:github.com/other/repo-${i % 50}`;
+      insert.run(`project:${other}:seed-${i}`, `seed-${i}`, other);
+    }
+    for (let i = 0; i < aliasRows; i++) {
+      insert.run(`project:${alias}:named-${i}`, `named-${i}`, alias);
+    }
+  })();
 }
 
 export { LIMITS };

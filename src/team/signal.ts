@@ -48,6 +48,11 @@ export class ChangeSignal {
     return this.count;
   }
 
+  /** True once `close()` ran: a held request ends instead of waiting again. */
+  isClosed(): boolean {
+    return this.closed;
+  }
+
   waiting(): number {
     return this.waiters.size;
   }
