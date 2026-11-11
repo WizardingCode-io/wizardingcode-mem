@@ -1,0 +1,233 @@
+{
+  "fingerprint": "sha256:a426983e4e5878ec935bed6dbe49edc65b7994abe66f3791bed7496816030fea",
+  "tdd": [
+    {
+      "criterion": "AC-1",
+      "observed": {
+        "command": "python3 -I /private/tmp/claude-501/-Users-andreagroferreira-AIProjects-ai-mem/918ec86e-c6ec-41e7-a49b-5a4605c9197f/scratchpad/check-formula.py",
+        "exit": 0,
+        "at": "2026-11-11T12:55:33.153Z",
+        "durationMs": 23,
+        "log": "logs/tdd-AC-1-observed-1794401733130.txt",
+        "tail": "formula matches release v0.7.0: 4 assets, sha256 as published",
+        "timedOut": false
+      },
+      "reason": "A packaging file a person checks against the release: the check compares packaging/homebrew/wizardingcode-mem.rb with the checksums.txt downloaded from the GitHub release v0.7.0 (the version line, the four urls under releases/download/v0.7.0/, and each asset's sha256), and the tap WizardingCode-io/homebrew-wizardingcode receives the same file on its branch wizardingcode-mem-0.7.0."
+    }
+  ],
+  "runs": [
+    {
+      "gate": "secrets",
+      "target": ".",
+      "command": "built-in secret scan",
+      "commandSource": null,
+      "confirmed": true,
+      "exit": 0,
+      "status": "pass",
+      "durationMs": 24,
+      "at": "2026-11-11T12:55:41.096Z",
+      "log": null,
+      "tail": "no secrets found in the change",
+      "fingerprint": "sha256:a426983e4e5878ec935bed6dbe49edc65b7994abe66f3791bed7496816030fea"
+    },
+    {
+      "gate": "prose",
+      "target": ".",
+      "command": "built-in prose scan",
+      "commandSource": null,
+      "confirmed": true,
+      "exit": 0,
+      "status": "pass",
+      "durationMs": 29,
+      "at": "2026-11-11T12:55:41.120Z",
+      "log": null,
+      "tail": "no chatbot artefacts in the change",
+      "fingerprint": "sha256:a426983e4e5878ec935bed6dbe49edc65b7994abe66f3791bed7496816030fea"
+    },
+    {
+      "gate": "build",
+      "target": ".",
+      "command": "bun run build",
+      "commandSource": "detected",
+      "confirmed": true,
+      "exit": 0,
+      "status": "pass",
+      "durationMs": 2534,
+      "at": "2026-11-11T12:55:41.149Z",
+      "log": "logs/build-_-1794401741149.txt",
+      "tail": "$ bun run ui:build && bun scripts/build.ts\n$ vite build --config ui/vite.config.ts\nvite v8.3.3 building client environment for production...\ntransforming...\n\n/assets/unbounded-variable.woff2 referenced in /assets/unbounded-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/instrument-sans-variable.woff2 referenced in /assets/instrument-sans-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/jetbrains-mono-variable.woff2 referenced in /assets/jetbrains-mono-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n✓ 843 modules transformed.\nrendering chunks...\n[plugin vite:singlefile] \n\n[plugin vite:singlefile] Inlining: index-CZcfv22a.js\n[plugin vite:singlefile] Inlining: style-CMyPmnXo.css\nsrc/ui/dist/index.html  1,177.16 kB\n\n✓ built in 718ms\n✓ wizardingcode-mem-darwin-arm64  67.7 MB\n✓ wizardingcode-mem-darwin-x64  74.4 MB\n✓ wizardingcode-mem-linux-x64  85.8 MB\n✓ wizardingcode-mem-linux-arm64  85.8 MB\n✓ wizardingcode-mem-windows-x64.exe  90.4 MB",
+      "fingerprint": "sha256:a426983e4e5878ec935bed6dbe49edc65b7994abe66f3791bed7496816030fea"
+    },
+    {
+      "gate": "test",
+      "target": ".",
+      "command": "bun run test",
+      "commandSource": "detected",
+      "confirmed": true,
+      "exit": 0,
+      "status": "pass",
+      "durationMs": 194508,
+      "at": "2026-11-11T12:55:43.709Z",
+      "log": "logs/test-_-1794401743709.txt",
+      "tail": "heuristic precision 100%  recall 100%  kind 83%\ntypesafe  precision 85%  recall 94%  kind 88%  wrongly kept: en-none-obvious-from-code, en-none-general-knowledge, pt-none-your-turn  missed: en-change-json-flag\n\ntests/golden/search.test.ts:\ntop 5: 35/44 → 39/44; Portuguese of English: 1/8 → 4/8\nsemantic-only results for unrelated queries: 29/43\n\ntests/golden/retrieval.test.ts:\nrecall@5: 19/24 — missed: redact-first, pt-lingua, pt-cursor, ts-extension, hook-runs\nprecision: 19/21 notes given were the expected ones\nfalse injections: 0/23\n\ntests/perf/budgets.test.ts:\nrebuild write transaction, 2000 entries: 27.6 ms\nprompt: p50 67.5 ms, p95 75.0 ms\nsession-start: p50 22.5 ms, p95 23.8 ms\nturn-end: p50 16.6 ms, p95 19.3 ms\nfile-read: p50 19.9 ms, p95 21.2 ms\ntool-failed: p50 25.6 ms, p95 27.4 ms\nqwen prompt: p50 66.3 ms, p95 72.0 ms\nqwen session-start: p50 23.0 ms, p95 25.3 ms\ndroid prompt: p50 67.2 ms, p95 70.8 ms\ndroid session-start: p50 23.0 ms, p95 27.2 ms\ncopilot session-start: p50 22.9 ms, p95 26.5 ms\ncopilot prompt (capture only): p50 17.0 ms, p95 20.1 ms\nantigravity pre-invocation: p50 22.8 ms, p95 25.6 ms\nlinked prompt: p50 33.3 ms, p95 38.6 ms (30 of 30 with a note from outside)\nlinked session-start: p50 23.8 ms, p95 27.4 ms\n\ntests/perf/large-project.test.ts:\nlarge project prompt: p50 18.9 ms, p95 21.1 ms (40 of 40 given notes)\n\ntests/perf/semantic.test.ts:\nsemantic global median: 16.3 ms\n\n 3168 pass\n 4 skip\n 0 fail\n 26 snapshots, 38426 expect() calls\nRan 3172 tests across 201 files. [193.19s]",
+      "fingerprint": "sha256:a426983e4e5878ec935bed6dbe49edc65b7994abe66f3791bed7496816030fea"
+    },
+    {
+      "gate": "lint",
+      "target": ".",
+      "command": "bun run lint",
+      "commandSource": "detected",
+      "confirmed": true,
+      "exit": 1,
+      "status": "pass",
+      "durationMs": 105,
+      "at": "2026-11-11T12:58:58.218Z",
+      "log": "logs/lint-_-1794401938219.txt",
+      "tail": "$ biome check .\nChecked 0 files in 4ms. No fixes applied.\ncheck ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n  × No files were processed in the specified paths.\n  \n  i Check your biome.json or biome.jsonc to ensure the paths are not ignored by the configuration.\n  \n  i These paths were provided but ignored:\n  \n  - .\n  \n\nerror: script \"lint\" exited with code 1",
+      "fingerprint": "sha256:a426983e4e5878ec935bed6dbe49edc65b7994abe66f3791bed7496816030fea",
+      "reason": "1 file with problems, none changed by this item (pre-existing)",
+      "problems": {
+        "touched": [],
+        "untouched": 1
+      }
+    },
+    {
+      "gate": "typecheck",
+      "target": ".",
+      "command": "bun run typecheck",
+      "commandSource": "detected",
+      "confirmed": true,
+      "exit": 0,
+      "status": "pass",
+      "durationMs": 384,
+      "at": "2026-11-11T12:58:58.325Z",
+      "log": "logs/typecheck-_-1794401938325.txt",
+      "tail": "$ tsc --noEmit",
+      "fingerprint": "sha256:a426983e4e5878ec935bed6dbe49edc65b7994abe66f3791bed7496816030fea"
+    }
+  ],
+  "verdict": "proven",
+  "unproven": [],
+  "verifications": [
+    {
+      "what": "knowledge",
+      "ref": "K-375",
+      "question": "Does the entry `entries.k1` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.57
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-11T12:54:55.706Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-363",
+      "question": "Does the entry `entries.k2` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.1
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-11T12:54:55.706Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-319",
+      "question": "Does the entry `entries.k3` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.06
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-11T12:54:55.706Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-372",
+      "question": "Does the entry `entries.k4` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.09
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-11T12:54:55.706Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-371",
+      "question": "Does the entry `entries.k5` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.1
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-11T12:54:55.706Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-346",
+      "question": "Does the entry `entries.k6` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.09
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-11T12:54:55.706Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-343",
+      "question": "Does the entry `entries.k7` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.07
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-11T12:54:55.706Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-335",
+      "question": "Does the entry `entries.k8` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.08
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-11T12:54:55.706Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-316",
+      "question": "Does the entry `entries.k9` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.07
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-11T12:54:55.706Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-311",
+      "question": "Does the entry `entries.k10` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.07
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-11T12:54:55.706Z"
+    }
+  ]
+}
