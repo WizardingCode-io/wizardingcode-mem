@@ -99,7 +99,7 @@ The server is new code behind a new command; a client without part 6 never calls
 
 ## The one-time step: the package is public
 
-A package on the GitHub container registry starts private: until the operator makes `ghcr.io/wizardingcode-io/wizardingcode-mem` public once in the organisation's package settings, `docker compose pull` on the VPS needs `docker login ghcr.io` with a token that reads packages. The runbook (part 7) carries both.
+A package on the GitHub container registry starts private: until the operator makes `ghcr.io/wizardingcode-io/wizardingcode-mem` public once in the organisation's package settings, `docker compose pull` on the VPS needs `docker login ghcr.io` with a token that reads packages. The runbook ([docs/runbooks/team-server.md](../runbooks/team-server.md), part 7) carries both.
 
 ## The lease's 30-second window
 
