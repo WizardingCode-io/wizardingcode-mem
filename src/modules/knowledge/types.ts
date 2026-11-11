@@ -15,7 +15,14 @@ export type RootRef = { scope: "workspace" } | { scope: "shared" };
 /** `source` tells the fallback name `you` from a person who is really named so. */
 export type PersonWriter = { kind: "person"; name: string; source: "setting" | "git" | "default" };
 export type AgentWriter = { kind: "agent"; id: string };
-export type Writer = PersonWriter | AgentWriter;
+/** The sync applying a teammate's revision (ADR 0027): the member is the author, the sync the committer. */
+export type SyncWriter = {
+  kind: "sync";
+  serverId: string;
+  serverName: string;
+  member: { id: string; name: string };
+};
+export type Writer = PersonWriter | AgentWriter | SyncWriter;
 
 /** What git records as the author and the committer of a commit. */
 export type Identity = { name: string; email: string };

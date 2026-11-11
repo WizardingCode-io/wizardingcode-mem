@@ -1,7 +1,8 @@
+import pkg from "../../../package.json" with { type: "json" };
 import { findProject, remoteAliasOf } from "../../core/project.ts";
 import { type SharingKey, validatePatch } from "../../settings/settings.ts";
 import { policyInForce, sharingRefusal } from "../../sharing/in-force.ts";
-import { levelKey, levelOf } from "../../sharing/levels.ts";
+import { confirmedServerRefs, destinationOf, levelKey, levelOf } from "../../sharing/levels.ts";
 import { decide, INERT_PROBLEM } from "../../sharing/policy.ts";
 import {
   findEntry,
@@ -18,6 +19,7 @@ import {
   previewSettingsPatch,
   setLevel,
   setLevelMessage,
+  setServerLists,
 } from "../../sharing/store.ts";
 import {
   type Item,
@@ -31,25 +33,48 @@ import {
   TEAM_DESTINATION,
 } from "../../sharing/types.ts";
 import { type Db, openDb } from "../../store/db.ts";
+import type { SyncContext } from "../../sync/context.ts";
+import {
+  confirmJoin,
+  joinServer,
+  muteServer,
+  rejoinServer,
+  removeServer,
+  resumePreview,
+  resumeServer,
+} from "../../sync/join.ts";
+import { ledgerHistory } from "../../sync/ledger.ts";
+import { findServer } from "../../sync/servers.ts";
+import { startSync } from "../../sync/spawn.ts";
+import { type ServerStatus, statusReport } from "../../sync/state.ts";
+import { realClock, realTimers } from "../../util/clock.ts";
 import { logError } from "../../util/log.ts";
 import { resolvePaths } from "../../util/paths.ts";
 import { plural } from "../../util/text.ts";
 import { EXIT_USAGE } from "../exit.ts";
-import { askYesNo, type PromptIo, terminalIo } from "../prompt.ts";
+import { askSecret, askYesNo, type PromptIo, terminalIo } from "../prompt.ts";
 
 export const USAGE = `Usage: wizardingcode-mem share <command>
 
 Commands:
-  project <level> [--yes]      What the project of the current folder shares with the team
-  roots <list|none> [--yes]    The repositories whose knowledge may leave: workspace, shared
-  areas <list|none> [--yes]    The areas that may leave, such as workspace:sales
-  status [--list]              What is shared and what would leave; --list names each item
-  explain <scope>/<slug>       Why one knowledge entry leaves or stays
-  explain memory <id>          Why one memory leaves or stays
+  project <level> [--yes] [--server <s>]   What the project of the current folder shares
+  roots <list|none> [--yes] [--server <s>] The repositories whose knowledge may leave: workspace, shared
+  areas <list|none> [--yes] [--server <s>] The areas that may leave, such as workspace:sales
+  status [--list] [--server <s>]           What is shared and what would leave; --list names each item
+  explain <scope>/<slug> [--server <s>]    Why one knowledge entry leaves or stays
+  explain memory <id> [--server <s>]       Why one memory leaves or stays
+  server add <url> [--code <code>] [--label <label>] [--name <your name>] [--yes] [--no-sync]
+  server rejoin <server> [--code <code>] [--label <label>]
+      Without --code the invitation code is asked on the terminal, with no echo, so it stays
+      out of the shell's history and the process list.
+  server list
+  server remove <server> [--withdraw] [--yes]
+  server mute | unmute <server> [--member <id>]
+  server resume [<server>] [--yes]
 
 Levels: ${LEVELS.map((level) => `${level} (${LEVEL_LABELS[level]})`).join(", ")}.
 Sharing more asks first; --yes answers for a script. Nothing is sent until a team server
-is configured.
+is joined and confirmed (share server add). A server is named by its id, name or host.
 `;
 
 /** Bad arguments: the usage is printed and the exit code is 64. */
@@ -62,28 +87,45 @@ class Refusal extends Error {}
 interface Context {
   db: Db;
   dataDir: string;
+  storeDir: string;
   policy: SharingPolicy;
   now: number;
+  /** The sync client's context over the same store, for a server operation. */
+  sync: () => SyncContext;
+  /** The policy in force for one server (null: the team's default while none is confirmed). */
+  policyFor: (serverId: string | null) => SharingPolicy;
 }
 
 /**
  * A subcommand in two steps: its arguments are read first, so that a usage error opens no
  * store; what comes back acts on the store.
  */
-type Subcommand = (argv: string[]) => (context: Context) => void;
+type Subcommand = (argv: string[]) => (context: Context) => void | Promise<void>;
 
 const out = (line: string) => process.stdout.write(`${line}\n`);
 
-/** The arguments apart: the options this subcommand takes, and what is left. */
-function parse(argv: string[], allowed: string[]): { options: Set<string>; rest: string[] } {
+/** The arguments apart, with the options that take a value: `--code <code>`. */
+function parseWith(
+  argv: string[],
+  flags: string[],
+  valued: string[],
+): { options: Set<string>; values: Map<string, string>; rest: string[] } {
   const options = new Set<string>();
+  const values = new Map<string, string>();
   const rest: string[] = [];
-  for (const arg of argv) {
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i] as string;
     if (!arg.startsWith("--")) rest.push(arg);
-    else if (allowed.includes(arg)) options.add(arg);
-    else throw new UsageError(`unknown option ${arg}`);
+    else if (flags.includes(arg)) options.add(arg);
+    else if (valued.includes(arg)) {
+      const value = argv[i + 1];
+      if (value === undefined || value.startsWith("--"))
+        throw new UsageError(`${arg} takes a value`);
+      values.set(arg, value);
+      i++;
+    } else throw new UsageError(`unknown option ${arg}`);
   }
-  return { options, rest };
+  return { options, values, rest };
 }
 
 /**
@@ -111,6 +153,35 @@ function requireLoaded(policy: SharingPolicy): void {
   if (refusal !== null) throw new Refusal(refusal);
 }
 
+/**
+ * The server a command acts on (ADR 0027): `--server` names one by id, name or host (a pending
+ * one is refused); without it, the only confirmed server, or null while none is confirmed (the
+ * team's default); with several, the option is required.
+ */
+function serverFor(db: Db, given: string | undefined): string | null {
+  if (given !== undefined) {
+    const row = findServer(db, given);
+    if (row === null)
+      throw new Refusal(`\`${given}\` names no server; share server list shows them`);
+    if (row.confirmedAt === null)
+      throw new Refusal(`${row.name} is not confirmed: share server add again`);
+    return row.serverId;
+  }
+  const confirmed = confirmedServerRefs(db);
+  if (confirmed.length === 0) return null;
+  if (confirmed.length === 1) return (confirmed[0] as { serverId: string }).serverId;
+  throw new Refusal(
+    `several servers are configured (${confirmed.map((s) => s.name).join(", ")}); name one with --server <id|name|host>`,
+  );
+}
+
+/**
+ * The destination a command's `--server` chooses: that server (`serverFor`), else the team's
+ * default. For the project of the current folder the level is read for `destinationOf`, the
+ * sharing module's rule, which puts the server the project is bound to first.
+ */
+const chosenDestination = (serverId: string | null): string => serverId ?? TEAM_DESTINATION;
+
 // --- project ------------------------------------------------------------------------------
 
 /**
@@ -120,16 +191,19 @@ function requireLoaded(policy: SharingPolicy): void {
  * the person is asked anything; a widening is then asked for, and set with the yes.
  */
 const project: Subcommand = (argv) => {
-  const [level, ...more] = parse(argv, ["--yes"]).rest;
+  const { values, rest } = parseWith(argv, ["--yes"], ["--server"]);
+  const [level, ...more] = rest;
   if (!isLevel(level) || more.length > 0) throw new UsageError(setLevelMessage("invalid"));
-  return ({ db, policy, now }) => {
-    requireLoaded(policy);
+  return ({ db, now, policyFor }) => {
+    const serverId = serverFor(db, values.get("--server"));
+    requireLoaded(policyFor(serverId));
     const here = findProject(db, process.cwd());
     if (here === null) throw new Refusal(setLevelMessage("no-project"));
+    const destination = chosenDestination(serverId);
     const set = (confirm: boolean) =>
       setLevel(db, {
         projectId: here.id,
-        destination: TEAM_DESTINATION,
+        destination,
         level,
         source: "cli",
         now,
@@ -139,10 +213,16 @@ const project: Subcommand = (argv) => {
     let outcome = set(argv.includes("--yes"));
     if (!outcome.ok && outcome.reason === "needs-confirm") {
       const what = LEVEL_LABELS[level].toLowerCase();
-      requireYes(`Share ${what} of ${here.name} with the team?`, argv);
+      requireYes(`Share ${what} of ${here.name} with ${serverId ?? "the team"}?`, argv);
       outcome = set(true);
     }
-    if (!outcome.ok) throw new Refusal(setLevelMessage(outcome.reason));
+    if (!outcome.ok) {
+      if (outcome.reason === "one-server" && outcome.server !== undefined)
+        throw new Refusal(
+          `this project is bound to ${outcome.server}; set it to Nothing there first`,
+        );
+      throw new Refusal(setLevelMessage(outcome.reason));
+    }
     const unchanged = outcome.old === level && !outcome.rebound;
     out(`sharing: ${here.name} → ${LEVEL_LABELS[level]}${unchanged ? " (unchanged)" : ""}`);
   };
@@ -163,14 +243,37 @@ const LIST_KEYS = {
 const list =
   (which: keyof typeof LIST_KEYS): Subcommand =>
   (argv) => {
-    const [value, ...more] = parse(argv, ["--yes"]).rest;
+    const { values, rest } = parseWith(argv, ["--yes"], ["--server"]);
+    const [value, ...more] = rest;
     if (value === undefined || more.length > 0) {
       throw new UsageError(`${which} takes one comma list, or none`);
     }
     const key = LIST_KEYS[which];
     const validated = validatePatch({ [key]: value });
     if (!validated.ok) throw new UsageError(`${which}: ${validated.errors[key]}`);
-    return ({ db, dataDir, policy, now }) => {
+    return ({ db, dataDir, policy, now, policyFor }) => {
+      // With a server: its own lists (ADR 0027); the env file's lists stay the ceiling.
+      if (values.has("--server")) {
+        const serverId = serverFor(db, values.get("--server")) as string;
+        requireLoaded(policyFor(serverId));
+        const next = (validated.changes[key] ?? "")
+          .split(",")
+          .filter((id) => id !== "" && id !== "none");
+        // The store refuses a widening it was not told is confirmed; the question is asked
+        // then, and the write made again with the yes.
+        const write = (confirm: boolean) =>
+          setServerLists(db, serverId, { [which]: next }, { source: "cli", now, confirm });
+        let outcome = write(false);
+        if (!outcome.ok) {
+          requireYes(`Share more knowledge with ${serverId}? (${shareListText(next)})`, argv);
+          outcome = write(true);
+          if (!outcome.ok) throw new Refusal("not confirmed; nothing was changed");
+        }
+        out(
+          `sharing: ${which}@${serverId} → ${shareListText(next)}${outcome.changed.length === 0 ? " (unchanged)" : ""}`,
+        );
+        return;
+      }
       requireLoaded(policy);
       for (const change of previewSettingsPatch(dataDir, validated.changes)) {
         if (!change.widened) continue;
@@ -241,17 +344,22 @@ export function formatShareStatus(
  * brought up to date with the repositories' files.
  */
 const status: Subcommand = (argv) => {
-  const { options, rest } = parse(argv, ["--list"]);
+  const { options, values, rest } = parseWith(argv, ["--list"], ["--server"]);
   if (rest.length > 0) throw new UsageError(`unexpected argument ${rest[0]}`);
-  return ({ db, dataDir, policy, now }) => {
+  return ({ db, dataDir, now, policyFor }) => {
+    const serverId = serverFor(db, values.get("--server"));
+    const policy = policyFor(serverId);
+    const destination = chosenDestination(serverId);
     const report = wouldLeave(db, dataDir, process.env, policy, {
       now,
       fresh: true,
       list: options.has("--list"),
+      destination,
     });
     const here = findProject(db, process.cwd());
-    const level = here === null ? "local" : levelOf(policy, here.id, TEAM_DESTINATION).level;
-    const row = here === null ? undefined : policy.levels.get(levelKey(here.id, TEAM_DESTINATION));
+    const ofProject = here === null ? destination : destinationOf(db, policy, here.id);
+    const level = here === null ? "local" : levelOf(policy, here.id, ofProject).level;
+    const row = here === null ? undefined : policy.levels.get(levelKey(here.id, ofProject));
     const boundAlias = level === "local" ? "" : (row?.boundAlias ?? "");
     const current = here === null ? null : { name: here.name, level, boundAlias };
     for (const line of formatShareStatus(policy, report, current, lastChange(db))) out(line);
@@ -265,7 +373,8 @@ const status: Subcommand = (argv) => {
  * with its reason. `project/<slug>` is an entry of the current folder's project.
  */
 const explain: Subcommand = (argv) => {
-  const [first, second, ...more] = parse(argv, []).rest;
+  const { values, rest } = parseWith(argv, [], ["--server"]);
+  const [first, second, ...more] = rest;
   const ofMemory = first === "memory";
   const misses = ofMemory ? second === undefined : second !== undefined;
   if (first === undefined || more.length > 0 || misses) {
@@ -275,19 +384,214 @@ const explain: Subcommand = (argv) => {
     throw new UsageError("explain memory <id>: the id is the memory's number");
   }
   const ref = ofMemory ? `memory ${second}` : first;
-  return ({ db, policy }) => {
+  return ({ db, policyFor }) => {
+    const serverId = serverFor(db, values.get("--server"));
+    const policy = policyFor(serverId);
+    const destination = chosenDestination(serverId);
     const generation = generationOf(db);
     // A store with no generation never ran the sharing schema: no memory has a uid in it.
     const item: Item | null = !ofMemory
-      ? findEntry(db, ref, findProject(db, process.cwd())?.id ?? null)
+      ? findEntry(db, ref, findProject(db, process.cwd())?.id ?? null, destination)
       : generation === null
         ? null
         : findMemory(db, process.env, generation, Number(second));
     if (item === null) throw new Refusal(`${ref}: not found`);
-    const records = ledgerRecords(db, TEAM_DESTINATION, item.kind).get(item.uid) ?? [];
-    const { answer, reason } = decide(policy, TEAM_DESTINATION, item, records);
+    const records = ledgerRecords(db, destination, item.kind).get(item.uid) ?? [];
+    const { answer, reason } = decide(policy, destination, item, records);
     out(`${ref}: ${answer} · ${reason} · ${REASON_TEXT[reason]}`);
+    // With a server: the item's ledger history, the applied rows included (ADR 0027).
+    if (serverId === null) return;
+    const when = (at: number) => new Date(at).toISOString();
+    for (const row of ledgerHistory(db, destination, item.kind, item.uid)) {
+      const withdrawn =
+        row.withdrawnAt === null
+          ? ""
+          : ` · withdrawn ${when(row.withdrawnAt)}${row.reason === "" ? "" : ` (${row.reason})`}`;
+      out(
+        `  ledger: ${row.direction} · revision ${row.version} · hash ${row.hash.slice(0, 8)} · ${when(row.at)}${withdrawn}`,
+      );
+    }
   };
+};
+
+// --- server -------------------------------------------------------------------------------
+
+/** The invitation code: `--code`, else typed on the terminal with no echo; refused elsewhere. */
+function codeFrom(values: Map<string, string>): string {
+  const given = values.get("--code") ?? askSecret("Invitation code:");
+  if (given === null)
+    throw new Refusal("an invitation code is needed: --code <code>, or run on a terminal");
+  return given;
+}
+
+const counts = (report: { counts: { entries: number; memories: number } }): string =>
+  `would leave: ${plural(report.counts.entries, "entry", "entries")} · ${plural(report.counts.memories, "memory", "memories")}`;
+
+/**
+ * `share server add <url>`: the join, the pending row, the counts, the yes that confirms, and
+ * the sync started. A no leaves the row pending; without a terminal `--yes` is required.
+ */
+const serverAdd: Subcommand = (argv) => {
+  const { options, values, rest } = parseWith(
+    argv,
+    ["--yes", "--no-sync"],
+    ["--code", "--label", "--name"],
+  );
+  const [url, ...more] = rest;
+  if (url === undefined || more.length > 0) throw new UsageError("server add takes one URL");
+  return async ({ db, now, sync }) => {
+    const code = codeFrom(values);
+    const ctx = sync();
+    const joined = await joinServer(ctx, {
+      url,
+      code,
+      ...(values.has("--label") ? { label: values.get("--label") as string } : {}),
+      ...(values.has("--name") ? { name: values.get("--name") as string } : {}),
+    });
+    if (!joined.ok) throw new Refusal(joined.message);
+    out(`joined ${joined.host}: ${joined.member.name} (${joined.member.role})`);
+    out(counts(joined.wouldLeave));
+    const yes =
+      options.has("--yes") || askYesNo(`Share with ${joined.host} as listed above?`, false);
+    if (!yes) {
+      throw new Refusal(
+        terminalIo.isTTY
+          ? "not confirmed: share server add again"
+          : "confirming needs --yes when nobody can confirm; the server is listed as pending (share server add again)",
+      );
+    }
+    confirmJoin(ctx, joined.serverId);
+    out(`confirmed ${joined.host}${joined.first ? " (your levels now name it)" : ""}`);
+    if (!options.has("--no-sync")) startSync(db, process.env, now);
+  };
+};
+
+/** `share server rejoin <server>`: a new code, a new device; everything else stays. */
+const serverRejoin: Subcommand = (argv) => {
+  const { values, rest } = parseWith(argv, [], ["--code", "--label"]);
+  const [ref, ...more] = rest;
+  if (ref === undefined || more.length > 0) throw new UsageError("server rejoin takes one server");
+  return async ({ sync }) => {
+    const code = codeFrom(values);
+    const rejoined = await rejoinServer(sync(), ref, {
+      code,
+      ...(values.has("--label") ? { label: values.get("--label") as string } : {}),
+    });
+    if (!rejoined.ok) throw new Refusal(rejoined.message);
+    out(
+      `rejoined ${rejoined.serverId}: ${rejoined.member.name} (${rejoined.member.role}); the sync starts with the next session`,
+    );
+  };
+};
+
+/** One line of `share server list`. */
+export function formatServerLine(server: ServerStatus): string {
+  const state = server.remedy === null ? server.state : `${server.state}: ${server.remedy}`;
+  return `${server.name}  ${server.host}  ${server.member} (${server.role})  contract ${server.contract}  cursor ${server.cursor}  ${state}`;
+}
+
+const serverList: Subcommand = (argv) => {
+  if (argv.length > 0) throw new UsageError(`unexpected argument ${argv[0]}`);
+  return ({ db, dataDir }) => {
+    const servers = statusReport(db, dataDir);
+    if (servers.length === 0) out("no server; share server add <url> --code <code>");
+    for (const server of servers) out(formatServerLine(server));
+  };
+};
+
+/** `share server remove <server> [--withdraw] [--yes]`. */
+const serverRemove: Subcommand = (argv) => {
+  const { options, rest } = parseWith(argv, ["--withdraw", "--yes"], []);
+  const [ref, ...more] = rest;
+  if (ref === undefined || more.length > 0) throw new UsageError("server remove takes one server");
+  return async ({ sync }) => {
+    const removed = await removeServer(sync(), ref, {
+      withdraw: options.has("--withdraw"),
+      yes: options.has("--yes"),
+    });
+    if (!removed.ok) throw new Refusal(removed.message);
+    out(
+      `removed ${removed.name}: ${plural(removed.levels, "level")} and ${plural(removed.rows, "ledger row")} deleted; the device stays listed on the server until an admin revokes it`,
+    );
+  };
+};
+
+const serverMute =
+  (muted: boolean): Subcommand =>
+  (argv) => {
+    const { values, rest } = parseWith(argv, [], ["--member"]);
+    const [ref, ...more] = rest;
+    if (ref === undefined || more.length > 0)
+      throw new UsageError(`server ${muted ? "mute" : "unmute"} takes one server`);
+    return ({ sync }) => {
+      const outcome = muteServer(sync(), ref, {
+        muted,
+        ...(values.has("--member") ? { memberId: values.get("--member") as string } : {}),
+      });
+      if (!outcome.ok) throw new Refusal(outcome.message);
+      const who = values.has("--member") ? `member ${values.get("--member")} of ` : "";
+      out(`${muted ? "muted" : "unmuted"} ${who}${outcome.serverId}`);
+    };
+  };
+
+/** `share server resume [<server>] [--yes]`: the withdrawal sweep's preview and the release (D-10). */
+const serverResume: Subcommand = (argv) => {
+  const { options, rest } = parseWith(argv, ["--yes"], []);
+  if (rest.length > 1) throw new UsageError("server resume takes at most one server");
+  return ({ db, now, sync }) => {
+    const ctx = sync();
+    const previews = resumePreview(ctx, rest[0] ?? null);
+    if ("ok" in previews) throw new Refusal(previews.message);
+    const held = previews.filter((p) => p.hold !== null || p.total > 0);
+    if (held.length === 0) {
+      out("no withdrawal is held");
+      return;
+    }
+    for (const preview of held) {
+      const why = preview.hold === null ? "no hold" : `held (${preview.hold.reason})`;
+      out(
+        `${preview.name}: ${why}; the next sweep would take back ${plural(preview.total, "item")}`,
+      );
+      for (const project of preview.perProject) {
+        out(`  project ${project.projectId ?? "-"}: ${plural(project.count, "item")}`);
+      }
+    }
+    const yes =
+      options.has("--yes") ||
+      askYesNo("Release the hold and let the sweep take these back?", false);
+    if (!yes) {
+      throw new Refusal(
+        terminalIo.isTTY
+          ? "not released; nothing was changed"
+          : "releasing needs --yes when nobody can confirm",
+      );
+    }
+    const { released } = resumeServer(ctx, held);
+    out(`released ${released.join(", ")}; the sweep withdraws what was shown`);
+    startSync(db, process.env, now);
+  };
+};
+
+const SERVER_SUBCOMMANDS = new Map<string, Subcommand>([
+  ["add", serverAdd],
+  ["rejoin", serverRejoin],
+  ["list", serverList],
+  ["remove", serverRemove],
+  ["mute", serverMute(true)],
+  ["unmute", serverMute(false)],
+  ["resume", serverResume],
+]);
+
+/** `share server <command>`: the servers this machine syncs with. */
+const server: Subcommand = (argv) => {
+  const [name, ...rest] = argv;
+  const subcommand = name === undefined ? undefined : SERVER_SUBCOMMANDS.get(name);
+  if (subcommand === undefined) {
+    throw new UsageError(
+      name === undefined ? "server takes a command" : `unknown server command ${name}`,
+    );
+  }
+  return subcommand(rest);
 };
 
 const SUBCOMMANDS = new Map<string, Subcommand>([
@@ -296,7 +600,24 @@ const SUBCOMMANDS = new Map<string, Subcommand>([
   ["areas", list("areas")],
   ["status", status],
   ["explain", explain],
+  ["server", server],
 ]);
+
+/** The sync client's context over the command's store: the real clock and network. */
+function syncContextOf(db: Db, dataDir: string, storeDir: string): SyncContext {
+  return {
+    db,
+    dataDir,
+    storeDir,
+    env: process.env,
+    fetch: (input, init) => fetch(input, init),
+    clock: realClock,
+    timers: realTimers,
+    pid: process.pid,
+    version: pkg.version,
+    log: (line) => process.stderr.write(`${line}\n`),
+  };
+}
 
 /**
  * `wizardingcode-mem share <command>`: what may leave this machine for the team's server,
@@ -316,7 +637,17 @@ export async function run(argv: string[]): Promise<number> {
     const { dataDir, storeDir } = resolvePaths();
     db = openDb({ dataDir: storeDir, busyTimeoutMs: 5000 });
     const now = Date.now();
-    act({ db, dataDir, now, policy: policyInForce(db, dataDir, process.env, now) });
+    const opened = db;
+    await act({
+      db,
+      dataDir,
+      storeDir,
+      now,
+      policy: policyInForce(db, dataDir, process.env, now),
+      sync: () => syncContextOf(opened, dataDir, storeDir),
+      policyFor: (serverId) =>
+        policyInForce(opened, dataDir, process.env, now, serverId ?? undefined),
+    });
     return 0;
   } catch (error) {
     if (error instanceof UsageError) {

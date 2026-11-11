@@ -27,6 +27,7 @@ const COMMANDS: Record<string, () => Promise<CommandModule>> = {
   status: () => import("./commands/status.ts"),
   doctor: () => import("./commands/doctor.ts"),
   serve: () => import("./commands/serve.ts"),
+  sync: () => import("./commands/sync.ts"),
   __spike: () => import("./commands/spike.ts"),
 };
 
@@ -40,7 +41,8 @@ Usage: wizardingcode-mem <command> [options]
 Commands:
   install, uninstall, status, doctor, ui, distill, history, embed, backup,
   compact, knowledge, share, import, rejudge, hook, mcp, tool,
-  serve (the team server and its subcommands; wizardingcode-mem serve --help)
+  serve (the team server and its subcommands; wizardingcode-mem serve --help),
+  sync (the sync client: --auto, --once, stop)
 
 Options:
   -v, --version   Print the version

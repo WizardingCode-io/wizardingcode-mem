@@ -113,6 +113,9 @@ describe("the sharing namespace's tables", () => {
       "policy_epoch",
       "at",
       "withdrawn_at",
+      "local_hash",
+      "instance",
+      "reason",
     ]);
     expect(columnsOf(db, "sharing_changes")).toEqual(["id", "at", "source", "what", "old", "new"]);
     expect(named(db, "sharing_changes_at")).toBe("index");
@@ -153,12 +156,12 @@ describe("the sharing namespace's tables", () => {
 
   test("the schema is current, also for a reader that migrates nothing", () => {
     const db = open();
-    expect(moduleSchemaState(db, "sharing", 1)).toBe("current");
+    expect(moduleSchemaState(db, "sharing", 2)).toBe("current");
     const generation = generationOf(db);
     db.close();
     const reader = openExisting(dir);
     expect(reader).not.toBeNull();
-    expect(moduleSchemaState(reader as Database, "sharing", 1)).toBe("current");
+    expect(moduleSchemaState(reader as Database, "sharing", 2)).toBe("current");
     expect(generationOf(reader as Database)).toBe(generation);
     reader?.close();
   });
@@ -658,7 +661,7 @@ describe("setLevelMessage", () => {
       "this project has no git remote; a team can only match projects by their remote",
     );
     expect(setLevelMessage("disabled")).toBe("memory is off for this project");
-    expect(setLevelMessage("invalid")).toBe("the level is one of local, knowledge, all");
+    expect(setLevelMessage("invalid")).toBe("the level is one of local, receive, knowledge, all");
     expect(setLevelMessage("needs-confirm")).toBe("confirm: true is required to widen sharing");
   });
 });

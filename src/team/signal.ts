@@ -1,14 +1,10 @@
 // One signal per server: a held pull waits on it, a push fires it. The timers are injected so
 // a test drives them with its clock.
 
-export type Timers = {
-  setTimeout: typeof setTimeout;
-  clearTimeout: typeof clearTimeout;
-  setInterval: typeof setInterval;
-  clearInterval: typeof clearInterval;
-};
+import { realTimers, type Timers } from "../util/clock.ts";
 
-export const REAL_TIMERS: Timers = { setTimeout, clearTimeout, setInterval, clearInterval };
+export type { Timers };
+export const REAL_TIMERS: Timers = realTimers;
 
 export class ChangeSignal {
   private waiters = new Set<(fired: boolean) => void>();

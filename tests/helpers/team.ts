@@ -23,54 +23,9 @@ import {
   type TeamServer,
   type Timers,
 } from "../../src/team/server.ts";
+import { CLOCK_START, type Clock, fakeClock, fakeTimers } from "./clock.ts";
 
-export interface Clock {
-  now: number;
-  /** Moves time forward and fires every timer that became due, in order. */
-  advance(ms: number): void;
-}
-
-interface Scheduled {
-  id: number;
-  due: number;
-  fn: () => void;
-  every: number | null;
-}
-
-/** Timers that fire only when the clock is advanced past their due time. */
-export function fakeTimers(clock: Clock): Timers & { pending(): number } {
-  const scheduled: Scheduled[] = [];
-  let next = 1;
-  const add = (fn: () => void, ms: number, every: number | null) => {
-    const entry = { id: next++, due: clock.now + Math.max(0, ms), fn, every };
-    scheduled.push(entry);
-    return entry.id as unknown as ReturnType<typeof setTimeout>;
-  };
-  const remove = (id: unknown) => {
-    const index = scheduled.findIndex((entry) => entry.id === (id as number));
-    if (index >= 0) scheduled.splice(index, 1);
-  };
-  clock.advance = (ms: number) => {
-    const target = clock.now + ms;
-    for (;;) {
-      const due = scheduled.filter((entry) => entry.due <= target).sort((a, b) => a.due - b.due)[0];
-      if (due === undefined) break;
-      clock.now = Math.max(clock.now, due.due);
-      if (due.every === null) remove(due.id);
-      else due.due += due.every;
-      due.fn();
-    }
-    clock.now = target;
-  };
-  return {
-    setTimeout: ((fn: () => void, ms: number) => add(fn, ms, null)) as unknown as typeof setTimeout,
-    clearTimeout: remove as unknown as typeof clearTimeout,
-    setInterval: ((fn: () => void, ms: number) =>
-      add(fn, ms, Math.max(1, ms))) as unknown as typeof setInterval,
-    clearInterval: remove as unknown as typeof clearInterval,
-    pending: () => scheduled.length,
-  };
-}
+export { CLOCK_START, type Clock, fakeClock, fakeTimers };
 
 export interface TestServer {
   server: TeamServer;
@@ -78,6 +33,7 @@ export interface TestServer {
   /** The bootstrap invitation code the first start logged. */
   code: string;
   clock: Clock;
+  timers: Timers & { pending(): number };
   freeBytes: { value: number | null };
   /** Every line the server wrote to its output. */
   lines: string[];
@@ -90,17 +46,18 @@ export const ALIAS_B = "remote:github.com/acme/docs";
 
 const dirs: string[] = [];
 
-export const CLOCK_START = 1_700_000_000_000;
-
-/** `startAt` moves the fake clock: a restart after a restore must outlive the copied lease. */
+/**
+ * `startAt` moves the fake clock: a restart after a restore must outlive the copied lease.
+ * `clock` and `timers` share them with a sync client the same test drives.
+ */
 export async function startTestServer(
   overrides: Partial<ServerOptions> = {},
-  extra: { startAt?: number } = {},
+  extra: { startAt?: number; clock?: Clock; timers?: Timers & { pending(): number } } = {},
 ): Promise<TestServer> {
   const dir = overrides.dataDir ?? mkdtempSync(join(tmpdir(), "wcm-team-"));
   dirs.push(dir);
-  const clock: Clock = { now: extra.startAt ?? CLOCK_START, advance: () => undefined };
-  const timers = fakeTimers(clock);
+  const clock = extra.clock ?? fakeClock(extra.startAt ?? CLOCK_START);
+  const timers = extra.timers ?? fakeTimers(clock);
   const freeBytes = { value: (10 * 1024 * 1024 * 1024) as number | null };
   const lines: string[] = [];
   const mirrorRuns = { count: 0 };
@@ -132,6 +89,7 @@ export async function startTestServer(
     dir,
     code,
     clock,
+    timers,
     freeBytes,
     lines,
     mirrorRuns,

@@ -14,8 +14,9 @@ import {
 } from "node:fs";
 import { isAbsolute, join, resolve, win32 } from "node:path";
 import { ENV_FILE, writeEnvFile } from "../settings/env-file.ts";
+import { type Clock, realClock, realTimers, type Timers } from "../util/clock.ts";
 import { DB_FILE, LATEST_VERSION } from "./db.ts";
-import { anyLeaseActive } from "./meta.ts";
+import { anyLeaseActive, clearSyncStop, SYNC_STOP, stopSync } from "./meta.ts";
 
 export interface TargetReport {
   path: string;
@@ -122,6 +123,9 @@ export interface MoveOptions {
   from: string;
   to: string;
   now: number;
+  /** The clock and timers the stop of the sync waits on; the real ones unless a test gives its own. */
+  clock?: Clock;
+  timers?: Timers;
   /** Tests: runs while writers are held off, before the copy. */
   onFrozen?: () => void;
 }
@@ -157,8 +161,24 @@ export async function moveStore(options: MoveOptions): Promise<MoveOutcome> {
   const lock = new Database(source);
   const copier = new Database(source, { readonly: true });
   let frozen = false;
+  let flagged = false;
   try {
     lock.run(`PRAGMA busy_timeout = ${FREEZE_WAIT_MS}`);
+    // The sync is asked to leave through its flag (ADR 0027), the other work refuses.
+    flagged = true;
+    const left = await stopSync(lock, {
+      who: "move",
+      clock: options.clock ?? realClock,
+      timers: options.timers ?? realTimers,
+    });
+    if (!left) {
+      return {
+        ok: false,
+        reason: "busy",
+        detail:
+          "the sync is running and did not stop within 30 s; run `wizardingcode-mem sync stop` first",
+      };
+    }
     if (anyLeaseActive(lock, now)) {
       return {
         ok: false,
@@ -175,6 +195,13 @@ export async function moveStore(options: MoveOptions): Promise<MoveOutcome> {
     const tmp = join(to, `${DB_FILE}.tmp`);
     rmSync(tmp, { force: true });
     copier.run(`VACUUM INTO '${tmp.replaceAll("'", "''")}'`);
+    // The flag was set on the old file for the sync to see; the moved store never carries it.
+    const fresh = new Database(tmp);
+    try {
+      fresh.run("DELETE FROM meta WHERE key = ?", [SYNC_STOP]);
+    } finally {
+      fresh.close();
+    }
     const problem = verifyCopy(lock, tmp);
     if (problem !== null) {
       rmSync(tmp, { force: true });
@@ -200,6 +227,13 @@ export async function moveStore(options: MoveOptions): Promise<MoveOutcome> {
         lock.run("ROLLBACK");
       } catch {
         // The lock went with the file.
+      }
+    }
+    if (flagged) {
+      try {
+        clearSyncStop(lock);
+      } catch {
+        // The file is gone with the move: nothing to clear.
       }
     }
     copier.close();

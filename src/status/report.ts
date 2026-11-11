@@ -7,7 +7,7 @@ import type { HistoryStatus } from "../history/status.ts";
 import { USAGE_KEYS } from "../judge/index.ts";
 import { KNOWLEDGE_MODULE, KNOWLEDGE_SCHEMA_VERSION } from "../modules/knowledge/migrations.ts";
 import { type Env, loadSettings, publicSettings } from "../settings/settings.ts";
-import { levelOf } from "../sharing/levels.ts";
+import { destinationOf, levelOf } from "../sharing/levels.ts";
 import { isDefault, loadPolicy } from "../sharing/policy.ts";
 import { wouldLeave } from "../sharing/report.ts";
 import {
@@ -19,6 +19,8 @@ import {
 } from "../sharing/types.ts";
 import { type Db, moduleSchemaState } from "../store/db.ts";
 import { getMeta } from "../store/meta.ts";
+import { syncReport } from "../sync/report.ts";
+import type { ServerStatus, SyncState } from "../sync/state.ts";
 import { plural } from "../util/text.ts";
 
 export interface Latency {
@@ -50,6 +52,154 @@ export interface StatusReport {
   /** Null where the knowledge tables do not exist, or with no database. */
   knowledge: KnowledgeStatus | null;
   sharing: SharingStatus;
+  /** The sync's state (ADR 0027); null on a store without the sharing v2 tables. */
+  sync: SyncJson | null;
+  /** One entry per listed server, as `status --json` prints them; never a token. */
+  servers: ServerJson[];
+  /** When the report was read, for the relative times its lines print. */
+  now: number;
+}
+
+/** The sync as `status --json` says it: the lease, the stop flag and the failed-start mark folded. */
+export interface SyncJson {
+  state: "running" | "stopped" | "failed" | "idle";
+  pid: number | null;
+  /** False when a lease names a process that is gone (the next session restarts the sync). */
+  alive: boolean | null;
+  /** The last push or pull of any server, null when none happened. */
+  idleSince: number | null;
+  stoppedBy: string | null;
+  failedStart: { at: number; reason: string; nextTryAt: number } | null;
+}
+
+export interface ServerJson {
+  id: string;
+  name: string;
+  host: string;
+  member: string;
+  role: string;
+  state: ServerStatus["state"];
+  remedy: string | null;
+  cursor: number;
+  lastPushAt: number | null;
+  lastPushOkAt: number | null;
+  lastPullAt: number | null;
+  lastPullOkAt: number | null;
+  backlog: number;
+  dirty: number;
+  pending: number;
+  conflicts: number;
+  hold: { reason: "restore" | "bulk"; count: number } | null;
+}
+
+export function syncJson(state: SyncState, servers: ServerStatus[]): SyncJson {
+  const stamps = servers.flatMap((server) => [server.lastPushAt ?? 0, server.lastPullAt ?? 0]);
+  const idleSince = stamps.length === 0 || Math.max(...stamps) === 0 ? null : Math.max(...stamps);
+  const base = { alive: null, idleSince, stoppedBy: null, failedStart: null };
+  switch (state.kind) {
+    case "running":
+      return { ...base, state: "running", pid: state.pid, alive: true };
+    case "stopping":
+      return { ...base, state: "running", pid: state.pid, alive: true, stoppedBy: state.who };
+    case "stopped":
+      return { ...base, state: "stopped", pid: null, stoppedBy: state.who };
+    case "start-failed":
+      return {
+        ...base,
+        state: "failed",
+        pid: null,
+        failedStart: { at: state.at, reason: state.reason, nextTryAt: state.nextTryAt },
+      };
+    case "dead-holder":
+      return { ...base, state: "idle", pid: state.pid, alive: false };
+    case "not-running":
+      return { ...base, state: "idle", pid: null };
+  }
+}
+
+export const serverJson = (server: ServerStatus): ServerJson => ({
+  id: server.serverId,
+  name: server.name,
+  host: server.host,
+  member: server.member,
+  role: server.role,
+  state: server.state,
+  remedy: server.remedy,
+  cursor: server.cursor,
+  lastPushAt: server.lastPushAt,
+  lastPushOkAt: server.lastPushOkAt,
+  lastPullAt: server.lastPullAt,
+  lastPullOkAt: server.lastPullOkAt,
+  backlog: server.backlog,
+  dirty: server.dirtyPaths,
+  pending: server.pendingRows,
+  conflicts: server.openConflicts,
+  hold: server.hold === null ? null : { reason: server.hold.reason, count: server.hold.count },
+});
+
+/** `3 s ago`, `12 min ago`, `5 h ago`, `3 d ago`; `never` for null. */
+export function ago(now: number, at: number | null): string {
+  if (at === null) return "never";
+  const seconds = Math.max(0, Math.round((now - at) / 1000));
+  if (seconds < 60) return `${seconds} s ago`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return `${hours} h ago`;
+  return `${Math.round(hours / 24)} d ago`;
+}
+
+/** `in 4 min`, `in 2 h`; `now` once the time has come. */
+function inTime(now: number, at: number): string {
+  const seconds = Math.round((at - now) / 1000);
+  if (seconds <= 0) return "now";
+  if (seconds < 60) return `in ${seconds} s`;
+  const minutes = Math.round(seconds / 60);
+  return minutes < 60 ? `in ${minutes} min` : `in ${Math.round(minutes / 60)} h`;
+}
+
+/** The `sync` line of `status`. */
+export function formatSync(sync: SyncJson, now: number): string {
+  switch (sync.state) {
+    case "running":
+      if (sync.stoppedBy !== null)
+        return `sync      stopping (pid ${sync.pid}), asked by ${sync.stoppedBy}`;
+      return `sync      running (pid ${sync.pid})${sync.idleSince === null ? "" : `, idle since ${ago(now, sync.idleSince)}`}`;
+    case "stopped":
+      return `sync      stopped by ${sync.stoppedBy}; starts again with the next session`;
+    case "failed": {
+      const failed = sync.failedStart;
+      return failed === null
+        ? "sync      start failed"
+        : `sync      start failed: ${failed.reason}; next try ${inTime(now, failed.nextTryAt)}`;
+    }
+    case "idle":
+      return sync.pid !== null && sync.alive === false
+        ? `sync      lease held by pid ${sync.pid}, which is gone; the next session restarts it`
+        : "sync      not running; starts with the next session or sync --once";
+  }
+}
+
+/** One `server` line of `status`. */
+export function formatServer(server: ServerJson, now: number): string {
+  const state = server.remedy === null ? server.state : `${server.state}: ${server.remedy}`;
+  const parts = [
+    `${server.name} · ${server.host} · ${server.member} (${server.role})`,
+    state,
+    `cursor ${server.cursor}`,
+    `push ${ago(now, server.lastPushAt)} (ok ${ago(now, server.lastPushOkAt)})`,
+    `pull ${ago(now, server.lastPullAt)} (ok ${ago(now, server.lastPullOkAt)})`,
+    `backlog ${server.backlog}`,
+    `${server.dirty} dirty`,
+    `${server.pending} pending`,
+    plural(server.conflicts, "conflict"),
+  ];
+  if (server.hold !== null) {
+    parts.push(
+      `held: ${server.hold.reason}${server.hold.count > 0 ? ` (${server.hold.count})` : ""}`,
+    );
+  }
+  return `server    ${parts.join(" · ")}`;
 }
 
 /** What the agent can be shown from the knowledge index, over every repository. */
@@ -255,11 +405,18 @@ function sharingStatus(
   );
   // Over every known project, as `perProject` reads levels: that list holds this project
   // alone when the counts are this project's.
+  // Each project's level is the one of the server it is bound to (`destinationOf`, ADR 0027);
+  // with no store open, the team's default.
+  const destinationFor = (id: number) =>
+    db === null ? TEAM_DESTINATION : destinationOf(db, policy, id);
   const othersSharing = [...policy.projects].filter(
-    (id) => id !== projectId && levelOf(policy, id, TEAM_DESTINATION).level !== "local",
+    (id) => id !== projectId && levelOf(policy, id, destinationFor(id)).level !== "local",
   ).length;
   return {
-    level: projectId === undefined ? "local" : levelOf(policy, projectId, TEAM_DESTINATION).level,
+    level:
+      projectId === undefined
+        ? "local"
+        : levelOf(policy, projectId, destinationFor(projectId)).level,
     roots: [...policy.roots].sort(),
     areas: policy.areas.size,
     wouldLeave: report.counts,
@@ -306,6 +463,7 @@ export function statusReport(
 ): StatusReport {
   const env = options.env ?? process.env;
   const now = options.now ?? Date.now();
+  const live = db === null ? null : syncReport(db, dataDir, now);
   const count = (sql: string) =>
     db === null || project === null
       ? 0
@@ -333,6 +491,9 @@ export function statusReport(
     dataDir,
     knowledge: knowledgeStatus(db, now, knowledgeOn(env, dataDir)),
     sharing: sharingStatus(db, project, dataDir, env, now),
+    sync: live === null ? null : syncJson(live.state, live.servers),
+    servers: live === null ? [] : live.servers.map(serverJson),
+    now,
   };
 }
 
@@ -397,6 +558,13 @@ export function formatStatus(report: StatusReport): string {
   // machine, not this project's memories.
   if (report.knowledge !== null) lines.push(formatKnowledge(report.knowledge));
   lines.push(formatSharing(report.sharing));
+  // The sync's line once a server is listed, or when something of it stands (a lease, a flag,
+  // a failed start): a store with no server prints what it printed before.
+  const sync = report.sync;
+  if (sync !== null && (report.servers.length > 0 || sync.state !== "idle" || sync.pid !== null)) {
+    lines.push(formatSync(sync, report.now));
+  }
+  for (const server of report.servers) lines.push(formatServer(server, report.now));
   if (hooks.runs > 0) {
     const speeds = hooks.latency.map((l) => `${l.event} p50 ${l.p50} ms, p95 ${l.p95} ms`);
     lines.push(

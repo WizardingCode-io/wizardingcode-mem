@@ -12,6 +12,7 @@ import History from "./settings/History.vue";
 import Judge from "./settings/Judge.vue";
 import Retention from "./settings/Retention.vue";
 import Semantic from "./settings/Semantic.vue";
+import Servers from "./settings/Servers.vue";
 import Sharing from "./settings/Sharing.vue";
 import Storage from "./settings/Storage.vue";
 import Viewer from "./settings/Viewer.vue";
@@ -32,8 +33,8 @@ const AGENT_CHECKS = ["Claude Code", "Claude Desktop", "Codex", "Cursor", "OpenC
 const agentChecks = computed(() => (checks.value ?? []).filter((c) => AGENT_CHECKS.includes(c.name)));
 const healthChecks = computed(() => (checks.value ?? []).filter((c) => !AGENT_CHECKS.includes(c.name)));
 
-type Page = "agents" | "health" | "judge" | "retention" | "history" | "semantic" | "storage" | "backups" | "viewer" | "sharing" | "about";
-const PAGES: Page[] = ["agents", "health", "judge", "retention", "history", "semantic", "storage", "backups", "viewer", "sharing", "about"];
+type Page = "agents" | "health" | "judge" | "retention" | "history" | "semantic" | "storage" | "backups" | "viewer" | "servers" | "sharing" | "about";
+const PAGES: Page[] = ["agents", "health", "judge", "retention", "history", "semantic", "storage", "backups", "viewer", "servers", "sharing", "about"];
 // #settings/<page> opens that page (a link from the offer, or from elsewhere).
 const linked = /^#settings\/([a-z]+)$/.exec(location.hash)?.[1] as Page | undefined;
 const page = ref<Page>(linked && PAGES.includes(linked) ? linked : "agents");
@@ -65,6 +66,7 @@ const GROUPS = computed<{ label: string; items: { id: Page; label: string; icon:
     label: "App",
     items: [
       { id: "viewer", label: "Viewer", icon: "i-lucide-monitor" },
+      { id: "servers", label: "Servers", icon: "i-lucide-server" },
       { id: "sharing", label: "Sharing", icon: "i-lucide-share-2" },
       { id: "about", label: "About", icon: "i-lucide-info" },
     ],
@@ -73,8 +75,22 @@ const GROUPS = computed<{ label: string; items: { id: Page; label: string; icon:
 </script>
 
 <template>
-  <div class="flex min-h-0 flex-1">
-    <nav aria-label="Settings" class="flex w-[200px] flex-none flex-col gap-3 overflow-y-auto border-r border-(--line) px-2 py-3">
+  <div class="flex min-h-0 flex-1 flex-col sm:flex-row">
+    <!-- Under 640px the 200px nav would leave the cards no room: the pages become a select. -->
+    <div class="flex flex-none items-center gap-2 border-b border-(--line) px-4 py-2 sm:hidden">
+      <label for="settings-page" class="wz-label m-0">Page</label>
+      <select
+        id="settings-page"
+        class="min-w-0 flex-1 rounded-md border border-(--line) bg-(--paper-raised) px-2 py-1 text-[13px] text-(--ink)"
+        :value="page"
+        @change="page = ($event.target as HTMLSelectElement).value as Page"
+      >
+        <optgroup v-for="g in GROUPS" :key="g.label" :label="g.label">
+          <option v-for="n in g.items" :key="n.id" :value="n.id">{{ n.label }}{{ n.meta ? ` (${n.meta})` : "" }}</option>
+        </optgroup>
+      </select>
+    </div>
+    <nav aria-label="Settings" class="hidden w-[200px] flex-none flex-col gap-3 overflow-y-auto border-r border-(--line) px-2 py-3 sm:flex">
       <div v-for="g in GROUPS" :key="g.label" class="flex flex-col gap-0.5">
         <p class="wz-label m-0 mb-1 px-2">{{ g.label }}</p>
         <button
@@ -107,8 +123,11 @@ const GROUPS = computed<{ label: string; items: { id: Page; label: string; icon:
           <Storage v-else-if="page === 'storage'" />
           <Backups v-else-if="page === 'backups'" />
           <Viewer v-else-if="page === 'viewer'" />
+          <Servers v-else-if="page === 'servers'" />
           <Sharing v-else-if="page === 'sharing'" />
           <About v-else />
+          <!-- The nav's footer sentence, for the widths where the nav is a select. -->
+          <p class="m-0 text-[11.5px] leading-4 text-(--ink-muted) sm:hidden">Kept in the data directory, readable by you only. The environment wins over the file; for sharing it can only narrow.</p>
         </template>
       </div>
     </div>

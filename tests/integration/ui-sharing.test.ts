@@ -322,7 +322,7 @@ describe("wizardingcode-mem ui: the overview's projects", () => {
     expect(changes()).toHaveLength(1);
 
     const view = await sharing(s);
-    expect(view.levels).toEqual({ local: 1, knowledge: 0, all: 0 });
+    expect(view.levels).toEqual({ local: 1, receive: 0, knowledge: 0, all: 0 });
     expect(view.problems).toEqual([]);
     expect(levels()).toEqual([]);
     expect(changes().at(-1)).toEqual({
@@ -456,7 +456,7 @@ describe("wizardingcode-mem ui: POST /api/sharing/preview", () => {
       expect(changes()).toHaveLength(1);
       const view = await sharing(s);
       expect(view.report.counts.entries).toBe(0);
-      expect(view.levels).toEqual({ local: 1, knowledge: 0, all: 0 });
+      expect(view.levels).toEqual({ local: 1, receive: 0, knowledge: 0, all: 0 });
     },
     LONG,
   );
@@ -643,7 +643,7 @@ describe("wizardingcode-mem ui: a sharing policy that cannot be loaded", () => {
       db.run("UPDATE projects SET disabled = 1 WHERE id = ?", [projectId]);
       // A sharing schema newer than this binary, as a later version leaves it.
       db.run(
-        "INSERT INTO module_migrations (module, version, name, applied_at) VALUES ('sharing', 2, 'x', 0)",
+        "INSERT INTO module_migrations (module, version, name, applied_at) VALUES ('sharing', 3, 'x', 0)",
       );
     });
     const view = await sharing(s);

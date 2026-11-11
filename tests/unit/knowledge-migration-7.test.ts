@@ -111,6 +111,7 @@ describe("migration 7: the schema", () => {
     ).toEqual([
       [6, "knowledge_store"],
       [7, "knowledge_agent"],
+      [8, "knowledge_received"],
     ]);
     const entries = columnsOf("knowledge_entries");
     expect(entries.find((column) => column.name === "pinned")?.dflt_value).toBe("0");

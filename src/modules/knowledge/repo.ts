@@ -16,15 +16,14 @@ import {
   openSync,
   readdirSync,
   readSync,
-  renameSync,
   rmSync,
   type Stats,
   statSync,
-  writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
 import { headOfGitDir } from "../../core/git.ts";
 import { claimLease, KNOWLEDGE_LEASE_PREFIX, releaseLease } from "../../store/meta.ts";
+import { writeFileAtomic } from "../../util/atomic-write.ts";
 import { logError } from "../../util/log.ts";
 import { clip } from "../../util/text.ts";
 import { identityOf, personAuthor } from "./author.ts";
@@ -135,13 +134,16 @@ export function namesIn(folder: string): string[] {
  */
 export function refuseLinkedRoots(dataDir: string): void {
   const root = knowledgeRoot(dataDir);
-  for (const folder of [root, join(root, "projects")]) {
-    if (kindAt(folder) === "other") {
-      throw new KnowledgeError(
-        "invalid",
-        `${folder} is not a folder of its own (a link, or a file); the knowledge store keeps its repositories under it and never follows a link out of the data directory. Remove it; to keep the knowledge on another disk, make the data directory itself a link`,
-      );
-    }
+  for (const folder of [root, join(root, "projects")]) refuseLinkedRootsAt(folder);
+}
+
+/** The same refusal for one root: the received tree (`knowledge/received/`) asks it for its own. */
+export function refuseLinkedRootsAt(folder: string): void {
+  if (kindAt(folder) === "other") {
+    throw new KnowledgeError(
+      "invalid",
+      `${folder} is not a folder of its own (a link, or a file); the knowledge store keeps its repositories under it and never follows a link out of the data directory. Remove it; to keep the knowledge on another disk, make the data directory itself a link`,
+    );
   }
 }
 
@@ -327,16 +329,7 @@ export function readRegularFile(path: string, max = ENTRY_MAX_BYTES): Uint8Array
  * temporary file is created new: a name that already exists, a link included, is removed
  * first and never written through.
  */
-export function writeFileAtomic(path: string, content: string | Uint8Array): void {
-  const temp = join(dirname(path), `.${path.slice(dirname(path).length + 1)}.tmp`);
-  rmSync(temp, { force: true });
-  try {
-    writeFileSync(temp, content, { mode: 0o600, flag: "wx" });
-    renameSync(temp, path);
-  } finally {
-    rmSync(temp, { force: true });
-  }
-}
+export { writeFileAtomic };
 
 /** The SHA-256 of a file's bytes, first 16 hex: how the index and the intent record name a content. */
 export function hashOf(bytes: Uint8Array): string {
@@ -1009,7 +1002,7 @@ function ownPath(path: string): boolean {
  * store's to read, write or remove, whatever the path says. A folder that is not there
  * leads nowhere.
  */
-function reachedByFolders(repoPath: string, path: string): boolean {
+export function reachedByFolders(repoPath: string, path: string): boolean {
   let folder = repoPath;
   for (const part of path.split("/").slice(0, -1)) {
     folder = join(folder, part);
@@ -1080,7 +1073,7 @@ export function restoreToHead(
 // `openRepo` puts the tree back by it.
 
 /** The operations that leave a record. A record of any other is not read. */
-const INTENT_OPERATIONS = ["write", "accept", "reject", "adopt", "taxonomy"] as const;
+const INTENT_OPERATIONS = ["write", "accept", "reject", "adopt", "taxonomy", "apply"] as const;
 export type IntentOperation = (typeof INTENT_OPERATIONS)[number];
 
 export interface Intent {
@@ -1120,6 +1113,8 @@ export interface Change {
   created: string[];
   message: string;
   proposalId?: string;
+  /** Who records the commit when it is not the author: the sync, for what it writes. */
+  committer?: Identity;
 }
 
 /**
@@ -1161,6 +1156,7 @@ export function commitChange(store: KnowledgeStore, repo: Repo, change: Change):
       change.message,
       identityOf(change.writer),
       change.operation,
+      change.committer,
     );
   } catch (error) {
     try {

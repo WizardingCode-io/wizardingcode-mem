@@ -4,15 +4,19 @@
 
 // --- Levels -------------------------------------------------------------------------
 
-/** How much of one project may leave this machine for one destination. */
-export type Level = "local" | "knowledge" | "all";
+/**
+ * How much of one project may leave this machine for one destination. `receive` binds the
+ * project to a server without sending anything (ADR 0027): for what leaves it reads as `local`.
+ */
+export type Level = "local" | "receive" | "knowledge" | "all";
 
-/** Narrowest first: a level later in the list lets more leave. */
-export const LEVELS: readonly Level[] = ["local", "knowledge", "all"];
+/** Narrowest first: a level later in the list lets more leave, `receive` as little as `local`. */
+export const LEVELS: readonly Level[] = ["local", "receive", "knowledge", "all"];
 
 /** What a person reads for each level. */
 export const LEVEL_LABELS: Record<Level, string> = {
   local: "Nothing",
+  receive: "Receive only",
   knowledge: "Knowledge",
   all: "Knowledge and memories",
 };
@@ -21,9 +25,12 @@ export function isLevel(value: unknown): value is Level {
   return typeof value === "string" && (LEVELS as readonly string[]).includes(value);
 }
 
+/** What leaves at each level, ranked: `receive` sends what `local` sends, nothing. */
+const LEAVES: Record<Level, number> = { local: 0, receive: 0, knowledge: 1, all: 2 };
+
 /** Whether going from one level to another lets more leave: the change a person confirms. */
 export function widens(from: Level, to: Level): boolean {
-  return LEVELS.indexOf(to) > LEVELS.indexOf(from);
+  return LEAVES[to] > LEAVES[from];
 }
 
 // --- Roots, areas, destinations -----------------------------------------------------
@@ -69,6 +76,7 @@ export const REASONS = [
   "status",
   "root-off",
   "level-local",
+  "level-receive",
   "level-knowledge",
   "disabled",
   "unbound-alias",
@@ -95,6 +103,7 @@ export const REASON_TEXT: Record<Reason, string> = {
   status: "Only active items leave.",
   "root-off": "Its repository is not allowed to leave.",
   "level-local": "This project shares nothing.",
+  "level-receive": "The project receives from this server and sends nothing.",
   "level-knowledge": "This project shares knowledge only; memories stay.",
   disabled: "Memory is off for this project.",
   "unbound-alias": "The level was set under a git remote this project no longer has.",
@@ -238,14 +247,25 @@ export const MEMORY_HASH_FIELDS = ["memoryKind", "importance", "status", "title"
 
 // --- Rulings ------------------------------------------------------------------------
 
-/** What was sent to, or received from, a destination for one item. */
+/**
+ * What was sent to, or received from, a destination for one item; `applied` is a teammate's
+ * revision applied to an own item, which the predicate never reads (ADR 0027). The three
+ * optional fields are left out of a record whose row has none, so part 4's records read as
+ * they did.
+ */
 export interface LedgerRecord {
   destination: string;
-  direction: "sent" | "received";
+  direction: "sent" | "received" | "applied";
   /** Informational: the hash decides whether two versions are the same. */
   version: number;
   hash: string;
   withdrawnAt: number | null;
+  /** The local fingerprint when the row was written: an entry's index hash, a memory's hash. */
+  localHash?: string;
+  /** The server instance the row was written against. */
+  instance?: string;
+  /** Why the row is what it is: `moved`, `withdrawn-by-admin`, the answer's reason. */
+  reason?: string;
 }
 
 /** The predicate's answer for one item and one destination, under the policy of `epoch`. */
@@ -259,6 +279,9 @@ export const LEDGER_RECORD_KEYS = keysOf<LedgerRecord>({
   destination: true,
   direction: true,
   hash: true,
+  instance: true,
+  localHash: true,
+  reason: true,
   version: true,
   withdrawnAt: true,
 });
@@ -289,8 +312,10 @@ export interface SharingPolicy {
   epoch: number;
   /** The policy could not be loaded: nothing leaves. */
   closed: boolean;
-  /** The destinations the roots and areas apply to. */
+  /** The destinations the roots and areas apply to: the confirmed servers, or the team's default. */
   destinations: ReadonlySet<string>;
+  /** The server the lists and the epoch are of; null while no server is confirmed (the team destination). */
+  server: string | null;
   /** Every known project id. */
   projects: ReadonlySet<number>;
   roots: ReadonlySet<Root>;

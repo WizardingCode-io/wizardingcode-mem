@@ -32,6 +32,8 @@ export interface HookDeps {
   backupDue?: () => boolean;
   /** Starts one in the background and returns at once. */
   spawnBackup?: () => void;
+  /** Has the sync running when a server is listed and nothing says no; absent where none could be. */
+  spawnSync?: () => void;
   /** Indexes one finished session's transcript in the background; absent when there is no history index. */
   spawnHistoryIndex?: (transcriptPath: string, agent: string) => void;
   /**
@@ -189,6 +191,14 @@ export function handleHook(deps: HookDeps, adapter: AgentAdapter, input: HookInp
     if (!quiet && hasQueuedTurns(db, now) && !drainActive(db, now)) deps.spawnDistill();
   } catch (error) {
     deps.onError?.(error);
+  }
+  // The sync should be running from a session's start, of any source, and at each prompt.
+  if (input.event === "session-start" || input.event === "prompt") {
+    try {
+      deps.spawnSync?.();
+    } catch (error) {
+      deps.onError?.(error);
+    }
   }
   // A new session is when the viewer should be there; a resumed one already has it.
   if (input.event === "session-start" && input.source !== "resume") {

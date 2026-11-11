@@ -8,7 +8,6 @@ import {
   checkSlug,
   ENTRY_MAX_BYTES,
   parseEntry,
-  UUID,
 } from "../modules/knowledge/entry.ts";
 import { hashOf } from "../modules/knowledge/repo.ts";
 import type { KnowledgeEntry } from "../modules/knowledge/types.ts";
@@ -21,6 +20,7 @@ import {
   type OutgoingMemory,
 } from "../sharing/types.ts";
 import type { PushReason } from "./contract.ts";
+import { entryBytes, parseEntryUid } from "./contract.ts";
 import { MEMORY_UID } from "./ids.ts";
 
 export type EntryScope = "workspace" | "shared" | "project";
@@ -34,36 +34,7 @@ export interface Refusal {
 const refuse = (reason: PushReason, rule?: string): Refusal =>
   rule === undefined ? { result: "refused", reason } : { result: "refused", reason, rule };
 
-/** Part 1's `UUID` without its anchors, to build the uid grammar. */
-export const UUID_BODY = UUID.source.slice(1, -1);
-
-/** `workspace:<uuid>`, `shared:<uuid>` or `project:<alias>:<uuid>`; the alias is checked apart. */
-export const ENTRY_UID = new RegExp(
-  `^(workspace|shared):(${UUID_BODY})$|^project:(remote:[^,\\s]{1,200}):(${UUID_BODY})$`,
-);
-
-export interface EntryUid {
-  scope: EntryScope;
-  remoteAlias: string | null;
-  uuid: string;
-}
-
-/** The parts of an entry's uid; null when it is not one, or its alias is not host-led. */
-export function parseEntryUid(uid: string): EntryUid | null {
-  const match = ENTRY_UID.exec(uid);
-  if (match === null) return null;
-  if (match[1] !== undefined) {
-    return { scope: match[1] as EntryScope, remoteAlias: null, uuid: match[2] as string };
-  }
-  const alias = match[3] as string;
-  if (!isHostLedAlias(alias)) return null;
-  return { scope: "project", remoteAlias: alias, uuid: match[4] as string };
-}
-
-/** The file's bytes: the UTF-8 of the frontmatter block and the body as the client split them. */
-export function entryBytes(payload: OutgoingEntry): Uint8Array {
-  return Buffer.from(payload.frontmatter + payload.body, "utf8");
-}
+export { entryBytes, parseEntryUid };
 
 /** A plain object whose sorted keys are exactly `keys`. */
 export function hasExactKeys(

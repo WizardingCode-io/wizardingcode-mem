@@ -7,6 +7,7 @@ import { historyDbPath } from "../../history/path.ts";
 import { handleHook } from "../../hooks/handle.ts";
 import { loadSettings } from "../../settings/settings.ts";
 import { type Db, openDb } from "../../store/db.ts";
+import { startSync } from "../../sync/spawn.ts";
 import { errorLabel, logError } from "../../util/log.ts";
 import { defaultDataDir, resolvePaths } from "../../util/paths.ts";
 import { spawnDetached } from "../../util/self.ts";
@@ -157,6 +158,9 @@ export async function run(argv: string[]): Promise<number> {
           );
         },
         spawnBackup: () => spawnDetached("backup"),
+        spawnSync: () => {
+          startSync(db as Db, process.env, Date.now());
+        },
         modules: () => enabledModules(loadSettings(process.env, defaultDataDir()).modules),
         onError: (error, scope) => logError(`hook ${agent} ${event} (${scope ?? "lookup"})`, error),
       },

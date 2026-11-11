@@ -153,12 +153,18 @@ describe("what the ledger records and what the predicate answers", () => {
       version: 1,
       hash: "h",
       withdrawnAt: null,
+      localHash: "l",
+      instance: "i",
+      reason: "allowed",
     };
     expect(keysOf(sample)).toEqual([...LEDGER_RECORD_KEYS]);
     expect(LEDGER_RECORD_KEYS).toEqual([
       "destination",
       "direction",
       "hash",
+      "instance",
+      "localHash",
+      "reason",
       "version",
       "withdrawnAt",
     ]);
@@ -218,6 +224,13 @@ describe("the reasons", () => {
     for (const reason of REASONS) {
       expect(REASON_TEXT[reason].endsWith(".")).toBe(true);
     }
+  });
+
+  test("names the receive level's reason (ADR 0027): bound to a server, sending nothing", () => {
+    expect(REASONS).toContain("level-receive");
+    expect(REASON_TEXT["level-receive"]).toBe(
+      "The project receives from this server and sends nothing.",
+    );
   });
 });
 

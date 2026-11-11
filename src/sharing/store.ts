@@ -7,7 +7,7 @@ import { parseShareList, type SettingKey, type SharingKey } from "../settings/se
 import { type Db, withWrite } from "../store/db.ts";
 import { getMeta, setMeta } from "../store/meta.ts";
 import { plural } from "../util/text.ts";
-import { DESTINATIONS, effectiveLevel, isHostLedAlias, levelOf } from "./levels.ts";
+import { DESTINATIONS, destinationsOf, effectiveLevel, isHostLedAlias, levelOf } from "./levels.ts";
 import { GENERATION_KEY, newGeneration } from "./migrations.ts";
 import {
   isLevel,
@@ -33,8 +33,8 @@ export const COUNTER_KEY = "sharing.counter";
  */
 export const SETTINGS_SEEN_KEY = "sharing.settings_seen";
 
-/** The roots and the areas of one reading: the file's, the baseline's. Each list sorted. */
-interface Lists {
+/** The roots and the areas of one reading: the file's, the baseline's, a server's. Each list sorted. */
+export interface Lists {
   roots: Root[];
   areas: string[];
 }
@@ -125,6 +125,18 @@ export function lastChange(db: Db): ChangeRow | null {
   return recentChanges(db, 1)[0] ?? null;
 }
 
+/** Whether a person's own change (`cli` or `viewer`) to one of `whats` was logged after `at`. */
+export function ownChangeAfter(db: Db, at: number, whats: readonly string[]): boolean {
+  return (
+    (db
+      .query<{ n: number }, [number, string]>(
+        `SELECT count(*) AS n FROM sharing_changes
+          WHERE source IN ('cli', 'viewer') AND at > ? AND what IN (SELECT value FROM json_each(?))`,
+      )
+      .get(at, JSON.stringify(whats))?.n ?? 0) > 0
+  );
+}
+
 // --- The levels as stored ---------------------------------------------------------------
 
 /** A level as stored: `level` is whatever the row holds, not yet checked against the levels. */
@@ -172,6 +184,7 @@ const SET_LEVEL_MESSAGES = {
   "no-remote": "this project has no git remote; a team can only match projects by their remote",
   disabled: "memory is off for this project",
   invalid: `the level is one of ${LEVELS.join(", ")}`,
+  "one-server": "this project is bound to another server; set it to Nothing there first",
   "needs-confirm": "confirm: true is required to widen sharing",
 } as const;
 
@@ -223,8 +236,9 @@ export function previewLevel(
   policy: SharingPolicy,
   projectId: number,
   level: Level,
+  destination: string = policy.server ?? TEAM_DESTINATION,
 ): { current: Level; widened: boolean } {
-  const current = levelOf(policy, projectId, TEAM_DESTINATION).level;
+  const current = levelOf(policy, projectId, destination).level;
   return { current, widened: widens(current, level) };
 }
 
@@ -247,7 +261,7 @@ export interface SetLevelInput {
  */
 export type SetLevelOutcome =
   | { ok: true; old: Level; widened: boolean; boundAlias: string; rebound: boolean }
-  | { ok: false; reason: SetLevelRefusal };
+  | { ok: false; reason: SetLevelRefusal; server?: string };
 
 type Bound = { level: string; boundAlias: string };
 
@@ -265,6 +279,55 @@ function removeLevel(db: Db, projectId: number, destination: string): void {
     projectId,
     destination,
   ]);
+}
+
+/** The confirmed server, other than `destination`, a project is bound to above Nothing; null when none. */
+function otherBinding(
+  db: Db,
+  projectId: number,
+  destination: string,
+  destinations: ReadonlySet<string>,
+): string | null {
+  const rows = db
+    .query<{ destination: string }, [number, string]>(
+      "SELECT destination FROM sharing_levels WHERE project_id = ? AND level != 'local' AND destination != ?",
+    )
+    .all(projectId, destination);
+  return rows.map((row) => row.destination).find((other) => destinations.has(other)) ?? null;
+}
+
+/**
+ * The unbound row of a server and alias (ADR 0027): written when the last enabled project bound
+ * under the alias goes to Nothing, so the pull's reconcile removes the received copies; removed
+ * when a project is bound under it again. Only for a server: the team's default has no pull.
+ */
+function noteUnbound(
+  db: Db,
+  serverId: string,
+  alias: string,
+  projectId: number,
+  now: number,
+): void {
+  if (!hasTable(db, "sharing_unbound")) return;
+  const stillBound =
+    db
+      .query<{ n: number }, [string, string, number]>(
+        `SELECT count(*) AS n FROM sharing_levels l JOIN projects p ON p.id = l.project_id
+          WHERE l.destination = ? AND l.bound_alias = ? AND l.level != 'local'
+            AND l.project_id != ? AND p.disabled = 0`,
+      )
+      .get(serverId, alias, projectId)?.n ?? 0;
+  if (stillBound > 0) return;
+  db.run("INSERT OR IGNORE INTO sharing_unbound (server_id, alias, at) VALUES (?, ?, ?)", [
+    serverId,
+    alias,
+    now,
+  ]);
+}
+
+function clearUnbound(db: Db, serverId: string, alias: string): void {
+  if (!hasTable(db, "sharing_unbound")) return;
+  db.run("DELETE FROM sharing_unbound WHERE server_id = ? AND alias = ?", [serverId, alias]);
 }
 
 /**
@@ -310,23 +373,36 @@ function aliasToBind(
  */
 export function setLevel(db: Db, input: SetLevelInput): SetLevelOutcome {
   const { projectId, destination, level, source, now } = input;
-  if (!DESTINATIONS.has(destination)) {
+  const destinations = destinationsOf(db);
+  if (!destinations.has(destination)) {
     throw new Error(`the sharing destination ${destination} is not configured`);
   }
-  const refused = (reason: SetLevelRefusal): SetLevelOutcome => ({ ok: false, reason });
-  const what = `project:${projectId}`;
+  const ofServer = destinations !== DESTINATIONS;
+  const refused = (reason: SetLevelRefusal, server?: string): SetLevelOutcome =>
+    server === undefined ? { ok: false, reason } : { ok: false, reason, server };
+  // The log names the server once there is one (ADR 0027); the team's default as before.
+  const what = ofServer ? `project:${projectId}@${destination}` : `project:${projectId}`;
   return withWrite(db, (): SetLevelOutcome => {
     if (!isLevel(level)) return refused("invalid");
     const project = projectState(db, projectId);
     if (!project.known) return refused("no-project");
     const stored = storedLevel(db, projectId, destination);
-    const inForce = effectiveLevel(stored, project, destination, DESTINATIONS);
+    const inForce = effectiveLevel(stored, project, destination, destinations);
+    // The level as the person set it, while the row is in force: `receive` reads `local`
+    // for what leaves, but a stored `receive` set to `receive` again changes nothing.
+    const current: Level =
+      stored !== null &&
+      isLevel(stored.level) &&
+      (inForce.reason === "allowed" || inForce.reason === "level-receive")
+        ? stored.level
+        : inForce.level;
 
     if (level === "local") {
       // A row stored at `local` already says Nothing: there is nothing to remove or log.
       if (stored !== null && stored.level !== level) {
         removeLevel(db, projectId, destination);
         logChange(db, now, source, what, stored.level, level);
+        if (ofServer) noteUnbound(db, destination, stored.boundAlias, projectId, now);
         bumpCounter(db);
       }
       return { ok: true, old: inForce.level, widened: false, boundAlias: "", rebound: false };
@@ -338,10 +414,13 @@ export function setLevel(db: Db, input: SetLevelInput): SetLevelOutcome {
     const remotes = project.aliases.filter(isHostLedAlias);
     const boundAlias = aliasToBind(remotes, input.remoteAlias, stored?.boundAlias ?? null);
     if (boundAlias === undefined) return refused("no-remote");
+    // One server per project (ADR 0027): bound elsewhere, it is refused here.
+    const elsewhere = ofServer ? otherBinding(db, projectId, destination, destinations) : null;
+    if (elsewhere !== null) return refused("one-server", elsewhere);
     const widened = widens(inForce.level, level);
     if (widened && !input.confirm) return refused("needs-confirm");
-    if (stored !== null && inForce.level === level) {
-      return { ok: true, old: level, widened, boundAlias: stored.boundAlias, rebound: false };
+    if (stored !== null && current === level) {
+      return { ok: true, old: current, widened, boundAlias: stored.boundAlias, rebound: false };
     }
 
     const rebound = inForce.reason === "unbound-alias";
@@ -353,9 +432,10 @@ export function setLevel(db: Db, input: SetLevelInput): SetLevelOutcome {
          set_at = excluded.set_at, source = excluded.source`,
       [projectId, destination, level, boundAlias, now, source],
     );
-    logChange(db, now, source, what, rebound ? REBIND : inForce.level, level);
+    logChange(db, now, source, what, rebound ? REBIND : current, level);
+    if (ofServer) clearUnbound(db, destination, boundAlias);
     bumpCounter(db);
-    return { ok: true, old: inForce.level, widened, boundAlias, rebound };
+    return { ok: true, old: current, widened, boundAlias, rebound };
   });
 }
 
@@ -373,10 +453,14 @@ export function setLevel(db: Db, input: SetLevelInput): SetLevelOutcome {
 export function reconcileLevels(db: Db, now: number): { removed: number[] } {
   return withWrite(db, () => {
     const removed: number[] = [];
+    const destinations = destinationsOf(db);
     for (const row of levelRows(db)) {
       const project = projectState(db, row.projectId);
-      const { reason } = effectiveLevel(row, project, row.destination, DESTINATIONS);
-      if (reason !== "disabled" && reason !== "unbound-alias") continue;
+      const { reason } = effectiveLevel(row, project, row.destination, destinations);
+      // Once a server is confirmed, a row for the team's default or for a destination that is
+      // not a confirmed server no longer holds either (ADR 0027).
+      const unconfirmed = destinations !== DESTINATIONS && !destinations.has(row.destination);
+      if (reason !== "disabled" && reason !== "unbound-alias" && !unconfirmed) continue;
       removeLevel(db, row.projectId, row.destination);
       logChange(db, now, "system", `project:${row.projectId}`, row.level, "local");
       removed.push(row.projectId);
@@ -404,6 +488,88 @@ export function settingsSeen(db: Db): Lists {
     // A baseline nobody can read is no baseline: the file then reads as edited by hand.
   }
   return { roots: strings(seen?.roots).filter(isRoot), areas: strings(seen?.areas) };
+}
+
+/** A server's own lists, as its row holds them; an invalid list reads as empty, as the env lists do. */
+export function serverLists(db: Db, serverId: string): Lists {
+  const row = db
+    .query<{ roots: string; areas: string }, [string]>(
+      "SELECT roots, areas FROM sharing_servers WHERE server_id = ?",
+    )
+    .get(serverId);
+  if (row === null) return { roots: [], areas: [] };
+  return {
+    roots: parseShareList(row.roots === "" ? null : row.roots, ROOTS_KEY).list.filter(isRoot),
+    areas: parseShareList(row.areas === "" ? null : row.areas, AREAS_KEY).list,
+  };
+}
+
+/** What `setServerLists` did, or why it refused: a widening the caller did not confirm. */
+export type ServerListsOutcome =
+  | { ok: true; changed: ("roots" | "areas")[] }
+  | { ok: false; reason: "needs-confirm"; widening: { roots: string[]; areas: string[] } };
+
+/**
+ * Sets a server's own lists (`share roots | areas --server`, the viewer's Sharing card), each
+ * validated as the env lists are. As `setLevel` and `applySettingsPatch` do, a list that adds
+ * an id is a widening and needs `confirm`, refused in the store itself, under the write lock,
+ * so no caller can widen past it. Each list that changes is logged as `roots@<serverId>` or
+ * `areas@<serverId>`, and the counter moves once when one did.
+ */
+export function setServerLists(
+  db: Db,
+  serverId: string,
+  lists: { roots?: readonly string[]; areas?: readonly string[] },
+  options: { source: ChangeSource; now: number; confirm: boolean },
+): ServerListsOutcome {
+  const { source, now } = options;
+  const next: Partial<Lists> = {};
+  if (lists.roots !== undefined) {
+    const parsed = parseShareList(shareListText(lists.roots), ROOTS_KEY);
+    if (parsed.problem !== null) throw new Error(parsed.problem);
+    next.roots = parsed.list.filter(isRoot);
+  }
+  if (lists.areas !== undefined) {
+    const parsed = parseShareList(shareListText(lists.areas), AREAS_KEY);
+    if (parsed.problem !== null) throw new Error(parsed.problem);
+    next.areas = parsed.list;
+  }
+  return withWrite(db, (): ServerListsOutcome => {
+    const exists =
+      db
+        .query<{ n: number }, [string]>(
+          "SELECT count(*) AS n FROM sharing_servers WHERE server_id = ?",
+        )
+        .get(serverId)?.n ?? 0;
+    if (exists === 0) throw new Error(`server ${serverId} is not listed`);
+    const current = serverLists(db, serverId);
+    const widening = {
+      roots: (next.roots ?? []).filter((root) => !(current.roots as string[]).includes(root)),
+      areas: (next.areas ?? []).filter((area) => !current.areas.includes(area)),
+    };
+    if (!options.confirm && (widening.roots.length > 0 || widening.areas.length > 0))
+      return { ok: false, reason: "needs-confirm", widening };
+    const changed: ("roots" | "areas")[] = [];
+    for (const list of ["roots", "areas"] as const) {
+      const value = next[list];
+      if (value === undefined || sameList(value, current[list])) continue;
+      changed.push(list);
+      logChange(
+        db,
+        now,
+        source,
+        `${list}@${serverId}`,
+        shareListText(current[list]),
+        shareListText(value),
+      );
+      db.run(`UPDATE sharing_servers SET ${list} = ? WHERE server_id = ?`, [
+        value.join(","),
+        serverId,
+      ]);
+    }
+    if (changed.length > 0) bumpCounter(db);
+    return { ok: true, changed };
+  });
 }
 
 /**
@@ -535,6 +701,97 @@ export function applySettingsPatch(
     io.writeEnvFile(join(dataDir, ENV_FILE), changes);
     if (sharing.length > 0) setMeta(db, SETTINGS_SEEN_KEY, JSON.stringify(fileListsOf(dataDir)));
     return { sharing };
+  });
+}
+
+// --- A server operation's writes (ADR 0027) --------------------------------------------
+
+/**
+ * One change row of a server operation (`server:<id>` joined, removed, muted; a server's
+ * lists), inside the caller's transaction or on its own: a plain statement.
+ */
+export function logServerChange(
+  db: Db,
+  what: string,
+  old: string,
+  next: string,
+  now: number,
+  source: ChangeSource = "cli",
+): void {
+  logChange(db, now, source, what, old, next);
+}
+
+/**
+ * Removes every level stored for a server being removed, each logged as the system's (the
+ * person asked for the server to go, not for each project to share nothing), the counter
+ * moved once. Plain statements, safe inside the removal's transaction.
+ */
+export function removeServerLevels(db: Db, serverId: string, now: number): { removed: number[] } {
+  const rows = levelRows(db).filter((row) => row.destination === serverId);
+  for (const row of rows) {
+    removeLevel(db, row.projectId, serverId);
+    logChange(db, now, "system", `project:${row.projectId}@${serverId}`, row.level, "local");
+  }
+  if (rows.length > 0) bumpCounter(db);
+  return { removed: rows.map((row) => row.projectId) };
+}
+
+/** The host of a server's URL, what the change log names it by. */
+function hostOfUrl(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * The yes to a joined server, in one transaction: `confirmed_at` set, the change row
+ * `server:<id>` from `''` to the host, and, for the first confirmed server, every `team` row
+ * of the levels and the ledger moved to it, the env file's own lists copied into its lists
+ * and the baseline re-set so the move is not read as a hand edit. The counter moves once:
+ * the destinations changed, so every epoch does.
+ */
+export function confirmServer(
+  db: Db,
+  dataDir: string,
+  serverId: string,
+  now: number,
+  source: ChangeSource = "cli",
+): { first: boolean; moved: { levels: number; ledger: number } } {
+  return withWrite(db, () => {
+    const row = db
+      .query<{ url: string; others: number }, [string]>(
+        `SELECT url,
+                (SELECT count(*) FROM sharing_servers
+                  WHERE confirmed_at IS NOT NULL AND server_id != ?1) AS others
+           FROM sharing_servers WHERE server_id = ?1`,
+      )
+      .get(serverId);
+    if (row === null) throw new Error(`server ${serverId} is not listed`);
+    const first = row.others === 0;
+    db.run("UPDATE sharing_servers SET confirmed_at = ? WHERE server_id = ?", [now, serverId]);
+    logChange(db, now, source, `server:${serverId}`, "", hostOfUrl(row.url));
+    const moved = { levels: 0, ledger: 0 };
+    if (first) {
+      moved.levels = db.run("UPDATE sharing_levels SET destination = ? WHERE destination = ?", [
+        serverId,
+        TEAM_DESTINATION,
+      ]).changes;
+      moved.ledger = db.run("UPDATE sharing_ledger SET destination = ? WHERE destination = ?", [
+        serverId,
+        TEAM_DESTINATION,
+      ]).changes;
+      const file = fileListsOf(dataDir);
+      db.run("UPDATE sharing_servers SET roots = ?, areas = ? WHERE server_id = ?", [
+        file.roots.join(","),
+        file.areas.join(","),
+        serverId,
+      ]);
+      setMeta(db, SETTINGS_SEEN_KEY, JSON.stringify(file));
+    }
+    bumpCounter(db);
+    return { first, moved };
   });
 }
 

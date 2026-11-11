@@ -5,9 +5,10 @@
 import { randomUUID } from "node:crypto";
 import { lstatSync } from "node:fs";
 import { join } from "node:path";
+import { CONTROL } from "../../core/agent-name.ts";
 import { redact } from "../../core/redact.ts";
 import { withWrite } from "../../store/db.ts";
-import { authorOf, identityOf } from "./author.ts";
+import { authorOf, identityOf, personAuthor, syncCommitter } from "./author.ts";
 import {
   AREA_ID,
   AREA_MAX,
@@ -25,6 +26,7 @@ import {
   SLUG,
   STATUSES,
   slugify,
+  splitFrontmatterLines,
   TITLE_MAX,
   UUID,
 } from "./entry.ts";
@@ -33,6 +35,7 @@ import {
   countOpen,
   countOpenAll,
   ensureFresh,
+  entrySlugById,
   rebuildRepo,
   recordedFingerprint,
   recordRepoAfter,
@@ -81,12 +84,14 @@ import { requireSchema } from "./schema.ts";
 import type {
   AgentWriter,
   EntryChange,
+  Identity,
   KnowledgeEntry,
   KnowledgeProposal,
   KnowledgeStore,
   PersonWriter,
   Repo,
   ScopeRef,
+  SyncWriter,
   Taxonomy,
   Writer,
 } from "./types.ts";
@@ -365,8 +370,13 @@ export function writeEntry(
   if (change.supersedes !== undefined && !UUID.test(change.supersedes)) {
     throw invalid("supersedes: the id of the entry this one replaces");
   }
+  if (writer.kind === "sync") {
+    throw invalid(
+      "the sync never writes an entry through writeEntry; a teammate's revision is applied by applyRevision",
+    );
+  }
   if (writer.kind === "agent") {
-    return { kind: "proposed", proposal: propose(store, ref, change, writer) };
+    return { kind: "proposed", proposal: propose(store, ref, change, writer, { quota: true }) };
   }
 
   const status = change.status;
@@ -411,6 +421,68 @@ export function writeEntry(
       upsertEntry(store, repo.id, entry, path, hashOf(Buffer.from(text))),
     );
     return { kind: "written" as const, entry };
+  });
+}
+
+/**
+ * `knowledge take` (ADR 0027): a received entry copied into the matching own repository as
+ * the person's write, under the given uuid, so the own entry is what the results show for it
+ * from then on. A new entry at version 1; refused when an entry with the uuid or the slug is
+ * already here. Never `adopt`, which keeps its one meaning.
+ */
+export function writeTaken(
+  store: KnowledgeStore,
+  ref: ScopeRef,
+  change: EntryChange,
+  uuid: string,
+  person: PersonWriter,
+): KnowledgeEntry {
+  requireSchema(store);
+  requireGit(store);
+  if (person.kind !== "person") throw invalid("an entry is taken by a person, never by an agent");
+  if (!UUID.test(uuid)) throw invalid("the id of the received entry is not a uuid");
+  const fields = checkFields({ ...change, status: change.status ?? "active" });
+  const slug = change.slug === undefined ? slugify(fields.title) : checkSlug(change.slug);
+  const body = bodyOf(change.body);
+  return underLeases(store, ref, true, (repo, taxonomy) => {
+    checkArea(fields.area, taxonomy);
+    checkTarget(store, repo, slug);
+    if (entrySlugById(store, repo.id, uuid) !== null) {
+      throw new KnowledgeError("exists", `${uuid} is already an entry of this repository`);
+    }
+    const current = readCurrent(repo, slug, taxonomy);
+    if (current !== null) {
+      throw new KnowledgeError(
+        "exists",
+        `${entryPath(slug)} exists at version ${current.entry.version}; take it under another slug`,
+      );
+    }
+    const entry = nextEntry(null, 0, {
+      slug,
+      id: uuid,
+      fields,
+      body,
+      author: authorOf(person),
+      now: nowIso(store.now()),
+      supersedes: null,
+      pinned: change.pinned,
+      what: "take",
+    });
+    const path = entryPath(slug);
+    const text = checkSize(renderEntry(entry));
+    const committed = commit(store, repo, {
+      operation: "write",
+      writer: person,
+      write: [{ path, text }],
+      remove: [],
+      existed: [],
+      created: [path],
+      message: `knowledge: take ${slug} (v1)`,
+    });
+    settle(store, repo, committed, () =>
+      upsertEntry(store, repo.id, entry, path, hashOf(Buffer.from(text))),
+    );
+    return entry;
   });
 }
 
@@ -464,11 +536,19 @@ export function proposalBase(
   return base;
 }
 
+/** How a proposal is written: under the quotas (an agent's), or outside them and committed by another (the sync's). */
+interface ProposeOptions {
+  quota: boolean;
+  /** The commit's author and committer when they are not the proposer: the person, with the sync as committer. */
+  commitAs?: { writer: Writer; committer: Identity };
+}
+
 function propose(
   store: KnowledgeStore,
   ref: ScopeRef,
   change: EntryChange,
-  writer: AgentWriter,
+  writer: AgentWriter | SyncWriter,
+  options: ProposeOptions,
 ): KnowledgeProposal {
   // A proposal enters a history the engine never rewrites, and a session's text may carry
   // a secret. The limits apply to what is stored: the text after redaction.
@@ -492,22 +572,24 @@ function propose(
     const current = readCurrent(repo, slug, taxonomy);
     const base = proposalBase(slug, change, current === null ? null : current.entry);
 
-    const waiting = countOpen(
-      store,
-      repo.id,
-      current === null ? { slug } : { entryId: current.entry.id },
-    );
-    if (waiting >= OPEN_PER_TARGET) {
-      throw new KnowledgeError(
-        "quota",
-        `there are already ${OPEN_PER_TARGET} open proposals for ${slug}; a person decides them first`,
+    if (options.quota) {
+      const waiting = countOpen(
+        store,
+        repo.id,
+        current === null ? { slug } : { entryId: current.entry.id },
       );
-    }
-    if (countOpenAll(store, repo.id) >= OPEN_PER_REPO) {
-      throw new KnowledgeError(
-        "quota",
-        `the repository has ${OPEN_PER_REPO} open proposals waiting for a person`,
-      );
+      if (waiting >= OPEN_PER_TARGET) {
+        throw new KnowledgeError(
+          "quota",
+          `there are already ${OPEN_PER_TARGET} open proposals for ${slug}; a person decides them first`,
+        );
+      }
+      if (countOpenAll(store, repo.id) >= OPEN_PER_REPO) {
+        throw new KnowledgeError(
+          "quota",
+          `the repository has ${OPEN_PER_REPO} open proposals waiting for a person`,
+        );
+      }
     }
 
     const proposal: KnowledgeProposal = {
@@ -536,19 +618,139 @@ function propose(
     const text = checkSize(renderProposal(proposal));
     const committed = commit(store, repo, {
       operation: "write",
-      writer,
+      writer: options.commitAs?.writer ?? writer,
       write: [{ path, text }],
       remove: [],
       existed: [],
       created: [path],
       message: `knowledge: propose ${proposal.id} for ${slug}`,
       proposalId: proposal.id,
+      ...(options.commitAs === undefined ? {} : { committer: options.commitAs.committer }),
     });
     settle(store, repo, committed, () =>
       upsertProposal(store, repo.id, proposal, path, hashOf(Buffer.from(text))),
     );
     return proposal;
   });
+}
+
+// --- The sync's writes (ADR 0027) ---------------------------------------------------------
+
+/**
+ * The text with its `pinned` line as the local file has it: the server's line, if any, is
+ * dropped, and `pinned: true` is put before the closing `---` when the local entry is pinned.
+ * Every other byte stays, so the hash equals the server's whenever the entry has no pin. A
+ * text without a frontmatter is left as it is.
+ */
+function withLocalPin(text: string, pinned: boolean): string {
+  const split = splitFrontmatterLines(text);
+  if (split === null) return text;
+  const front = pinned ? [...split.front, "pinned: true"] : split.front;
+  return [split.open, ...front, split.close, ...split.body].join("\n");
+}
+
+function requireSyncWriter(writer: Writer, what: string): SyncWriter {
+  if (writer.kind !== "sync")
+    throw invalid(`${what} is the sync's own write, never a person's or an agent's`);
+  return writer;
+}
+
+/**
+ * Applies a teammate's revision to the person's own entry: the server's text, verbatim but
+ * for the local `pinned` line, committed under the member's name with the sync as committer
+ * (`commitChange` under the repository's leases, which throw `locked`). The new version and
+ * hash are what the ledger records.
+ */
+export function applyRevision(
+  store: KnowledgeStore,
+  ref: ScopeRef,
+  uuid: string,
+  text: string,
+  writer: Writer,
+  options: { uid: string; revision: number },
+): { version: number; hash: string } {
+  requireSchema(store);
+  requireGit(store);
+  const sync = requireSyncWriter(writer, "applying a revision");
+  if (!UUID.test(uuid)) throw invalid("entry id: the id of an own entry");
+  return underLeases(store, ref, false, (repo, taxonomy) => {
+    const slug = entrySlugById(store, repo.id, uuid);
+    if (slug === null) throw new KnowledgeError("missing", `there is no entry ${uuid} to revise`);
+    checkTarget(store, repo, slug);
+    const current = readCurrent(repo, slug, taxonomy);
+    if (current === null)
+      throw new KnowledgeError("missing", `there is no entry ${slug} to revise`);
+    // The server's text verbatim but for the pin, which is this machine's alone.
+    const applied = checkSize(withLocalPin(text, current.entry.pinned));
+    const path = entryPath(slug);
+    const committed = commit(store, repo, {
+      operation: "apply",
+      writer: sync,
+      committer: syncCommitter(sync),
+      write: [{ path, text: applied }],
+      remove: [],
+      existed: [path],
+      created: [],
+      message: `sync: apply ${options.uid} revision ${options.revision} from ${sync.serverName}`,
+    });
+    const entry = parseEntry(applied, slug, taxonomy);
+    const hash = hashOf(Buffer.from(applied));
+    settle(store, repo, committed, () => upsertEntry(store, repo.id, entry, path, hash));
+    return { version: entry.version, hash };
+  });
+}
+
+/**
+ * Keeps the person's text of a conflicted entry as a proposal: parsed into the proposal's
+ * fields with the `pinned` line dropped, redacted as every proposal is, outside both quotas,
+ * on the file's new version and hash, by `sync:<serverId>` on the person's behalf, and
+ * committed under the person's own identity with the sync as committer.
+ */
+export function proposeConflict(
+  store: KnowledgeStore,
+  ref: ScopeRef,
+  uuid: string,
+  text: string,
+  writer: Writer,
+  base: { version: number; hash: string },
+): { id: string } {
+  requireSchema(store);
+  requireGit(store);
+  const sync = requireSyncWriter(writer, "a conflict proposal");
+  if (!UUID.test(uuid)) throw invalid("entry id: the id of an own entry");
+  const repo = openRepo(store, ref);
+  if (repo === null)
+    throw new KnowledgeError("missing", `there is no ${ref.scope} knowledge repository yet`);
+  const slug = entrySlugById(store, repo.id, uuid);
+  if (slug === null)
+    throw new KnowledgeError("missing", `there is no entry ${uuid} to keep a conflict of`);
+  const local = parseEntry(withLocalPin(text, false), slug, null);
+  const person = personAuthor(store);
+  const current = readCurrent(repo, slug, null);
+  if (current === null)
+    throw new KnowledgeError("missing", `there is no entry ${slug} to keep a conflict of`);
+  if (current.entry.version !== base.version || current.hash !== base.hash) {
+    throw stale(current.entry.version, base.version, "conflict proposal");
+  }
+  const proposal = propose(
+    store,
+    ref,
+    {
+      slug,
+      title: local.title,
+      kind: local.kind,
+      area: local.area,
+      context: local.context,
+      subject: local.subject,
+      status: local.status,
+      body: local.body,
+      baseVersion: base.version,
+      proposal: { contradicts: [], onBehalfOf: person.name, judgedBy: null, judgeVersion: null },
+    },
+    sync,
+    { quota: false, commitAs: { writer: person, committer: syncCommitter(sync) } },
+  );
+  return { id: proposal.id };
 }
 
 // --- A person decides a proposal -------------------------------------------------------
@@ -735,10 +937,6 @@ export function readEntry(
 // --- Hand edits: adopt -------------------------------------------------------------------
 
 const ENTRY_FILE = new RegExp(`^${ENTRIES_DIR}/([^/]+)\\.md$`);
-/** The characters a terminal or a log acts on: line breaks, tabs, escapes. */
-// biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are what is matched.
-const CONTROL = /[\x00-\x1f\x7f]/g;
-
 /**
  * The text an entry file a person wrote by hand is committed as: an id when it has none,
  * the next version, `updated` and the person as author, everything else as they left it.

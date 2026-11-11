@@ -86,7 +86,14 @@ export default defineConfig({
       // with no network at all, so none is fetched from iconify's API at runtime. The rail's
       // icons come from the modules (/api/modules), not from this source: each built-in
       // module's views are listed here.
-      icon: { clientBundle: { scan: true, icons: MEMORY_VIEWS.map((view) => view.icon), sizeLimitKb: 512 } },
+      icon: {
+        clientBundle: {
+          scan: true,
+          // The Servers card's icons beside the rail's (ADR 0027).
+          icons: [...MEMORY_VIEWS.map((view) => view.icon), "i-lucide-server", "i-lucide-plug", "i-lucide-plug-zap", "i-lucide-volume-x", "i-lucide-volume-2", "i-lucide-play", "i-lucide-key-round", "i-lucide-trash-2"],
+          sizeLimitKb: 512,
+        },
+      },
     }),
     viteSingleFile({ removeViteModuleLoader: true }),
   ],

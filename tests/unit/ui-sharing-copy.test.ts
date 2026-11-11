@@ -46,7 +46,7 @@ describe("the Sharing page", () => {
     expect(sharing).toContain('id="sharing"');
     expect(sharing).toContain('title="Sharing"');
     expect(sharing).toContain(
-      "What may leave this machine for your team's server. Nothing leaves until you choose it here, and nothing is sent until a team server is configured.",
+      "What may leave this machine for your team's server. Nothing leaves until you choose it here, and nothing is sent until a server is listed.",
     );
     expect(sharing).not.toContain("soon");
   });
@@ -92,10 +92,12 @@ describe("the Sharing page", () => {
     expect(sharing).toContain('title="Share more knowledge?"');
     expect(sharing).toContain('tone="warn"');
     expect(sharing).toContain('icon="i-lucide-share-2"');
+    // The sentence names the listed server; with none listed, it says so and that nothing is sent.
     expect(sharing).toContain(
-      "would leave for your team's server once one is configured. Nothing is sent now.",
+      "would leave for your team's server once one is listed. Nothing is sent now.",
     );
-    expect(sharing).toContain("saveSettings(patch, { confirm: true })");
+    expect(sharing).toContain("would leave for ${serverName.value}.");
+    expect(sharing).toContain("saveSettings(patch, { confirm: true, ...options })");
   });
 
   test("says how many projects share, and the last change", () => {
@@ -175,11 +177,64 @@ describe("Across projects", () => {
     expect(projects).toContain("Share more of");
     expect(projects).toContain('action="Share"');
     expect(projects).toContain(
-      "would leave for your team's server once one is configured. Nothing is sent now.",
+      "would leave for your team's server once one is listed. Nothing is sent now.",
     );
+    expect(projects).toContain("would leave for ${serverName}.");
     expect(projects).toContain("sharingPreview({ level: {");
     expect(projects).toContain("setProjectSharing(");
     expect(projects).toContain("Sharing changed");
+  });
+});
+
+describe("the Servers card", () => {
+  const servers = source("ui/src/components/settings/Servers.vue");
+
+  test("is the card above Sharing, with the design's words for each state", () => {
+    expect(settingsPage).toContain('id: "servers", label: "Servers", icon: "i-lucide-server"');
+    expect(settingsPage).toContain('import Servers from "./settings/Servers.vue"');
+    expect(settingsPage).toContain("<Servers v-else-if=\"page === 'servers'\" />");
+    expect(settingsPage.indexOf('id: "servers"')).toBeLessThan(
+      settingsPage.indexOf('id: "sharing"'),
+    );
+    expect(servers).toContain('id="servers"');
+    expect(servers).toContain('title="Servers"');
+    for (const text of [
+      "No server listed yet. Nothing leaves this machine until one is.",
+      "Servers could not be loaded.",
+      "Add a server",
+      "Invitation code",
+      "The server is pending until you confirm.",
+      "Would leave now:",
+      "Remove this server?",
+      "The device stays listed on the server until an admin revokes it.",
+      "Rejoin with a new code",
+      "Resume the withdrawals?",
+      "Run now",
+    ]) {
+      expect(servers).toContain(text);
+    }
+  });
+
+  test("the row's actions take their own line under 640px, so none is cut off at a phone's width", () => {
+    expect(servers).toContain("basis-full");
+    expect(servers).toContain("sm:basis-auto");
+    expect(servers).not.toContain("flex-none flex-wrap");
+  });
+
+  test("says a failure in a plain sentence, and shows no token", () => {
+    expect(servers).toContain('title: "Not added"');
+    expect(servers).toContain("The server refused the code.");
+    expect(servers).not.toContain("error.message");
+    expect(servers).not.toContain("console.");
+    // No token value and no read of one: the routes never answer it, and the page never asks.
+    expect(servers).not.toMatch(/wcm1_|\.token\b/);
+  });
+
+  test("the dock names the bound server and offers Receive only", () => {
+    expect(projects).toContain("Bound to {{ selected.server.name }}.");
+    expect(projects).toContain('placeholder="Choose a server"');
+    expect(projects).toContain("LEVELS");
+    expect(source("src/sharing/types.ts")).toContain('receive: "Receive only"');
   });
 });
 
@@ -200,11 +255,11 @@ describe("the viewer's client", () => {
 
   test("sends the confirmation with a save when it is asked to", () => {
     expect(client).toMatch(
-      /saveSettings: \(patch: SettingsPatch, options\?: \{ confirm\?: boolean \}/,
+      /saveSettings: \(patch: SettingsPatch, options\?: \{ confirm\?: boolean; server\?: string \}/,
     );
     expect(client).toContain("confirm: true");
     expect(settingsState).toMatch(
-      /saveSettings\(\s*patch: SettingsPatch,\s*options\?: \{ confirm\?: boolean \}/,
+      /saveSettings\(\s*patch: SettingsPatch,\s*options\?: \{ confirm\?: boolean; server\?: string \}/,
     );
     expect(settingsState).toContain("api.saveSettings(patch, options)");
   });

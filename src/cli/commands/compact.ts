@@ -14,14 +14,14 @@ const size = (bytes: number) =>
  * `wizardingcode-mem compact [--dry-run]`: removes old records no memory depends on and gives
  * the space back. Memories are never deleted here.
  */
-export function run(argv: string[]): number {
+export async function run(argv: string[]): Promise<number> {
   const dryRun = argv.includes("--dry-run");
   let db: Db | undefined;
   try {
     const { dataDir, storeDir } = resolvePaths();
     db = openDb({ dataDir: storeDir, busyTimeoutMs: 5000 });
     const { retentionDays, historyDays } = loadSettings(process.env, dataDir);
-    const report = compact(db, { now: Date.now(), dryRun, retentionDays, historyDays });
+    const report = await compact(db, { now: Date.now(), dryRun, retentionDays, historyDays });
     const what = `${plural(report.turns, "turn")}, ${plural(report.sessions, "session")}, ${plural(report.hookRuns, "hook run")}`;
     process.stdout.write(
       dryRun

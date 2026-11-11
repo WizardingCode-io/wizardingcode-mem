@@ -26,7 +26,7 @@ export async function loadSettings(): Promise<void> {
  */
 export async function saveSettings(
   patch: SettingsPatch,
-  options?: { confirm?: boolean },
+  options?: { confirm?: boolean; server?: string },
 ): Promise<boolean> {
   settingsState.saving = true;
   settingsState.errors = {};

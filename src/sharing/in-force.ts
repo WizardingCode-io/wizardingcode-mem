@@ -12,12 +12,18 @@ import type { SharingPolicy } from "./types.ts";
  * level its project can no longer hold. Loaded, reconciled, loaded again. Under a policy
  * that could not be loaded nothing is recorded, for the reason `sharingRefusal` gives.
  */
-export function policyInForce(db: Db, dataDir: string, env: Env, now: number): SharingPolicy {
-  const loaded = loadPolicy(db, dataDir, env);
+export function policyInForce(
+  db: Db,
+  dataDir: string,
+  env: Env,
+  now: number,
+  serverId?: string,
+): SharingPolicy {
+  const loaded = loadPolicy(db, dataDir, env, serverId);
   if (loaded.closed) return loaded;
   reconcileSettings(db, dataDir, now);
   reconcileLevels(db, now);
-  return loadPolicy(db, dataDir, env);
+  return loadPolicy(db, dataDir, env, serverId);
 }
 
 /**

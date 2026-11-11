@@ -119,7 +119,7 @@ describe("loadPolicy: the store", () => {
     const widgets = addProject(db, "widgets", WIDGETS);
     addLevel(db, widgets, "all", WIDGETS);
     db.run(
-      "INSERT INTO module_migrations (module, version, name, applied_at) VALUES ('sharing', 2, 'x', 0)",
+      "INSERT INTO module_migrations (module, version, name, applied_at) VALUES ('sharing', 3, 'x', 0)",
     );
     const policy = load(db);
     expect(policy.closed).toBe(true);

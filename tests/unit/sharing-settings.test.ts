@@ -37,9 +37,10 @@ afterAll(() => {
 
 describe("levels, roots and area ids", () => {
   test("the levels, their labels and the roots are the fixed lists", () => {
-    expect(LEVELS).toEqual(["local", "knowledge", "all"]);
+    expect(LEVELS).toEqual(["local", "receive", "knowledge", "all"]);
     expect(LEVEL_LABELS).toEqual({
       local: "Nothing",
+      receive: "Receive only",
       knowledge: "Knowledge",
       all: "Knowledge and memories",
     });

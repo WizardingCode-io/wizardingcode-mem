@@ -7,7 +7,13 @@ import { explicitMatch } from "../retrieve/query.ts";
 import { fuseRanks, SEMANTIC_POOL, semanticCandidates } from "../retrieve/semantic.ts";
 import type { Env } from "../settings/settings.ts";
 import { policyInForce, sharingRefusal } from "../sharing/in-force.ts";
-import { isHostLedAlias, levelOf } from "../sharing/levels.ts";
+import {
+  boundServerOf,
+  confirmedServerRefs,
+  destinationOf,
+  isHostLedAlias,
+  levelOf,
+} from "../sharing/levels.ts";
 import { knownAreas, loadPolicy } from "../sharing/policy.ts";
 import { type PolicyChange, type Report, withChange, wouldLeave } from "../sharing/report.ts";
 import {
@@ -25,7 +31,6 @@ import {
   type Root,
   SHARE_AREA,
   type SharingPolicy,
-  TEAM_DESTINATION,
 } from "../sharing/types.ts";
 import { hookLatency } from "../status/report.ts";
 import { type Db, withWrite } from "../store/db.ts";
@@ -65,6 +70,8 @@ export interface ProjectSummary {
   remote: boolean;
   /** Memory is off for it. */
   disabled: boolean;
+  /** The confirmed server its level binds it to (ADR 0027); null when none. */
+  server: { id: string; name: string } | null;
 }
 
 /**
@@ -79,6 +86,7 @@ export function listProjects(db: Db, policy: SharingPolicy): ProjectSummary[] {
   // The one rule for "a name a team knows the project by" is isHostLedAlias (ADR 0025), so
   // the remote aliases are read and judged in code, never by a pattern in SQL.
   const named = new Set<number>();
+  const serverNames = new Map(confirmedServerRefs(db).map((row) => [row.serverId, row.name]));
   for (const { projectId, alias } of db
     .query<{ projectId: number; alias: string }, []>(
       "SELECT project_id AS projectId, alias FROM project_aliases WHERE alias LIKE 'remote:%'",
@@ -100,13 +108,18 @@ export function listProjects(db: Db, policy: SharingPolicy): ProjectSummary[] {
     )
     .all()
     .map((row) => {
-      const { level, reason } = levelOf(policy, row.id, TEAM_DESTINATION);
+      const { level, reason } = levelOf(policy, row.id, destinationOf(db, policy, row.id));
+      const bound = boundServerOf(db, row.id);
+      const serverName = bound === null ? undefined : serverNames.get(bound);
       return {
         ...row,
-        sharing: level,
+        // Receive only sends nothing, so the policy reads it as Nothing for what leaves; the
+        // level the person set, and the dock offers, is Receive only (ADR 0027).
+        sharing: reason === "level-receive" ? "receive" : level,
         sharingReason: reason,
         remote: named.has(row.id),
         disabled: row.disabled === 1,
+        server: bound !== null && serverName !== undefined ? { id: bound, name: serverName } : null,
       };
     });
 }
@@ -920,10 +933,12 @@ export function sharingView(
   env: Env,
   now: number,
   list: boolean,
+  serverId?: string,
 ): SharingView {
-  const policy = policyInForce(db, dataDir, env, now);
+  // With a server, the lists in force are its own, inside the file's (ADR 0027).
+  const policy = policyInForce(db, dataDir, env, now, serverId);
   const report = wouldLeave(db, dataDir, env, policy, { now, fresh: true, list });
-  const levels: Record<Level, number> = { local: 0, knowledge: 0, all: 0 };
+  const levels: Record<Level, number> = { local: 0, receive: 0, knowledge: 0, all: 0 };
   for (const project of report.perProject) levels[project.level]++;
   return {
     epoch: policy.epoch,
@@ -957,7 +972,7 @@ export function sharingPreview(
   env: Env,
   now: number,
   body: unknown,
-): Answer<200 | 400> {
+): Answer<200 | 400 | 404> {
   if (body === null || typeof body !== "object" || Array.isArray(body)) {
     return refused(400, "body must be an object");
   }
@@ -968,12 +983,14 @@ export function sharingPreview(
     if (level === null || typeof level !== "object") {
       return refused(400, "level must name a project and a level");
     }
-    const asked = level as { projectId?: unknown; level?: unknown };
+    const asked = level as { projectId?: unknown; level?: unknown; server?: unknown };
     if (typeof asked.projectId !== "number" || !policy.projects.has(asked.projectId)) {
       return refused(400, NO_PROJECT);
     }
     if (!isLevel(asked.level)) return refused(400, setLevelMessage("invalid"));
-    change.level = { projectId: asked.projectId, level: asked.level };
+    const destination = destinationFor(db, policy, asked.projectId, asked.server);
+    if (typeof destination !== "string") return destination;
+    change.level = { projectId: asked.projectId, level: asked.level, destination };
   }
   if (roots !== undefined) {
     if (!isStrings(roots) || !roots.every(isRoot)) {
@@ -999,7 +1016,32 @@ const REFUSAL_STATUS: Record<SetLevelRefusal, 400 | 404 | 409> = {
   "no-project": 404,
   "no-remote": 409,
   disabled: 409,
+  "one-server": 409,
 };
+
+/**
+ * The destination a project's level is set for: the server the request names (one that is
+ * confirmed), else the sharing module's one rule, `destinationOf` (the server the project is
+ * bound to, else the policy's server, else the team's default while no server is confirmed;
+ * ADR 0027). With several servers confirmed and the project bound to none, the request must
+ * name one: `400 { error: "server" }`.
+ */
+function destinationFor(
+  db: Db,
+  policy: SharingPolicy,
+  projectId: number,
+  server: unknown,
+): string | Answer<400 | 404> {
+  if (typeof server === "string") {
+    return confirmedServerRefs(db).some((row) => row.serverId === server)
+      ? server
+      : refused(404, "no such server");
+  }
+  if (server !== undefined) return refused(400, "server");
+  if (boundServerOf(db, projectId) === null && confirmedServerRefs(db).length > 1)
+    return refused(400, "server");
+  return destinationOf(db, policy, projectId);
+}
 
 /**
  * Sets what a project shares, from its dock. Refused in this order: a project the store
@@ -1018,15 +1060,18 @@ export function setProjectSharing(
   level: unknown,
   confirm: boolean,
   now: number,
+  server?: unknown,
 ): Answer<200 | 400 | 404 | 409> {
   const policy = loadPolicy(db, dataDir, env);
   const closed = sharingRefusal(policy);
   if (closed !== null) return refused(409, closed);
   if (!policy.projects.has(projectId)) return refused(404, NO_PROJECT);
   if (!isLevel(level)) return refused(400, setLevelMessage("invalid"));
+  const destination = destinationFor(db, policy, projectId, server);
+  if (typeof destination !== "string") return destination;
   const outcome = setLevel(db, {
     projectId,
-    destination: TEAM_DESTINATION,
+    destination,
     level,
     source: "viewer",
     now,

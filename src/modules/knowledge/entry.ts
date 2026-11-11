@@ -43,6 +43,30 @@ export function nowIso(ms: number): string {
   return new Date(ms).toISOString();
 }
 
+/** The frontmatter line of a pin, which never leaves this machine and is never taken from a server. */
+export const PIN_LINE = /^pinned:/;
+
+/**
+ * A text split at its frontmatter block with the `pinned` line left out: the opening line,
+ * the lines between, the closing line and the body's lines. Null without a block. The sync
+ * sends a file through it, and takes a teammate's revision through it with the local pin put
+ * back, so both read one rule.
+ */
+export function splitFrontmatterLines(
+  text: string,
+): { open: string; front: string[]; close: string; body: string[] } | null {
+  const lines = text.split("\n");
+  if (lines[0]?.trimEnd() !== "---") return null;
+  const end = lines.findIndex((line, index) => index > 0 && line.trimEnd() === "---");
+  if (end === -1) return null;
+  return {
+    open: lines[0] as string,
+    front: lines.slice(1, end).filter((line) => !PIN_LINE.test(line)),
+    close: lines[end] as string,
+    body: lines.slice(end + 1),
+  };
+}
+
 // --- Slugs ------------------------------------------------------------------------
 
 export function slugify(title: string): string {
@@ -62,9 +86,14 @@ export function slugify(title: string): string {
   return RESERVED.test(slug) ? `${slug}-entry` : slug;
 }
 
+/** Whether a value is a slug the store writes a file for: the one rule `checkSlug` and the received store's names apply. */
+export function isSlug(raw: string): boolean {
+  return SLUG.test(raw) && raw.length <= SLUG_MAX && !RESERVED.test(raw);
+}
+
 /** A caller's slug is checked, never normalised: what was asked is what is written, or nothing. */
 export function checkSlug(raw: string): string {
-  if (!SLUG.test(raw) || raw.length > SLUG_MAX || RESERVED.test(raw)) {
+  if (!isSlug(raw)) {
     throw new KnowledgeError(
       "invalid",
       `slug: lower-case letters, digits and hyphens, starting with a letter or a digit, at most ${SLUG_MAX} characters, and not a reserved file name`,

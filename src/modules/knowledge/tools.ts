@@ -40,6 +40,7 @@ import {
   SEARCH_MAX_LIMIT,
 } from "./policy.ts";
 import { allowProposal, judgeProposal } from "./propose.ts";
+import { provenanceOf, RECEIVED_REF, refOfHit, resolveReceivedRef } from "./received-ref.ts";
 import {
   kindAt,
   openRepo,
@@ -76,7 +77,7 @@ const DESCRIPTIONS: Record<ToolName, string> = {
   knowledge_search:
     "Search the team's curated knowledge (strategies, personas, patterns, facts kept on purpose) by words; one line per entry with its scope/slug, kind, area and version. Not for what happened in earlier sessions: that is memory_search.",
   knowledge_get:
-    "Read knowledge entries whole, by the scope/slug references knowledge_search returned.",
+    "Read knowledge entries whole, by the scope/slug references knowledge_search returned (a teammate's entry by its <server>:<slug>--<8 hex> reference).",
   knowledge_propose:
     "Propose a new knowledge entry, or a change to one (give its slug and base version). A person accepts it before it becomes knowledge; the area is one of the taxonomy's. Not for session facts, decisions or fixes: those are memory_save.",
 };
@@ -106,6 +107,8 @@ const NO_MATCH = "No knowledge matches.";
 const QUOTA = `refused quota: ${PROPOSALS_PER_HOUR} proposals in the last hour; a person decides them first`;
 /** A reference as the agent gives it: a scope and a slug, never a path. */
 const REF = /^(workspace|shared|project)\/[a-z0-9][a-z0-9-]{0,79}$/;
+/** Either reference, as the schema accepts it: an own entry's, or a received one's (`received-ref.ts`). */
+const ANY_REF = new RegExp(`(?:${REF.source})|(?:${RECEIVED_REF.source})`);
 
 // --- The area enum ----------------------------------------------------------------------
 
@@ -207,10 +210,12 @@ export function searchKnowledge(
     ...(args.area === undefined ? {} : { area: args.area }),
     ...(args.kind === undefined ? {} : { kind: args.kind }),
   };
-  const hits =
+  const received = { projectId: context.projectId };
+  const hits = (
     tokens.length === 0
-      ? browseEntries(store.db, ids, filters, limit)
-      : searchEntries(store.db, tokens, ids, filters, null, limit);
+      ? browseEntries(store.db, ids, filters, limit, received)
+      : searchEntries(store.db, tokens, ids, filters, null, limit, received)
+  ).filter((hit) => wanted === null || hit.scope === wanted);
   if (hits.length === 0) return NO_MATCH;
   const labels = new Map<string, Taxonomy | null>();
   const labelOf = (hit: Hit) => {
@@ -219,11 +224,12 @@ export function searchKnowledge(
     return labels.get(root)?.areas.find((area) => area.id === hit.area)?.label ?? hit.area;
   };
   return hits
-    .map((hit) =>
-      inert(
-        `${hit.scope}/${hit.slug}  ${hit.kind} · ${labelOf(hit)} · v${hit.version}  ${hit.title}`,
-      ),
-    )
+    .map((hit) => {
+      const provenance = provenanceOf(hit);
+      return inert(
+        `${refOfHit(hit)}  ${hit.kind} · ${labelOf(hit)} · v${hit.version}  ${hit.title}${provenance === "" ? "" : `  (${provenance})`}`,
+      );
+    })
     .join("\n");
 }
 
@@ -235,10 +241,12 @@ function renderBlock(hit: Hit): string {
     hit.body.length > GET_BODY_MAX
       ? `${clip(hit.body, GET_BODY_MAX)}\n[cut at ${GET_BODY_MAX.toLocaleString("en-US")} characters of ${hit.body.length}]`
       : hit.body;
+  const provenance = provenanceOf(hit);
   return inert(
     [
-      `# ${hit.scope}/${hit.slug} (v${hit.version})`,
-      `id: ${hit.id}`,
+      `# ${refOfHit(hit)} (v${hit.version})`,
+      ...(provenance === "" ? [] : [provenance]),
+      `id: ${hit.received?.id ?? hit.id}`,
       `title: ${hit.title}`,
       `kind: ${hit.kind}`,
       `area: ${hit.area}`,
@@ -269,18 +277,22 @@ export function getKnowledge(
   });
   freshen(
     store,
-    parsed.map((each) => each.scope),
+    parsed.filter((each) => REF.test(each.ref)).map((each) => each.scope),
     context.projectId,
   );
   const visible = visibleRepos(store.db, context.projectId);
+  const received = { projectId: context.projectId };
   let answer = "";
   for (const [at, each] of parsed.entries()) {
     const repo = REF.test(each.ref) ? visible.find((r) => r.scope === each.scope) : undefined;
-    const hit = repo === undefined ? null : entryAt(store.db, repo.id, each.slug);
+    const local = repo === undefined ? null : entryAt(store.db, repo.id, each.slug);
+    const hit = REF.test(each.ref) ? local : resolveReceivedRef(store.db, each.ref, received);
     const block =
-      hit === null || hit.status !== "active" || hit.problem !== null
-        ? `Not found: ${each.ref}`
-        : renderBlock(hit);
+      typeof hit === "string"
+        ? hit
+        : hit === null || hit.status !== "active" || hit.problem !== null
+          ? `Not found: ${each.ref}`
+          : renderBlock(hit);
     const next = answer === "" ? block : `${answer}\n---\n${block}`;
     if (answer !== "" && next.length > GET_ANSWER_MAX) {
       return `${answer}\n[${parsed.length - at} more not shown: ask for them separately]`;
@@ -428,10 +440,12 @@ async function schemas(global: boolean, areas: { ids: string[]; description: str
     }),
     knowledge_get: z.object({
       refs: z
-        .array(z.string().regex(REF))
+        .array(z.string().regex(ANY_REF))
         .min(1)
         .max(GET_MAX_REFS)
-        .describe("scope/slug references, as knowledge_search returns them."),
+        .describe(
+          "scope/slug references, or <server>:<slug>--<8 hex> for a teammate's entry, as knowledge_search returns them.",
+        ),
     }),
     knowledge_propose: z.object({
       repo: z.enum(["workspace", "project", "shared"]),

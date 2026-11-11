@@ -679,14 +679,14 @@ exports[`MCP tool list by default (memory and knowledge) inside a project, knowl
         "openWorldHint": false,
         "readOnlyHint": true,
       },
-      "description": "Read knowledge entries whole, by the scope/slug references knowledge_search returned.",
+      "description": "Read knowledge entries whole, by the scope/slug references knowledge_search returned (a teammate's entry by its <server>:<slug>--<8 hex> reference).",
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "properties": {
           "refs": {
-            "description": "scope/slug references, as knowledge_search returns them.",
+            "description": "scope/slug references, or <server>:<slug>--<8 hex> for a teammate's entry, as knowledge_search returns them.",
             "items": {
-              "pattern": "^(workspace|shared|project)\\/[a-z0-9][a-z0-9-]{0,79}$",
+              "pattern": "(?:^(workspace|shared|project)\\/[a-z0-9][a-z0-9-]{0,79}$)|(?:^([^:/\\s]{1,80}):([a-z0-9][a-z0-9-]{0,79})--([0-9a-f]{8})$)",
               "type": "string",
             },
             "maxItems": 10,
@@ -1034,14 +1034,14 @@ exports[`MCP tool list by default (memory and knowledge) with --global, search a
         "openWorldHint": false,
         "readOnlyHint": true,
       },
-      "description": "Read knowledge entries whole, by the scope/slug references knowledge_search returned.",
+      "description": "Read knowledge entries whole, by the scope/slug references knowledge_search returned (a teammate's entry by its <server>:<slug>--<8 hex> reference).",
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "properties": {
           "refs": {
-            "description": "scope/slug references, as knowledge_search returns them.",
+            "description": "scope/slug references, or <server>:<slug>--<8 hex> for a teammate's entry, as knowledge_search returns them.",
             "items": {
-              "pattern": "^(workspace|shared|project)\\/[a-z0-9][a-z0-9-]{0,79}$",
+              "pattern": "(?:^(workspace|shared|project)\\/[a-z0-9][a-z0-9-]{0,79}$)|(?:^([^:/\\s]{1,80}):([a-z0-9][a-z0-9-]{0,79})--([0-9a-f]{8})$)",
               "type": "string",
             },
             "maxItems": 10,

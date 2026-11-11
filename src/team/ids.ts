@@ -1,6 +1,7 @@
 // The team server's random ids, tokens and codes, and the grammars that recognise them.
 // A leaf over node:crypto.
 import { createHash, getRandomValues, timingSafeEqual } from "node:crypto";
+import { isLoopback, REQUEST_ID_RE } from "./contract.ts";
 
 /** Lower case, for ids a person reads in a log or a folder name. */
 export const BASE32 = "abcdefghijklmnopqrstuvwxyz234567";
@@ -50,7 +51,7 @@ export function sameHash(a: string, b: string): boolean {
 export const TOKEN = /^wcm1_[A-Za-z0-9_-]{43}$/;
 export const CODE = /^wci1_[A-Z2-7]{26}$/;
 /** A client's own request id, echoed when it has this shape. */
-export const REQUEST_ID = /^[A-Za-z0-9_-]{1,64}$/;
+export const REQUEST_ID = REQUEST_ID_RE;
 
 /** Part 4's memory uid: the client store's generation (eight hex characters) and the row id. */
 export const MEMORY_UID = /^[0-9a-f]{8}:\d{1,18}$/;
@@ -70,9 +71,4 @@ export function splitMemoryKey(key: string): { deviceId: string; uid: string } {
 export const OPERATOR_ID = "operator";
 export const OPERATOR = { memberId: OPERATOR_ID, deviceId: "cli" } as const;
 
-/** `127.0.0.0/8`, `::1` and `localhost`: the hosts a server may answer in plain HTTP without a warning. */
-export function isLoopback(host: string): boolean {
-  const lower = host.toLowerCase();
-  if (lower === "localhost" || lower === "::1" || lower === "[::1]") return true;
-  return /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(lower);
-}
+export { isLoopback };

@@ -11,17 +11,20 @@ import {
   type RebuildResult,
   rebuildAll,
 } from "../../modules/knowledge/index-store.ts";
+import { RECEIVED_REF, resolveReceivedRef } from "../../modules/knowledge/received-ref.ts";
 import { withRepoLeases } from "../../modules/knowledge/repo.ts";
 import {
   acceptProposal,
   adopt,
   rejectProposal,
   writeEntry,
+  writeTaken,
 } from "../../modules/knowledge/store.ts";
 import { openStore } from "../../modules/knowledge/store-open.ts";
 import { addArea, removeArea, renameArea } from "../../modules/knowledge/taxonomy.ts";
 import type { KnowledgeStore, ScopeRef } from "../../modules/knowledge/types.ts";
 import { type Db, openDb } from "../../store/db.ts";
+import { closeConflict } from "../../sync/conflicts.ts";
 import { logError } from "../../util/log.ts";
 import { resolvePaths } from "../../util/paths.ts";
 import { plural } from "../../util/text.ts";
@@ -40,6 +43,7 @@ Commands:
   rebuild  [--scope workspace|shared|project]
   adopt    [--scope workspace|shared|project]
   list     [--scope workspace|shared|project]
+  take     <server>:<slug>--<8 hex> --scope shared|project   (a teammate's entry, as yours)
 
 Kinds: knowledge, strategy, persona, pattern. --scope project is the project of the
 current folder for write, accept and reject, and every project for the others.
@@ -165,6 +169,11 @@ async function write(store: KnowledgeStore, argv: string[]): Promise<void> {
   const slug = flags.get("--slug");
   const status = flags.get("--status");
   const pinned = pinnedOf(flags);
+  if (slug?.includes(":") === true) {
+    throw new UsageError(
+      "a received entry (<server>:<slug>--<8 hex>) cannot be written or pinned; knowledge take copies it into your repository first",
+    );
+  }
   // A trailing newline is the file's or the shell's, not the entry's.
   const body = (await bodyOf(flags)).replace(/\r?\n$/, "");
   const result = writeEntry(
@@ -201,6 +210,58 @@ function decide(store: KnowledgeStore, argv: string[], decision: "accept" | "rej
     rejectProposal(store, ref, id, personAuthor(store));
     out(`rejected ${id}`);
   }
+  // A proposal the sync made of a conflict (ADR 0027): its conflicts row closes with the decision.
+  closeConflict(store.db, id, store.now());
+}
+
+/**
+ * `knowledge take <server>:<slug>--<8 hex> --scope shared|project`: a teammate's entry copied
+ * into the matching own repository under the same uuid, as the person's write (ADR 0027).
+ * The reference is resolved as `knowledge_get` resolves it (`resolveReceivedRef`).
+ */
+function take(store: KnowledgeStore, argv: string[]): void {
+  const { flags, rest } = parse(argv, ["--scope"]);
+  const scope = scopeOf(flags);
+  if (scope === undefined || scope === "workspace")
+    throw new UsageError("--scope shared or --scope project is required");
+  const ref = rest[0];
+  if (ref === undefined || !RECEIVED_REF.test(ref) || rest.length > 1)
+    throw new UsageError("give one <server>:<slug>--<8 hex> reference");
+  const target = refOf(store, scope);
+  const hit = resolveReceivedRef(store.db, ref, {
+    projectId: target.scope === "project" ? target.projectId : null,
+  });
+  if (typeof hit === "string") throw new KnowledgeError("missing", hit);
+  if (hit.received === undefined) throw new KnowledgeError("missing", `Not found: ${ref}`);
+  // A teammate's workspace entry is theirs to keep: only shared and project entries are taken.
+  if (hit.scope === "workspace")
+    throw new KnowledgeError(
+      "invalid",
+      `${ref} is a teammate's workspace entry; only shared and project entries are taken`,
+    );
+  if (hit.scope !== scope)
+    throw new KnowledgeError(
+      "invalid",
+      `${ref} is a ${hit.scope} entry; take it with --scope ${hit.scope}`,
+    );
+  const uuid = hit.received.id;
+  const entry = writeTaken(
+    store,
+    target,
+    {
+      slug: hit.slug,
+      title: hit.title,
+      kind: hit.kind,
+      area: hit.area,
+      context: hit.context,
+      subject: hit.subject,
+      status: hit.status,
+      body: hit.body,
+    },
+    uuid,
+    personAuthor(store),
+  );
+  out(`taken ${entry.slug} (v${entry.version}) from ${hit.received.serverName}`);
 }
 
 function area(store: KnowledgeStore, argv: string[]): void {
@@ -332,7 +393,7 @@ export async function run(argv: string[]): Promise<number> {
   const [command, ...rest] = argv;
   let db: Db | undefined;
   try {
-    const commands = ["write", "accept", "reject", "area", "rebuild", "adopt", "list"];
+    const commands = ["write", "accept", "reject", "area", "rebuild", "adopt", "list", "take"];
     if (command === undefined || !commands.includes(command)) {
       throw new UsageError(
         command === undefined ? "a command is needed" : `unknown command ${command}`,
@@ -351,6 +412,7 @@ export async function run(argv: string[]): Promise<number> {
     if (command === "write") await write(store, rest);
     else if (command === "accept" || command === "reject") decide(store, rest, command);
     else if (command === "area") area(store, rest);
+    else if (command === "take") take(store, rest);
     else if (command === "rebuild") refused = rebuild(store, rest);
     else if (command === "adopt") refused = adoptAll(store, rest);
     else refused = list(store, rest);

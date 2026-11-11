@@ -388,7 +388,7 @@ describe("restoreBackup", () => {
     db = openDb({ dataDir: storeDir, busyTimeoutMs: 2000 });
   });
 
-  test("a copy without sharing tables restores with nothing to reset", async () => {
+  test("a copy without sharing tables gains them in the restore, with nothing to reset", async () => {
     await bareBackup(NOW);
     setMeta(db, "sharing.counter", "4");
     db.close();
@@ -401,7 +401,7 @@ describe("restoreBackup", () => {
     });
     expect(outcome).toMatchObject({ ok: true, sharingReset: 0 });
     const restored = sharingOf(join(storeDir, DB_FILE));
-    expect(restored.levels).toBeNull();
+    expect(restored.levels).toBe(0);
     expect(restored.counter).toBe("5");
     expect(restored.generation).toMatch(/^[0-9a-f]{8}$/);
     expect(JSON.parse(restored.seen as string)).toEqual({ roots: [], areas: [] });

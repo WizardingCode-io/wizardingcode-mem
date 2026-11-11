@@ -61,7 +61,8 @@ function pending(db: Db, afterId: number, limit: number): Row[] {
     .all(SOURCE_JUDGE, afterId, limit);
 }
 
-function remaining(db: Db): number {
+/** How many imported memories the rejudge would still select: its own selection, for the tests too. */
+export function rejudgeRemaining(db: Db): number {
   return (
     db
       .query<{ n: number }, [string]>(
@@ -175,8 +176,8 @@ export async function rejudge(db: Db, options: RejudgeOptions): Promise<RejudgeR
         if (kind !== row.kind) report.kindChanged++;
       }
     });
-    options.onProgress?.({ ...report, remaining: remaining(db) });
+    options.onProgress?.({ ...report, remaining: rejudgeRemaining(db) });
   }
-  report.remaining = remaining(db);
+  report.remaining = rejudgeRemaining(db);
   return report;
 }

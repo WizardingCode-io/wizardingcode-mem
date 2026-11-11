@@ -73,10 +73,11 @@ describe("the knowledge module's schema", () => {
       { module: SHARING_MODULE, migrations: SHARING_MIGRATIONS },
     ]);
     expect(KNOWLEDGE_MODULE).toBe("knowledge");
-    expect(KNOWLEDGE_SCHEMA_VERSION).toBe(7);
+    expect(KNOWLEDGE_SCHEMA_VERSION).toBe(8);
     expect(KNOWLEDGE_MIGRATIONS.map((m) => [m.version, m.name])).toEqual([
       [6, "knowledge_store"],
       [7, "knowledge_agent"],
+      [8, "knowledge_received"],
     ]);
   });
 
@@ -84,27 +85,33 @@ describe("the knowledge module's schema", () => {
     const db = open();
     expect(userVersion(db)).toBe(LATEST_VERSION);
     const recorded = rows(db);
-    expect(recorded).toHaveLength(3);
+    expect(recorded).toHaveLength(5);
     expect(recorded[0]).toMatchObject({ module: "knowledge", version: 6, name: "knowledge_store" });
     expect(recorded[0]?.applied_at).toBeGreaterThan(0);
     expect(recorded[1]).toMatchObject({ module: "knowledge", version: 7, name: "knowledge_agent" });
     expect(recorded[1]?.applied_at).toBeGreaterThan(0);
-    expect(recorded[2]).toMatchObject({ module: "sharing", version: 1, name: "sharing_policy" });
-    expect(recorded[2]?.applied_at).toBeGreaterThan(0);
+    expect(recorded[2]).toMatchObject({
+      module: "knowledge",
+      version: 8,
+      name: "knowledge_received",
+    });
+    expect(recorded[3]).toMatchObject({ module: "sharing", version: 1, name: "sharing_policy" });
+    expect(recorded[3]?.applied_at).toBeGreaterThan(0);
+    expect(recorded[4]).toMatchObject({ module: "sharing", version: 2, name: "sharing_servers" });
     const names = tables(db);
     expect(names).toEqual(
       expect.arrayContaining(["knowledge_repos", "knowledge_entries", "knowledge_proposals"]),
     );
     expect(names).toContain("knowledge_fts");
     expect(names).toContain("knowledge_shown");
-    expect(moduleVersion(db, "knowledge")).toBe(7);
+    expect(moduleVersion(db, "knowledge")).toBe(8);
     db.close();
   });
 
   test("a second open applies nothing and takes no backup", () => {
     open().close();
     const db = open();
-    expect(rows(db)).toHaveLength(3);
+    expect(rows(db)).toHaveLength(5);
     expect(backups()).toEqual([]);
     db.close();
   });
@@ -116,7 +123,9 @@ describe("the knowledge module's schema", () => {
     expect(rows(db).map((row) => [row.module, row.version, row.name])).toEqual([
       ["knowledge", 6, "knowledge_store"],
       ["knowledge", 7, "knowledge_agent"],
+      ["knowledge", 8, "knowledge_received"],
       ["sharing", 1, "sharing_policy"],
+      ["sharing", 2, "sharing_servers"],
     ]);
     expect(backups()).toEqual([]);
     db.close();
@@ -138,7 +147,9 @@ describe("the knowledge module's schema", () => {
       ["knowledge", 6],
       ["knowledge", 7],
       ["knowledge", 8],
+      ["knowledge", 9],
       ["sharing", 1],
+      ["sharing", 2],
     ]);
     again.close();
   });
@@ -207,7 +218,9 @@ describe("the knowledge module's schema", () => {
       })),
       expect.objectContaining({ module: "knowledge", version: 6, name: "knowledge_store" }),
       expect.objectContaining({ module: "knowledge", version: 7, name: "knowledge_agent" }),
+      expect.objectContaining({ module: "knowledge", version: 8, name: "knowledge_received" }),
       expect.objectContaining({ module: "sharing", version: 1, name: "sharing_policy" }),
+      expect.objectContaining({ module: "sharing", version: 2, name: "sharing_servers" }),
     ]);
     const names = tables(db);
     for (const gone of [
@@ -415,7 +428,9 @@ describe("the knowledge module's schema", () => {
     expect(rows(db).map((row) => [row.module, row.version])).toEqual([
       ["knowledge", 6],
       ["knowledge", 7],
+      ["knowledge", 8],
       ["sharing", 1],
+      ["sharing", 2],
     ]);
     db.close();
   }, 30_000);
