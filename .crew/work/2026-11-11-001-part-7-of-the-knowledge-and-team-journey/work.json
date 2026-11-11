@@ -1,0 +1,68 @@
+{
+  "id": "2026-11-11-001-part-7-of-the-knowledge-and-team-journey",
+  "title": "Part 7 of the knowledge and team journey, the runbook: docs/runbooks/team-server",
+  "input": "Part 7 of the knowledge and team journey, the runbook: docs/runbooks/team-server.md tells an operator how to run the team server (the one-time ghcr step, the first start and its bootstrap code, invitations and roles, upgrade, rollback, the restore of the volume and serve instance renew, the lease's 30 seconds, the log lines to read) and a member how to join and recover (a fresh machine, the first run and status, the token file outside the store's backups, a revoked device and share server rejoin, a client restore with sync --once and the hold released by share server resume, doctor's warnings), with README, CLAUDE.md and the ADRs pointing at it; a test keeps every command, variable, file and log event it names true to the code.",
+  "type": "chore",
+  "route": "fast",
+  "routeReasons": [
+    "chore in one spot, clear request, no risk area"
+  ],
+  "riskAreas": [],
+  "phase": "learn",
+  "awaiting": null,
+  "criteria": [
+    {
+      "id": "AC-1",
+      "kind": "behavior",
+      "text": "docs/runbooks/team-server.md exists and tests/unit/team-runbook.test.ts proves its references against the code: every wizardingcode-mem command it cites is one the CLI knows (the command in src/cli/main.ts, the subcommand in that command's usage text), every WIZARDINGCODE_* variable it names is read somewhere under src/, every repository file it names exists, and every server log event it names is one src/team writes; the test fails on a name the code does not know."
+    },
+    {
+      "id": "AC-2",
+      "kind": "observed",
+      "text": "The runbook covers, in this order, the operator's side (the one-time step that makes the ghcr package public or the docker login that reads it, the first start and the bootstrap code in the log, invitations and roles, the upgrade, the rollback, the restore of the volume and serve instance renew, the lease's 30-second window, the log's events) and the member's side (joining from a fresh machine, the first run and status, the token file's place outside the store's backups, a revoked device and share server rejoin, a client restore with sync --once and share server resume, doctor's warnings); README's sync section, CLAUDE.md's team server bullet and ADR 0026 and 0027 point at it; a person reads each step against the command's usage."
+    }
+  ],
+  "approvals": [],
+  "skips": [],
+  "baseCommit": "f9181d7763c846e97677e14b1cd22fca5e8d93fd",
+  "createdAt": "2026-11-11T10:50:58.714Z",
+  "updatedAt": "2026-11-11T11:00:12.924Z",
+  "kind": "feature",
+  "kindFrom": "work_type chore",
+  "knowledge": {
+    "readAt": "2026-11-11T10:50:58.727Z",
+    "listed": [
+      "K-363",
+      "K-371",
+      "K-346",
+      "K-343",
+      "K-335",
+      "K-319",
+      "K-316",
+      "K-311",
+      "K-179",
+      "K-203"
+    ]
+  },
+  "priority": "normal",
+  "phaseAt": {
+    "build": "2026-11-11T10:50:59.036Z",
+    "gate": "2026-11-11T10:59:48.936Z",
+    "deliver": "2026-11-11T10:59:49.012Z",
+    "learn": "2026-11-11T10:59:59.536Z"
+  },
+  "runtimes": [
+    "claude"
+  ],
+  "seats": [],
+  "knowledgeFiles": [],
+  "knowledgeLabels": [],
+  "primaryTeam": "backend",
+  "learned": {
+    "at": "2026-11-11T11:00:12.924Z",
+    "entries": [
+      "K-372"
+    ],
+    "confirmed": []
+  }
+}
