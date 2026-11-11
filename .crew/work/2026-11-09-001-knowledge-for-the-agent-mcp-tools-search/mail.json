@@ -23,7 +23,8 @@
       "subject": "Lane journey/2026-11-08-001-j-knowledge-base-and-team-collab (2026-11-09-001-...",
       "body": "Lane journey/2026-11-08-001-j-knowledge-base-and-team-collab (2026-11-09-001-knowledge-for-the-agent-mcp-tools-search, proven) is proven: commit it, then merge it from the main checkout.",
       "replyTo": null,
-      "status": "sent"
+      "status": "done",
+      "readAt": "2026-11-10T18:34:10.465Z"
     }
   ]
 }

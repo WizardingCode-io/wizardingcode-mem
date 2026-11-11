@@ -1,0 +1,46 @@
+# architects lead's validation of 2026-11-10-002-part-6-of-the-knowledge-and-team-journey: spec
+verdict: returned
+## Returns
+- R-1 · .crew/work/2026-11-10-002-part-6-of-the-knowledge-and-team-journey/spec.md:63 (and plan.md:69) · The `user_version` stays 7 invariant is stated nowhere in the spec or the plan, and it must be, with a test.
+  - The spec says "two module migrations (sharing v2, knowledge v8)" at line 63. Plan task 1 checks `module_migrations` at sharing 2 and knowledge 8 (plan.md:69).
+  - Neither document says that `PRAGMA user_version` stays 7, that both migrations are add-only and registered only through `src/engine/module-schemas.ts:11-14`, or that no core table gains a foreign key or trigger.
+  - CLAUDE.md pins `user_version` as 7, and the 0.5.0 binaries refuse a database above it.
+  - What must change: add one sentence to "Where things live" (spec.md:80-83) and one assertion to `tests/unit/sync-schema.test.ts` (plan.md:69) that `user_version` reads 7 after both migrations. The rollback risk at spec.md:199 should say the same.
+- R-2 · .crew/work/2026-11-10-002-part-6-of-the-knowledge-and-team-journey/plan.md:83 (and spec.md:83, plan.md:108) · Phase C removes `DESTINATIONS` and makes the destination a server id. It leaves five callers of `TEAM_DESTINATION` unconverted, in files the plan does not name for this phase.
+  - `src/ui/api.ts:103` and `src/ui/api.ts:1029` call `levelOf(policy, …, TEAM_DESTINATION)`, and the sharing routes at `api.ts:975` and `api.ts:1026` live in that file.
+  - `src/status/report.ts:259` and `:262` call `levelOf(policy, …, TEAM_DESTINATION)`.
+  - `src/doctor/checks.ts:913` filters `row.destination === TEAM_DESTINATION`.
+  - `src/sharing/store.ts:227` (`previewLevel`) calls `levelOf(policy, …, TEAM_DESTINATION)`.
+  - Once a server is confirmed, `levelOf` returns `unknown-destination`/`local` for `team` (`src/sharing/levels.ts:75-77`).
+  - The viewer's project list, `status`'s sharing line, `doctor`'s sharing check and the preview would all read Nothing without an error.
+  - Task 19 names `src/ui/server.ts`, and spec.md:83 lists `src/ui/server.ts` too, but not `src/ui/api.ts`.
+  - What must change:
+    - plan.md:83 (task 9) adds `previewLevel`, `src/status/report.ts:259-262` and `src/doctor/checks.ts:913` to phase C, with the rule for which server's level each shows (the project's bound server, else Nothing).
+    - plan.md:108 (task 19) and spec.md:83 name `src/ui/api.ts` (lines 103 and 1026-1029) as the place to modify.
+    - AC-29 or AC-23 gets a case for a viewer and `status` read with a confirmed server.
+- R-3 · .crew/work/2026-11-10-002-part-6-of-the-knowledge-and-team-journey/spec.md:134 (and plan.md:92, plan.md:94) · The boundary rule says that no hook imports `src/sync/` but `spawn.ts`. Two pieces the hooks need are defined only by what they do, and the plan does not say which module owns them.
+  - `agentName` renders the marker on the prompt floor and in the notes. `contribute.ts`, `brief.ts` and `notes.ts` are on hook paths, and so is the muted-server and muted-member filter that reads `sharing_servers` and `sharing_muted_members`. The spec puts the received search in `src/modules/knowledge/`.
+  - If `agentName`, the mute read or `RECEIVED_SHARE` lands in `src/sync/`, the boundary test fails. If they land in knowledge, the module reads the sharing namespace's tables across modules, which the spec does not state.
+  - What must change:
+    - plan.md:92 and plan.md:94 name the module and file for `agentName`, the mute read and `RECEIVED_SHARE`. I suggest `src/modules/knowledge/` for `agentName` and the mute read, with `RECEIVED_SHARE` beside the brief's shares.
+    - spec.md:134 says that the knowledge module reads the muted tables read-only, by SQL, importing nothing from `src/sharing/` code or `src/sync/`.
+## Notes
+- My round-2 return is answered, and the answer holds against the code as it is. The spec gives it at spec.md:103 and the plan at plan.md:69, plan.md:83 and plan.md:119.
+  - Checked against `src/sharing/levels.ts:54-62`: a `receive` row can return `{ local, level-receive }` after the alias checks. `levelOf` (levels.ts:70-85) passes it through unchanged.
+  - Checked against `src/sharing/policy.ts:306-321`: `levelRefusal` gets level `local` and reason `level-receive`. `widens(local, needed)` is true, the level is not `knowledge`, the reason is not `allowed`, and it returns the reason on its existing last line. So `decide` and `levelRefusal` need no change.
+  - Checked against `src/sharing/store.ts:341-343`: with `widens` ranking by what leaves, Nothing to `receive` is not a widening. `receive` to `knowledge` is a widening, because the in-force level reads `local`.
+  - `setLevel` idempotence compares `inForce.level === level` at store.ts:343. For a stored `receive` row that is false, which is why the spec's "reads the stored row for its idempotence" (spec.md:103) is needed. It is stated, and a test case for it is listed (plan.md:119).
+  - `sharing_levels` has no CHECK on `level` (`src/sharing/migrations/0001_sharing_policy.sql:7-11`, "checked in code"). Storing `receive` needs no table rebuild, and the partial unique index `WHERE level != 'local'` is a plain add.
+  - The REASONS block of `tests/unit/sharing-contract.test.ts:213-218` is named as the one test that changes (plan.md:69, AC-33 at spec.md:188, AC-28 at spec.md:190).
+  - The boundary test is now written in phase F as the red of task 16 (plan.md:73). That answers my earlier note on the tree's buildable claim at plan.md:3.
+- The boundaries among `src/sync/`, `src/sharing/`, `src/modules/knowledge/` and `src/team/` are stated the same way in spec.md:80-83, plan.md:73 and plan.md:77, and the boundary test pins them.
+  - Only `spawn.ts` is reachable from `handle.ts` and `hook.ts`.
+  - `spawn.ts` imports nothing else of `src/sync/`.
+  - `src/sync/` imports only `contract.ts` from `src/team/`.
+  - `src/team/` imports nothing from `src/sync/`.
+  - `src/team/contract.ts` stays a leaf that exports the answer types (plan.md:77), with the fingerprint unchanged.
+- The migrations are add-only (plan.md:7-46 for sharing v2, plan.md:50-63 for knowledge v8) and are registered through the one list, `src/engine/module-schemas.ts:11-14`. The new tables add no foreign key or trigger on a core table.
+- The sharing and knowledge versions, v2 and v8, read the same in spec.md:63, spec.md:199, plan.md:7, plan.md:50 and plan.md:69. This is the only consistent statement in the files; the `user_version` gap is R-1.
+- `meta` key ownership is listed at plan.md:48 and extended at plan.md:70 (`sync.lease`, `sync.stop`, `sync.busy:<serverId>`, `sharing.restore_hold`). `sharing.carry_owed` appears in spec.md:146 and plan.md:103 but not in the list at plan.md:48; add it there when R-1 is edited.
+- The received tree's use of the store's guards (`lookAt`, `kindAt`, `namesIn`, `refuseLinkedRoots`, `reachedByFolders`) and the reserved `repo_id` 0 are stated at spec.md:134 and plan.md:65 and plan.md:92. I find no conflict with CLAUDE.md's rules for the knowledge store.
+- D-9 (spec.md:59), its Alternatives entry (spec.md:171) and the plan's "server B's pull never naming a project bound to A" (plan.md:93) agree.

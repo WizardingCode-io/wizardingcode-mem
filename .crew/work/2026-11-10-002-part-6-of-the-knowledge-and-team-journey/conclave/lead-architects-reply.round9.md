@@ -1,0 +1,41 @@
+# architects lead's validation of 2026-11-10-002-part-6-of-the-knowledge-and-team-journey: spec
+verdict: returned
+## Returns
+- R-1 · .crew/work/2026-11-10-002-part-6-of-the-knowledge-and-team-journey/spec.md:83 (also spec.md:91, spec.md:159, plan.md:97 and plan.md:88) · The rule that `ledger.ts` holds every statement over the sharing tables "with three exceptions, each named here and pinned by the boundary test" is false as written. The spec and the plan put sharing-table writes in more places than the three.
+  - `deleteReceivedMemory` in `src/store/memories.ts` (spec.md:91 and :159, plan.md:97) clears `sharing_received_memories` and the ledger row. It is a write, and it sits in a core store file. It is none of the three exceptions, which are the knowledge module's reads, the retrieval's reads and the carry.
+  - `src/sharing/store.ts` also writes sharing tables, and it is not `ledger.ts`: `confirmServer`, `setLevel`'s `sharing_unbound` row and `setServerLists` (plan.md:84 and :88). `resetSharingInCopy` in `backup.ts` (plan.md:109) writes them as well.
+  - A boundary test written from "three exceptions" either fails on the real tree or is weakened to pass.
+  - What must change:
+    - spec.md:83-86 and plan.md:92 state the rule as it is. For example: the sync client's statements live in `ledger.ts`; the policy module's own writes stay in `src/sharing/`; and the named exceptions are the two read-only readers, the carry, `resetSharingInCopy` and `deleteReceivedMemory`.
+    - Or move the sharing-table part of `deleteReceivedMemory` out of `src/store/memories.ts` into a function called from `src/sync/received.ts`.
+    - Either way, the boundary test (plan.md:104) pins the same list.
+- R-2 · .crew/work/2026-11-10-002-part-6-of-the-knowledge-and-team-journey/spec.md:87 (and plan.md:104) · The last clause of the boundary sentence contradicts the hook design: "nothing under `src/sync/` or `src/backup/carry.ts` runs on a hook path".
+  - `spawn.ts` is under `src/sync/` and runs on the hook path by design. `hook.ts` calls `startSync`, which reads one statement and may spawn (spec.md:130, plan.md:105).
+  - The same sentence says earlier that `hook.ts` reaches `spawn.ts`.
+  - What must change: spec.md:87 reads "nothing under `src/sync/` but `spawn.ts`, and not `src/backup/carry.ts`, runs on a hook path". The boundary test at plan.md:104 says the same. A test that checks the clause literally would fail on `spawn.ts`.
+- R-3 · .crew/work/2026-11-10-002-part-6-of-the-knowledge-and-team-journey/spec.md:82 (also spec.md:64 and plan.md:5) · The file count for `src/sync/` is wrong.
+  - spec.md:82 says "13 files" and lists 13 (`context`, `servers`, `state`, `client`, `join`, `outbound`, `inbound`, `received`, `conflicts`, `run`, `log`, `spawn`, `naming`). It then puts `ledger.ts` in `src/sync/` in the next bullet (spec.md:83).
+  - The plan creates `ledger.ts` (task 9, plan.md:92) as well. That makes 14 files under `src/sync/`.
+  - The Sizing line at spec.md:64 repeats "13 new under `src/sync/`".
+  - What must change: list `ledger.ts` in spec.md:82 and make both numbers 14, together with the "About 30 source files" total at spec.md:64.
+## Notes
+- The structure of revision 10 agrees with the code as it is, on the points I could check.
+  - `compact` is synchronous today (`src/store/compact.ts:70`), and its callers are `src/cli/commands/compact.ts:24` and `src/ui/server.ts:466`. The plan makes it async with both callers, in task 17 (plan.md:109).
+  - `restoreBackup` (`src/backup/backup.ts:137`) and `moveStore` (`src/store/move.ts:144`) are async already, so awaiting the async `stopSync` costs them nothing.
+  - The knowledge repo's own state matches what the plan modifies: `reachedByFolders` is not yet exported (`src/modules/knowledge/repo.ts:1012`), `INTENT_OPERATIONS` has no `apply` (repo.ts:1083), `writeFileAtomic` is in `repo.ts:330`, and `withRepoLeases` is at repo.ts:1396.
+  - The `TEAM_DESTINATION` callers outside `src/sharing/` (`src/status/report.ts:259` and `:262`, `src/doctor/checks.ts:913`, `src/cli/commands/share.ts` at 132, 253, 254, 287 and 288, `src/ui/api.ts:103` and `:1029`) are all covered by plan task 8 (plan.md:88).
+  - `HookDeps` exists (`src/hooks/handle.ts:24`) and `hook.ts` wires spawns by dependency (`src/cli/commands/hook.ts:159`), so an injected `spawnSync` follows the existing pattern.
+- The schema is stated consistently across the spec, the plan and the criteria.
+  - Sharing v2, knowledge v8 and `user_version` 7 appear at spec.md:64, :89 and :256, and plan.md:54 and :75.
+  - `sharing_pending_rows` has its `payload` column in both the prose (spec.md:95) and the DDL (plan.md:27-29).
+  - `stopped` no longer holds `removing`, and the `cursors` JSON shape is given at plan.md:54.
+  - The ledger's `applied` direction is stated in the DDL notes (plan.md:54) and in the inbound rule (spec.md:157).
+  - The meta keys are `sharing.restore_hold:<serverId>` per server, with `sync.last_failed_start`, `sharing.carry_owed` and `sharing.carry_done` (plan.md:54).
+- Module ownership and import directions agree between the spec and the plan, apart from the three returns above.
+  - `carry.ts` is the one `src/backup/` import from `src/sync/run.ts`, and `src/backup/` imports nothing of `src/sync/` (spec.md:87, plan.md:104 and :109).
+  - `deleteServerReceived` has one owner, `src/sync/received.ts`. The knowledge module and the retrieval import nothing of `src/sync/` or `src/sharing/`, and they read five sharing tables with the schema-absent guard (spec.md:84-85, :89 and :166-168; plan.md:71 and :97).
+  - `agentName` and its control-character pattern are in `src/core/agent-name.ts`.
+  - `writeFileAtomic` is in `src/util/atomic-write.ts`.
+  - The contract exports (`entryBytes` and the header names) are in `src/team/contract.ts` with the server's aliases kept (plan.md:82).
+- The criteria are consistent. AC-49 to AC-57 supersede AC-44, AC-35's predecessor chain, AC-17, AC-18, AC-40, AC-47, AC-31, AC-48, AC-27 and AC-34 as the coordinator states, and each criterion names what it supersedes. The plan's phase headers and the test-case lines use the new numbers (plan.md:73, :80, :86, :90, :95, :102, :107, :122-134).
+- One wording point, not a return. spec.md:111 says `loadPolicy` without a server returns "the policy of the project's bound server when a project is in question, else that of the first confirmed server by name". But `loadPolicy` takes no project argument. The plan has it right (plan.md:88: first confirmed server by name, with the callers passing the bound server through `boundServerOf`). Reword the spec to say that only the callers pass the bound server.

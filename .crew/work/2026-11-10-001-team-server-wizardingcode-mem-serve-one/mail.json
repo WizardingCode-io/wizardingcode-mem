@@ -23,7 +23,8 @@
       "subject": "Lane journey/2026-11-08-001-j-knowledge-base-and-team-collab (2026-11-10-001-...",
       "body": "Lane journey/2026-11-08-001-j-knowledge-base-and-team-collab (2026-11-10-001-team-server-wizardingcode-mem-serve-one, proven) is proven: commit it, then merge it from the main checkout.",
       "replyTo": null,
-      "status": "sent"
+      "status": "done",
+      "readAt": "2026-11-10T17:03:47.655Z"
     }
   ]
 }

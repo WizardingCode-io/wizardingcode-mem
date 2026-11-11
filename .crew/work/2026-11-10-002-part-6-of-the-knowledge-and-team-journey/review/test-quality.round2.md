@@ -1,0 +1,26 @@
+# test-quality findings for 2026-11-10-002-part-6-of-the-knowledge-and-team-journey
+reviewer: review-test-quality
+read: 12 test files (the round-1 targets and the files behind this round's records, read in full; sync-join, sync-status, sync-policy, sync-client and the unit sync-* files only by search), 15 criteria
+
+## Findings
+- F-1 · defect · tests/integration/sync-received.test.ts:449 · AC-87 says "knowledge rebuild keeps its search row", but the only `rebuildAll` call runs on a store with no received row. Undoing the `knowledge_received` clause this diff adds to rebuildAll's `DELETE FROM knowledge_fts` (index-store.ts, diff.patch:1913-1915) leaves every test green (Q1).
+- F-2 · defect · tests/integration/sync-received.test.ts:482 · AC-87 "knowledge take copies a received entry into the own repository under its uuid": the test calls `writeTaken` with the uuid and body it supplies itself, then asserts the `id: UUID_B` it passed in. The `knowledge take` command (knowledge.ts:226-274: the reference parse, `serverByName`, `receivedByFile`, the uuid taken from the received uid) is never run, so a wrong lookup or a wrong uuid would pass (Q1/Q2).
+- F-3 · defect · tests/integration/sync-received.test.ts:221 · AC-87 wants "from <member> via <server>" with names cut at 80 characters and control characters stripped, but every received fixture uses short, clean names (Bob, Ana). `agentName` is tested only alone (knowledge-sync-writer.test.ts:117), and the prompt floor's render (contribute.ts:174-175) never calls it. The clause fails on the floor and no test shows it (Q1).
+- F-4 · defect · tests/unit/sync-retrieval.test.ts:106 · AC-87 "a muted server or member hides it": the round-1 fix filters teammates' copies in linked projects' pools (brief.ts:159-166, prompt.ts:129-139), but no test puts a received memory in a linked project. Removing either filter passes every test (Q1).
+- F-5 · defect · tests/integration/sync-inbound.test.ts:183 · AC-87 "an importance of 3.5, 0.2 or 9 rounded and clamped to 4, 1 and 5": only 3.5→4 is asserted. Removing the `Math.min`/`Math.max` clamp from `importanceOf` (inbound.ts:108-109) still passes (Q1).
+- F-6 · defect · tests/integration/sync-inbound.test.ts:962 · AC-88 "a newly bound alias … a row of it written during that snapshot arriving once": the row pushed during the one-alias snapshot is the shared entry (`uids.shared`), which the main pull brings in however the alias is handled. No row of the re-joined alias is written during its snapshot, so a lost or doubled alias row would pass (Q1).
+- F-7 · defect · tests/integration/sync-inbound.test.ts:610 · AC-88's snapshot comparison says own rows "present with a sent hash are left; present with another hash are applied or become conflicts". Neither snapshot in the test holds an own sent row the server still has as an upsert: `own` is deleted from the server and `ownTwo` is withdrawn. A comparison that cleared every present sent row, or mishandled a changed one, would pass (Q1).
+- F-8 · defect · tests/integration/sync-outbound.test.ts:333 · AC-77 "batches of at most … 900 KiB of serialized body": the 451 memories are a few hundred bytes each, so no batch comes near the byte cap, and the bound is checked against the imported `BATCH_BYTES`. Deleting `|| bytes + candidate.bytes > BATCH_BYTES` (outbound.ts:565), or raising the constant, passes (Q1).
+- F-9 · defect · tests/integration/sync-received.test.ts:557 · AC-87 "a linked received/ or received/<serverId>/ folder is refused": only a linked `received/<serverId>/` is tested. No test links the `received/` root itself (Q1).
+- F-10 · defect · tests/unit/ui-sharing-copy.test.ts:100 · AC-85 (preserve, still live; its replacement AC-92 is a separate criterion) still lets only "the two configured-server sentences" of this file change. The diff also rewrites the `saveSettings` call here, the two signature regexes at :252 and :256, and adds the Servers card and dock cases. AC-92 names these changes and AC-85 does not, so AC-85's "everything else … passes unchanged" is false for this file until the person retires or restates it (Q3).
+- F-11 · advisory · tests/integration/sync-received.test.ts:949 · The 50 ms bound has no check that any transaction was timed (`longest > 0`). If the apply's writes stopped going through `ctx.db`'s `transaction().immediate()`, `longest` would stay 0 and the bound would pass by construction (Q2).
+- F-12 · advisory · tests/integration/sync-received.test.ts:469 · The title still promises "a pinned write of a received ref is refused" and the body does not test it; the refusal is now proven at :797 (Q6).
+- F-13 · advisory · tests/integration/sync-inbound.test.ts:475 · AC-88 "a 409 stops it as contract naming both": only `stopped = "contract"` is asserted, not that the error names both contract versions (Q1, partial).
+
+## Outside the change
+none
+
+## Not answerable
+- Q1 for AC-90's screen states (/settings#servers, #sharing, /projects at 360/768/1280, light and dark, motion none) · these are visual captures; no capture or capture manifest was given to read.
+- Q4 for AC-91's measurement of the sharing v1→v2 copy on the 50 MB fixture · the delivery's evidence is not among the files given.
+- Q7 (mutation) · no mutation report was named.

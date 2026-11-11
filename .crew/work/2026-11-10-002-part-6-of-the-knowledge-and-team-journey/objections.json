@@ -1,0 +1,28 @@
+{
+  "objections": [
+    {
+      "id": "O-1",
+      "raisedBy": "gap-round",
+      "severity": "advisory",
+      "text": "Received text reaches the agents without a review step (D-5, D-6): the marker, the pin rule, the one-third cap and the mute stand in",
+      "raisedAt": "2026-11-10T18:13:18.298Z",
+      "criterion": "AC-87"
+    },
+    {
+      "id": "O-2",
+      "raisedBy": "gap-round",
+      "severity": "advisory",
+      "text": "The invitation code given on the command line lands in the shell history; the prompt when --code is absent is the stated path",
+      "raisedAt": "2026-11-10T18:13:18.357Z",
+      "criterion": "AC-15"
+    },
+    {
+      "id": "O-3",
+      "raisedBy": "gap-round",
+      "severity": "advisory",
+      "text": "share server remove hard-deletes received copies behind a command named remove; the confirmation and the open-conflicts refusal guard it",
+      "raisedAt": "2026-11-10T18:13:18.416Z",
+      "criterion": "AC-80"
+    }
+  ]
+}
