@@ -1,6 +1,7 @@
 // How a project's level reads, and the policy's epoch. A leaf over `types.ts`: the store
 // (which writes levels) and the loader (which reads them) both import it, and the store
 // never imports the loader, so the two apply one rule.
+import type { Db } from "../store/db.ts";
 import { isLevel, type Level, type Reason, type SharingPolicy, TEAM_DESTINATION } from "./types.ts";
 
 /** The prefix of an alias taken from a git remote. */
@@ -12,6 +13,89 @@ const REMOTE_ALIAS = "remote:";
  * adds starts with every project at Nothing.
  */
 export const DESTINATIONS: ReadonlySet<string> = new Set([TEAM_DESTINATION]);
+
+/** Whether the store has the server list, asked of `sqlite_master` once per open. */
+const serversKnown = new WeakMap<Db, boolean>();
+function hasServerList(db: Db): boolean {
+  let known = serversKnown.get(db);
+  if (known === undefined) {
+    known =
+      db.query<unknown, []>("SELECT 1 FROM sqlite_master WHERE name = 'sharing_servers'").get() !==
+      null;
+    serversKnown.set(db, known);
+  }
+  return known;
+}
+
+export interface ServerRef {
+  serverId: string;
+  name: string;
+}
+
+/** The confirmed servers, by name then id; none on a store without the server list. */
+export function confirmedServerRefs(db: Db): ServerRef[] {
+  if (!hasServerList(db)) return [];
+  return db
+    .query<ServerRef, []>(
+      `SELECT server_id AS serverId, name FROM sharing_servers
+        WHERE confirmed_at IS NOT NULL ORDER BY name, server_id`,
+    )
+    .all();
+}
+
+/**
+ * The destinations there are: the confirmed servers' ids, or `DESTINATIONS` (the team's,
+ * kept as the default) while none is confirmed, with no database, and on a store without the
+ * server list (ADR 0027). The default is the same object, so a caller can tell the two apart.
+ */
+export function destinationsOf(db: Db | null): ReadonlySet<string> {
+  if (db === null) return DESTINATIONS;
+  const ids = confirmedServerRefs(db)
+    .map((server) => server.serverId)
+    .sort();
+  return ids.length === 0 ? DESTINATIONS : new Set(ids);
+}
+
+/** True once a server is confirmed: the team's default destination is then no destination. */
+export function serversConfirmedIn(db: Db | null): boolean {
+  return destinationsOf(db) !== DESTINATIONS;
+}
+
+/** The confirmed server a project's level binds it to, null when none (or only the team's row). */
+export function boundServerOf(db: Db, projectId: number): string | null {
+  const destinations = destinationsOf(db);
+  if (destinations === DESTINATIONS) return null;
+  const rows = db
+    .query<{ destination: string }, [number]>(
+      "SELECT destination FROM sharing_levels WHERE project_id = ? AND level != 'local'",
+    )
+    .all(projectId);
+  return (
+    rows.map((row) => row.destination).find((destination) => destinations.has(destination)) ?? null
+  );
+}
+
+/** The aliases of enabled projects bound to a server above Nothing, sorted: a pull's project scopes. */
+export function boundAliasesOf(db: Db, serverId: string): string[] {
+  return db
+    .query<{ alias: string }, [string]>(
+      `SELECT DISTINCT l.bound_alias AS alias FROM sharing_levels l
+         JOIN projects p ON p.id = l.project_id
+         JOIN project_aliases a ON a.project_id = p.id AND a.alias = l.bound_alias
+        WHERE l.destination = ? AND l.level != 'local' AND p.disabled = 0
+        ORDER BY l.bound_alias`,
+    )
+    .all(serverId)
+    .map((row) => row.alias);
+}
+
+/**
+ * Whether an enabled project's level binds it to the server under the alias: `boundAliasesOf`'s
+ * one rule asked for one alias (the one the level names, never another alias the project has).
+ */
+export function aliasBoundTo(db: Db, serverId: string, alias: string): boolean {
+  return boundAliasesOf(db, serverId).includes(alias);
+}
 
 /** A host name of dotted labels (letters, digits, hyphens), with a port or without. */
 const HOST = /^[a-z0-9-]+(\.[a-z0-9-]+)+(:\d+)?$/i;
@@ -27,6 +111,19 @@ export function isHostLedAlias(alias: string): boolean {
   const remote = alias.slice(REMOTE_ALIAS.length);
   const slash = remote.indexOf("/");
   return HOST.test(slash === -1 ? remote : remote.slice(0, slash));
+}
+
+/**
+ * The destination a project's level is read for (ADR 0027): the confirmed server its level
+ * binds it to, else the policy's server, else the team's default while no server is confirmed.
+ * One rule for `status`, the viewer's project list and the viewer's level routes.
+ */
+export function destinationOf(
+  db: Db,
+  policy: { server?: string | null },
+  projectId: number,
+): string {
+  return boundServerOf(db, projectId) ?? policy.server ?? TEAM_DESTINATION;
 }
 
 /** The key of one project's level for one destination in `SharingPolicy.levels`. */
@@ -58,6 +155,8 @@ export function effectiveLevel(
   if (!project.aliases.includes(row.boundAlias) || !isHostLedAlias(row.boundAlias)) {
     return local("unbound-alias");
   }
+  // Bound to the server, sending nothing: for what leaves it reads as `local` (ADR 0027).
+  if (row.level === "receive") return local("level-receive");
   if (!isLevel(row.level)) return local("level-local");
   return { level: row.level, reason: "allowed" };
 }
@@ -119,6 +218,7 @@ export function policyWith(parts: Partial<SharingPolicy>): SharingPolicy {
     epoch: 0,
     closed: false,
     destinations: new Set(DESTINATIONS),
+    server: null,
     projects: new Set(),
     roots: new Set(),
     areas: new Set(),

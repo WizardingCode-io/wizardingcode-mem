@@ -5,8 +5,8 @@
 // selected project opens in the app's 320px dock: its suggestions with their reasons and
 // Link / Reject, its confirmed links with Unlink, a way to link one by hand, and what it
 // shares with the team's server.
-import { computed, reactive, ref } from "vue";
-import { api, LEVEL_LABELS, LEVELS, type Level, type LinkKind, type Project, widens } from "../api";
+import { computed, onMounted, reactive, ref } from "vue";
+import { api, LEVEL_LABELS, LEVELS, type Level, type LinkKind, type Project, type ServerEntry, widens } from "../api";
 import { compact, day, hue } from "../format";
 import { projectGroups, projectLinks, projectPlace, signalParts, visibleFrom } from "../links";
 import { loadLinks, loadOverview, openCross, reload, state } from "../viewer";
@@ -113,9 +113,24 @@ async function linkByHand() {
   }
 }
 // What the project shares: a wider level is previewed and confirmed; a narrower one is set.
+// The level binds the project to a server (ADR 0027): the one it is bound to, else the only
+// one listed, else the one picked here when several are.
+const servers = ref<ServerEntry[]>([]);
+const chosenServer = ref<string | undefined>(undefined);
+const serverItems = computed(() => servers.value.map((s) => ({ label: `${s.name} · ${s.host}`, value: s.id })));
+onMounted(async () => {
+  try {
+    servers.value = (await api.servers()).servers.filter((s) => s.state !== "pending");
+  } catch {
+    servers.value = [];
+  }
+});
+/** The server a level of this project goes to, by id; undefined leaves it to the server's rule. */
+const serverFor = (p: Project) => p.server?.id ?? (servers.value.length > 1 ? chosenServer.value : undefined);
+const serverNameFor = (p: Project) => p.server?.name ?? (servers.value.length > 1 ? servers.value.find((s) => s.id === chosenServer.value)?.name : servers.value[0]?.name) ?? null;
 const sharingBusy = ref(false);
 const widening = ref<{ id: number; name: string; level: Level; description: string } | null>(null);
-const sharingLocked = computed(() => !selected.value || !selected.value.remote || selected.value.disabled);
+const sharingLocked = computed(() => !selected.value || !selected.value.remote || selected.value.disabled || (servers.value.length > 1 && !selected.value.server && chosenServer.value === undefined));
 const LEVEL_ITEMS = LEVELS.map((level) => ({ label: LEVEL_LABELS[level], value: level }));
 /** Whatever failed, the person reads one plain sentence: no message, no path. */
 const notChanged = () => toast.add({ title: "Not changed", description: "The level could not be saved.", color: "error" });
@@ -128,14 +143,16 @@ async function chooseLevel(level: Level) {
   }
   sharingBusy.value = true;
   try {
-    const { report } = await api.sharingPreview({ level: { projectId: p.id, level } });
+    const server = serverFor(p);
+    const { report } = await api.sharingPreview({ level: { projectId: p.id, level, ...(server ? { server } : {}) } });
     const own = report.perProject.find((row) => row.id === p.id) ?? report.counts;
     const count = (n: number, one: string, many: string) => `${n.toLocaleString("en-GB")} ${n === 1 ? one : many}`;
+    const serverName = serverNameFor(p);
     widening.value = {
       id: p.id,
       name: p.name,
       level,
-      description: `${count(own.entries, "knowledge entry", "knowledge entries")} and ${count(own.memories, "memory", "memories")} of ${p.name} would leave for your team's server once one is configured. Nothing is sent now.`,
+      description: `${count(own.entries, "knowledge entry", "knowledge entries")} and ${count(own.memories, "memory", "memories")} of ${p.name} ${serverName === null ? "would leave for your team's server once one is listed. Nothing is sent now." : `would leave for ${serverName}.`}`,
     };
   } catch {
     notChanged();
@@ -146,7 +163,8 @@ async function chooseLevel(level: Level) {
 async function setLevel(id: number, level: Level, confirm: boolean) {
   sharingBusy.value = true;
   try {
-    const changed = await api.setProjectSharing(id, level, confirm);
+    const p = state.projects.find((row) => row.id === id);
+    const changed = await api.setProjectSharing(id, level, confirm, p ? serverFor(p) : undefined);
     await loadOverview();
     toast.add({ title: "Sharing changed", description: `${LEVEL_LABELS[changed.old]} → ${LEVEL_LABELS[changed.level]}`, color: "success" });
   } catch {
@@ -290,6 +308,11 @@ const RELATION_TONE = {
 
         <section aria-label="Sharing" class="flex flex-col gap-2 border-t border-(--line) pt-3">
           <div class="flex h-5 items-center gap-2"><h3 class="m-0 text-sm font-semibold">Sharing</h3><span class="wz-meta">{{ LEVEL_LABELS[selected.sharing] }}</span></div>
+          <p v-if="selected.server" class="m-0 text-xs leading-4 text-(--ink-muted)">Bound to {{ selected.server.name }}.</p>
+          <UFormField v-else-if="servers.length > 1" label="Server" help="The level binds this project to the server you pick." class="w-full">
+            <USelectMenu :model-value="chosenServer" :items="serverItems" value-key="value" :search-input="false" placeholder="Choose a server" size="sm" class="w-full" @update:model-value="(id) => (chosenServer = id as string)" />
+          </UFormField>
+          <p v-else-if="servers.length === 1" class="m-0 text-xs leading-4 text-(--ink-muted)">A level set here binds this project to {{ servers[0]?.name }}.</p>
           <URadioGroup
             :model-value="selected.sharing"
             :items="LEVEL_ITEMS"
@@ -297,6 +320,7 @@ const RELATION_TONE = {
             size="sm"
             legend="What this project shares"
             :disabled="sharingLocked || sharingBusy"
+            :class="{ 'opacity-60': sharingLocked }"
             :ui="{ legend: 'sr-only', fieldset: 'gap-0', item: 'h-8 items-center' }"
             @update:model-value="(level) => chooseLevel(level as Level)"
           />

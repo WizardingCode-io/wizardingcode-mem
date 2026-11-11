@@ -3,9 +3,10 @@
 // the levels the projects are at. The page only changes the settings file, through the
 // server, which asks for the person's yes before anything is widened; nothing is sent here.
 import { computed, onMounted, reactive, ref } from "vue";
-import { api, buildSharingPatch, LEVEL_LABELS, type Level, type Root, type SettingKey, type SettingsPatch, type SharingView } from "../../api";
+import { api, buildSharingPatch, LEVEL_LABELS, type Level, type Root, type ServerEntry, type SettingKey, type SettingsPatch, type SharingView } from "../../api";
 import { ago } from "../../format";
 import { fromEnvironment, saveSettings, setting } from "../../settings";
+import { serverChange } from "../../sharing-text";
 import { openCross, state } from "../../viewer";
 import Confirm from "../Confirm.vue";
 import Card from "./Card.vue";
@@ -24,6 +25,14 @@ const STATEMENTS =
 const view = ref<SharingView | null>(null);
 /** The page could not be read; the viewer says so in a plain sentence, never the error. */
 const loadFailed = ref(false);
+/** The confirmed servers; with several, the switches edit the chosen one's lists (ADR 0027). */
+const servers = ref<ServerEntry[]>([]);
+const chosen = ref<string | undefined>(undefined);
+const serverItems = computed(() => servers.value.map((s) => ({ label: `${s.name} · ${s.host}`, value: s.id })));
+const several = computed(() => servers.value.length > 1);
+/** The server the sentences name: the chosen one, else the only one, else none yet. */
+const serverName = computed(() => (several.value ? servers.value.find((s) => s.id === chosen.value)?.name : servers.value[0]?.name) ?? null);
+const CEILING = "The settings file's lists are the ceiling: a server's lists can only narrow them.";
 const roots = reactive<Record<Root, boolean>>({ workspace: false, shared: false });
 const areas = reactive<Record<string, boolean>>({});
 /** Inert ids the person removed: hidden, and Save offered, though every save drops them. */
@@ -53,7 +62,13 @@ function reset(next: SharingView) {
 
 async function load() {
   try {
-    const next = await api.sharing();
+    try {
+      servers.value = (await api.servers()).servers.filter((s) => s.state !== "pending");
+    } catch {
+      servers.value = [];
+    }
+    if (several.value && (chosen.value === undefined || !servers.value.some((s) => s.id === chosen.value))) chosen.value = servers.value[0]?.id;
+    const next = await api.sharing(false, several.value ? chosen.value : undefined);
     view.value = next;
     loadFailed.value = false;
     reset(next);
@@ -62,6 +77,10 @@ async function load() {
   }
 }
 onMounted(load);
+async function chooseServer(id: string) {
+  chosen.value = id;
+  await load();
+}
 
 const inertOf = (root: Root) =>
   (view.value?.inert ?? []).filter((id) => id.startsWith(`${root}:`) && !removed.value.includes(id));
@@ -70,10 +89,16 @@ const totalOf = (root: Root, area: string) => view.value?.report.perRoot[root].a
 const levelCount = (level: Level) => view.value?.levels[level] ?? 0;
 const openProjects = () => openCross("projects", null);
 
-/** The log's line for the last change: a project by its name, a level by its label. */
+/** The log's line for the last change: a project by its name, a level by its label, a server by its name (`serverChange`). */
 const lastChange = computed(() => {
   const change = view.value?.lastChange;
   if (!change) return null;
+  const server = /^server:([0-9a-f]+)$/.exec(change.what);
+  if (server !== null) {
+    const listed = servers.value.find((s) => s.id === server[1])?.name;
+    const name = listed ?? (/^mute/.test(change.old) || change.old === "" ? "a server" : change.old);
+    return { ...change, what: serverChange(name, change.old, change.new), old: "", new: "" };
+  }
   const project = /^project:(\d+)$/.exec(change.what);
   if (project === null) return change;
   const id = Number(project[1]);
@@ -142,7 +167,7 @@ async function save() {
 
 const description = computed(
   () =>
-    `${leaving.value.toLocaleString("en-GB")} knowledge ${leaving.value === 1 ? "entry" : "entries"} would leave for your team's server once one is configured. Nothing is sent now.`,
+    `${leaving.value.toLocaleString("en-GB")} knowledge ${leaving.value === 1 ? "entry" : "entries"} ${serverName.value === null ? "would leave for your team's server once one is listed. Nothing is sent now." : `would leave for ${serverName.value}.`}`,
 );
 
 async function confirmShare() {
@@ -161,7 +186,9 @@ function notSaved() {
 async function commit(patch: SettingsPatch, confirmed: boolean) {
   saving.value = true;
   try {
-    const taken = confirmed ? await saveSettings(patch, { confirm: true }) : await saveSettings(patch);
+    const forServer = several.value ? chosen.value : undefined;
+    const options = { ...(confirmed ? { confirm: true } : {}), ...(forServer ? { server: forServer } : {}) };
+    const taken = confirmed ? await saveSettings(patch, { confirm: true, ...options }) : await saveSettings(patch, options);
     if (!taken) {
       notSaved();
       return;
@@ -177,16 +204,23 @@ async function commit(patch: SettingsPatch, confirmed: boolean) {
 </script>
 
 <template>
-  <Card id="sharing" title="Sharing" description="What may leave this machine for your team's server. Nothing leaves until you choose it here, and nothing is sent until a team server is configured.">
+  <Card id="sharing" title="Sharing" description="What may leave this machine for your team's server. Nothing leaves until you choose it here, and nothing is sent until a server is listed.">
     <p v-if="view === null && !loadFailed" class="m-0 text-[13px] text-(--ink-muted)">Loading…</p>
     <p v-else-if="view === null" class="m-0 text-[13px] text-(--ink-muted)">Sharing could not be loaded.</p>
     <div v-else class="flex flex-col">
       <UAlert v-if="view.problems.length" class="mb-4" color="warning" variant="soft" icon="i-lucide-triangle-alert" :description="view.problems.join(' · ')" />
+      <div v-if="several" class="mb-4 flex flex-col gap-2">
+        <UFormField label="Server" :help="CEILING">
+          <USelectMenu :model-value="chosen" :items="serverItems" value-key="value" :search-input="false" class="w-full max-w-[360px]" @update:model-value="(id) => chooseServer(id as string)" />
+        </UFormField>
+      </div>
+      <p v-else-if="serverName" class="m-0 mb-4 text-xs leading-4 text-(--ink-muted)">Sending to {{ serverName }}. {{ CEILING }}</p>
       <div class="flex flex-col gap-4">
         <div v-for="r in ROOT_ROWS" :key="r.root" class="flex flex-col gap-2">
-          <div class="flex items-start gap-3">
-            <USwitch v-model="roots[r.root]" class="min-w-0 flex-1" :disabled="lockedRoots" :label="r.label" :description="lockedRoots ? `${r.help} ${LOCKED}` : r.help" />
-            <span class="wz-mono flex-none text-(--ink-muted)">{{ entries(view.report.perRoot[r.root].entries) }} would leave</span>
+          <!-- The count wraps under the switch where the two do not fit on one line (a phone's width), indented to the label. -->
+          <div class="flex flex-wrap items-start gap-x-3 gap-y-1">
+            <USwitch v-model="roots[r.root]" class="min-w-0 flex-1 basis-56" :disabled="lockedRoots" :label="r.label" :description="lockedRoots ? `${r.help} ${LOCKED}` : r.help" />
+            <span class="wz-mono flex-none pl-11 text-(--ink-muted) md:pl-0">{{ entries(view.report.perRoot[r.root].entries) }} would leave</span>
           </div>
           <div class="flex flex-col gap-1.5 pl-11">
             <p v-if="view.taxonomies[r.root] === null" class="m-0 text-xs leading-4 text-(--ink-muted)">No taxonomy yet: write a knowledge entry first.</p>
@@ -213,7 +247,7 @@ async function commit(patch: SettingsPatch, confirmed: boolean) {
           {{ levelCount("knowledge").toLocaleString("en-GB") }} projects share knowledge, {{ levelCount("all").toLocaleString("en-GB") }} share knowledge and memories.
           <button type="button" class="wz-link" @click="openProjects">Across projects</button>
         </p>
-        <p v-if="lastChange" class="m-0">Last change: {{ lastChange.what }} {{ lastChange.old }} → {{ lastChange.new }}, {{ ago(lastChange.at) }}, from the {{ lastChange.source }}.</p>
+        <p v-if="lastChange" class="m-0">Last change: {{ lastChange.what }}<template v-if="lastChange.old || lastChange.new"> {{ lastChange.old }} → {{ lastChange.new }}</template>, {{ ago(lastChange.at) }}, from the {{ lastChange.source }}.</p>
       </div>
     </div>
     <Confirm

@@ -1,0 +1,22 @@
+# test-quality findings for 2026-11-10-002-part-6-of-the-knowledge-and-team-journey
+reviewer: review-test-quality
+read: 3 test files (round 5's new or changed cases, read from the tree: tests/integration/sync-received.test.ts, tests/unit/ui-sharing-copy.test.ts, tests/unit/team-validate.test.ts; plus the helper tests/helpers/sync-world.ts), 15 criteria
+
+## Findings
+- F-1 · defect · tests/unit/ui-sharing-copy.test.ts:100 · AC-85 (preserve) is still live in probes/criteria.md:13 and its text is unchanged. It allows only "the two configured-server sentences" of this file to change, but the diff also changes the saveSettings call, the two signature regexes, the last-change case and the added Servers and dock cases. So its "passes unchanged" still does not hold. The person has to retire or restate it, as round 4's ruling says (Q3).
+- F-2 · defect · tests/unit/ui-sharing-copy.test.ts:109 · AC-92 (observed) says everything else of this file "passes unchanged" except the named cases. Round 5 added lines 109-113 to the "says how many projects share, and the last change" case (the muted, unmuted and removed/added matches). AC-92 does not name that case, so its recorded claim is false for this file. The added "would leave for ${serverName…}." lines at :93 and :187 also sit outside the two configured-server sentences as written. AC-92 must name these cases, or the lines have to move into a new case (Q4).
+- F-3 · defect · tests/unit/team-validate.test.ts:3 · AC-91 (observed) says the server's tests (tests/unit/team-*.test.ts) "pass unchanged on the final tree". This diff changes team-validate.test.ts so that it imports parseEntryUid from src/team/contract.ts instead of src/team/validate.ts. The change was not needed: src/team/validate.ts:37 still re-exports parseEntryUid, so the base's import would pass. Restoring the base's import lines makes AC-91's claim true again, and contract.ts's parser stays covered through that re-export (Q4).
+- F-4 · advisory · tests/unit/ui-sharing-copy.test.ts:111 · AC-90 (the last-change line's mute and unmute). The case matches the source text of the template strings and never runs `serverChange` (ui/src/components/settings/Sharing.vue:96-104) on the values muteServer logs (src/sync/join.ts:375-383: new `mute` / old `mute`, `mute:<member>`). Reverting to the round 4 code fails it. But swapping the old and new checks would still pass, and so would dropping the member prefix. A call with ("", "mute"), ("mute", "") and ("", "mute:m1") checked against the expected lines would test the behaviour itself (Q5).
+- F-5 · advisory · tests/unit/ui-sharing-copy.test.ts:224 · AC-90 (the server row's actions on their own line under 640px). `basis-full` and `sm:basis-auto` are searched for anywhere in Servers.vue rather than on the action group at :262, so a later class elsewhere would satisfy them. The case does fail on reversion through the `not.toContain("flex-none flex-wrap")` check. The visual proof is the 360 capture, not this case (Q5).
+
+These round 5 cases were read against the code, and each fails if its fix is reverted:
+- AC-87, tests/integration/sync-received.test.ts:533-563 (a project with two host-led remotes). The other alias `remote:github.com/acme/a-second` sorts before the bound `ALIAS` (`remote:github.com/acme/site`, tests/helpers/sync-world.ts:21, bound by setLevel at :73). So the old RECEIVED_VISIBLE, which took the first host-led alias by name and accepted any alias of the project, would show `other-copy` and hide `bound-copy`. The case fails both on search (:551-552) and on browse (:562). The current query ties `x.remote_alias` to `l.bound_alias` (src/modules/knowledge/index-store.ts:959-961). Search, the floor's FTS read and knowledge_get by name share that clause, so this case covers all three.
+- parseEntryUid's single home: tests/unit/team-validate.test.ts:16-37 pins the three shapes and the refusals, including the non-host-led alias at :32. Every caller (src/sync/conflicts.ts:53 and :94, inbound.ts, outbound.ts, src/team/push.ts, validate.ts) now uses src/team/contract.ts:36's parser.
+
+## Outside the change
+none
+
+## Not answerable
+- Q1 for AC-90's screen states (/settings#servers, #sharing, /projects at 360/768/1280, light and dark, motion none) · these are visual captures, and none was given to this reviewer.
+- Q4 for AC-91's measurement of the sharing v1→v2 copy on the 50 MB fixture · the delivery's evidence was not among the files given.
+- Q7 (mutation) · no mutation report was named.

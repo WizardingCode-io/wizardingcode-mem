@@ -56,7 +56,7 @@ export interface Report {
 
 /** A change a person is about to make: one project's level, the roots, the areas. */
 export interface PolicyChange {
-  level?: { projectId: number; level: Level };
+  level?: { projectId: number; level: Level; destination?: string };
   roots?: Root[];
   areas?: string[];
 }
@@ -64,6 +64,8 @@ export interface PolicyChange {
 export interface WouldLeaveOptions {
   /** Only this project's own repository and memories. */
   projectId?: number;
+  /** The destination asked about: a server's id; the team's by default. */
+  destination?: string;
   /** Also name what leaves. */
   list?: boolean;
   /** Bring the index up to date with the repositories' files first. */
@@ -102,16 +104,16 @@ const idList = (ids: readonly number[]) => JSON.stringify(ids);
 /** The levels with one project's replaced. A project at Nothing has no level. */
 function withLevel(
   levels: ReadonlyMap<string, LevelRow>,
-  { projectId, level }: NonNullable<PolicyChange["level"]>,
+  { projectId, level, destination }: NonNullable<PolicyChange["level"]> & { destination: string },
 ): Map<string, LevelRow> {
   const next = new Map(levels);
-  const key = levelKey(projectId, TEAM_DESTINATION);
+  const key = levelKey(projectId, destination);
   if (level === "local") next.delete(key);
   else {
     const boundAlias = levels.get(key)?.boundAlias ?? "";
     next.set(key, {
       projectId,
-      destination: TEAM_DESTINATION,
+      destination,
       level,
       boundAlias,
       reason: "allowed",
@@ -147,7 +149,13 @@ export function withChange(
       roots: roots ?? policy.settings.roots,
       areas: listed ?? policy.settings.areas,
     },
-    levels: change.level === undefined ? policy.levels : withLevel(policy.levels, change.level),
+    levels:
+      change.level === undefined
+        ? policy.levels
+        : withLevel(policy.levels, {
+            ...change.level,
+            destination: change.level.destination ?? policy.server ?? TEAM_DESTINATION,
+          }),
   };
   const inForce = { roots: [...next.roots], areas: [...next.areas] };
   return { ...next, epoch: epochOf(counterOfEpoch(policy.epoch) + 1, inForce) };
@@ -164,7 +172,7 @@ const rootOf = (scope: EntryItem["scope"]): Root => (scope === "shared" ? "share
  * was sent under that name is still found and can be withdrawn. A project with none: its
  * first remote alias by name, the one a level would be bound to.
  */
-function entryAliases(db: Db): Map<number, string> {
+function entryAliases(db: Db, destination: string): Map<number, string> {
   type Named = { projectId: number; alias: string };
   // Only a host-led alias names a project to a team (ADR 0025): a path alias never does, not
   // as the first by name and not as the alias a row was bound to before the rule.
@@ -184,7 +192,7 @@ function entryAliases(db: Db): Map<number, string> {
           `SELECT project_id AS projectId, bound_alias AS alias FROM sharing_levels
             WHERE destination = ?`,
         )
-        .all(TEAM_DESTINATION)
+        .all(destination)
         .filter(({ alias }) => isHostLedAlias(alias))
     : [];
   // Listed last, the alias a level is bound to replaces the project's first.
@@ -217,6 +225,7 @@ interface EntryRow {
 function readEntries(
   db: Db,
   only: { projectId?: number | null; scope?: string; slug?: string },
+  destination: string,
 ): ListedEntry[] {
   if (!knowledgeReadable(db)) return [];
   const rows = db
@@ -232,7 +241,7 @@ function readEntries(
     )
     .all(only.projectId ?? null, only.scope ?? null, only.slug ?? null);
   const aliases = rows.some((row) => row.scope === "project")
-    ? entryAliases(db)
+    ? entryAliases(db, destination)
     : new Map<number, string>();
   return rows.map((row) => ({
     kind: "entry",
@@ -257,20 +266,33 @@ function readEntries(
  * Every indexed entry as the predicate reads it, or one project's repository's only; none
  * on a store without the knowledge tables.
  */
-export function entryItems(db: Db, projectId?: number): ListedEntry[] {
-  return readEntries(db, { projectId });
+export function entryItems(
+  db: Db,
+  projectId?: number,
+  destination: string = TEAM_DESTINATION,
+): ListedEntry[] {
+  return readEntries(db, { projectId }, destination);
 }
 
 /**
  * The entry a reference names, `<scope>/<slug>`: the workspace's, the shared repository's,
  * or, for `project/<slug>`, the given project's. Null when there is none.
  */
-export function findEntry(db: Db, ref: string, projectId: number | null): EntryItem | null {
+export function findEntry(
+  db: Db,
+  ref: string,
+  projectId: number | null,
+  destination: string = TEAM_DESTINATION,
+): EntryItem | null {
   const [scope, slug, ...more] = ref.split("/");
   if (scope === undefined || slug === undefined || more.length > 0) return null;
   const ofProject = scope === "project";
   if (ofProject && projectId === null) return null;
-  const [found] = readEntries(db, { projectId: ofProject ? projectId : null, scope, slug });
+  const [found] = readEntries(
+    db,
+    { projectId: ofProject ? projectId : null, scope, slug },
+    destination,
+  );
   if (found === undefined) return null;
   const { slug: _slug, title: _title, ...item } = found;
   return item;
@@ -306,9 +328,10 @@ function projectsAt(
   policy: SharingPolicy,
   only: number | undefined,
   passes: (level: Level) => boolean,
+  destination: string,
 ): number[] {
   const ids = only === undefined ? [...policy.projects].sort((a, b) => a - b) : [only];
-  return ids.filter((id) => passes(levelOf(policy, id, TEAM_DESTINATION).level));
+  return ids.filter((id) => passes(levelOf(policy, id, destination).level));
 }
 
 interface MemoryRow {
@@ -323,10 +346,18 @@ interface MemoryRow {
 }
 
 /** What the predicate reads of a memory, and never its text. The join is an input, not a rule. */
-const MEMORY_ROWS = `
+const MEMORY_COLUMNS = `
   SELECT m.id, m.project_id AS projectId, m.status, m.stale, m.scope, m.origin,
-         m.updated_at AS updatedAt, u.memory_id IS NOT NULL AS isUserRule
-    FROM memories m LEFT JOIN user_memories u ON u.memory_id = m.id`;
+         m.updated_at AS updatedAt, u.memory_id IS NOT NULL AS isUserRule`;
+const MEMORY_JOIN = "LEFT JOIN user_memories u ON u.memory_id = m.id";
+const MEMORY_ROWS = `${MEMORY_COLUMNS} FROM memories m ${MEMORY_JOIN}`;
+const PROJECTS_IN = "m.project_id IN (SELECT value FROM json_each(?))";
+
+/** A sweep's tick: the rows changed at or after a time, and the rows inserted above an id. */
+export interface MemoryWindow {
+  updatedSince: number;
+  idAbove: number;
+}
 
 const memoryOf = (row: MemoryRow, generation: string): ListedMemory => ({
   kind: "memory",
@@ -353,14 +384,29 @@ export function memoryItems(
   policy: SharingPolicy,
   generation: string,
   projectId?: number,
+  destination: string = TEAM_DESTINATION,
+  window?: MemoryWindow,
 ): ListedMemory[] {
-  const projects = projectsAt(policy, projectId, (level) => level === "all");
+  const projects = projectsAt(policy, projectId, (level) => level === "all", destination);
   if (projects.length === 0) return [];
+  const ids = idList(projects);
+  if (window === undefined)
+    return db
+      .query<MemoryRow, [string]>(`${MEMORY_ROWS} WHERE ${PROJECTS_IN} ORDER BY m.id`)
+      .all(ids)
+      .map((row) => memoryOf(row, generation));
+  // The two halves each through their index (`sharing_memories_updated`, the rowid), so a
+  // window with nothing in it reads no row; the union removes a row in both.
   return db
-    .query<MemoryRow, [string]>(
-      `${MEMORY_ROWS} WHERE m.project_id IN (SELECT value FROM json_each(?)) ORDER BY m.id`,
+    .query<MemoryRow, [number, string, number, string]>(
+      `${MEMORY_COLUMNS} FROM memories m INDEXED BY sharing_memories_updated ${MEMORY_JOIN}
+        WHERE m.updated_at >= ? AND ${PROJECTS_IN}
+       UNION
+       ${MEMORY_COLUMNS} FROM memories m NOT INDEXED ${MEMORY_JOIN}
+        WHERE m.id > ? AND ${PROJECTS_IN}
+       ORDER BY id`,
     )
-    .all(idList(projects))
+    .all(window.updatedSince, ids, window.idAbove, ids)
     .map((row) => memoryOf(row, generation));
 }
 
@@ -429,17 +475,31 @@ export function ledgerRecords(
 ): Map<string, LedgerRecord[]> {
   const records = new Map<string, LedgerRecord[]>();
   if (!hasTable(db, "sharing_ledger")) return records;
+  // Sharing v2 adds `local_hash`, `instance` and `reason` (ADR 0027); a v1 store, which
+  // `status` and `doctor` may open without migrating, has the five columns alone.
+  const extended = hasTable(db, "sharing_sent_hashes");
+  type Row = LedgerRecord & { uid: string; localHash?: string; instance?: string; reason?: string };
   const rows = db
-    .query<LedgerRecord & { uid: string }, [string, string]>(
+    .query<Row, [string, string]>(
       `SELECT item_uid AS uid, destination, direction, version, hash, withdrawn_at AS withdrawnAt
+              ${extended ? ", local_hash AS localHash, instance, reason" : ""}
          FROM sharing_ledger
         WHERE item_kind = ? AND (destination = ? OR direction = 'received')`,
     )
     .all(kind, destination);
-  for (const { uid, ...record } of rows) {
+  for (const { uid, localHash, instance, reason, ...record } of rows) {
+    // The index hash of the file as it was when sent or applied is what `decide` compares the
+    // item with; the server's hash of the redacted bytes stays in `hash` for the push's base.
+    const mapped: LedgerRecord = {
+      ...record,
+      hash: localHash !== undefined && localHash !== "" ? localHash : record.hash,
+      ...(localHash !== undefined && localHash !== "" ? { localHash } : {}),
+      ...(instance !== undefined && instance !== "" ? { instance } : {}),
+      ...(reason !== undefined && reason !== "" ? { reason } : {}),
+    };
     const ofItem = records.get(uid);
-    if (ofItem === undefined) records.set(uid, [record]);
-    else ofItem.push(record);
+    if (ofItem === undefined) records.set(uid, [mapped]);
+    else ofItem.push(mapped);
   }
   return records;
 }
@@ -453,10 +513,11 @@ function leaving<T extends Item>(
   policy: SharingPolicy,
   items: T[],
   ledger: Map<string, LedgerRecord[]>,
+  destination: string,
 ): T[] {
   return items.filter(
     (item) =>
-      decide(policy, TEAM_DESTINATION, item, ledger.get(item.uid) ?? NO_RECORDS).answer === "send",
+      decide(policy, destination, item, ledger.get(item.uid) ?? NO_RECORDS).answer === "send",
   );
 }
 
@@ -470,14 +531,16 @@ function leavingMemories(
   env: Env,
   policy: SharingPolicy,
   projectId: number | undefined,
+  destination: string,
 ): ListedMemory[] {
   const generation = generationOf(db);
-  const candidates = generation === null ? [] : memoryItems(db, policy, generation, projectId);
+  const candidates =
+    generation === null ? [] : memoryItems(db, policy, generation, projectId, destination);
   if (candidates.length === 0) return candidates;
-  const ledger = ledgerRecords(db, TEAM_DESTINATION, "memory");
+  const ledger = ledgerRecords(db, destination, "memory");
   const recorded = candidates.filter((item) => ledger.has(item.uid)).map((item) => item.uid);
   withHashes(db, env, candidates, new Set(recorded));
-  return leaving(policy, candidates, ledger);
+  return leaving(policy, candidates, ledger, destination);
 }
 
 /** The titles of the memories a list names. */
@@ -517,7 +580,12 @@ function refreshRepos(
   if (!knowledgeReadable(db)) return;
   const store = openStore({ db, dataDir, env, now: () => options.now });
   const refresh = options.refresh ?? ((repo: Repo) => refreshIndex(store, repo));
-  const projects = projectsAt(policy, options.projectId, (level) => level !== "local");
+  const projects = projectsAt(
+    policy,
+    options.projectId,
+    (level) => level !== "local",
+    options.destination ?? TEAM_DESTINATION,
+  );
   const refs: ScopeRef[] = [
     ...(options.projectId === undefined
       ? ([{ scope: "workspace" }, { scope: "shared" }] as const)
@@ -569,11 +637,11 @@ function readLeaving(
   db: Db,
   env: Env,
   policy: SharingPolicy,
-  { projectId, list }: WouldLeaveOptions,
+  { projectId, list, destination = TEAM_DESTINATION }: WouldLeaveOptions,
 ): Leaving {
-  const sent = ledgerRecords(db, TEAM_DESTINATION, "entry");
-  const entries = leaving(policy, entryItems(db, projectId), sent);
-  const memories = leavingMemories(db, env, policy, projectId);
+  const sent = ledgerRecords(db, destination, "entry");
+  const entries = leaving(policy, entryItems(db, projectId, destination), sent, destination);
+  const memories = leavingMemories(db, env, policy, projectId, destination);
   const titles = list === true ? titlesOf(db, memories.slice(0, LIST_CAP)) : new Map();
   return { entries, memories, totals: areaTotals(db), titles };
 }
@@ -608,8 +676,10 @@ export function wouldLeave(
   policy: SharingPolicy,
   options: WouldLeaveOptions,
 ): Report {
-  if (db !== null && options.fresh === true) refreshRepos(db, dataDir, env, policy, options);
-  const found = db === null ? nothingLeaves() : readLeaving(db, env, policy, options);
+  const destination = options.destination ?? policy.server ?? TEAM_DESTINATION;
+  const resolved = { ...options, destination };
+  if (db !== null && options.fresh === true) refreshRepos(db, dataDir, env, policy, resolved);
+  const found = db === null ? nothingLeaves() : readLeaving(db, env, policy, resolved);
   const { entries, memories, totals } = found;
   const ofRoot = (root: Root) => entries.filter((entry) => rootOf(entry.scope) === root).length;
   const projectEntries = tally(
@@ -622,9 +692,9 @@ export function wouldLeave(
       workspace: { entries: ofRoot("workspace"), areaTotals: totals.workspace },
       shared: { entries: ofRoot("shared"), areaTotals: totals.shared },
     },
-    perProject: projectsAt(policy, options.projectId, () => true).map((id) => ({
+    perProject: projectsAt(policy, options.projectId, () => true, destination).map((id) => ({
       id,
-      level: levelOf(policy, id, TEAM_DESTINATION).level,
+      level: levelOf(policy, id, destination).level,
       entries: projectEntries.get(id) ?? 0,
       memories: projectMemories.get(id) ?? 0,
     })),

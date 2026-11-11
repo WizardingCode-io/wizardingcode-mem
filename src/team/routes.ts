@@ -4,10 +4,10 @@ import type { Server } from "bun";
 import { json, problem } from "../http/respond.ts";
 import { readAudit } from "./audit.ts";
 import { authenticate, type Caller, checkContract, requireAdmin } from "./auth.ts";
-import { CONTRACT } from "./contract.ts";
+import { CONTRACT, REQUEST_ID_HEADER, REQUEST_ID_RE } from "./contract.ts";
 import { HttpError, unknownItem } from "./errors.ts";
 import { parsePullQuery, pullWithWait } from "./feed.ts";
-import { newHexId, REQUEST_ID } from "./ids.ts";
+import { newHexId } from "./ids.ts";
 import {
   checkLabel,
   checkName,
@@ -493,8 +493,8 @@ export async function handle(
   server: Server<unknown>,
 ): Promise<Response> {
   const started = ctx.now();
-  const own = request.headers.get("x-request-id");
-  const requestId = own !== null && REQUEST_ID.test(own) ? own : newHexId();
+  const own = request.headers.get(REQUEST_ID_HEADER);
+  const requestId = own !== null && REQUEST_ID_RE.test(own) ? own : newHexId();
   const url = new URL(request.url);
   const segments = url.pathname.split("/").filter((part) => part !== "");
   const address = clientAddress(request, server, ctx.trustProxy);
@@ -534,7 +534,7 @@ export async function handle(
       response = problem(500, "internal error", { requestId });
     }
   }
-  response.headers.set("x-request-id", requestId);
+  response.headers.set(REQUEST_ID_HEADER, requestId);
   ctx.log.request({
     requestId,
     route: routeName,

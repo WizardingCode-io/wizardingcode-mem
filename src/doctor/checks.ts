@@ -54,12 +54,7 @@ import { type FoundRepo, scanRepos } from "../modules/knowledge/resolve.ts";
 import type { KnowledgeStore } from "../modules/knowledge/types.ts";
 import { loadSettings } from "../settings/settings.ts";
 import { isDefault, loadPolicy } from "../sharing/policy.ts";
-import {
-  type Level,
-  type SharingPolicy,
-  shareListText,
-  TEAM_DESTINATION,
-} from "../sharing/types.ts";
+import { type Level, type SharingPolicy, shareListText } from "../sharing/types.ts";
 import { hookLatency } from "../status/report.ts";
 import {
   DB_FILE,
@@ -69,7 +64,11 @@ import {
   openExisting,
   SchemaTooNewError,
 } from "../store/db.ts";
+import { readFailedStart, readSyncStop, staleStopFlag } from "../store/meta.ts";
 import { inspectTarget } from "../store/move.ts";
+import { checkServerUrl } from "../sync/client.ts";
+import { syncReport } from "../sync/report.ts";
+import { readTokens, tokensPath } from "../sync/servers.ts";
 import { plural } from "../util/text.ts";
 
 export interface Check {
@@ -907,10 +906,10 @@ function knowledge(context: DoctorContext, db: Db | null): Check {
 
 // --- Sharing --------------------------------------------------------------------------
 
-/** How many projects stand at a level for the team, as the policy reads them now. */
+/** How many projects stand at a level for a configured destination, as the policy reads them now. */
 function countAtLevel(policy: SharingPolicy, level: Level): number {
   return [...policy.levels.values()].filter(
-    (row) => row.destination === TEAM_DESTINATION && row.level === level,
+    (row) => policy.destinations.has(row.destination) && row.level === level,
   ).length;
 }
 
@@ -943,6 +942,116 @@ function sharing(context: DoctorContext, db: Db | null): Check {
   return { name, status: "ok", detail };
 }
 
+// --- The sync ---------------------------------------------------------------------------
+
+const DAY_MS = 24 * HOUR_MS;
+
+/** An https origin, or http on this machine's loopback: the client's own rule (`checkServerUrl`). */
+function isHttpsOrLoopback(url: string): boolean {
+  try {
+    checkServerUrl(url);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The sync (ADR 0027): the token file's mode and its orphans, a confirmed row with no token, a
+ * non-https URL, a stopped server with its remedy, a lease whose process is gone, a stale stop
+ * flag, a failed start with its reason, a server with no successful push or pull in a day while
+ * sessions ran, open conflicts, pending rows, a held withdrawal. It asks the network nothing.
+ * Nothing on a store at sharing v1, or with no server listed.
+ */
+function sync(context: DoctorContext, db: Db | null): Check {
+  const name = "sync";
+  if (db === null) return { name, status: "skip", detail: "no database yet" };
+  const report = syncReport(db, context.dataDir, context.now);
+  if (report === null || report.servers.length === 0) {
+    return { name, status: "ok", detail: "no team server listed" };
+  }
+  const problems: string[] = [];
+  const path = tokensPath(context.dataDir);
+  const file = basename(path);
+  if (existsSync(path) && process.platform !== "win32") {
+    const mode = statSync(path).mode & 0o777;
+    if (mode !== 0o600) problems.push(`${file} is mode 0${mode.toString(8)}; make it 0600`);
+  }
+  const listed = new Set(report.servers.map((server) => server.serverId));
+  for (const id of Object.keys(readTokens(context.dataDir))) {
+    if (!listed.has(id)) {
+      problems.push(
+        `a token for no listed server (${id}); remove it from ${file} or add the server again`,
+      );
+    }
+  }
+  const ran =
+    (db
+      .query<{ n: number }, [number]>("SELECT count(*) AS n FROM hook_runs WHERE at > ?")
+      .get(context.now - DAY_MS)?.n ?? 0) > 0;
+  for (const server of report.servers) {
+    if (server.state === "token missing") {
+      problems.push(`${server.name}: token missing; share server rejoin`);
+    }
+    if (!isHttpsOrLoopback(server.url)) problems.push(`${server.name}: ${server.url} is not https`);
+    if (server.state === "stopped") {
+      problems.push(`${server.name}: stopped (${server.stopped}); ${server.remedy}`);
+    }
+    if (server.state === "ok" && ran) {
+      const lastOk = Math.max(server.lastPushOkAt ?? 0, server.lastPullOkAt ?? 0);
+      if (lastOk < context.now - DAY_MS) {
+        problems.push(`${server.name}: no successful push or pull in 24 h while sessions ran`);
+      }
+    }
+    if (server.openConflicts > 0) {
+      problems.push(
+        `${server.name}: ${plural(server.openConflicts, "open conflict")}; knowledge accept or reject them`,
+      );
+    }
+    if (server.pendingRows > 0) {
+      problems.push(
+        `${server.name}: ${plural(server.pendingRows, "row")} set aside after failed applies`,
+      );
+    }
+    if (server.hold !== null) {
+      problems.push(
+        `${server.name}: ${plural(server.hold.count, "withdrawal")} held (${server.hold.reason}); share server resume`,
+      );
+    }
+  }
+  const { state } = report;
+  if (state.kind === "dead-holder") {
+    problems.push(
+      `the sync's lease is held by pid ${state.pid}, which is gone; the next session restarts it`,
+    );
+  }
+  if (staleStopFlag(db, context.now)) {
+    problems.push(
+      `a stop flag older than ten minutes (set by ${readSyncStop(db)?.who ?? "?"}); the next session clears it`,
+    );
+  }
+  const failed = readFailedStart(db);
+  if (failed !== null) {
+    problems.push(
+      `the sync's last start failed: ${failed.reason} (${agoLabel(context.now - failed.at)}); it is tried again with a later session`,
+    );
+  }
+  if (problems.length > 0) return { name, status: "warn", detail: problems.join(" · ") };
+  const summary =
+    state.kind === "running"
+      ? `running (pid ${state.pid})`
+      : state.kind === "stopping"
+        ? `stopping, asked by ${state.who}`
+        : state.kind === "stopped"
+          ? `stopped by ${state.who}`
+          : "not running";
+  return {
+    name,
+    status: "ok",
+    detail: `${plural(report.servers.length, "server")} · sync ${summary}`,
+  };
+}
+
 /** Looks, and changes nothing: no directory, database or setting is created or altered. */
 export function runChecks(context: DoctorContext): Check[] {
   const { check: databaseCheck, db } = database(context);
@@ -960,6 +1069,7 @@ export function runChecks(context: DoctorContext): Check[] {
       readingDb("backups", db, () => backups(context, db)),
       knowledge(context, db),
       sharing(context, db),
+      readingDb("sync", db, () => sync(context, db)),
       // Claude Code is the host this started on: its absence is a warning, not a skip.
       hooksHost("Claude Code", CLAUDE_CODE, context.settingsPath, null, context),
       hooksHost("Codex", CODEX, context.codexHooksPath, "codex", context),

@@ -171,3 +171,93 @@ export function findNeighbours(
     files: files.all(row.id).map((file) => file.path),
   }));
 }
+
+/** What a teammate's memory carries beside a `NewMemory`: the status and the date as sent. */
+export interface ReceivedFields {
+  status: "active" | "superseded" | "archived";
+  createdAt: number;
+}
+
+/**
+ * Inserts a received memory (ADR 0027): `insertMemory` as for any memory, then the status and
+ * the creation date the server sent, which the insert does not take. The vector is written
+ * by the insert when a model is given, else healed later.
+ */
+export function insertReceivedMemory(
+  db: Db,
+  memory: NewMemory,
+  received: ReceivedFields,
+  model: Model | null = null,
+): number {
+  const id = insertMemory(db, memory, model);
+  db.run("UPDATE memories SET status = ?, created_at = ? WHERE id = ?", [
+    received.status,
+    received.createdAt,
+    id,
+  ]);
+  return id;
+}
+
+/**
+ * A later revision of a received memory: the row's text, its sent fields and the sender's
+ * creation date replaced, and the vector refreshed as `insertMemory`'s update path refreshes
+ * it (rewritten with a model, dropped without one), so that a search never matches the old text.
+ */
+export function updateReceivedMemory(
+  db: Db,
+  memoryId: number,
+  fields: Pick<NewMemory, "kind" | "title" | "body" | "importance" | "now"> & ReceivedFields,
+  model: Model | null = null,
+): void {
+  db.run(
+    `UPDATE memories SET title = ?, body = ?, kind = ?, importance = ?, status = ?, created_at = ?,
+            updated_at = ?
+      WHERE id = ?`,
+    [
+      fields.title,
+      fields.body,
+      fields.kind,
+      fields.importance,
+      fields.status,
+      fields.createdAt,
+      fields.now,
+      memoryId,
+    ],
+  );
+  refreshMemoryVector(db, model, memoryId);
+}
+
+/**
+ * Deletes a received memory (ADR 0027): a copy of a teammate's, the one exception to
+ * "memories are never deleted". Every memory whose `superseded_by` pointed at it is set back
+ * to `superseded_by` null and status `active` first, so a row id SQLite reuses inherits
+ * nothing; then the tables keyed by memory id that carry no cascade (the provenance row, its
+ * `received` ledger row) go, and the row itself, which cascades the rest (`memory_files`,
+ * `memory_sources`, `injections`, `memory_vectors`, `user_memories`, `turn_memories`). Plain
+ * statements, inside the caller's transaction.
+ */
+export function deleteReceivedMemory(db: Db, memoryId: number): void {
+  db.run("UPDATE memories SET superseded_by = NULL, status = 'active' WHERE superseded_by = ?", [
+    memoryId,
+  ]);
+  const hasProvenance =
+    db
+      .query<unknown, []>("SELECT 1 FROM sqlite_master WHERE name = 'sharing_received_memories'")
+      .get() !== null;
+  if (hasProvenance) {
+    const provenance = db
+      .query<{ server_id: string; remote_uid: string }, [number]>(
+        "SELECT server_id, remote_uid FROM sharing_received_memories WHERE memory_id = ?",
+      )
+      .get(memoryId);
+    if (provenance !== null) {
+      db.run(
+        `DELETE FROM sharing_ledger WHERE destination = ? AND item_kind = 'memory'
+            AND item_uid = ? AND direction = 'received'`,
+        [provenance.server_id, provenance.remote_uid],
+      );
+      db.run("DELETE FROM sharing_received_memories WHERE memory_id = ?", [memoryId]);
+    }
+  }
+  db.run("DELETE FROM memories WHERE id = ?", [memoryId]);
+}

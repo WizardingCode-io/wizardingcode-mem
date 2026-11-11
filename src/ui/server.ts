@@ -47,6 +47,21 @@ import {
   setMeta,
 } from "../store/meta.ts";
 import { inspectTarget, moveStore } from "../store/move.ts";
+import { confirmedServerRefs } from "../sharing/levels.ts";
+import type { SyncContext } from "../sync/context.ts";
+import { startSync } from "../sync/spawn.ts";
+import { type Clock, realClock, realTimers, type Timers } from "../util/clock.ts";
+import {
+  addServerRoute,
+  muteRoute,
+  rejoinRoute,
+  removeRoute,
+  resumeRoute,
+  serversUnavailable,
+  serversView,
+  setServerListsRoute,
+  syncView,
+} from "./servers-api.ts";
 import { logError } from "../util/log.ts";
 import { brandHome, storeDirOf } from "../util/paths.ts";
 import { spawnDetached } from "../util/self.ts";
@@ -106,6 +121,9 @@ export interface UiOptions {
   spawn?: (...args: string[]) => void;
   /** The modules this binary has (`BUILT_IN`); tests add the fixture. */
   modules?: readonly EngineModule[];
+  /** The clock and timers the sync's joins and the store's stops of it wait on; tests pass fakes. */
+  clock?: Clock;
+  timers?: Timers;
 }
 
 /** Thrown by an exclusive start that lost the race to another viewer. */
@@ -199,6 +217,24 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
 
   const open = options.openBrowser ?? openBrowser;
   const spawn = options.spawn ?? spawnDetached;
+  const clock = options.clock ?? realClock;
+  const timers = options.timers ?? realTimers;
+  // The sync's side (ADR 0027): a context over the current connection, and the start the hooks
+  // make too, here at the viewer's start and on its button.
+  const syncContext = (): SyncContext => ({
+    db,
+    dataDir: options.dataDir,
+    storeDir,
+    env,
+    fetch: (input, init) => fetch(input, init),
+    clock,
+    timers,
+    pid: process.pid,
+    version: pkg.version,
+    log: (line) => logError("ui sync", new Error(line), options.dataDir),
+  });
+  const spawnSync = (mode: "--auto" | "--once") =>
+    startSync(db, env, now(), spawn, mode);
   const historyRunning = () => leaseActive(db, HISTORY_LEASE, now());
   // When a tab last said it was there, and when a browser was last opened.
   let lastPingAt: number | null = null;
@@ -352,6 +388,8 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
           target,
           name: body.name,
           now: now(),
+          clock,
+          timers,
         });
         return json(outcome, outcome.ok ? 200 : outcome.reason === "busy" ? 409 : 400);
       } finally {
@@ -389,7 +427,14 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
       // Our own connection must not hold the file while it is renamed.
       db.close();
       try {
-        const outcome = await moveStore({ dataDir: options.dataDir, from: storeDir, to, now: now() });
+        const outcome = await moveStore({
+          dataDir: options.dataDir,
+          from: storeDir,
+          to,
+          now: now(),
+          clock,
+          timers,
+        });
         if (outcome.ok) storeDir = outcome.to;
         return json(outcome, outcome.ok ? 200 : outcome.reason === "busy" ? 409 : 400);
       } finally {
@@ -403,13 +448,33 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
     if (path === "/api/settings" && request.method === "PUT") {
       const body = await jsonObject(request);
       if (body instanceof Response) return body;
-      // `confirm` is the person's yes to sharing more, not a setting.
-      const { confirm, ...patch } = body;
+      // `confirm` is the person's yes to sharing more, not a setting; `server` names whose
+      // lists the sharing keys edit, required once several servers are confirmed (ADR 0027).
+      const { confirm, server: serverChoice, ...patch } = body;
       const validated = validatePatch(patch);
       if (!validated.ok) {
         return json({ error: "some settings could not be saved", errors: validated.errors }, 400);
       }
       if (SHARING_KEYS.some((key) => key in validated.changes)) {
+        const servers = confirmedServerRefs(db);
+        if (typeof serverChoice === "string" || servers.length > 1) {
+          if (typeof serverChoice !== "string") return json({ error: "server" }, 400);
+          if (!servers.some((row) => row.serverId === serverChoice))
+            return problem(404, "no such server");
+          const answer = setServerListsRoute(
+            db,
+            serverChoice,
+            validated.changes,
+            confirm === true,
+            now(),
+          );
+          if (answer !== null) return json(answer.body, answer.status);
+          return json({
+            dataDir: options.dataDir,
+            settings: publicSettings(env, options.dataDir),
+            server: serverChoice,
+          });
+        }
         // A patch with a sharing list is written by the store's one path, which logs the
         // change. It is given the request's own `confirm`, so a wider list is refused there,
         // under the write lock, unless the request itself says yes.
@@ -431,7 +496,8 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
     // project's level. Nothing is sent from here.
     if (path === "/api/sharing" && request.method === "GET") {
       const list = url.searchParams.get("list") === "1";
-      return json(sharingView(db, options.dataDir, env, now(), list));
+      const forServer = url.searchParams.get("server");
+      return json(sharingView(db, options.dataDir, env, now(), list, forServer ?? undefined));
     }
     if (path === "/api/sharing/preview" && request.method === "POST") {
       const body = await jsonObject(request);
@@ -451,8 +517,58 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
         body.level,
         body.confirm === true,
         now(),
+        body.server,
       );
       return json(answer.body, answer.status);
+    }
+    // The team servers (ADR 0027): the list, the add, the rejoin, the removal, mute and resume;
+    // the sync's state, and its run from the person's button. No token leaves here.
+    if (path === "/api/servers" && request.method === "GET") {
+      // A list that cannot be read (an unreadable token file) is one state of the page, not a
+      // fault of the request: answered as such, logged here.
+      try {
+        return json(serversView(db, options.dataDir, now()));
+      } catch (error) {
+        logError("ui.servers", error);
+        return json(serversUnavailable());
+      }
+    }
+    if (path === "/api/sync" && request.method === "GET") {
+      return json(syncView(db, options.dataDir, now()));
+    }
+    if (path === "/api/sync/run" && request.method === "POST") {
+      return json({ started: spawnSync("--once") === "spawned" });
+    }
+    if (path === "/api/servers" && request.method === "POST") {
+      const body = await jsonObject(request);
+      if (body instanceof Response) return body;
+      const answer = await addServerRoute(syncContext(), body, () => {
+        spawnSync("--auto");
+      });
+      return json(answer.body, answer.status);
+    }
+    const serverRoute = /^\/api\/servers\/([^/]+)(?:\/(rejoin|mute|unmute|resume))?$/.exec(path);
+    if (serverRoute !== null) {
+      const serverId = serverRoute[1] as string;
+      const action = serverRoute[2];
+      if (action === undefined && request.method === "DELETE") {
+        const body = await jsonObject(request);
+        if (body instanceof Response) return body;
+        const answer = await removeRoute(syncContext(), serverId, body);
+        return json(answer.body, answer.status);
+      }
+      if (action !== undefined && request.method === "POST") {
+        const body = await jsonObject(request);
+        if (body instanceof Response) return body;
+        const ctx = syncContext();
+        const answer =
+          action === "rejoin"
+            ? await rejoinRoute(ctx, serverId, body)
+            : action === "resume"
+              ? resumeRoute(ctx, serverId, body)
+              : muteRoute(ctx, serverId, body, action === "mute");
+        return json(answer.body, answer.status);
+      }
     }
     if (path === "/api/doctor" && request.method === "GET") {
       return json(runChecks(doctorContext(options.dataDir, now())));
@@ -463,7 +579,9 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
       const dryRun = body.dryRun === true;
       const { retentionDays, historyDays } = loadSettings(env, options.dataDir);
       try {
-        return json(compact(db, { now: now(), dryRun, retentionDays, historyDays }));
+        return json(
+          await compact(db, { now: now(), dryRun, retentionDays, historyDays, clock, timers }),
+        );
       } catch (error) {
         if (error instanceof CompactBusyError) return problem(409, error.message);
         throw error;
@@ -748,6 +866,8 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
     },
   });
   touch();
+  // The sync should be running while the viewer is: the hooks' own start, here too.
+  spawnSync("--auto");
 
   const origin = `http://127.0.0.1:${server.port}`;
   const url = `${origin}/?token=${token}`;

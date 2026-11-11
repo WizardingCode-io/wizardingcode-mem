@@ -60,6 +60,20 @@ export async function run(argv: string[]): Promise<number> {
           "backup: history index removed; run wizardingcode-mem history index to rebuild it\n",
         );
       }
+      if (outcome.servers.carried.length > 0) {
+        process.stdout.write(
+          `backup: ${plural(outcome.servers.carried.length, "team server")} carried; withdrawals are held until wizardingcode-mem share server resume\n`,
+        );
+      }
+      if (outcome.pendingDeletion.length > 0) {
+        const how =
+          outcome.servers.carried.length === 0
+            ? "; run wizardingcode-mem sync --once to delete them now"
+            : "";
+        process.stdout.write(
+          `backup: received copies of ${plural(outcome.pendingDeletion.length, "server")} no longer listed (${outcome.pendingDeletion.join(", ")}) are deleted at the sync's next start${how}\n`,
+        );
+      }
       return 0;
     }
     process.stderr.write(`wizardingcode-mem backup: not restored: ${outcome.detail}\n`);

@@ -1,8 +1,9 @@
 import { statSync } from "node:fs";
 import { KNOWLEDGE_MODULE, KNOWLEDGE_SCHEMA_VERSION } from "../modules/knowledge/migrations.ts";
 import { DEFAULTS } from "../settings/settings.ts";
+import { type Clock, realClock, realTimers, type Timers } from "../util/clock.ts";
 import { type Db, moduleSchemaState, withWrite } from "./db.ts";
-import { anyLeaseActive } from "./meta.ts";
+import { anyLeaseActive, clearSyncStop, stopSync } from "./meta.ts";
 
 // Keeps the database to what still serves a purpose. Memories are never touched here:
 // what to keep or archive is the user's call, in the viewer. What goes is the record of
@@ -38,13 +39,27 @@ export interface CompactOptions {
   retentionDays?: number;
   /** How far back `history import` reads; history turns this recent are kept. */
   historyDays?: number;
+  /** The clock and timers the stop of the sync waits on; the real ones unless a test gives its own. */
+  clock?: Clock;
+  timers?: Timers;
 }
 
 /** Background work (a history run, a drain, a backup) holds the database: compact waits. */
 export class CompactBusyError extends Error {
-  constructor() {
-    super("background work is running (a history run, a drain or a backup); compact when it ends");
+  constructor(detail?: string) {
+    super(
+      detail ??
+        "background work is running (a history run, a drain or a backup); compact when it ends",
+    );
   }
+}
+
+/** Whether the store has the received table (knowledge v8), whose shown rows are kept. */
+function hasReceivedTable(db: Db): boolean {
+  return (
+    db.query<unknown, []>("SELECT 1 FROM sqlite_master WHERE name = 'knowledge_received'").get() !==
+    null
+  );
 }
 
 /** Whether the store has the tables the shown rows are pruned by: the knowledge module's. */
@@ -67,12 +82,36 @@ function fileSize(db: Db): number {
   }
 }
 
-export function compact(db: Db, options: CompactOptions): CompactReport {
+/**
+ * Removes old records no memory depends on and gives the space back. The deletes and the
+ * VACUUM hold the write lock for seconds: not under a running job, and not under the sync,
+ * which is asked to leave through its flag first (ADR 0027; its own busy error when it has
+ * not left within 30 s). A dry run reads only and waits for nothing.
+ */
+export async function compact(db: Db, options: CompactOptions): Promise<CompactReport> {
+  if (options.dryRun === true) return compactNow(db, options);
+  const left = await stopSync(db, {
+    who: "compact",
+    clock: options.clock ?? realClock,
+    timers: options.timers ?? realTimers,
+  });
+  try {
+    if (!left) {
+      throw new CompactBusyError(
+        "the sync is running and did not stop within 30 s; run `wizardingcode-mem sync stop` first",
+      );
+    }
+    if (anyLeaseActive(db, options.now)) throw new CompactBusyError();
+    return compactNow(db, options);
+  } finally {
+    clearSyncStop(db);
+  }
+}
+
+function compactNow(db: Db, options: CompactOptions): CompactReport {
   const cutoff = options.now - (options.retentionDays ?? RETENTION_DAYS) * DAY_MS;
   const historyCutoff = options.now - (options.historyDays ?? HISTORY_DAYS) * DAY_MS;
   const dryRun = options.dryRun === true;
-  // The deletes and the VACUUM hold the write lock for seconds: not under a running job.
-  if (!dryRun && anyLeaseActive(db, options.now)) throw new CompactBusyError();
   const n = (sql: string, params: (number | string)[]) =>
     db.query<{ n: number }, (number | string)[]>(sql).get(...params)?.n ?? 0;
 
@@ -87,8 +126,13 @@ export function compact(db: Db, options: CompactOptions): CompactReport {
   // The shown rows that go: the repository is gone, or the session is gone or about to go.
   // One condition joined by OR, so a row that meets both counts once, and the count taken
   // before the sessions go is the number the delete after them removes.
+  // A shown row of repository 0 names a received entry (ADR 0027): it stays while that entry does.
+  const hasReceived = hasReceivedTable(db);
+  const receivedKept = hasReceived
+    ? `AND NOT (k.repo_id = 0 AND EXISTS (SELECT 1 FROM knowledge_received x WHERE x.server_id || '|' || x.uid = k.entry_id))`
+    : "";
   const orphanShown = `FROM knowledge_shown AS k
-     WHERE NOT EXISTS (SELECT 1 FROM knowledge_repos r WHERE r.id = k.repo_id)
+     WHERE (NOT EXISTS (SELECT 1 FROM knowledge_repos r WHERE r.id = k.repo_id) ${receivedKept})
         OR NOT EXISTS (SELECT 1 FROM sessions s WHERE s.id = k.session_id)
         OR k.session_id IN (SELECT s.id ${emptySessions})`;
   const extraRuns = `FROM hook_runs WHERE id NOT IN (SELECT id FROM hook_runs ORDER BY id DESC LIMIT ?)`;

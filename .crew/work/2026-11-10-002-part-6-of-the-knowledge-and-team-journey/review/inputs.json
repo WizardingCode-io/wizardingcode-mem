@@ -1,0 +1,407 @@
+{
+  "dependencies": [],
+  "phrases": [],
+  "fingerprint": "sha256:5c8d0e59f215161533ec338a67ef6878d2a97caf1d03f59b9ac4882e1631a1cc",
+  "at": "2026-11-11T05:38:43.731Z",
+  "captures": [
+    {
+      "page": "projects",
+      "state": "bound",
+      "file": "review/ui/projects-bound@360-dark.png",
+      "files": [
+        "review/ui/projects-bound@360-dark.png",
+        "review/ui/projects-bound@768-dark.png",
+        "review/ui/projects-bound@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-projects-bound.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "projects",
+      "state": "choosing",
+      "file": "review/ui/projects-choosing@360-dark.png",
+      "files": [
+        "review/ui/projects-choosing@360-dark.png",
+        "review/ui/projects-choosing@768-dark.png",
+        "review/ui/projects-choosing@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-projects-choosing.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "projects",
+      "state": "receive",
+      "file": "review/ui/projects-receive@360-dark.png",
+      "files": [
+        "review/ui/projects-receive@360-dark.png",
+        "review/ui/projects-receive@768-dark.png",
+        "review/ui/projects-receive@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-projects-receive.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "projects",
+      "state": "sent",
+      "file": "review/ui/projects-sent@360-dark.png",
+      "files": [
+        "review/ui/projects-sent@360-dark.png",
+        "review/ui/projects-sent@768-dark.png",
+        "review/ui/projects-sent@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-projects-sent.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "projects",
+      "state": "widening",
+      "file": "review/ui/projects-widening@360-dark.png",
+      "files": [
+        "review/ui/projects-widening@360-dark.png",
+        "review/ui/projects-widening@768-dark.png",
+        "review/ui/projects-widening@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-projects-widening.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "settings",
+      "state": "adding",
+      "file": "review/ui/settings-adding@360-dark.png",
+      "files": [
+        "review/ui/settings-adding@360-dark.png",
+        "review/ui/settings-adding@768-dark.png",
+        "review/ui/settings-adding@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-settings-adding.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "settings",
+      "state": "confirming",
+      "file": "review/ui/settings-confirming@360-dark.png",
+      "files": [
+        "review/ui/settings-confirming@360-dark.png",
+        "review/ui/settings-confirming@768-dark.png",
+        "review/ui/settings-confirming@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-settings-confirming.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "settings",
+      "state": "empty",
+      "file": "review/ui/settings-empty@360-dark.png",
+      "files": [
+        "review/ui/settings-empty@360-dark.png",
+        "review/ui/settings-empty@768-dark.png",
+        "review/ui/settings-empty@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-settings-empty.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "settings",
+      "state": "error",
+      "file": "review/ui/settings-error@360-dark.png",
+      "files": [
+        "review/ui/settings-error@360-dark.png",
+        "review/ui/settings-error@768-dark.png",
+        "review/ui/settings-error@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-settings-error.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "settings",
+      "state": "held",
+      "file": "review/ui/settings-held@360-dark.png",
+      "files": [
+        "review/ui/settings-held@360-dark.png",
+        "review/ui/settings-held@768-dark.png",
+        "review/ui/settings-held@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-settings-held.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "settings",
+      "state": "listed",
+      "file": "review/ui/settings-listed@360-dark.png",
+      "files": [
+        "review/ui/settings-listed@360-dark.png",
+        "review/ui/settings-listed@768-dark.png",
+        "review/ui/settings-listed@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-settings-listed.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "settings",
+      "state": "muted",
+      "file": "review/ui/settings-muted@360-dark.png",
+      "files": [
+        "review/ui/settings-muted@360-dark.png",
+        "review/ui/settings-muted@768-dark.png",
+        "review/ui/settings-muted@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-settings-muted.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "settings",
+      "state": "one",
+      "file": "review/ui/settings-one@360-dark.png",
+      "files": [
+        "review/ui/settings-one@360-dark.png",
+        "review/ui/settings-one@768-dark.png",
+        "review/ui/settings-one@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-settings-one.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "settings",
+      "state": "pending",
+      "file": "review/ui/settings-pending@360-dark.png",
+      "files": [
+        "review/ui/settings-pending@360-dark.png",
+        "review/ui/settings-pending@768-dark.png",
+        "review/ui/settings-pending@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-settings-pending.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "settings",
+      "state": "rejoining",
+      "file": "review/ui/settings-rejoining@360-dark.png",
+      "files": [
+        "review/ui/settings-rejoining@360-dark.png",
+        "review/ui/settings-rejoining@768-dark.png",
+        "review/ui/settings-rejoining@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-settings-rejoining.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "settings",
+      "state": "removing",
+      "file": "review/ui/settings-removing@360-dark.png",
+      "files": [
+        "review/ui/settings-removing@360-dark.png",
+        "review/ui/settings-removing@768-dark.png",
+        "review/ui/settings-removing@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-settings-removing.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "settings",
+      "state": "resuming",
+      "file": "review/ui/settings-resuming@360-dark.png",
+      "files": [
+        "review/ui/settings-resuming@360-dark.png",
+        "review/ui/settings-resuming@768-dark.png",
+        "review/ui/settings-resuming@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-settings-resuming.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "settings",
+      "state": "several",
+      "file": "review/ui/settings-several@360-dark.png",
+      "files": [
+        "review/ui/settings-several@360-dark.png",
+        "review/ui/settings-several@768-dark.png",
+        "review/ui/settings-several@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-settings-several.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "settings",
+      "state": "stopped",
+      "file": "review/ui/settings-stopped@360-dark.png",
+      "files": [
+        "review/ui/settings-stopped@360-dark.png",
+        "review/ui/settings-stopped@768-dark.png",
+        "review/ui/settings-stopped@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-settings-stopped.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "settings",
+      "state": "unavailable",
+      "file": "review/ui/settings-unavailable@360-dark.png",
+      "files": [
+        "review/ui/settings-unavailable@360-dark.png",
+        "review/ui/settings-unavailable@768-dark.png",
+        "review/ui/settings-unavailable@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-settings-unavailable.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "settings-token",
+      "state": "missing",
+      "file": "review/ui/settings-token-missing@360-dark.png",
+      "files": [
+        "review/ui/settings-token-missing@360-dark.png",
+        "review/ui/settings-token-missing@768-dark.png",
+        "review/ui/settings-token-missing@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-settings-token-missing.json",
+      "meta": null,
+      "by": "session"
+    }
+  ]
+}

@@ -4,12 +4,10 @@
 // through part 1's runner, synchronously, in the child process; never on a request.
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { slugify } from "../modules/knowledge/entry.ts";
 import {
   commitPaths,
   type GitHost,
   headOf,
-  projectFolderName,
   removePaths,
   runGit,
   stagePaths,
@@ -17,6 +15,7 @@ import {
 } from "../modules/knowledge/repo.ts";
 import type { Identity } from "../modules/knowledge/types.ts";
 import { entryUid } from "../sharing/types.ts";
+import { fileNameFor, repoFolder } from "./contract.ts";
 import { type Db, teamPaths } from "./db.ts";
 import { HttpError, unknownItem } from "./errors.ts";
 import { OPERATOR, splitMemoryKey } from "./ids.ts";
@@ -60,39 +59,7 @@ export function memberIdentity(member: { id: string; name: string }): Identity {
 }
 
 /** The slug of a name, or `fallback` when nothing of it survives: never the raw text. */
-function slugOf(text: string, fallback: string): string {
-  const letters = text
-    .normalize("NFKD")
-    .replace(/\p{M}+/gu, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "");
-  return letters === "" ? fallback : slugify(text);
-}
-
-/**
- * The repository a scope and alias name, relative to `repos/`: `shared`; a project by the
- * slug of its alias and a hash of it; a member's workspace by their id and the slug of their
- * name. Built from ids and slugs, so a name such as `../x` stays under its parent.
- */
-export function repoFolder(
-  scope: string,
-  remoteAlias: string | null,
-  member: { id: string; name: string } | null,
-): string {
-  if (scope === "shared") return "shared";
-  if (scope === "project") {
-    const alias = remoteAlias ?? "";
-    const slug = slugOf(alias.replace(/^remote:/, ""), "project");
-    return `projects/${slug}-${projectFolderName(alias).slice(0, 8)}`;
-  }
-  const who = member ?? { id: "unknown", name: "" };
-  return `members/${who.id}-${slugOf(who.name, "member")}`;
-}
-
-/** A fixed file name: two entries with one slug never collide, and a slug change is a rename. */
-export function fileNameFor(uuid: string, slug: string): string {
-  return `entries/${slug}--${uuid.slice(0, 8)}.md`;
-}
+export { fileNameFor, repoFolder };
 
 export const MIRROR_GIT_TIMEOUT_MS = 60_000;
 

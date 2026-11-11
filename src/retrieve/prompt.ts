@@ -8,6 +8,7 @@ import { anyOf, inProject, isGeneric, stem } from "../util/words.ts";
 import { LINKED_POOL, MAX_LINKED_NOTES } from "./brief.ts";
 import { MEMORY_COLUMNS, type MemoryRow, prior, ranks, toNote } from "./notes.ts";
 import { buildQuery, matchTerms, type Query, searchTokens } from "./query.ts";
+import { RECEIVED_SHARE, receivedMarks, teamOrigin } from "./received.ts";
 import { type Note, renderNote, renderNotes } from "./render.ts";
 import { documentCounts } from "./vocab.ts";
 
@@ -125,8 +126,17 @@ function extraCandidates(
             ORDER BY f.bm25 LIMIT ?`,
         )
         .all(`${FTS_MATCH(match)} AND project_id : (${projects})`, LINKED_SCAN, LINKED_POOL);
+      // A teammate's copy in a linked project is shown only while it is visible there
+      // (ADR 0027): a muted server or member, or an unbound project, hides it here too.
+      const marksOf = new Map<number, ReturnType<typeof receivedMarks>>();
       for (const { bm25, projectId, ...row } of rows) {
         if (origins.has(row.id)) continue; // one of the author's rules, weighed as such
+        let marks = marksOf.get(projectId);
+        if (marks === undefined) {
+          marks = receivedMarks(db, projectId);
+          marksOf.set(projectId, marks);
+        }
+        if (marks.get(row.id)?.visible === false) continue;
         origins.set(row.id, `from ${names.get(projectId)}`);
         linked.push({ row, bm25, overlap: 0 });
       }
@@ -482,6 +492,17 @@ export function retrieveForPrompt(
     return rare;
   };
 
+  // Teammates' copies (ADR 0027): the hidden ones out, the visible ones marked and capped.
+  const marks = receivedMarks(db, input.projectId);
+  for (const id of [...candidates.keys()]) {
+    const mark = marks.get(id);
+    if (mark === undefined) continue;
+    if (!mark.visible) candidates.delete(id);
+    else extra.origins.set(id, teamOrigin(mark));
+  }
+  const receivedCap = Math.max(1, Math.floor(maxNotes * RECEIVED_SHARE));
+  let receivedShown = 0;
+
   const evident = (candidate: Candidate) => hasEvidence(candidate, query, isRare);
   const eligible = [
     ...[...candidates.values()].filter(evident),
@@ -515,11 +536,14 @@ export function retrieveForPrompt(
   ]).length;
   for (const candidate of ordered) {
     if (notes.length === maxNotes) break;
+    const fromTeam = marks.get(candidate.row.id)?.visible === true;
+    if (fromTeam && receivedShown >= receivedCap) continue;
     const note = toNote(db, candidate.row, extra.origins.get(candidate.row.id));
     const cost = renderNote(note).length + 1 + (notes.length === 0 ? overhead : 0);
     if (size + cost > budgetChars) continue;
     notes.push(note);
     size += cost;
+    if (fromTeam) receivedShown++;
   }
   return notes;
 }

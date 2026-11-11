@@ -3,7 +3,10 @@ import type { Db } from "../store/db.ts";
 import { visibleProjects } from "../store/links.ts";
 import { logError } from "../util/log.ts";
 import { MEMORY_COLUMNS, type MemoryRow, prior, toNote } from "./notes.ts";
+import { RECEIVED_SHARE, receivedMarks, teamOrigin } from "./received.ts";
 import { type LastTurn, type Note, renderBrief, renderHeading } from "./render.ts";
+
+export { RECEIVED_SHARE };
 
 const POOL = 200;
 /** The share of the brief the author's own rules may take. */
@@ -48,7 +51,7 @@ export function sessionBrief(
 
   // Memories whose files are gone are left out here: unprompted, they are more likely
   // to mislead than to help.
-  const ranked = rank(
+  const pool = rank(
     db
       .query<MemoryRow, [number, number]>(
         `SELECT ${MEMORY_COLUMNS} FROM memories m
@@ -57,13 +60,19 @@ export function sessionBrief(
       )
       .all(input.projectId, POOL),
   );
+  // Teammates' copies (ADR 0027) come after the person's own, within their share, marked;
+  // one no longer visible (a muted server or member, an unbound project) is left out.
+  const marks = receivedMarks(db, input.projectId);
+  const ranked = pool.filter((row) => !marks.has(row.id));
+  const received = pool.filter((row) => marks.get(row.id)?.visible === true);
 
   // The author's rules and the linked projects' notes come after the project's own, so
   // the top of the brief reads as it always has; each takes at most its share.
   const own: Note[] = [];
+  const team: Note[] = [];
   const linked: Note[] = [];
   const user: Note[] = [];
-  const render = () => renderBrief(last, [...own, ...linked, ...user]);
+  const render = () => renderBrief(last, [...own, ...team, ...linked, ...user]);
   let text = render();
   const fill = (into: Note[], candidates: { row: MemoryRow; origin?: string }[], share: number) => {
     let used = 0;
@@ -100,11 +109,19 @@ export function sessionBrief(
     LINKED_SHARE * budgetChars,
   );
   fill(
+    team,
+    received.map((row) => ({
+      row,
+      origin: teamOrigin(marks.get(row.id) as NonNullable<ReturnType<typeof marks.get>>),
+    })),
+    RECEIVED_SHARE * budgetChars,
+  );
+  fill(
     own,
     ranked.filter((row) => !shown.has(row.id)).map((row) => ({ row, origin: label(row) })),
     budgetChars,
   );
-  return { text, notes: [...own, ...linked, ...user] };
+  return { text, notes: [...own, ...team, ...linked, ...user] };
 }
 
 interface ExtraPools {
@@ -138,10 +155,15 @@ function extraPools(db: Db, projectId: number): ExtraPools {
         WHERE m.project_id = ? AND m.status = 'active' AND m.importance >= ? AND m.stale = 0
         ORDER BY m.importance DESC, m.updated_at DESC LIMIT ?`,
     );
-    // Project by project, each an index range read that stops at the pool's size.
+    // Project by project, each an index range read that stops at the pool's size. A
+    // teammate's copy in a linked project is shown only while it is visible there (ADR 0027):
+    // a muted server or member, or an unbound project, hides it here as in its own project.
     const linked = visibleProjects(db, projectId)
       .flatMap((project) => {
-        const rows = top.all(project.id, LINKED_MIN_IMPORTANCE, LINKED_POOL);
+        const marks = receivedMarks(db, project.id);
+        const rows = top
+          .all(project.id, LINKED_MIN_IMPORTANCE, LINKED_POOL)
+          .filter((row) => marks.get(row.id)?.visible !== false);
         for (const row of rows) names.set(row.id, project.name);
         return rows;
       })

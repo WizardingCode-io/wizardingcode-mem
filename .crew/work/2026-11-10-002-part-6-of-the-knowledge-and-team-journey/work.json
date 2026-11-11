@@ -1,0 +1,2309 @@
+{
+  "id": "2026-11-10-002-part-6-of-the-knowledge-and-team-journey",
+  "title": "Part 6 of the knowledge and team journey, the sync client: wizardingcode-mem kee",
+  "input": "Part 6 of the knowledge and team journey, the sync client: wizardingcode-mem keeps a list of team servers (https URL, serverId, device token, contract) and joins one with an invitation code from the CLI and the viewer; binds a project to one server at most and chooses roots and areas per server; keys the sharing ledger and the policy by serverId, migrating part 4's ledger; syncs in the background, never on a hook path: pushes what the policy allows right after each local change and keeps one pull open per server with wait while a session or the viewer is active, applying received entries and memories to the local store with their received records, handling stale, refused, purged, rate and storage answers, instance changes, 410 and moves as ADR 0026 states; ADR 0027.",
+  "type": "feature",
+  "route": "full",
+  "routeReasons": [
+    "risk areas: auth, personal-data, data-migration, public-api",
+    "personal data in lines not read for risk (test or excluded): email (tests/helpers/sync-world.ts), email (tests/integration/sync-outbound.test.ts), email (tests/unit/knowledge-sync-writer.test.ts)",
+    "personal data in lines not read for risk (test or excluded): phone (tests/unit/ui-sharing-copy.test.ts), email (tests/helpers/sync-world.ts), email (tests/integration/sync-outbound.test.ts), email (tests/unit/knowledge-sync-writer.test.ts)"
+  ],
+  "riskAreas": [
+    "auth",
+    "personal-data",
+    "data-migration",
+    "public-api"
+  ],
+  "phase": "learn",
+  "awaiting": "role",
+  "criteria": [
+    {
+      "id": "AC-1",
+      "kind": "behavior",
+      "text": "share server add <url> --code <code> against the in-process test server joins, writes the sharing_servers row and the token to <data dir>/servers.json (mode 0600; the token in no table), prints the server's name and the member's name and role, prints the would-leave counts and, without a terminal, refuses to send without --yes; a non-https URL outside loopback is refused; a serverId already listed is refused; the first server's add moves every team row of sharing_levels, sharing_ledger and sharing_changes to its serverId and copies the env lists into the server's lists in one transaction, and status reads nothing as a hand edit afterwards",
+      "supersededBy": {
+        "id": "AC-15",
+        "at": "2026-11-10T18:32:32.980Z"
+      }
+    },
+    {
+      "id": "AC-2",
+      "kind": "behavior",
+      "text": "loadPolicy for a server intersects the server's lists, the env file's and the environment's, has that server's epoch, and decide is byte-for-byte the function of ADR 0025 (its contract test unchanged); setLevel refuses a level above Nothing for a project bound to another server with one-server, the partial index refuses it in SQL, and share roots | areas --server <s> edit the server's lists while share roots | areas edit the env file's",
+      "supersededBy": {
+        "id": "AC-16",
+        "at": "2026-11-10T18:32:33.041Z"
+      }
+    },
+    {
+      "id": "AC-3",
+      "kind": "behavior",
+      "text": "sync --auto claims sync.lease with owner sync-<pid> renewed within 20 s; a second --auto exits 0 at once; a dead owner's lease is taken over; anyLeaseActive reports it; with WIZARDINGCODE_MEM_SYNC=off it exits 0 without claiming; it exits within a minute once fifteen minutes pass with no hook run, no live viewer and no backlog; the session-start and prompt hooks spawn it when a server is listed and no lease is live, and not otherwise, through one read; the hook snapshots are unchanged with no server listed",
+      "supersededBy": {
+        "id": "AC-17",
+        "at": "2026-11-10T18:32:33.101Z"
+      }
+    },
+    {
+      "id": "AC-4",
+      "kind": "behavior",
+      "text": "with a project at Knowledge bound to the server, a written entry is applied on the server within 5 s of the write under the test's clock and the in-process server, its sent row holds the server's revision and hash, local_hash, instance, policy_epoch and reason, and its sent-hash row exists; the redacted hash the client computed equals the server's; a retry changes nothing; narrowing the policy withdraws the item from the ledger's uid; a move sends the new uid on the old row's base and retires the old row with reason moved; refused secret is stored with its rule and never re-sent for that hash; purged leaves a purged row and the uid is never re-sent; rate and storage schedule the next sweep as stated; the first run after the add sends 450 allowed memories in batches of at most 200 items and 900 KiB with the live change sent first",
+      "supersededBy": {
+        "id": "AC-18",
+        "at": "2026-11-10T18:32:33.161Z"
+      }
+    },
+    {
+      "id": "AC-5",
+      "kind": "behavior",
+      "text": "a stale on an own entry whose current.hash is in the sent history re-sends on current with no conflict; a stale with a teammate's hash applies the server's revision to the file in a commit whose author is the member and whose committer is the sync, writes the proposal by sync:<serverId> on behalf of the person outside the quota (a 6th open proposal still written) and the conflicts row, and status counts one open conflict; accepting the proposal sends the person's text on the server's current base",
+      "supersededBy": {
+        "id": "AC-19",
+        "at": "2026-11-10T18:32:33.219Z"
+      }
+    },
+    {
+      "id": "AC-6",
+      "kind": "behavior",
+      "text": "a teammate's entry pulled with wait is on disk under knowledge/received/<serverId>/shared/entries/<slug>--<8 hex>.md within 5 s with hashOf(file) equal to the server's hash, its knowledge_received row, its search row and its received ledger row written in one transaction; knowledge_search and the prompt floor return it with received: { server, member } and the rendered from <member> via <server>; pinnedEntries never returns it and knowledge pin refuses it; a muted server or member hides it; a received memory is an imported row with its provenance row, retrieved in a brief marked (team: <name>) and capped at a third of the budget; a tombstone deletes the received copy by its (scope, alias) and a tombstone with movedTo a range this machine does not read deletes it; a purge deletes a received copy and marks an own entry purged; the cursor is saved per page and a page re-applied after a crash changes nothing; a dirty target is retried and counted",
+      "supersededBy": {
+        "id": "AC-20",
+        "at": "2026-11-10T18:32:33.281Z"
+      }
+    },
+    {
+      "id": "AC-7",
+      "kind": "behavior",
+      "text": "a page with a new instance makes the next pull a snapshot; after it, received rows absent from the snapshot are dropped with their copies, sent rows absent are cleared and re-sent on base 0, present with a sent hash are left, present with another hash become conflicts; a 410 makes a snapshot; a 401 on the row's instance stops the server as unauthorized, on another as rejoin; a 409 stops it as contract naming both; a 429 waits Retry-After; an empty page back in under a second with wait backs off; three failures open the breaker; every state is on the server's row and in status",
+      "supersededBy": {
+        "id": "AC-21",
+        "at": "2026-11-10T18:32:33.342Z"
+      }
+    },
+    {
+      "id": "AC-8",
+      "kind": "behavior",
+      "text": "restoreBackup carries sharing_servers, the mutes, the not-withdrawn sent rows and the sent hashes into the copy with the levels reset; the next sweep withdraws the old generation's memory uids; received files whose rows the copy lacks are re-indexed from disk at the sync's start",
+      "supersededBy": {
+        "id": "AC-22",
+        "at": "2026-11-10T18:32:33.403Z"
+      }
+    },
+    {
+      "id": "AC-9",
+      "kind": "behavior",
+      "text": "status prints the sync's state and one line per server as stated; doctor sync warns for the token file's mode, an orphan token, a non-https URL, a stopped server, a dead lease holder, a server with no success in 24 h while sessions ran, open conflicts and a missing token, and makes no request; share explain --server prints the ledger history of an item",
+      "supersededBy": {
+        "id": "AC-23",
+        "at": "2026-11-10T18:32:33.462Z"
+      }
+    },
+    {
+      "id": "AC-10",
+      "kind": "behavior",
+      "text": "the Servers card lists, adds (with the counts and the confirmation), removes and mutes through the routes; the Sharing card's texts name the server and its selector edits the chosen server's lists with several; the dock names the bound server; screen /settings#servers states empty, listed, adding, confirming, error, stopped, /settings#sharing states one, several, /projects states bound, choosing, viewports 360, 768, 1280, schemes light and dark, motion none",
+      "screens": [
+        {
+          "page": "settings",
+          "state": "empty"
+        },
+        {
+          "page": "settings",
+          "state": "listed"
+        },
+        {
+          "page": "settings",
+          "state": "adding"
+        },
+        {
+          "page": "settings",
+          "state": "confirming"
+        },
+        {
+          "page": "settings",
+          "state": "error"
+        },
+        {
+          "page": "settings",
+          "state": "stopped"
+        },
+        {
+          "page": "settings",
+          "state": "one"
+        },
+        {
+          "page": "settings",
+          "state": "several"
+        },
+        {
+          "page": "projects",
+          "state": "bound"
+        },
+        {
+          "page": "projects",
+          "state": "choosing"
+        }
+      ],
+      "supersededBy": {
+        "id": "AC-24",
+        "at": "2026-11-10T18:32:33.522Z"
+      }
+    },
+    {
+      "id": "AC-11",
+      "kind": "behavior",
+      "text": "share server remove --withdraw withdraws every not-withdrawn sent row first and refuses on a failure naming the count; remove deletes the server's received files, rows and memories, its levels, ledger rows, refusals, conflicts (refused with open ones without --yes), sent hashes, mutes, row and token; history replace-imports spares received memories; rejudge selects nothing new",
+      "supersededBy": {
+        "id": "AC-25",
+        "at": "2026-11-10T18:32:33.584Z"
+      }
+    },
+    {
+      "id": "AC-12",
+      "kind": "observed",
+      "text": "docs/adr/0027-sync-client.md records D-1 to D-8 and the rules of the spec; ADR 0025 is amended for the ledger's columns and LEDGER_RECORD_KEYS (localHash, instance, reason added, the contract test updated with it); ADR 0024 is amended for the sync writer and the received table; CLAUDE.md has a sync bullet",
+      "supersededBy": {
+        "id": "AC-26",
+        "at": "2026-11-10T18:32:33.645Z"
+      }
+    },
+    {
+      "id": "AC-13",
+      "kind": "observed",
+      "text": "the hook snapshots, the MCP tools list, the perf budgets and the server's tests (tests/unit/team-*.test.ts, tests/integration/team-*.test.ts) pass unchanged on the final tree, against the base's whole-suite run",
+      "supersededBy": {
+        "id": "AC-27",
+        "at": "2026-11-10T18:32:33.705Z"
+      }
+    },
+    {
+      "id": "AC-14",
+      "kind": "preserve",
+      "text": "the knowledge module's and the sharing module's existing tests keep passing (tests/unit/knowledge-*.test.ts, tests/integration/knowledge-*.test.ts, tests/unit/sharing-*.test.ts, tests/integration/sharing-*.test.ts)",
+      "supersededBy": {
+        "id": "AC-28",
+        "at": "2026-11-10T18:32:33.765Z"
+      }
+    },
+    {
+      "id": "AC-15",
+      "kind": "behavior",
+      "text": "share server add <url> --code <code> against the in-process test server joins, writes the token to <data dir>/servers.json (mode 0600; the token in no table, in no route's answer and in no command's output) and the sharing_servers row as pending, prints the server's name and the member's name and role, prints the would-leave counts and, without a terminal, refuses to confirm without --yes; while the row is pending a sync spawned by a prompt hook sends nothing; the yes confirms the row in one transaction with the sharing_changes row server:<id> and, for the first server, moves every team row of sharing_levels and sharing_ledger to its serverId and copies the env lists into the server's lists, after which status reads nothing as a hand edit; a non-https URL outside loopback and http://localhost.example.com are refused; a redirect answered by the server is a failure that never follows; a confirmed serverId already listed is refused and share server rejoin replaces the device and the token keeping the ledger"
+    },
+    {
+      "id": "AC-16",
+      "kind": "behavior",
+      "text": "loadPolicy without a server reads the destination team as part 4 did, and the decide cases of tests/unit/sharing-policy.test.ts and the DECISION_KEYS block of tests/unit/sharing-contract.test.ts pass unchanged; with a server it intersects the server's lists, the env file's and the environment's and has that server's epoch; ledgerRecords hands decide the local_hash of an entry row so a redacted sent entry reads keep already-sent; the level receive binds without sending; setLevel refuses a level other than Nothing for a project bound to another server with one-server, the partial index refuses it in SQL, and share roots | areas --server <s> edit the server's lists while share roots | areas edit the env file's; once a server is confirmed, reconcileLevels removes a team row with a logged system change",
+      "supersededBy": {
+        "id": "AC-29",
+        "at": "2026-11-10T18:42:11.497Z"
+      }
+    },
+    {
+      "id": "AC-17",
+      "kind": "behavior",
+      "text": "in-process with the injected clock and timers, runSync claims sync.lease with owner sync-<pid>-<version> renewed within 20 s, also across a 25 s held pull; a dead owner's lease is taken over and a newer version takes over an older holder's; anyLeaseActive reports it; it exits within a minute once fifteen minutes pass with no hook run, no live viewer and no backlog, and not while a viewer is live or a backlog remains; it leaves within five seconds of the stop flag; through spawnCli, a second --auto exits 0 at once, WIZARDINGCODE_MEM_SYNC=off exits 0 without claiming, sync --once refuses while --auto runs and exits 1 with a stopped server; the session-start and prompt hooks spawn it when a confirmed server is listed, no lease is live and no stop flag is set, and not otherwise, through one read; the hook snapshots are unchanged with no server listed",
+      "supersededBy": {
+        "id": "AC-50",
+        "at": "2026-11-10T21:31:27.283Z"
+      }
+    },
+    {
+      "id": "AC-18",
+      "kind": "behavior",
+      "text": "with a project at Knowledge bound to the server, a written entry is applied on the server within 5 s of the write under the test's clock and the in-process server, its sent row holds the server's revision and hash, local_hash, instance, policy_epoch and reason, and its sent-hash row exists; the redacted hash the client computed equals the server's and the pinned line never leaves; a retry changes nothing and the next sweep sends nothing; narrowing the policy withdraws the item from the ledger's uid; a move sends the new uid on the old row's base and retires the old row with reason moved; refused secret is stored with its rule and never re-sent for that hash; purged leaves a purged row and the uid is never re-sent; rate and storage schedule the next sweep as stated; a project put at all after a sweep sends its 10 old memories at the next; the first run after the add sends 450 allowed memories in batches of at most 200 items and 900 KiB with the live change sent first",
+      "supersededBy": {
+        "id": "AC-51",
+        "at": "2026-11-10T21:31:27.345Z"
+      }
+    },
+    {
+      "id": "AC-19",
+      "kind": "behavior",
+      "text": "a stale on an own entry whose current.hash is in the sent history re-sends on current with no conflict; a stale with a teammate's hash applies the server's revision to the file verbatim but for the local pinned line, in a commit whose author is the member and whose committer is the sync, so that the file's hash equals the server's when the entry had no pin and the next sweep sends nothing, writes the proposal by sync:<serverId> on behalf of the person outside the quota (a 6th open proposal still written) and the conflicts row, and status counts one open conflict; two conflicts on one entry keep both texts; a revision that adds pinned: true does not pin the entry; accepting the proposal sends the person's text on the server's current base",
+      "supersededBy": {
+        "id": "AC-30",
+        "at": "2026-11-10T18:42:11.553Z"
+      }
+    },
+    {
+      "id": "AC-20",
+      "kind": "behavior",
+      "text": "a teammate's entry pulled with wait is on disk under knowledge/received/<serverId>/shared/entries/<slug>--<8 hex>.md within 5 s with hashOf(file) equal to the server's hash, its knowledge_received row, its search row and its received ledger row written in one transaction whose write lock is held under 50 ms for the largest chunk; knowledge_search, browse and the prompt floor return it with received: { server, member } and the rendered from <member> via <server> (names cut at 80 characters, control characters stripped); knowledge_get reads it by <server>:<slug>--<8 hex>; pinnedEntries never returns it, knowledge pin refuses it, knowledge rebuild keeps its search row and compact keeps its shown row; a muted server or member hides it; a path component the server supplies outside its grammar is refused, and a linked received/ or received/<serverId>/ folder is refused; an own entry's upsert with the ledger's hash is skipped, with another hash is applied to the own file by the sync writer with the received row and the revised by marker, and with a local edit in flight becomes a conflict; a project bound to server A is never named in server B's pull; a received memory is an imported row with judge team:<serverId> and its provenance row, deduped by content against the project's memories, retrieved in a brief marked (team: <name>) and capped at a third of the budget, and deleted on its tombstone with every superseded_by that pointed at it set back; a tombstone deletes the received copy by its (scope, alias) and a tombstone with movedTo a range this machine does not read deletes it; a purge deletes a received copy and marks an own entry purged; the cursor is saved per page and a page re-applied after a crash changes nothing; a dirty target stops the cursor at its seq, is retried, and after ten tries is set aside in sharing_pending_rows with the cursor going on; knowledge take copies a received entry into the own repository under its uuid",
+      "supersededBy": {
+        "id": "AC-36",
+        "at": "2026-11-10T20:42:06.038Z"
+      }
+    },
+    {
+      "id": "AC-21",
+      "kind": "behavior",
+      "text": "a page with a new instance makes the next pull a snapshot; after its last page, received rows absent from the snapshot are dropped with their copies, sent rows absent are cleared and re-sent on base 0, present with a sent hash are left, present with another hash are applied or become conflicts by the local-edit rule, present as a tombstone are marked withdrawn by the admin; a cut snapshot restarts; a newly bound alias gets its own snapshot and joins its group; a 410 makes a snapshot; a 401 on the row's instance stops the server as unauthorized, on another as rejoin; a 403 member disabled stops it as disabled; a 409 stops it as contract naming both; a 429 waits Retry-After; an empty page back in under a second with wait backs off; three failures open the breaker; every state is on the server's row and in status, with its remedy",
+      "supersededBy": {
+        "id": "AC-31",
+        "at": "2026-11-10T18:42:11.608Z"
+      }
+    },
+    {
+      "id": "AC-22",
+      "kind": "behavior",
+      "text": "backup --restore with sync --auto running stops it through the flag, carries sharing_servers, the mutes, the sent rows whole and the sent hashes into the restored store (opened through openDb, so a v1 copy is upgraded first), deletes the copy's rows of a server the live list no longer held, sets snapshot_due and sharing.restore_hold, and resets the levels; the withdrawal sweep is held until a level is set; afterwards the old generation's memory uids are withdrawn; received files whose rows the copy lacks are re-indexed from disk at the sync's start; a store move and compact stop the sync the same way instead of refusing",
+      "supersededBy": {
+        "id": "AC-32",
+        "at": "2026-11-10T18:42:11.665Z"
+      }
+    },
+    {
+      "id": "AC-23",
+      "kind": "behavior",
+      "text": "status prints the sync's state and one line per server as stated; doctor sync warns for the token file's mode, an orphan token, a confirmed row with no token, a non-https URL, a stopped server, a dead lease holder, a stale stop flag, a server with no success in 24 h while sessions ran, open conflicts and pending rows, and makes no request; share explain --server prints the ledger history of an item",
+      "supersededBy": {
+        "id": "AC-70",
+        "at": "2026-11-10T22:22:15.565Z"
+      }
+    },
+    {
+      "id": "AC-24",
+      "kind": "behavior",
+      "text": "the Servers card lists, adds (with the counts, the pending row and the confirmation), re-joins, removes and mutes through the routes, none of which returns a token; the Sharing card's texts name the server and its selector edits the chosen server's lists with several; the dock names the bound server and offers Receive only; screen /settings#servers states empty, listed, adding, confirming, pending, error, stopped, /settings#sharing states one, several, /projects states bound, choosing, receive, viewports 360, 768, 1280, schemes light and dark, motion none",
+      "screens": [
+        {
+          "page": "settings",
+          "state": "empty"
+        },
+        {
+          "page": "settings",
+          "state": "listed"
+        },
+        {
+          "page": "settings",
+          "state": "adding"
+        },
+        {
+          "page": "settings",
+          "state": "confirming"
+        },
+        {
+          "page": "settings",
+          "state": "pending"
+        },
+        {
+          "page": "settings",
+          "state": "error"
+        },
+        {
+          "page": "settings",
+          "state": "stopped"
+        },
+        {
+          "page": "settings",
+          "state": "one"
+        },
+        {
+          "page": "settings",
+          "state": "several"
+        },
+        {
+          "page": "projects",
+          "state": "bound"
+        },
+        {
+          "page": "projects",
+          "state": "choosing"
+        },
+        {
+          "page": "projects",
+          "state": "receive"
+        }
+      ],
+      "supersededBy": {
+        "id": "AC-90",
+        "at": "2026-11-11T03:16:09.911Z"
+      }
+    },
+    {
+      "id": "AC-25",
+      "kind": "behavior",
+      "text": "share server remove sets the server removing, which a loop mid-page obeys within a page, and refuses after 30 s with the remedy; --withdraw withdraws every not-withdrawn sent row first and refuses on a failure naming the count while the server is down; remove deletes the server's received files, rows and memories (with the superseded_by rule), its levels, ledger rows, refusals, conflicts (refused with open ones without --yes), sent hashes, mutes, pending rows, row and token, writes the sharing_changes row, and says the device stays on the server until an admin revokes it; history replace-imports spares received memories; rejudge selects nothing new",
+      "supersededBy": {
+        "id": "AC-44",
+        "at": "2026-11-10T20:54:59.431Z"
+      }
+    },
+    {
+      "id": "AC-26",
+      "kind": "observed",
+      "text": "docs/adr/0027-sync-client.md records D-1 to D-9 and the rules of the spec; ADR 0025 is amended for the ledger's columns and LEDGER_RECORD_KEYS (localHash, instance, reason, pinned by tests/unit/sharing-contract.test.ts, which this part changes), the destination as a server, the receive level and the reversed reconcile rule; ADR 0024 is amended for the sync writer, the received table, the reserved repo id and the proposal outside the quota; ADR 0026 is amended for the contract module's exported shapes and the sync as its first client; CLAUDE.md gains a sync bullet and loses the sentence that part 6 is not built",
+      "supersededBy": {
+        "id": "AC-33",
+        "at": "2026-11-10T18:42:11.721Z"
+      }
+    },
+    {
+      "id": "AC-27",
+      "kind": "observed",
+      "text": "the hook snapshots, the MCP tools list, the perf budgets and the server's tests (tests/unit/team-*.test.ts, tests/integration/team-*.test.ts) pass unchanged on the final tree, against the base's whole-suite run; the one-time copy sharing v1 to v2 takes on the first opener is read beside the budgets",
+      "supersededBy": {
+        "id": "AC-56",
+        "at": "2026-11-10T21:31:27.698Z"
+      }
+    },
+    {
+      "id": "AC-28",
+      "kind": "preserve",
+      "text": "the knowledge module's and the sharing module's existing tests keep passing unchanged, but for tests/unit/sharing-contract.test.ts, which AC-26 changes: tests/unit/knowledge-*.test.ts, tests/integration/knowledge-*.test.ts, tests/unit/sharing-policy.test.ts, tests/unit/sharing-store-writes.test.ts and every other tests/unit/sharing-*.test.ts and tests/integration/sharing-*.test.ts",
+      "supersededBy": {
+        "id": "AC-34",
+        "at": "2026-11-10T20:42:05.914Z"
+      }
+    },
+    {
+      "id": "AC-29",
+      "kind": "behavior",
+      "text": "loadPolicy without a server reads the destination team as part 4 did, and the decide cases of tests/unit/sharing-policy.test.ts and the DECISION_KEYS block of tests/unit/sharing-contract.test.ts pass unchanged; with a server it intersects the server's lists, the env file's and the environment's and has that server's epoch; ledgerRecords hands decide the local_hash of an entry row so a redacted sent entry reads keep already-sent; the level receive binds without sending; setLevel refuses a level other than Nothing for a project bound to another server with one-server, the partial index refuses it in SQL, and share roots | areas --server <s> edit the server's lists while share roots | areas edit the env file's; once a server is confirmed, reconcileLevels removes a team row with a logged system change; a project at receive decides keep with level-receive and is never sent, Nothing to receive needs no confirm and receive to Knowledge does",
+      "supersededBy": {
+        "id": "AC-35",
+        "at": "2026-11-10T20:42:05.977Z"
+      }
+    },
+    {
+      "id": "AC-30",
+      "kind": "behavior",
+      "text": "a stale on an own entry whose current.hash is in the sent history re-sends on current with no conflict; a stale with a teammate's hash applies the server's revision to the file verbatim but for the local pinned line, in a commit whose author is the member and whose committer is the sync, so that the file's hash equals the server's when the entry had no pin and the next sweep sends nothing, writes the proposal by sync:<serverId> on behalf of the person outside the quota (a 6th open proposal still written) and the conflicts row, and status counts one open conflict; two conflicts on one entry keep both texts; a revision that adds pinned: true does not pin the entry; accepting the proposal sends the person's text on the server's current base; a teammate's revision applied to an own entry followed by the person's edit is applied with no conflict, since the apply moved the sent row's base",
+      "supersededBy": {
+        "id": "AC-37",
+        "at": "2026-11-10T20:42:06.100Z"
+      }
+    },
+    {
+      "id": "AC-31",
+      "kind": "behavior",
+      "text": "a page with a new instance makes the next pull a snapshot; after its last page, received rows absent from the snapshot are dropped with their copies, sent rows absent are cleared and re-sent on base 0, present with a sent hash are left, present with another hash are applied or become conflicts by the local-edit rule, present as a tombstone are marked withdrawn by the admin; a cut snapshot restarts; a newly bound alias makes its group a new group that snapshots from 0, and a row of another alias of the group written during that snapshot is pulled; a 410 makes a snapshot; a 401 on the row's instance stops the server as unauthorized, on another as rejoin; a 403 member disabled stops it as disabled; a 409 stops it as contract naming both; a 429 waits Retry-After; an empty page back in under a second with wait backs off; three failures open the breaker; every state is on the server's row and in status, with its remedy",
+      "supersededBy": {
+        "id": "AC-54",
+        "at": "2026-11-10T21:31:27.566Z"
+      }
+    },
+    {
+      "id": "AC-32",
+      "kind": "behavior",
+      "text": "backup --restore with sync --auto running stops it through the flag, carries sharing_servers, the mutes, the sent rows whole and the sent hashes into the restored store (opened through openDb, so a v1 copy is upgraded first), deletes the copy's rows of a server the live list no longer held, sets snapshot_due and sharing.restore_hold, and resets the levels; the withdrawal sweep is held until a level is set; afterwards the old generation's memory uids are withdrawn; received files whose rows the copy lacks are re-indexed from disk at the sync's start; a store move and compact stop the sync the same way instead of refusing; a carry that fails after the rename leaves sharing.carry_owed naming the replaced file, holds the sweep and the pull, is shown by status and doctor, and is completed at the sync's next start",
+      "supersededBy": {
+        "id": "AC-38",
+        "at": "2026-11-10T20:42:06.162Z"
+      }
+    },
+    {
+      "id": "AC-33",
+      "kind": "observed",
+      "text": "docs/adr/0027-sync-client.md records D-1 to D-9 and the rules of the spec; ADR 0025 is amended for the ledger's columns and LEDGER_RECORD_KEYS (localHash, instance, reason) and the reason level-receive, both pinned by tests/unit/sharing-contract.test.ts (its ledger keys and its REASONS block), which this part changes, the destination as a server, the receive level and the reversed reconcile rule; ADR 0024 is amended for the sync writer, the received table, the reserved repo id and the proposal outside the quota; ADR 0026 is amended for the contract module's exported shapes and the sync as its first client; CLAUDE.md gains a sync bullet and loses the sentence that part 6 is not built",
+      "supersededBy": {
+        "id": "AC-62",
+        "at": "2026-11-10T21:35:39.918Z"
+      }
+    },
+    {
+      "id": "AC-34",
+      "kind": "preserve",
+      "text": "the knowledge module's and the sharing module's existing tests keep passing unchanged, but for tests/unit/sharing-contract.test.ts, which AC-33 changes, and the levels-and-labels case of tests/unit/sharing-settings.test.ts, which the receive level changes (its widens case stays as it is): tests/unit/knowledge-*.test.ts, tests/integration/knowledge-*.test.ts, tests/unit/sharing-policy.test.ts, tests/unit/sharing-store-writes.test.ts, every other tests/unit/sharing-*.test.ts and tests/integration/sharing-*.test.ts, and tests/unit/ui-sharing-copy.test.ts",
+      "supersededBy": {
+        "id": "AC-57",
+        "at": "2026-11-10T21:31:27.760Z"
+      }
+    },
+    {
+      "id": "AC-35",
+      "kind": "behavior",
+      "text": "loadPolicy without a server reads the destination team as part 4 did, and the decide cases of tests/unit/sharing-policy.test.ts and the DECISION_KEYS block of tests/unit/sharing-contract.test.ts pass unchanged; with a server it intersects the server's lists, the env file's and the environment's and has that server's epoch; ledgerRecords hands decide the local_hash of an entry row so a redacted sent entry reads keep already-sent; the level receive binds without sending; setLevel refuses a level other than Nothing for a project bound to another server with one-server, the partial index refuses it in SQL, and share roots | areas --server <s> edit the server's lists while share roots | areas edit the env file's; once a server is confirmed, reconcileLevels removes a team row with a logged system change; a project at receive decides keep with level-receive and is never sent, Nothing to receive needs no confirm and receive to Knowledge does; once a server is confirmed, the viewer's project list and sharing routes, status's sharing line, doctor's sharing check and share project's preview read the level of the project's bound server, else Nothing, never team."
+    },
+    {
+      "id": "AC-36",
+      "kind": "behavior",
+      "text": "a teammate's entry pulled with wait is on disk under knowledge/received/<serverId>/shared/entries/<slug>--<8 hex>.md within 5 s with hashOf(file) equal to the server's hash, its knowledge_received row, its search row and its received ledger row written in one transaction whose write lock is held under 50 ms for the largest chunk; knowledge_search, browse and the prompt floor return it with received: { server, member } and the rendered from <member> via <server> (names cut at 80 characters, control characters stripped); knowledge_get reads it by <server>:<slug>--<8 hex>; pinnedEntries never returns it, knowledge pin refuses it, knowledge rebuild keeps its search row and compact keeps its shown row; a muted server or member hides it; a path component the server supplies outside its grammar is refused, and a linked received/ or received/<serverId>/ folder is refused; an own entry's upsert with the ledger's hash is skipped, with another hash is applied to the own file by the sync writer with the received row and the revised by marker, and with a local edit in flight becomes a conflict; a project bound to server A is never named in server B's pull; a received memory is an imported row with judge team:<serverId> and its provenance row, deduped by content against the project's memories, retrieved in a brief marked (team: <name>) and capped at a third of the budget, and deleted on its tombstone with every superseded_by that pointed at it set back; a tombstone deletes the received copy by its (scope, alias) and a tombstone with movedTo a range this machine does not read deletes it; a purge deletes a received copy and marks an own entry purged; the cursor is saved per page and a page re-applied after a crash changes nothing; a dirty target stops the cursor at its seq, is retried, and after ten tries is set aside in sharing_pending_rows with the cursor going on; knowledge take copies a received entry into the own repository under its uuid; a project unbound from a server has that server's received rows, files, search rows and memories of its alias deleted before the next pull's first page, and a re-bind's snapshot brings them back.",
+      "supersededBy": {
+        "id": "AC-39",
+        "at": "2026-11-10T20:47:33.272Z"
+      }
+    },
+    {
+      "id": "AC-37",
+      "kind": "behavior",
+      "text": "a stale on an own entry whose current.hash is in the sent history re-sends on current with no conflict; a stale with a teammate's hash applies the server's revision to the file verbatim but for the local pinned line, in a commit whose author is the member and whose committer is the sync, so that the file's hash equals the server's when the entry had no pin and the next sweep sends nothing, writes the proposal by sync:<serverId> on behalf of the person outside the quota (a 6th open proposal still written) and the conflicts row, and status counts one open conflict; two conflicts on one entry keep both texts; a revision that adds pinned: true does not pin the entry; accepting the proposal sends the person's text on the server's current base; a teammate's revision applied to an own entry followed by the person's edit is applied with no conflict, since the apply moved the sent row's base; accepting or rejecting the proposal closes the conflicts row and status counts 0 open, and a row whose proposal is gone is closed at the sync's start.",
+      "supersededBy": {
+        "id": "AC-40",
+        "at": "2026-11-10T20:47:33.330Z"
+      }
+    },
+    {
+      "id": "AC-38",
+      "kind": "behavior",
+      "text": "backup --restore with sync --auto running stops it through the flag, carries, for every server the live list holds, sharing_servers, the mutes, the sent rows whole, the sent hashes, the refusals, the conflicts and the pending rows into the restored store (opened through openDb, so a v1 copy is upgraded first), deletes the copy's rows of a server the live list no longer held, sets snapshot_due and sharing.restore_hold, and resets the levels; the withdrawal sweep is held until a level is set; afterwards the old generation's memory uids are withdrawn; received files whose rows the copy lacks are re-indexed from disk at the sync's start; a store move and compact stop the sync the same way instead of refusing; a carry that fails after the rename leaves sharing.carry_owed naming the replaced file, holds the sweep and the pull, is shown by status and doctor, and is completed at the sync's next start; a restore while a carry is owed completes the owed carry first and clears its mark before reading the live rows; doctor warns for a <db>.replaced-* file beside the store that no mark names.",
+      "supersededBy": {
+        "id": "AC-41",
+        "at": "2026-11-10T20:47:33.388Z"
+      }
+    },
+    {
+      "id": "AC-39",
+      "kind": "behavior",
+      "text": "a teammate's entry pulled with wait is on disk under knowledge/received/<serverId>/shared/entries/<slug>--<8 hex>.md within 5 s with hashOf(file) equal to the server's hash, its knowledge_received row, its search row and its received ledger row written in one transaction whose write lock is held under 50 ms for the largest chunk; knowledge_search, browse and the prompt floor return it with received: { server, member } and the rendered from <member> via <server> (names cut at 80 characters, control characters stripped); knowledge_get reads it by <server>:<slug>--<8 hex>; pinnedEntries never returns it, knowledge pin refuses it, knowledge rebuild keeps its search row and compact keeps its shown row; a muted server or member hides it; a path component the server supplies outside its grammar is refused, and a linked received/ or received/<serverId>/ folder is refused; an own entry's upsert with the ledger's hash is skipped, with another hash is applied to the own file by the sync writer with the received row and the revised by marker, and with a local edit in flight becomes a conflict; a project bound to server A is never named in server B's pull; a received memory is an imported row with judge team:<serverId> and its provenance row, deduped by content against the project's memories, retrieved in a brief marked (team: <name>) and capped at a third of the budget, and deleted on its tombstone with every superseded_by that pointed at it set back; a tombstone deletes the received copy by its (scope, alias) and a tombstone with movedTo a range this machine does not read deletes it; a purge deletes a received copy and marks an own entry purged; the cursor is saved per page and a page re-applied after a crash changes nothing; a dirty target stops the cursor at its seq, is retried, and after ten tries is set aside in sharing_pending_rows with the cursor going on; knowledge take copies a received entry into the own repository under its uuid; a project unbound from a server has that server's received copies of its alias deleted before the next pull's first page, the files first and the rows in one transaction, a crash between the two leaving rows the sync's start drops, a failed reconcile holding the page and retried at the next pull, and a re-bind's snapshot brings them back.",
+      "supersededBy": {
+        "id": "AC-42",
+        "at": "2026-11-10T20:51:42.430Z"
+      }
+    },
+    {
+      "id": "AC-40",
+      "kind": "behavior",
+      "text": "a stale on an own entry whose current.hash is in the sent history re-sends on current with no conflict; a stale with a teammate's hash applies the server's revision to the file verbatim but for the local pinned line, in a commit whose author is the member and whose committer is the sync, so that the file's hash equals the server's when the entry had no pin and the next sweep sends nothing, writes the proposal by sync:<serverId> on behalf of the person outside the quota (a 6th open proposal still written) and the conflicts row, and status counts one open conflict; two conflicts on one entry keep both texts; a revision that adds pinned: true does not pin the entry; accepting the proposal sends the person's text on the server's current base; a teammate's revision applied to an own entry followed by the person's edit is applied with no conflict, since the apply moved the sent row's base; accepting or rejecting the proposal closes the conflicts row and status counts 0 open, and a row whose proposal is accepted, rejected or gone is closed at the sync's start.",
+      "supersededBy": {
+        "id": "AC-52",
+        "at": "2026-11-10T21:31:27.429Z"
+      }
+    },
+    {
+      "id": "AC-41",
+      "kind": "behavior",
+      "text": "backup --restore with sync --auto running stops it through the flag, carries, for every server the live list holds, sharing_servers, the mutes, the sent rows whole, the sent hashes, the refusals, the conflicts and the pending rows into the restored store (opened through openDb, so a v1 copy is upgraded first), deletes the copy's rows of a server the live list no longer held, sets snapshot_due and sharing.restore_hold, and resets the levels; the withdrawal sweep is held until a level is set; afterwards the old generation's memory uids are withdrawn; received files whose rows the copy lacks are re-indexed from disk at the sync's start; a store move and compact stop the sync the same way instead of refusing; a carry that fails after the rename leaves sharing.carry_owed naming the replaced file, holds the sweep and the pull, is shown by status and doctor, and is completed at the sync's next start; a restore while a carry is owed completes the owed carry first and clears its mark before reading the live rows, and fails with nothing changed when that carry fails; a finished carry writes sharing.carry_done naming its file, and doctor warns for a <db>.replaced-* file newer than that one that no owed mark names, and for nothing after an ordinary restore.",
+      "supersededBy": {
+        "id": "AC-43",
+        "at": "2026-11-10T20:51:42.490Z"
+      }
+    },
+    {
+      "id": "AC-42",
+      "kind": "behavior",
+      "text": "a teammate's entry pulled with wait is on disk under knowledge/received/<serverId>/shared/entries/<slug>--<8 hex>.md within 5 s with hashOf(file) equal to the server's hash, its knowledge_received row, its search row and its received ledger row written in one transaction whose write lock is held under 50 ms for the largest chunk; knowledge_search, browse and the prompt floor return it with received: { server, member } and the rendered from <member> via <server> (names cut at 80 characters, control characters stripped); knowledge_get reads it by <server>:<slug>--<8 hex>; pinnedEntries never returns it, knowledge pin refuses it, knowledge rebuild keeps its search row and compact keeps its shown row; a muted server or member hides it; a path component the server supplies outside its grammar is refused, and a linked received/ or received/<serverId>/ folder is refused; an own entry's upsert with the ledger's hash is skipped, with another hash is applied to the own file by the sync writer with the received row and the revised by marker, and with a local edit in flight becomes a conflict; a project bound to server A is never named in server B's pull; a received memory is an imported row with judge team:<serverId> and its provenance row, deduped by content against the project's memories, retrieved in a brief marked (team: <name>) and capped at a third of the budget, and deleted on its tombstone with every superseded_by that pointed at it set back; a tombstone deletes the received copy by its (scope, alias) and a tombstone with movedTo a range this machine does not read deletes it; a purge deletes a received copy and marks an own entry purged; the cursor is saved per page and a page re-applied after a crash changes nothing; a dirty target stops the cursor at its seq, is retried, and after ten tries is set aside in sharing_pending_rows with the cursor going on; knowledge take copies a received entry into the own repository under its uuid; a project unbound from a server by the person has that server's received copies of its alias deleted before the next pull's first page, the files first and the rows in one transaction, a crash between the two leaving rows the sync's start drops and memories the next reconcile removes, a failed reconcile holding the page and retried at the next pull, a re-bind before the reconcile keeping the copies, and a re-bind's snapshot brings them back; a received shared entry and a received members entry survive the sync's start; a restore unbinds nothing and the received project copies survive it.",
+      "supersededBy": {
+        "id": "AC-45",
+        "at": "2026-11-10T20:54:59.484Z"
+      }
+    },
+    {
+      "id": "AC-43",
+      "kind": "behavior",
+      "text": "backup --restore with sync --auto running stops it through the flag, carries, for every server the live list holds, sharing_servers, the mutes, the sent rows whole, the sent hashes, the refusals, the conflicts, the pending rows and the unbound list into the restored store (opened through openDb, so a v1 copy is upgraded first), deletes the copy's rows of a server the live list no longer held, sets snapshot_due and sharing.restore_hold, and resets the levels; the withdrawal sweep is held until a level is set; afterwards the old generation's memory uids are withdrawn; received files whose rows the copy lacks are re-indexed from disk at the sync's start; a store move and compact stop the sync the same way instead of refusing; a carry that fails after the rename leaves sharing.carry_owed naming the replaced file, holds the sweep and the pull, is shown by status and doctor, and is completed at the sync's next start; a restore while a carry is owed completes the owed carry first and clears its mark before reading the live rows, and fails with nothing changed when that carry fails; a finished carry writes sharing.carry_done naming its file, and doctor warns for a <db>.replaced-* file newer than that one that no owed mark names, and for nothing after an ordinary restore; a copy's stale sharing.carry_owed or sharing.carry_done is cleared in the raw copy before the rename, so openDb failing after the rename leaves no owed mark; the carry is one function, completeOwedCarry, called by the restore and by the sync's start.",
+      "supersededBy": {
+        "id": "AC-46",
+        "at": "2026-11-10T20:54:59.540Z"
+      }
+    },
+    {
+      "id": "AC-44",
+      "kind": "behavior",
+      "text": "share server remove sets the server removing, which a loop mid-page obeys within a page, and refuses after 30 s with the remedy; --withdraw withdraws every not-withdrawn sent row first and refuses on a failure naming the count while the server is down; remove deletes the server's received files, rows and memories (with the superseded_by rule), its levels, ledger rows, refusals, conflicts (refused with open ones without --yes), sent hashes, mutes, pending rows, unbound rows, row and token, writes the sharing_changes row, and says the device stays on the server until an admin revokes it; history replace-imports spares received memories; rejudge selects nothing new.",
+      "supersededBy": {
+        "id": "AC-49",
+        "at": "2026-11-10T21:31:27.218Z"
+      }
+    },
+    {
+      "id": "AC-45",
+      "kind": "behavior",
+      "text": "a teammate's entry pulled with wait is on disk under knowledge/received/<serverId>/shared/entries/<slug>--<8 hex>.md within 5 s with hashOf(file) equal to the server's hash, its knowledge_received row, its search row and its received ledger row written in one transaction whose write lock is held under 50 ms for the largest chunk; knowledge_search, browse and the prompt floor return it with received: { server, member } and the rendered from <member> via <server> (names cut at 80 characters, control characters stripped); knowledge_get reads it by <server>:<slug>--<8 hex>; pinnedEntries never returns it, knowledge pin refuses it, knowledge rebuild keeps its search row and compact keeps its shown row; a muted server or member hides it; a path component the server supplies outside its grammar is refused, and a linked received/ or received/<serverId>/ folder is refused; an own entry's upsert with the ledger's hash is skipped, with another hash is applied to the own file by the sync writer with the received row and the revised by marker, and with a local edit in flight becomes a conflict; a project bound to server A is never named in server B's pull; a received memory is an imported row with judge team:<serverId> and its provenance row, deduped by content against the project's memories, retrieved in a brief marked (team: <name>) and capped at a third of the budget, and deleted on its tombstone with every superseded_by that pointed at it set back; a tombstone deletes the received copy by its (scope, alias) and a tombstone with movedTo a range this machine does not read deletes it; a purge deletes a received copy and marks an own entry purged; the cursor is saved per page and a page re-applied after a crash changes nothing; a dirty target stops the cursor at its seq, is retried, and after ten tries is set aside in sharing_pending_rows with the cursor going on; knowledge take copies a received entry into the own repository under its uuid; a project unbound from a server by the person has that server's received copies of its alias deleted before the next pull's first page, the files first and the rows in one transaction, a crash between the two leaving rows the sync's start drops and memories the next reconcile removes, a failed reconcile holding the page and retried at the next pull, a re-bind before the reconcile keeping the copies, and a re-bind's snapshot brings them back; a received shared entry and a received members entry survive the sync's start; a restore unbinds nothing and the received project copies survive it; with two enabled projects bound under one alias, the first set to Nothing writes no unbound row and the copies stay, and a row found with its alias bound again is dropped with no deletion.",
+      "supersededBy": {
+        "id": "AC-47",
+        "at": "2026-11-10T20:57:26.738Z"
+      }
+    },
+    {
+      "id": "AC-46",
+      "kind": "behavior",
+      "text": "backup --restore with sync --auto running stops it through the flag, carries, for every server the live list holds, sharing_servers, the mutes, the sent rows whole, the sent hashes, the refusals, the conflicts, the pending rows and the unbound list into the restored store (opened through openDb, so a v1 copy is upgraded first), deletes the copy's sharing rows of a server the live list no longer held, table by table, and has its received copies deleted at the sync's next start (also by sync --once with no server listed), sets snapshot_due and sharing.restore_hold, and resets the levels; the withdrawal sweep is held until a level is set; afterwards the old generation's memory uids are withdrawn; received files whose rows the copy lacks are re-indexed from disk at the sync's start; a store move and compact stop the sync the same way instead of refusing; a carry that fails after the rename leaves sharing.carry_owed naming the replaced file, holds the sweep and the pull, is shown by status and doctor, and is completed at the sync's next start; a restore while a carry is owed completes the owed carry first and clears its mark before reading the live rows, and fails with nothing changed when that carry fails; a finished carry writes sharing.carry_done naming its file, and doctor warns for a <db>.replaced-* file newer than that one that no owed mark names, and for nothing after an ordinary restore; a copy's stale sharing.carry_owed or sharing.carry_done is cleared in the raw copy before the rename, so openDb failing after the rename leaves no owed mark; the carry is one function, completeOwedCarry, called by the restore and by the sync's start.",
+      "supersededBy": {
+        "id": "AC-48",
+        "at": "2026-11-10T20:57:26.797Z"
+      }
+    },
+    {
+      "id": "AC-47",
+      "kind": "behavior",
+      "text": "a teammate's entry pulled with wait is on disk under knowledge/received/<serverId>/shared/entries/<slug>--<8 hex>.md within 5 s with hashOf(file) equal to the server's hash, its knowledge_received row, its search row and its received ledger row written in one transaction whose write lock is held under 50 ms for the largest chunk; knowledge_search, browse and the prompt floor return it with received: { server, member } and the rendered from <member> via <server> (names cut at 80 characters, control characters stripped); knowledge_get reads it by <server>:<slug>--<8 hex>; pinnedEntries never returns it, knowledge pin refuses it, knowledge rebuild keeps its search row and compact keeps its shown row; a muted server or member hides it; a path component the server supplies outside its grammar is refused, and a linked received/ or received/<serverId>/ folder is refused; an own entry's upsert with the ledger's hash is skipped, with another hash is applied to the own file by the sync writer with the received row and the revised by marker, and with a local edit in flight becomes a conflict; a project bound to server A is never named in server B's pull; a received memory is an imported row with judge team:<serverId> and its provenance row, deduped by content against the project's memories, retrieved in a brief marked (team: <name>) and capped at a third of the budget, and deleted on its tombstone with every superseded_by that pointed at it set back; a tombstone deletes the received copy by its (scope, alias) and a tombstone with movedTo a range this machine does not read deletes it; a purge deletes a received copy and marks an own entry purged; the cursor is saved per page and a page re-applied after a crash changes nothing; a dirty target stops the cursor at its seq, is retried, and after ten tries is set aside in sharing_pending_rows with the cursor going on; knowledge take copies a received entry into the own repository under its uuid; a project unbound from a server by the person has that server's received copies of its alias deleted before the next pull's first page, the files first and the rows in one transaction, a crash between the two leaving rows the sync's start drops and memories the next reconcile removes, a failed reconcile holding the page and retried at the next pull, a re-bind before the reconcile keeping the copies, and a re-bind's snapshot brings them back; a received shared entry and a received members entry survive the sync's start; a restore unbinds nothing and the received project copies survive it; with two enabled projects bound under one alias, the first set to Nothing writes no unbound row and the copies stay, and a row found with its alias bound again is dropped with no deletion; a folder left by a remove that crashed before deleting it is deleted at the sync's start, a linked or unreadable one is refused, and the searches, knowledge_get and the brief return nothing of a server with no sharing_servers row.",
+      "supersededBy": {
+        "id": "AC-53",
+        "at": "2026-11-10T21:31:27.496Z"
+      }
+    },
+    {
+      "id": "AC-48",
+      "kind": "behavior",
+      "text": "backup --restore with sync --auto running stops it through the flag, carries, for every server the live list holds, sharing_servers, the mutes, the sent rows whole, the sent hashes, the refusals, the conflicts, the pending rows and the unbound list into the restored store (opened through openDb, so a v1 copy is upgraded first), deletes the copy's sharing rows of a server the live list no longer held, table by table, and has its received copies deleted at the sync's next start (also by sync --once with no server listed), the restore's report naming that pending deletion and the searches and the brief returning none of that server's items before the start, sets snapshot_due and sharing.restore_hold, and resets the levels; the withdrawal sweep is held until a level is set; afterwards the old generation's memory uids are withdrawn; received files whose rows the copy lacks are re-indexed from disk at the sync's start; a store move and compact stop the sync the same way instead of refusing; a carry that fails after the rename leaves sharing.carry_owed naming the replaced file, holds the sweep and the pull, is shown by status and doctor, and is completed at the sync's next start; a restore while a carry is owed completes the owed carry first and clears its mark before reading the live rows, and fails with nothing changed when that carry fails; a finished carry writes sharing.carry_done naming its file, and doctor warns for a <db>.replaced-* file newer than that one that no owed mark names, and for nothing after an ordinary restore; a copy's stale sharing.carry_owed or sharing.carry_done is cleared in the raw copy before the rename, so openDb failing after the rename leaves no owed mark; the carry is one function, completeOwedCarry, called by the restore and by the sync's start.",
+      "supersededBy": {
+        "id": "AC-55",
+        "at": "2026-11-10T21:31:27.635Z"
+      }
+    },
+    {
+      "id": "AC-49",
+      "kind": "behavior",
+      "text": "share server remove stops the sync through the stop flag, waiting at most 30 s for the lease and refusing after it with the remedy, and the next spawn restarts the sync; --withdraw withdraws every not-withdrawn sent row first, retries a stale withdraw once on current, and refuses on a second failure naming the count while the server is down; remove deletes the server's received files, rows and memories (with the superseded_by rule), its levels, ledger rows, refusals, conflicts (refused with open ones without --yes), sent hashes, mutes, pending rows, unbound rows, row and token, writes the sharing_changes row, and says the device stays on the server until an admin revokes it; history replace-imports spares received memories; rejudge selects nothing new; share server resume prints the withdrawals the sweep would take back per project, clears the hold on the yes and not without it, and the sweep then withdraws them.",
+      "supersededBy": {
+        "id": "AC-58",
+        "at": "2026-11-10T21:35:39.630Z"
+      }
+    },
+    {
+      "id": "AC-50",
+      "kind": "behavior",
+      "text": "in-process with the injected clock and timers, runSync claims sync.lease with owner sync-<pid>-<version> renewed within 20 s, also across a 25 s held pull; a dead owner's lease is taken over and a newer version takes over an older holder's, which writes nothing after losing it and exits 1 after its page, its cursor never moving backwards; a lease held by a live pid across a 90 s sleep under the fake clock is not taken over and is renewed on wake; anyLeaseActive reports it; an idle sync makes no sweep between the sixty-second marks, its own writes moving no baseline; it exits within a minute once fifteen minutes pass with no hook run, no live viewer and no backlog, and not while a viewer is live or a backlog remains; it leaves within five seconds of the stop flag; through spawnCli, a second --auto exits 0 at once, WIZARDINGCODE_MEM_SYNC=off exits 0 without claiming, sync --once refuses while --auto runs and exits 1 with a stopped server; the session-start and prompt hooks spawn it when a confirmed server is listed, no lease is live, no stop flag is set and no young failed-start mark exists, and not otherwise, through one statement; a start that fails writes sync.last_failed_start, the next prompt within five minutes spawns nothing, and a start that reaches the loop clears it; the hook snapshots are unchanged with no server listed.",
+      "supersededBy": {
+        "id": "AC-64",
+        "at": "2026-11-10T22:22:15.224Z"
+      }
+    },
+    {
+      "id": "AC-51",
+      "kind": "behavior",
+      "text": "with a project at Knowledge bound to the server, a written entry is applied on the server within 5 s of the write under the test's clock and the in-process server, its sent row holds the server's revision in version, its hash, local_hash, instance, policy_epoch and reason, and its sent-hash row exists; an edit made to the file outside the store is sent at the next sixty-second sweep; the redacted hash the client computed equals the server's and the pinned line never leaves; a retry changes nothing and the next sweep sends nothing; narrowing the policy withdraws the item from the ledger's uid; a move sends the new uid on the old row's base and retires the old row with reason moved; refused secret is stored with its rule and never re-sent for that hash; purged leaves a purged row and the uid is never re-sent; rate and storage schedule the next sweep as stated; a stale on a memory records the server's copy as sent and sends nothing more for the uid until a later local change; a project put at all after a sweep sends its 10 old memories at the next; the first run after the add sends 450 allowed memories in batches of at most 200 items and 900 KiB of serialized body with the live change sent first; a 413 splits the batch and the items are applied, and an item over the cap is refused locally as too-large.",
+      "supersededBy": {
+        "id": "AC-59",
+        "at": "2026-11-10T21:35:39.701Z"
+      }
+    },
+    {
+      "id": "AC-52",
+      "kind": "behavior",
+      "text": "a stale on an own entry whose current has a lower revision, or another instance, is a rollback re-sent on current with no conflict; a stale whose current has a higher revision, its hash in the sent history or not, applies the server's revision to the file verbatim but for the local pinned line, in a commit whose author is the member and whose committer is the sync, so that the file's hash equals the server's when the entry had no pin and the next sweep sends nothing, writes the proposal by sync:<serverId> on behalf of the person outside the quota (a 6th open proposal still written) and the conflicts row, and status counts one open conflict; two conflicts on one entry keep both texts; a revision that adds pinned: true does not pin the entry; accepting the proposal sends the person's text on the server's current base; a teammate's revision applied to an own entry followed by the person's edit is applied with no conflict, since the apply moved the sent row's base; an own entry sent to two servers and revised by a teammate on one still decides send on the other; accepting or rejecting the proposal closes the conflicts row and status counts 0 open, and a row whose proposal is accepted, rejected or gone is closed at the sync's start.",
+      "supersededBy": {
+        "id": "AC-69",
+        "at": "2026-11-10T22:22:15.454Z"
+      }
+    },
+    {
+      "id": "AC-53",
+      "kind": "behavior",
+      "text": "a teammate's entry pulled with wait is on disk under knowledge/received/<serverId>/shared/entries/<slug>--<8 hex>.md within 5 s with hashOf(file) equal to the server's hash, its knowledge_received row, its search row and its received ledger row written in one transaction whose write lock is held under 50 ms for the largest chunk; knowledge_search, browse and the prompt floor return it with received: { server, member } and the rendered from <member> via <server> (names cut at 80 characters, control characters stripped); the floor shows at most one received entry per prompt and the session-start block pins none; knowledge_get reads it by <server name>:<slug>--<8 hex> and by the id, and refuses a name two servers share; pinnedEntries never returns it, knowledge pin refuses it, knowledge rebuild keeps its search row and compact keeps its shown row, and doctor's search-table check stays quiet; a muted server or member hides it; a path component the server supplies outside its grammar is refused, and a linked received/ or received/<serverId>/ folder is refused; an own entry's upsert with the ledger's hash is skipped, with another hash is applied to the own file by the sync writer with the applied ledger row and the revised by marker, and with a local edit in flight becomes a conflict; a project bound to server A is never named in server B's pull; a received memory is an imported row with judge team:<serverId> and its provenance row, deduped by content against the project's memories (a later revision of a deduped uid deduped again or inserted by its content), retrieved in a brief marked (team: <name>) and capped at a third of the budget, and deleted on its tombstone through deleteReceivedMemory with every superseded_by that pointed at it set back and its vector row gone; a tombstone deletes the received copy by its (scope, alias) and a tombstone with movedTo a range this machine does not read deletes it; a purge deletes a received copy and marks an own entry purged; the cursor is saved per page and a page re-applied after a crash changes nothing; a dirty target stops the cursor at its seq, is retried, and after ten tries is set aside in sharing_pending_rows with its payload and the cursor going on, re-applied an hour later and dropped by a later row of the same uid; knowledge take copies a received entry into the own repository under its uuid; this member's workspace entry pushed from another device arrives as a received copy marked (another device), never as an own item; a project unbound from a server by the person has that server's received copies of its alias deleted before the next pull's first page, the files first and the rows in one transaction, a crash between the two leaving rows the sync's start drops and memories the next reconcile removes, a failed reconcile holding the page and retried at the next pull, a re-bind before the reconcile keeping the copies, and a re-bind's snapshot brings them back; the copies of an unbound alias are hidden from search, knowledge_get, the floor and the brief; a received shared entry and a received members entry survive the sync's start; a restore unbinds nothing and the received project copies survive it; with two enabled projects bound under one alias, the first set to Nothing writes no unbound row and the copies stay, and a row found with its alias bound again is dropped with no deletion; a folder left by a remove that crashed before deleting it is deleted at the sync's start, a linked or unreadable one is refused, and the searches, knowledge_get and the brief return nothing of a server with no sharing_servers row.",
+      "supersededBy": {
+        "id": "AC-67",
+        "at": "2026-11-10T22:22:15.396Z"
+      }
+    },
+    {
+      "id": "AC-54",
+      "kind": "behavior",
+      "text": "a page with a new instance makes the next pull a snapshot; after its last page, received rows absent from the snapshot are dropped with their copies, sent rows absent are cleared and re-sent on base 0, present with a sent hash are left, present with another hash are applied or become conflicts by the local-edit rule, present as a tombstone are marked withdrawn by the admin; a cut snapshot restarts; the shared scope and the workspaces move under the scopes cursor, which a bind or unbind does not touch; a newly bound alias makes its group a new group that snapshots from 0 over its aliases only, and a row of another alias of the group written during that snapshot is pulled; a 410 makes a snapshot; a 401 on the row's instance stops the server as unauthorized, on another as rejoin; a 403 member disabled stops it as disabled; a 409 stops it as contract naming both; a 429 waits Retry-After; an empty page back in under a second with wait backs off; three failures open the breaker and the interval doubles to the cap until a success resets it; every state is on the server's row and in status, with its remedy.",
+      "supersededBy": {
+        "id": "AC-60",
+        "at": "2026-11-10T21:35:39.776Z"
+      }
+    },
+    {
+      "id": "AC-55",
+      "kind": "behavior",
+      "text": "backup --restore with sync --auto running stops it through the flag, carries, for every server the live list holds, sharing_servers, the mutes, the sent rows whole, the sent hashes, the refusals, the conflicts, the pending rows and the unbound list into the restored store (opened through openDb, so a v1 copy is upgraded first), deletes the copy's sharing rows of a server the live list no longer held, table by table, and has its received copies deleted at the sync's next start (also by sync --once with no server listed), the restore's report naming that pending deletion and the searches and the brief returning none of that server's items before the start, sets snapshot_due and sharing.restore_hold per server, and resets the levels; the withdrawal sweep is held until share server resume is confirmed, a setLevel alone clearing nothing; afterwards the old generation's memory uids are withdrawn; received files whose rows the copy lacks are re-indexed from disk at the sync's start; a store move and compact stop the sync the same way instead of refusing; a carry that fails after the rename leaves sharing.carry_owed naming the replaced file, holds the sweep and the pull, is shown by status and doctor, and is completed at the sync's next start; a restore while a carry is owed completes the owed carry first and clears its mark before reading the live rows, and fails with nothing changed when that carry fails; a finished carry writes sharing.carry_done naming its file, and doctor warns for a <db>.replaced-* file newer than that one that no owed mark names, and for nothing after an ordinary restore; a copy's stale sharing.carry_owed or sharing.carry_done is cleared in the raw copy before the rename, so openDb failing after the rename leaves no owed mark; the carry is one function, completeOwedCarry, called by the restore and by the sync's start.",
+      "supersededBy": {
+        "id": "AC-61",
+        "at": "2026-11-10T21:35:39.849Z"
+      }
+    },
+    {
+      "id": "AC-56",
+      "kind": "observed",
+      "text": "the hook snapshots, the MCP tools list, the perf budgets and the server's tests (tests/unit/team-*.test.ts, tests/integration/team-*.test.ts) pass unchanged on the final tree, against the base's whole-suite run; the one-time copy sharing v1 to v2 takes on the first opener is measured on the 50 MB fixture store (wall time around openDb) and recorded in the delivery's evidence, with the bar that it completes within the 10 s other openers wait; a slower copy is a known limit noted at the delivery with its remedy (open the store once from a shell before the session).",
+      "supersededBy": {
+        "id": "AC-91",
+        "at": "2026-11-11T03:16:09.962Z"
+      }
+    },
+    {
+      "id": "AC-57",
+      "kind": "preserve",
+      "text": "the knowledge module's and the sharing module's existing tests keep passing unchanged, but for the named cases this part changes: tests/unit/sharing-contract.test.ts (AC-33), the levels-and-labels case of tests/unit/sharing-settings.test.ts (its widens case stays), the ledger column list and the invalid-level message of tests/unit/sharing-store.test.ts, the migration list of tests/unit/knowledge-migration-7.test.ts and of tests/unit/module-migrations.test.ts, and the two configured-server sentences of tests/unit/ui-sharing-copy.test.ts; everything else of tests/unit/knowledge-*.test.ts, tests/integration/knowledge-*.test.ts, tests/unit/sharing-policy.test.ts, tests/unit/sharing-report.test.ts, tests/unit/sharing-store-writes.test.ts, every other tests/unit/sharing-*.test.ts and tests/integration/sharing-*.test.ts, and tests/unit/ui-sharing-copy.test.ts passes unchanged.",
+      "supersededBy": {
+        "id": "AC-82",
+        "at": "2026-11-10T22:40:27.938Z"
+      }
+    },
+    {
+      "id": "AC-58",
+      "kind": "behavior",
+      "text": "share server remove stops the sync through the stop flag, waiting at most 30 s for the lease and refusing after it with the remedy, and the next spawn restarts the sync; --withdraw withdraws every not-withdrawn sent row first, retries a stale withdraw once on current, and refuses on a second failure naming the count while the server is down; remove deletes the server's received files, rows and memories (with the superseded_by rule), its levels, ledger rows, refusals, conflicts (refused with open ones without --yes), sent hashes, mutes, pending rows, unbound rows, restore hold key, row and token, writes the sharing_changes row, and says the device stays on the server until an admin revokes it; history replace-imports spares received memories; rejudge selects nothing new; share server resume prints the withdrawals the sweep would take back per project, clears the hold on the yes and not without it, and the sweep then withdraws them.",
+      "supersededBy": {
+        "id": "AC-63",
+        "at": "2026-11-10T22:22:15.165Z"
+      }
+    },
+    {
+      "id": "AC-59",
+      "kind": "behavior",
+      "text": "with a project at Knowledge bound to the server, a written entry is applied on the server within 5 s of the write under the test's clock and the in-process server, its sent row holds the server's revision in version, its hash, local_hash, instance, policy_epoch and reason, and its sent-hash row exists; an edit made to the file outside the store is sent at the next sixty-second sweep; the redacted hash the client computed equals the server's and the pinned line never leaves; a retry changes nothing and the next sweep sends nothing; narrowing the policy withdraws the item from the ledger's uid; a move sends the new uid on the old row's base and retires the old row with reason moved; refused secret is stored with its rule and never re-sent for that hash; purged leaves a purged row and the uid is never re-sent; rate and storage schedule the next sweep as stated; a stale on a memory records the server's copy as sent with the local memoryHash as local_hash, the next sweep sends nothing for it, and a later local change is sent; a project put at all after a sweep sends its 10 old memories at the next; the first run after the add sends 450 allowed memories in batches of at most 200 items and 900 KiB of serialized body with the live change sent first; a 413 splits the batch and the items are applied, and an item over the cap is refused locally as too-large.",
+      "supersededBy": {
+        "id": "AC-65",
+        "at": "2026-11-10T22:22:15.281Z"
+      }
+    },
+    {
+      "id": "AC-60",
+      "kind": "behavior",
+      "text": "a page with a new instance makes the next pull a snapshot; after its last page, received rows absent from the snapshot are dropped with their copies, sent rows absent are cleared and re-sent on base 0, present with a sent hash are left, present with another hash are applied or become conflicts by the local-edit rule, present as a tombstone are marked withdrawn by the admin; a snapshot completes per cursor and snapshot_due clears only after the scopes cursor and every group reached more: false, a cut snapshot restarting from the first uncompleted cursor; an instance change deletes the server's pending rows; the shared scope and the workspaces move under the scopes cursor, which a bind or unbind does not touch; a newly bound alias makes its group a new group that snapshots from 0 over its aliases only, and a row of another alias of the group written during that snapshot is pulled; a 410 makes a snapshot; a 401 on the row's instance stops the server as unauthorized, on another as rejoin; a 403 member disabled stops it as disabled; a 409 stops it as contract naming both; a 429 waits Retry-After; an empty page back in under a second with wait backs off; three failures open the breaker and the interval doubles to the cap until a success resets it; every state is on the server's row and in status, with its remedy.",
+      "supersededBy": {
+        "id": "AC-66",
+        "at": "2026-11-10T22:22:15.339Z"
+      }
+    },
+    {
+      "id": "AC-61",
+      "kind": "behavior",
+      "text": "backup --restore with sync --auto running stops it through the flag, carries, for every server the live list holds, sharing_servers, the mutes, the sent rows whole, the sent hashes, the refusals, the conflicts, the pending rows and the unbound list into the restored store (opened through openDb, so a v1 copy is upgraded first), deletes the copy's sharing rows of a server the live list no longer held, table by table, and has its received copies deleted at the sync's next start (also by sync --once with no server listed), the restore's report naming that pending deletion and the searches and the brief returning none of that server's items before the start, sets snapshot_due and sharing.restore_hold per server, and resets the levels; the withdrawal sweep is held until share server resume is confirmed, a setLevel alone clearing nothing; afterwards the old generation's memory uids are withdrawn; received files whose rows the copy lacks are re-indexed from disk at the sync's start; a store move and compact stop the sync the same way instead of refusing; a carry that fails after the rename leaves sharing.carry_owed naming the replaced file, holds the sweep and the pull, is shown by status and doctor, and is completed at the sync's next start; a restore while a carry is owed completes the owed carry first and clears its mark before reading the live rows, and fails with nothing changed when that carry fails; a finished carry writes sharing.carry_done naming its file, and doctor warns for a <db>.replaced-* file newer than that one that no owed mark names, and for nothing after an ordinary restore; a copy's stale sharing.carry_owed or sharing.carry_done is cleared in the raw copy before the rename, so openDb failing after the rename leaves no owed mark, and the copy's sharing.restore_hold:* keys are cleared with them and set afresh for the listed servers, so a re-added server starts with no hold nobody set; the carry is one function, completeOwedCarry, called by the restore and by the sync's start.",
+      "supersededBy": {
+        "id": "AC-68",
+        "at": "2026-11-10T22:22:15.510Z"
+      }
+    },
+    {
+      "id": "AC-62",
+      "kind": "observed",
+      "text": "docs/adr/0027-sync-client.md records D-1 to D-9 and the rules of the spec; ADR 0025 is amended for the ledger's columns, the applied direction and LEDGER_RECORD_KEYS (localHash, instance, reason) and the reason level-receive, both pinned by tests/unit/sharing-contract.test.ts (its ledger keys and its REASONS block), which this part changes, the destination as a server, the receive level and the reversed reconcile rule; ADR 0024 is amended for the sync writer, the received table, the reserved repo id and the proposal outside the quota; ADR 0026 is amended for the contract module's exported shapes and the sync as its first client; CLAUDE.md gains a sync bullet and loses \"the sync client, part 6, and the runbook, part 7, are not built\"."
+    },
+    {
+      "id": "AC-63",
+      "kind": "behavior",
+      "text": "share server remove stops the sync through the stop flag, waiting at most 30 s for the lease and refusing after it with the remedy, and the next spawn restarts the sync; a reference that names two servers is refused with their ids; --withdraw withdraws every not-withdrawn sent row first, retries a stale withdraw once on current, and refuses on a second failure naming the count while the server is down; remove deletes the server's received files, rows and memories (with the superseded_by rule), its levels, ledger rows, refusals, conflicts (refused with open ones without --yes), sent hashes, mutes, pending rows, unbound rows, hold key, row and token, writes the sharing_changes row, and says the device stays on the server until an admin revokes it; history replace-imports spares received memories; rejudge selects nothing new; share server resume prints the withdrawals the sweep would take back per project, clears the hold on the yes and not without it, whether a restore or a bulk withdrawal set it, and the sweep then withdraws them.",
+      "supersededBy": {
+        "id": "AC-71",
+        "at": "2026-11-10T22:27:44.766Z"
+      }
+    },
+    {
+      "id": "AC-64",
+      "kind": "behavior",
+      "text": "in-process with the injected clock and timers, runSync claims sync.lease with owner sync-<pid>-<version> renewed within 20 s, also across a 25 s held pull; a dead owner's lease is taken over and a newer version takes over an older holder's, which writes nothing after losing it and exits 1 after its page, its cursor never moving backwards; a lease expired across a 90 s sleep under the fake clock is taken by the wake's spawn and the old holder exits without a write; anyLeaseActive reports it; an idle sync makes no sweep between the sixty-second marks, its own writes moving no data_version, and a quiet tick sweep on the fixture (1,000 entries, 10,000 memories) issues one indexed query per table and reads no row; it exits within a minute once fifteen minutes pass with no hook run, no live viewer and no backlog, and not while a viewer is live or a backlog remains; it leaves within five seconds of the stop flag; through spawnCli, a second --auto exits 0 at once, WIZARDINGCODE_MEM_SYNC=off exits 0 without claiming, sync --once exits 2 while --auto runs and 1 with a stopped server; the session-start and prompt hooks spawn it when a confirmed server is listed, no lease is live, no stop flag is set and no young failed-start mark exists, and not otherwise, through one statement and one process.kill, nothing on a store without the sharing schema, failing open on any error; a start that fails writes sync.last_failed_start and exits 3, the next prompt within five minutes spawns nothing, and a start that reaches the loop clears it; the hook snapshots are unchanged with no server listed.",
+      "supersededBy": {
+        "id": "AC-76",
+        "at": "2026-11-10T22:27:45.073Z"
+      }
+    },
+    {
+      "id": "AC-65",
+      "kind": "behavior",
+      "text": "with a project at Knowledge bound to the server, a written entry is applied on the server within 5 s of the write under the test's clock and the in-process server, its sent row holds the server's revision in version, its hash, local_hash, instance, policy_epoch and reason, and its sent-hash row exists; an edit made to the file outside the store is skipped and counted as dirty until it is committed, and is sent at the next sixty-second sweep once committed; the redacted hash the client computed equals the server's and the pinned line never leaves; a retry changes nothing and the next sweep sends nothing; narrowing the policy withdraws the item from the ledger's uid; an entry whose repository is unmounted is not withdrawn; a sweep that would withdraw more than 20 items holds them under bulk, status names the count, and share server resume releases them; a memory inserted with a past updated_at is sent once by the max-id rule; a move sends the new uid on the old row's base and retires the old row with reason moved; refused secret is stored with its rule and never re-sent for that hash; purged leaves a purged row and the uid is never re-sent; rate and storage schedule the next sweep as stated; a stale on a memory records the server's copy as sent with the local memoryHash as local_hash, the next sweep sends nothing for it, and a later local change is sent; a project put at all after a sweep sends its 10 old memories at the next; the first run after the add sends 450 allowed memories in batches of at most 200 items and 900 KiB of serialized body with the live change sent first; a 413 splits the batch and the items are applied, and an item over the per-item limit /v1/me publishes is refused locally as too-large.",
+      "supersededBy": {
+        "id": "AC-72",
+        "at": "2026-11-10T22:27:44.817Z"
+      }
+    },
+    {
+      "id": "AC-66",
+      "kind": "behavior",
+      "text": "the main pull names scope=all with the first 100 bound aliases and holds with wait, one held pull per server; a 101st bound alias is pulled with scope=project under its own cursor without wait at the sixty-second mark and its change arrives within a minute; a newly bound alias joins the main set and gets a one-alias snapshot, a row of it written during that snapshot arriving once; an unbind leaves the main cursor standing; a page with a new instance makes the next pull a snapshot and deletes the pending rows; a snapshot completes per cursor and snapshot_due clears only after the main cursor and every extra alias reached more: false, a cut snapshot restarting from the first uncompleted cursor; after a cursor's last page, received rows absent from the snapshot are dropped with their copies, sent rows absent are cleared with their applied row and re-sent on base 0, present with a sent hash are left, present with another hash are applied or become conflicts by the local-edit rule, present as a tombstone are marked withdrawn by the admin; a 410 makes a snapshot; a 401 on the row's instance stops the server as unauthorized, on another as rejoin; a 403 member disabled stops it as disabled; a 409 stops it as contract naming both; a 429 waits Retry-After; an empty page back in under a second with wait backs off; three failures open the breaker and the interval doubles to the cap until a success resets it; every state is on the server's row and in status, with its remedy.",
+      "supersededBy": {
+        "id": "AC-73",
+        "at": "2026-11-10T22:27:44.867Z"
+      }
+    },
+    {
+      "id": "AC-67",
+      "kind": "behavior",
+      "text": "a teammate's entry pulled with wait is on disk under knowledge/received/<serverId>/shared/entries/<slug>--<8 hex>.md within 5 s with hashOf(file) equal to the server's hash, its knowledge_received row, its search row and its received ledger row written in one transaction whose write lock is held under 50 ms for the largest chunk (one chunk of 50 mixed rows on a project with 2,000 memories and 500 entries); knowledge_search, browse and the prompt floor return it with received: { server, member } and the rendered from <member> via <server> (names cut at 80 characters, control characters stripped); the floor shows at most one received entry per prompt and the brief's pinned block none; knowledge_get reads it by <server name>:<slug>--<8 hex> and by the id, and refuses a name two servers share; a received hit's id and its knowledge_shown row are <serverId>|<uid>; pinnedEntries never returns it, knowledge write --pinned refuses it, knowledge rebuild keeps its search row and compact keeps its shown row, and doctor's search-table check stays quiet; a muted server or member hides it; a path component the server supplies outside its grammar is refused, and a linked received/ or received/<serverId>/ folder is refused; an own entry's upsert with the ledger's hash is skipped, with another hash is applied to the own file by the sync writer with the applied ledger row and the revised by marker, and with a local edit in flight becomes a conflict; a pinned own entry a teammate revised leaves the brief's pinned block and shows on the floor marked (pin held) until the person edits or re-pins it; a project bound to server A is never named in server B's pull; a received memory is an imported row with judge team:<serverId> and its provenance row, its ledger item_uid remote:<device alias>:<uid>, an unknown kind mapped to discovery, an importance clamped and a foreign status mapped to active with the remote values kept, deduped by content against the project's memories through the per-page map (a later revision of a deduped uid deduped again or inserted by its content), retrieved in a brief marked (team: <name>) and capped at a third of the budget, left out of the brief when its alias is unbound, and deleted on its tombstone through deleteReceivedMemory with every superseded_by that pointed at it set back and its vector row gone; a tombstone deletes the received copy by its (scope, alias) and a tombstone with movedTo a range this machine does not read deletes it; a purge deletes a received copy and marks an own entry purged; the cursor is saved per page and a page re-applied after a crash changes nothing; a dirty target stops the cursor at its seq, is retried, and after ten tries is set aside in sharing_pending_rows with its payload and the cursor going on, re-applied an hour later and dropped by a later row of the same uid; knowledge take copies a received entry into the own repository under its uuid; this member's workspace entry pushed from another device arrives as a received copy marked (another device), never as an own item; a project unbound from a server by the person has that server's received copies of its alias deleted before the next pull's first page, the files first and the rows in one transaction, a crash between the two leaving rows the sync's start drops and memories the next reconcile removes, a failed reconcile holding the page and retried at the next pull, a re-bind before the reconcile keeping the copies, and a re-bind's snapshot brings them back; the copies of an unbound alias are hidden from search, knowledge_get, the floor and the brief; a received shared entry and a received members entry survive the sync's start; a restore unbinds nothing and the received project copies survive it; with two enabled projects bound under one alias, the first set to Nothing writes no unbound row and the copies stay, a row found with its alias bound again is dropped with no deletion, and a received memory of the alias goes to the project with the lowest id; a folder left by a remove that crashed before deleting it is deleted at the sync's start, a linked or unreadable one is refused, and the searches, knowledge_get and the brief return nothing of a server with no sharing_servers row.",
+      "supersededBy": {
+        "id": "AC-75",
+        "at": "2026-11-10T22:27:44.971Z"
+      }
+    },
+    {
+      "id": "AC-68",
+      "kind": "behavior",
+      "text": "backup --restore with sync --auto running stops it through the flag, reads the live rows of the eight tables for every server the live list holds, upgrades the raw copy through openDb without the upgrade's backup copy (so a v1 copy gains sharing v2 and knowledge v8), writes those rows into the copy server by server, deletes the copy's sharing rows of a server the live list no longer held table by table, resets the levels, clears the copy's hold keys and stale sync.* marks, sets a hold with reason restore on every listed server and snapshot_due, and only then renames; a failure in any step before the rename leaves the live store unchanged and the copy discarded; the unlisted server's received copies are deleted at the sync's next start (also by sync --once with no server listed), the restore's report naming that pending deletion and the searches and the brief returning none of that server's items before the start; the withdrawal sweep is held until share server resume is confirmed, a setLevel alone clearing nothing; afterwards the old generation's memory uids are withdrawn; received files whose rows the copy lacks are re-indexed from disk at the sync's start; a store move and compact stop the sync the same way instead of refusing, and refuse with their busy error when it does not stop within 30 s; a copy holding a hold key for a server the live list lacks, re-added after the restore, starts with no hold; doctor raises nothing after an ordinary restore.",
+      "supersededBy": {
+        "id": "AC-74",
+        "at": "2026-11-10T22:27:44.918Z"
+      }
+    },
+    {
+      "id": "AC-69",
+      "kind": "behavior",
+      "text": "a stale on an own entry whose current has a lower revision, or another instance, is a rollback re-sent on current with no conflict; a stale whose current has a higher revision, its hash in the sent history or not, applies the server's revision to the file verbatim but for the local pinned line, in a commit whose author is the member and whose committer is the sync, so that the file's hash equals the server's when the entry had no pin and the next sweep sends nothing, writes the proposal by sync:<serverId> on behalf of the person outside the quota (a 6th open proposal still written, its file committed under the person's identity with the sync as committer) and the conflicts row, and status counts one open conflict; two conflicts on one entry keep both texts; a revision that adds pinned: true does not pin the entry; accepting the proposal sends the person's text on the server's current base; a teammate's revision applied to an own entry followed by the person's edit is applied with no conflict, since the apply moved the sent row's base; an own entry sent to two servers and revised by a teammate on one still decides send on the other; accepting or rejecting the proposal closes the conflicts row and status counts 0 open, and a row whose proposal is accepted, rejected or gone is closed at the sync's start."
+    },
+    {
+      "id": "AC-70",
+      "kind": "behavior",
+      "text": "status prints the sync's state and one line per server as stated, the dirty count and a held withdrawal with its reason and count among them; doctor sync warns for the token file's mode, an orphan token, a confirmed row with no token, a non-https URL, a stopped server, a dead lease holder, a stale stop flag, a failed-start mark, a server with no success in 24 h while sessions ran, open conflicts, pending rows and a held withdrawal, and makes no request; status and doctor on a store at sharing v1 print no server line and warn nothing of the sync; share explain --server prints the ledger history of an item; logError writes one line per distinct error with its count, and no token, code or payload reaches the log or last_error."
+    },
+    {
+      "id": "AC-71",
+      "kind": "behavior",
+      "text": "share server remove stops the sync through the stop flag, waiting at most 30 s for the lease and refusing after it with the remedy, and the next spawn restarts the sync; a reference that names two servers is refused with their ids; --withdraw withdraws every not-withdrawn sent row first, retries a stale withdraw once on current, and refuses on a second failure naming the count while the server is down; remove deletes the server's received files, rows and memories (with the superseded_by rule), its levels, ledger rows, refusals, conflicts (refused with open ones without --yes), sent hashes, mutes, pending rows, unbound rows, hold key, row and token, writes the sharing_changes row, and says the device stays on the server until an admin revokes it; history replace-imports spares received memories; rejudge selects nothing new; share server resume prints the withdrawals the sweep would take back per project, clears the hold on the yes and not without it, whether a restore or a bulk withdrawal set it, the sweep then withdraws the set it showed with the guard suspended for those uids, and the hold does not return for that set.",
+      "supersededBy": {
+        "id": "AC-80",
+        "at": "2026-11-10T22:30:35.356Z"
+      }
+    },
+    {
+      "id": "AC-72",
+      "kind": "behavior",
+      "text": "with a project at Knowledge bound to the server, a written entry is applied on the server within 5 s of the write under the test's clock and the in-process server, its sent row holds the server's revision in version, its hash, local_hash, instance, policy_epoch and reason, and its sent-hash row exists; an edit made to the file outside the store is skipped and counted as dirty until it is committed, and is sent at the next sixty-second sweep once committed; the redacted hash the client computed equals the server's and the pinned line never leaves; a retry changes nothing and the next sweep sends nothing; narrowing the policy withdraws the item from the ledger's uid at once, 25 items of a project set to Nothing included, with no hold; an entry whose repository is unmounted is not withdrawn; a sweep that would withdraw more than 20 entries gone from a present repository holds them under bulk, status names the count, share server resume releases them, and the next sweep withdraws that set and holds nothing for it; a memory inserted with a past updated_at is sent once by the max-id rule; a move sends the new uid on the old row's base and retires the old row with reason moved; refused secret is stored with its rule and never re-sent for that hash; purged leaves a purged row and the uid is never re-sent; rate and storage schedule the next sweep as stated; a stale on a memory records the server's copy as sent with the local memoryHash as local_hash, the next sweep sends nothing for it, and a later local change is sent; a project put at all after a sweep sends its 10 old memories at the next; the first run after the add sends 450 allowed memories in batches of at most 200 items and 900 KiB of serialized body with the live change sent first; a 413 splits the batch and the items are applied, and an item over the per-item limit /v1/me publishes is refused locally as too-large.",
+      "supersededBy": {
+        "id": "AC-77",
+        "at": "2026-11-10T22:30:35.201Z"
+      }
+    },
+    {
+      "id": "AC-73",
+      "kind": "behavior",
+      "text": "the main pull names scope=all with the main set of up to 100 bound aliases and holds with wait, one held pull per server; a 101st bound alias is pulled with scope=project under its own cursor without wait at the sixty-second mark and its change arrives within a minute; a newly bound alias joins the main set and gets a one-alias snapshot, a row of it written during that snapshot arriving once; an alias raised from receive to Knowledge stays in the main set; an unbind leaves the main cursor standing and promotes the first extra alias by its bytes with a one-alias snapshot; no alias is demoted; a page with a new instance makes the next pull a snapshot and deletes the pending rows; a snapshot completes per cursor and snapshot_due clears only after the main cursor and every extra alias reached more: false, a cut snapshot restarting from the first uncompleted cursor; after a cursor's last page, received rows absent from the snapshot are dropped with their copies, sent rows absent are cleared with their applied row and re-sent on base 0, present with a sent hash are left, present with another hash are applied or become conflicts by the local-edit rule, present as a tombstone are marked withdrawn by the admin; a 410 makes a snapshot; a 401 on the row's instance stops the server as unauthorized, on another as rejoin; a 403 member disabled stops it as disabled; a 409 stops it as contract naming both; a 429 waits Retry-After; an empty page back in under a second with wait backs off; three failures open the breaker and the interval doubles to the cap until a success resets it; every state is on the server's row and in status, with its remedy.",
+      "supersededBy": {
+        "id": "AC-78",
+        "at": "2026-11-10T22:30:35.253Z"
+      }
+    },
+    {
+      "id": "AC-74",
+      "kind": "behavior",
+      "text": "backup --restore with sync --auto running stops it through the flag, reads the live rows of the eight tables for every server the live list holds, upgrades the raw copy through openDb without the upgrade's backup copy (so a v1 copy gains sharing v2 and knowledge v8), writes those rows into the copy server by server, deletes the copy's sharing rows of a server the live list no longer held table by table, resets the levels, clears the copy's hold keys and stale sync.* marks, sets a hold with reason restore on every listed server and snapshot_due, sets the copy's journal mode to DELETE and closes it, and only then renames; a copy whose header is in WAL mode keeps every carried row after the restore; a -wal or -shm file beside the unpacked copy refuses the restore before the rename; a failure in any step before the rename leaves the live store unchanged and the copy discarded; the unlisted server's received copies are deleted at the sync's next start (also by sync --once with no server listed), the restore's report naming that pending deletion and the searches and the brief returning none of that server's items before the start; the withdrawal sweep is held until share server resume is confirmed, a setLevel alone clearing nothing; afterwards the old generation's memory uids are withdrawn; received files whose rows the copy lacks are re-indexed from disk at the sync's start; a store move and compact stop the sync the same way instead of refusing, and refuse with their busy error when it does not stop within 30 s; a copy holding a hold key for a server the live list lacks, re-added after the restore, starts with no hold; doctor raises nothing after an ordinary restore.",
+      "supersededBy": {
+        "id": "AC-79",
+        "at": "2026-11-10T22:30:35.304Z"
+      }
+    },
+    {
+      "id": "AC-75",
+      "kind": "behavior",
+      "text": "a teammate's entry pulled with wait is on disk under knowledge/received/<serverId>/shared/entries/<slug>--<8 hex>.md within 5 s with hashOf(file) equal to the server's hash, its knowledge_received row, its search row and its received ledger row written in one transaction whose write lock is held under 50 ms for the largest chunk (one chunk of 50 mixed rows on a project with 2,000 memories and 500 entries); knowledge_search, browse and the prompt floor return it with received: { server, member } and the rendered from <member> via <server> (names cut at 80 characters, control characters stripped); the floor shows at most one received entry per prompt and the brief's pinned block none; knowledge_get reads it by <server name>:<slug>--<8 hex> and by the id, and refuses a name two servers share; a received hit's id and its knowledge_shown row are <serverId>|<uid>; pinnedEntries never returns it, knowledge write --pinned refuses it, knowledge rebuild keeps its search row and compact keeps its shown row, and doctor's search-table check stays quiet; a muted server or member hides it; a path component the server supplies outside its grammar is refused, and a linked received/ or received/<serverId>/ folder is refused; an own entry's upsert with the ledger's hash is skipped, with another hash is applied to the own file by the sync writer with the applied ledger row and the revised by marker, and with a local edit in flight becomes a conflict; a pinned own entry a teammate revised leaves the brief's pinned block and shows on the floor marked (pin held) until the person edits or re-pins it; a project bound to server A is never named in server B's pull; a received memory is an imported row with judge team:<serverId> and its provenance row, its ledger item_uid remote:<device alias>:<uid>, an unknown kind mapped to discovery, an importance of 3.5, 0.2 or 9 rounded and clamped to 4, 1 and 5 and a foreign status mapped to active with the remote values kept, deduped by content against the project's memories through the per-page map (a later revision of a deduped uid deduped again or inserted by its content), retrieved in a brief marked (team: <name>) and capped at a third of the budget, left out of the brief when its alias is unbound, and deleted on its tombstone through deleteReceivedMemory with every superseded_by that pointed at it set back and its vector row gone; a tombstone deletes the received copy by its (scope, alias) and a tombstone with movedTo a range this machine does not read deletes it; a purge deletes a received copy and marks an own entry purged; the cursor is saved per page and a page re-applied after a crash changes nothing; a dirty target stops the cursor at its seq, is retried, and after ten tries is set aside in sharing_pending_rows with its payload and the cursor going on, re-applied an hour later and dropped by a later row of the same uid; knowledge take copies a received entry into the own repository under its uuid; this member's workspace entry pushed from another device arrives as a received copy marked (another device), never as an own item; a project unbound from a server by the person has that server's received copies of its alias deleted before the next pull's first page, the files first and the rows in one transaction, a crash between the two leaving rows the sync's start drops and memories the next reconcile removes, a failed reconcile holding the page and retried at the next pull, a re-bind before the reconcile keeping the copies, and a re-bind's snapshot brings them back; the copies of an unbound alias are hidden from search, knowledge_get, the floor and the brief; a received shared entry and a received members entry survive the sync's start; a restore unbinds nothing and the received project copies survive it; with two enabled projects bound under one alias, the first set to Nothing writes no unbound row and the copies stay, a row found with its alias bound again is dropped with no deletion, and a received memory of the alias goes to the project with the lowest id; a folder left by a remove that crashed before deleting it is deleted at the sync's start, a linked or unreadable one is refused, and the searches, knowledge_get and the brief return nothing of a server with no sharing_servers row.",
+      "supersededBy": {
+        "id": "AC-87",
+        "at": "2026-11-11T03:16:09.755Z"
+      }
+    },
+    {
+      "id": "AC-76",
+      "kind": "behavior",
+      "text": "in-process with the injected clock and timers, runSync claims sync.lease with owner sync-<pid>-<version> renewed within 20 s, also across a 25 s held pull; a dead owner's lease is taken over and a newer version takes over an older holder's, which writes nothing after losing it and exits 1 after its page, its cursor never moving backwards; a lease expired across a 90 s sleep under the fake clock is taken by the wake's spawn and the old holder exits without a write; anyLeaseActive reports it; an idle sync makes no sweep between the sixty-second marks, its own writes moving no data_version, and a quiet tick sweep on the fixture (1,000 entries, 10,000 memories) issues one indexed query per table and reads no row; a change from a quiet state is swept at the next tick, and a burst of changes is coalesced into one sweep per five seconds; it exits within a minute once fifteen minutes pass with no hook run, no live viewer and no backlog, and not while a viewer is live or a backlog remains; it leaves within five seconds of the stop flag; through spawnCli, a second --auto exits 0 at once, WIZARDINGCODE_MEM_SYNC=off exits 0 without claiming, sync --once exits 2 while --auto runs and 1 with a stopped server; the session-start and prompt hooks spawn it when a confirmed server is listed, no lease is live, no stop flag is set and no young failed-start mark exists, and not otherwise, through one statement and one process.kill, nothing on a store without the sharing schema, failing open on any error; a start that fails writes sync.last_failed_start and exits 3, the next prompt within five minutes spawns nothing, and a start that reaches the loop clears it; the hook snapshots are unchanged with no server listed.",
+      "supersededBy": {
+        "id": "AC-89",
+        "at": "2026-11-11T03:16:09.859Z"
+      }
+    },
+    {
+      "id": "AC-77",
+      "kind": "behavior",
+      "text": "with a project at Knowledge bound to the server, a written entry is applied on the server within 5 s of the write under the test's clock and the in-process server, its sent row holds the server's revision in version, its hash, local_hash, instance, policy_epoch and reason, and its sent-hash row exists; an edit made to the file outside the store is skipped and counted as dirty until it is committed, and is sent at the next sixty-second sweep once committed; the redacted hash the client computed equals the server's and the pinned line never leaves; a retry changes nothing and the next sweep sends nothing; narrowing the policy withdraws the item from the ledger's uid at once, 25 items of a project set to Nothing included, with no hold; an entry whose repository is unmounted is not withdrawn; a sweep that would withdraw more than 20 entries gone from a present repository holds them under bulk, status names the count, share server resume releases them, the next sweeps withdraw that set and hold nothing for it, and a sweep interrupted by rate after half of it keeps the rest authorised and finishes at the next; a memory inserted with a past updated_at is sent once by the max-id rule; a move sends the new uid on the old row's base and retires the old row with reason moved; refused secret is stored with its rule and never re-sent for that hash; purged leaves a purged row and the uid is never re-sent; rate and storage schedule the next sweep as stated; a stale on a memory records the server's copy as sent with the local memoryHash as local_hash, the next sweep sends nothing for it, and a later local change is sent; a project put at all after a sweep sends its 10 old memories at the next; the first run after the add sends 450 allowed memories in batches of at most 200 items and 900 KiB of serialized body with the live change sent first; a 413 splits the batch and the items are applied, and an item over the per-item limit /v1/me publishes is refused locally as too-large."
+    },
+    {
+      "id": "AC-78",
+      "kind": "behavior",
+      "text": "the main pull names scope=all with the main set of up to 100 bound aliases and holds with wait, one held pull per server; a 101st bound alias is pulled with scope=project under its own cursor without wait at the sixty-second mark and its change arrives within a minute; a newly bound alias joins the main set and gets a one-alias snapshot, a row of it written during that snapshot arriving once; an alias raised from receive to Knowledge stays in the main set; a project disabled and re-enabled leaves mainAliases at the next pull and returns through the new-alias path with a one-alias snapshot, a row written meanwhile arriving; an unbind leaves the main cursor standing and promotes the first extra alias by its bytes with a one-alias snapshot; no alias is demoted; a page with a new instance makes the next pull a snapshot and deletes the pending rows; a snapshot completes per cursor and snapshot_due clears only after the main cursor and every extra alias reached more: false, a cut snapshot restarting from the first uncompleted cursor; after a cursor's last page, received rows absent from the snapshot are dropped with their copies, sent rows absent are cleared with their applied row and re-sent on base 0, present with a sent hash are left, present with another hash are applied or become conflicts by the local-edit rule, present as a tombstone are marked withdrawn by the admin; a 410 makes a snapshot; a 401 on the row's instance stops the server as unauthorized, on another as rejoin; a 403 member disabled stops it as disabled; a 409 stops it as contract naming both; a 429 waits Retry-After; an empty page back in under a second with wait backs off; three failures open the breaker and the interval doubles to the cap until a success resets it; every state is on the server's row and in status, with its remedy.",
+      "supersededBy": {
+        "id": "AC-88",
+        "at": "2026-11-11T03:16:09.806Z"
+      }
+    },
+    {
+      "id": "AC-79",
+      "kind": "behavior",
+      "text": "backup --restore with sync --auto running stops it through the flag, reads the live rows of the eight tables for every server the live list holds, upgrades the raw copy through openDb without the upgrade's backup copy (so a v1 copy gains sharing v2 and knowledge v8), writes those rows into the copy server by server, deletes the copy's sharing rows of a server the live list no longer held table by table, resets the levels, clears the copy's hold keys, authorised lists and stale sync.* marks, sets a hold with reason restore on every listed server and snapshot_due, sets the copy's journal mode to DELETE and closes it, and only then renames; a copy whose header is in WAL mode keeps every carried row after the restore; a -wal or -shm file beside the unpacked copy refuses the restore before the rename; a failure in any step before the rename leaves the live store unchanged and the copy discarded; the unlisted server's received copies are deleted at the sync's next start (also by sync --once with no server listed), the restore's report naming that pending deletion and the searches and the brief returning none of that server's items before the start; the withdrawal sweep is held until share server resume is confirmed, a setLevel alone clearing nothing; afterwards the old generation's memory uids are withdrawn; received files whose rows the copy lacks are re-indexed from disk at the sync's start; a store move and compact stop the sync the same way instead of refusing, and refuse with their busy error when it does not stop within 30 s; a copy holding a hold key for a server the live list lacks, re-added after the restore, starts with no hold; doctor raises nothing after an ordinary restore."
+    },
+    {
+      "id": "AC-80",
+      "kind": "behavior",
+      "text": "share server remove stops the sync through the stop flag, waiting at most 30 s for the lease and refusing after it with the remedy, and the next spawn restarts the sync; a reference that names two servers is refused with their ids; --withdraw withdraws every not-withdrawn sent row first, retries a stale withdraw once on current, and refuses on a second failure naming the count while the server is down; remove deletes the server's received files, rows and memories (with the superseded_by rule), its levels, ledger rows, refusals, conflicts (refused with open ones without --yes), sent hashes, mutes, pending rows, unbound rows, hold key, authorised list, row and token, writes the sharing_changes row, and says the device stays on the server until an admin revokes it; history replace-imports spares received memories; rejudge selects nothing new; share server resume prints the withdrawals the sweep would take back per project, clears the hold on the yes and not without it, whether a restore or a bulk withdrawal set it, the sweep then withdraws the set it showed with the guard suspended for those uids, and the hold does not return for that set."
+    },
+    {
+      "id": "AC-82",
+      "kind": "preserve",
+      "text": "the knowledge module's and the sharing module's existing tests keep passing unchanged, but for the named cases this part changes: tests/unit/sharing-contract.test.ts (AC-62), the levels-and-labels case of tests/unit/sharing-settings.test.ts (its widens case stays), the ledger column list, the invalid-level message and the schema-version case of tests/unit/sharing-store.test.ts, the two level-count cases of tests/integration/ui-sharing.test.ts (the counts gain receive), the migration list of tests/unit/knowledge-migration-7.test.ts and of tests/unit/module-migrations.test.ts, and the two configured-server sentences of tests/unit/ui-sharing-copy.test.ts; everything else of tests/unit/knowledge-*.test.ts, tests/integration/knowledge-*.test.ts, tests/unit/sharing-policy.test.ts, tests/unit/sharing-report.test.ts, tests/unit/sharing-store-writes.test.ts, every other tests/unit/sharing-*.test.ts and tests/integration/sharing-*.test.ts, and tests/unit/ui-sharing-copy.test.ts passes unchanged on the final tree, proven by the gate's whole-suite run against the base's run (a before run could not be recorded once the schema had changed, so the engine's record of this criterion is an observed run at the end, with that reason).",
+      "supersededBy": {
+        "id": "AC-83",
+        "at": "2026-11-10T23:19:05.979Z"
+      }
+    },
+    {
+      "id": "AC-83",
+      "kind": "preserve",
+      "text": "the knowledge module's and the sharing module's existing tests keep passing unchanged, but for the named cases this part changes: tests/unit/sharing-contract.test.ts (AC-62), the levels-and-labels case of tests/unit/sharing-settings.test.ts (its widens case stays), the ledger column list, the invalid-level message and the schema-version case of tests/unit/sharing-store.test.ts, the two level-count cases of tests/integration/ui-sharing.test.ts (the counts gain receive), the migration list of tests/unit/knowledge-migration-7.test.ts and of tests/unit/module-migrations.test.ts, the too-new case of tests/unit/sharing-policy.test.ts (the version it records as newer moves past 2), and the two configured-server sentences of tests/unit/ui-sharing-copy.test.ts; everything else of tests/unit/knowledge-*.test.ts, tests/integration/knowledge-*.test.ts, tests/unit/sharing-policy.test.ts, tests/unit/sharing-report.test.ts, tests/unit/sharing-store-writes.test.ts, every other tests/unit/sharing-*.test.ts and tests/integration/sharing-*.test.ts, and tests/unit/ui-sharing-copy.test.ts passes unchanged on the final tree, proven by the gate's whole-suite run against the base's run (a before run could not be recorded once the schema had changed, so the engine's record of this criterion is an observed run at the end, with that reason).",
+      "supersededBy": {
+        "id": "AC-84",
+        "at": "2026-11-10T23:20:12.270Z"
+      }
+    },
+    {
+      "id": "AC-84",
+      "kind": "preserve",
+      "text": "the knowledge module's and the sharing module's existing tests keep passing unchanged, but for the named cases this part changes: tests/unit/sharing-contract.test.ts (AC-62), the levels-and-labels case of tests/unit/sharing-settings.test.ts (its widens case stays), the ledger column list, the invalid-level message and the schema-version case of tests/unit/sharing-store.test.ts, the two level-count cases and the closed-policy case of tests/integration/ui-sharing.test.ts (the counts gain receive; the version recorded as newer moves past 2), the migration list of tests/unit/knowledge-migration-7.test.ts and of tests/unit/module-migrations.test.ts, the too-new case of tests/unit/sharing-policy.test.ts (the version it records as newer moves past 2), and the two configured-server sentences of tests/unit/ui-sharing-copy.test.ts; everything else of tests/unit/knowledge-*.test.ts, tests/integration/knowledge-*.test.ts, tests/unit/sharing-policy.test.ts, tests/unit/sharing-report.test.ts, tests/unit/sharing-store-writes.test.ts, every other tests/unit/sharing-*.test.ts and tests/integration/sharing-*.test.ts, and tests/unit/ui-sharing-copy.test.ts passes unchanged on the final tree, proven by the gate's whole-suite run against the base's run (a before run could not be recorded once the schema had changed, so the engine's record of this criterion is an observed run at the end, with that reason).",
+      "supersededBy": {
+        "id": "AC-85",
+        "at": "2026-11-11T01:31:42.940Z"
+      }
+    },
+    {
+      "id": "AC-85",
+      "kind": "preserve",
+      "text": "the knowledge module's and the sharing module's existing tests keep passing unchanged, but for the named cases this part changes: tests/unit/sharing-contract.test.ts (AC-62), the levels-and-labels case of tests/unit/sharing-settings.test.ts (its widens case stays), the ledger column list, the invalid-level message and the schema-version case of tests/unit/sharing-store.test.ts, the two level-count cases and the closed-policy case of tests/integration/ui-sharing.test.ts (the counts gain receive; the version recorded as newer moves past 2), the migration list of tests/unit/knowledge-migration-7.test.ts and of tests/unit/module-migrations.test.ts, the too-new case of tests/unit/sharing-policy.test.ts (the version it records as newer moves past 2), the too-new cases of tests/unit/knowledge-status.test.ts and tests/integration/compact.test.ts (the knowledge version they record as newer moves past 8, since this part adds migration 8), and the two configured-server sentences of tests/unit/ui-sharing-copy.test.ts; everything else of tests/unit/knowledge-*.test.ts, tests/integration/knowledge-*.test.ts, tests/unit/sharing-policy.test.ts, tests/unit/sharing-report.test.ts, tests/unit/sharing-store-writes.test.ts, every other tests/unit/sharing-*.test.ts and tests/integration/sharing-*.test.ts, and tests/unit/ui-sharing-copy.test.ts passes unchanged on the final tree, proven by the gate's whole-suite run against the base's run (a before run could not be recorded once the schema had changed, so the engine's record of this criterion is an observed run at the end, with that reason)."
+    },
+    {
+      "id": "AC-86",
+      "kind": "observed",
+      "text": "the knowledge module's and the sharing module's existing tests keep passing unchanged, but for the named cases this part changes: tests/unit/sharing-contract.test.ts (AC-62), the levels-and-labels case of tests/unit/sharing-settings.test.ts (its widens case stays), the ledger column list, the invalid-level message and the schema-version case of tests/unit/sharing-store.test.ts, the two level-count cases and the closed-policy case of tests/integration/ui-sharing.test.ts (the counts gain receive; the version recorded as newer moves past 2), the migration list of tests/unit/knowledge-migration-7.test.ts and of tests/unit/module-migrations.test.ts, the too-new case of tests/unit/sharing-policy.test.ts (the version it records as newer moves past 2), the too-new cases of tests/unit/knowledge-status.test.ts and tests/integration/compact.test.ts (the knowledge version they record as newer moves past 8, since this part adds migration 8), and the two configured-server sentences of tests/unit/ui-sharing-copy.test.ts; everything else of tests/unit/knowledge-*.test.ts, tests/integration/knowledge-*.test.ts, tests/unit/sharing-policy.test.ts, tests/unit/sharing-report.test.ts, tests/unit/sharing-store-writes.test.ts, every other tests/unit/sharing-*.test.ts and tests/integration/sharing-*.test.ts, and tests/unit/ui-sharing-copy.test.ts passes unchanged on the final tree, proven by the gate's whole-suite run against the base's run (a before run could not be recorded once the schema had changed, so the engine's record of this criterion is an observed run at the end, with that reason).",
+      "supersededBy": {
+        "id": "AC-92",
+        "at": "2026-11-11T03:16:10.020Z"
+      }
+    },
+    {
+      "id": "AC-87",
+      "kind": "behavior",
+      "text": "a teammate's entry pulled with wait is on disk under knowledge/received/<serverId>/shared/entries/<slug>--<8 hex>.md within 5 s with hashOf(file) equal to the server's hash, its knowledge_received row, its search row and its received ledger row written in one transaction whose write lock is held under 50 ms for the largest chunk (one chunk of 50 mixed rows on a project with 2,000 memories and 500 entries); knowledge_search, browse and the prompt floor return it with received: { server, member } and the rendered from <member> via <server> (names cut at 80 characters, control characters stripped); the floor shows at most one received entry per prompt and the brief's pinned block none; knowledge_get reads it by <server name>:<slug>--<8 hex> and by the id, and refuses a name two servers share; a received hit's id and its knowledge_shown row are <serverId>|<uid>; pinnedEntries never returns it, knowledge write --pinned refuses it, knowledge rebuild keeps its search row and compact keeps its shown row, and doctor's search-table check stays quiet; a muted server or member hides it; a path component the server supplies outside its grammar is refused, and a linked received/ or received/<serverId>/ folder is refused; an own entry's upsert with the ledger's hash is skipped, with another hash is applied to the own file by the sync writer with the applied ledger row and the revised by marker, and with a local edit in flight becomes a conflict, the edit told by the file's hash against local_hash, whether or not the index was refreshed; a pinned own entry a teammate revised leaves the brief's pinned block and shows on the floor marked (pin held) until the person edits or re-pins it; a project bound to server A is never named in server B's pull; a received memory is an imported row with judge team:<serverId> and its provenance row, its ledger item_uid remote:<device alias>:<uid>, an unknown kind mapped to discovery, an importance of 3.5, 0.2 or 9 rounded and clamped to 4, 1 and 5 and a foreign status mapped to active with the remote values kept, deduped by content against the project's memories through the per-page map (a later revision of a deduped uid deduped again or inserted by its content), retrieved in a brief marked (team: <name>) and capped at a third of the budget, left out of the brief when its alias is unbound, a later revision of it written through the store's writer (updateReceivedMemory in src/store/memories.ts) with its vector refreshed, and deleted on its tombstone through deleteReceivedMemory with every superseded_by that pointed at it set back and its vector row gone; a tombstone deletes the received copy by its (scope, alias) and a tombstone with movedTo a range this machine does not read deletes it; a purge deletes a received copy and marks an own entry purged; the cursor is saved per page and a page re-applied after a crash changes nothing; a dirty target stops the cursor at its seq, is retried, and after ten tries is set aside in sharing_pending_rows with its payload and the cursor going on, re-applied an hour later and dropped by a later row of the same uid; a row that fails to apply for any other reason is set aside at once as a pending row whose reason names the failure (apply: ...), the cursor going on, and is re-applied the same way; knowledge take copies a received entry into the own repository under its uuid; this member's workspace entry pushed from another device arrives as a received copy marked (another device), never as an own item; a project unbound from a server by the person has that server's received copies of its alias deleted before the next pull's first page, the files first and the rows in one transaction, a crash between the two leaving rows the sync's start drops and memories the next reconcile removes, a failed reconcile holding the page and retried at the next pull, a re-bind before the reconcile keeping the copies, and a re-bind's snapshot brings them back; the copies of an unbound alias are hidden from search, knowledge_get, the floor and the brief; a received shared entry and a received members entry survive the sync's start; a restore unbinds nothing and the received project copies survive it; an alias names one enabled project (the aliases table keys it), so a received memory of the alias has one home, and an unbound row found with its alias bound again is dropped with no deletion; a folder left by a remove that crashed before deleting it is deleted at the sync's start, a linked or unreadable one is refused, and the searches, knowledge_get and the brief return nothing of a server with no sharing_servers row."
+    },
+    {
+      "id": "AC-88",
+      "kind": "behavior",
+      "text": "the main pull names scope=all with the main set of up to 100 bound aliases and holds with wait, one held pull per server; a 101st bound alias is pulled with scope=project under its own cursor without wait at the sixty-second mark and its change arrives within a minute; a newly bound alias joins the main set and gets a one-alias snapshot, a row of it written during that snapshot arriving once; an alias raised from receive to Knowledge stays in the main set; a project disabled and re-enabled leaves mainAliases at the next pull and returns through the new-alias path with a one-alias snapshot, a row written meanwhile arriving; an unbind leaves the main cursor standing and promotes the first extra alias by its bytes with a one-alias snapshot; no alias is demoted; a page with a new instance makes the next pull a snapshot and deletes the pending rows; a snapshot completes per cursor and snapshot_due clears only after the main cursor and every extra alias reached more: false, a cut snapshot restarting from the first uncompleted cursor (a cursor whose snapshot completed is not pulled from zero again); after a cursor's last page, over every page of that cursor's snapshot and not the last alone, a received memory absent from it is deleted through deleteReceivedMemory, received rows absent from the snapshot are dropped with their copies, sent rows absent are cleared with their applied row and re-sent on base 0, present with a sent hash are left, present with another hash are applied or become conflicts by the local-edit rule, present as a tombstone are marked withdrawn by the admin; a 410 makes a snapshot; a 401 on the row's instance stops the server as unauthorized, on another as rejoin; a 403 member disabled stops it as disabled; a 409 stops it as contract naming both; a 429 waits Retry-After; an empty page back in under a second with wait backs off; three failures open the breaker and the interval doubles to the cap until a success resets it; every state is on the server's row and in status, with its remedy."
+    },
+    {
+      "id": "AC-89",
+      "kind": "behavior",
+      "text": "in-process with the injected clock and timers, runSync claims sync.lease with owner sync-<pid>-<version> renewed within 20 s, also across a 25 s held pull; a dead owner's lease is taken over and a newer version takes over an older holder's, which writes nothing after losing it and exits 1 after its page, its cursor never moving backwards; a lease expired across a 90 s sleep under the fake clock is taken by the wake's spawn and the old holder exits without a write; anyLeaseActive reports it; an idle sync makes no sweep between the sixty-second marks, its own writes moving no data_version, and a quiet tick sweep on the fixture (1,000 entries, 10,000 memories) issues one indexed query over the memories, none over the entries or the ledger, and reads no row; a server confirmed while the sync runs gets its pull loop at the next tick that sees the change, and one held pull runs per server; a change from a quiet state is swept at the next tick, and a burst of changes is coalesced into one sweep per five seconds; it exits within a minute once fifteen minutes pass with no hook run, no live viewer and no backlog, and not while a viewer is live or a backlog remains; it leaves within five seconds of the stop flag; through spawnCli, a second --auto exits 0 at once, WIZARDINGCODE_MEM_SYNC=off exits 0 without claiming, sync --once exits 2 while --auto runs and 1 with a stopped server; the session-start and prompt hooks spawn it when a confirmed server is listed, no lease is live, no stop flag is set and no young failed-start mark exists, and not otherwise, through one statement and one process.kill, nothing on a store without the sharing schema, failing open on any error; a start that fails writes sync.last_failed_start and exits 3, the next prompt within five minutes spawns nothing, and a start that reaches the loop clears it; the hook snapshots are unchanged with no server listed."
+    },
+    {
+      "id": "AC-90",
+      "kind": "behavior",
+      "text": "the Servers card lists, adds (with the counts, the pending row and the confirmation), re-joins, removes and mutes through the routes, none of which returns a token; the Sharing card's texts name the server and its selector edits the chosen server's lists with several; the dock names the bound server and offers Receive only; screen /settings#servers states empty, listed, adding, confirming, pending, error, stopped, rejoining, removing, resuming, token-missing, held, muted, unavailable, /settings#sharing states one, several, /projects states bound, choosing, receive, sent, widening, viewports 360, 768, 1280, schemes light and dark, motion none"
+    },
+    {
+      "id": "AC-91",
+      "kind": "observed",
+      "text": "the hook snapshots, the perf budgets and the server's tests (tests/unit/team-*.test.ts, tests/integration/team-*.test.ts) pass unchanged on the final tree, against the base's whole-suite run; the MCP tools list snapshot changes only in knowledge_get's description and its refs pattern, which gain the received reference form <server>:<slug>--<8 hex>, in both lists; the one-time copy sharing v1 to v2 takes on the first opener is measured on the 50 MB fixture store (wall time around openDb) and recorded in the delivery's evidence, with the bar that it completes within the 10 s other openers wait; a slower copy is a known limit noted at the delivery with its remedy (open the store once from a shell before the session)."
+    },
+    {
+      "id": "AC-92",
+      "kind": "observed",
+      "text": "the knowledge module's and the sharing module's existing tests keep passing unchanged, but for the named cases this part changes: tests/unit/sharing-contract.test.ts (AC-62), the levels-and-labels case of tests/unit/sharing-settings.test.ts (its widens case stays), the ledger column list, the invalid-level message and the schema-version case of tests/unit/sharing-store.test.ts, the two level-count cases and the closed-policy case of tests/integration/ui-sharing.test.ts (the counts gain receive; the version recorded as newer moves past 2), the migration list of tests/unit/knowledge-migration-7.test.ts and of tests/unit/module-migrations.test.ts, the too-new case of tests/unit/sharing-policy.test.ts (the version it records as newer moves past 2), the too-new cases of tests/unit/knowledge-status.test.ts and tests/integration/compact.test.ts (the knowledge version they record as newer moves past 8, since this part adds migration 8), and, in tests/unit/ui-sharing-copy.test.ts, the two configured-server sentences, the saveSettings call (its confirm option gains the server), the client's and the settings state's saveSettings signature regexes (options?: { confirm?: boolean; server?: string }), the Servers card's cases and the dock's Receive only case, which this part adds; everything else of tests/unit/knowledge-*.test.ts, tests/integration/knowledge-*.test.ts, tests/unit/sharing-policy.test.ts, tests/unit/sharing-report.test.ts, tests/unit/sharing-store-writes.test.ts, every other tests/unit/sharing-*.test.ts and tests/integration/sharing-*.test.ts, and tests/unit/ui-sharing-copy.test.ts passes unchanged on the final tree, proven by the gate's whole-suite run against the base's run (a before run could not be recorded once the schema had changed, so the engine's record of this criterion is an observed run at the end, with that reason)."
+    }
+  ],
+  "approvals": [
+    {
+      "what": "spec",
+      "at": "2026-11-10T18:13:18.973Z",
+      "by": "validator",
+      "rule": "complete-gap-round"
+    }
+  ],
+  "skips": [
+    {
+      "step": "tdd:AC-85",
+      "reason": "The person's decision D-10 (2026-11-11, 'ok aceito a tua proposta', then option 1): AC-85 (preserve) is retired in favour of AC-92 (observed, recorded over the 31 knowledge and sharing suites, naming the changed cases in full). No before could be recorded once the schema had changed, and the engine refuses an observed record, a late before, the removal of a superseding criterion and an observed replacement, so this skip is the retirement; the preservation's proof is AC-92's run on the final tree.",
+      "at": "2026-11-11T10:35:33.739Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "step": "tdd:AC-14",
+      "reason": "A revision of the preserve claim AC-85 supersedes (the same claim, restated after review rounds); retired with it by the person's decision D-10 (2026-11-11, 'ok aceito a tua proposta', then option 1) in favour of AC-92 (observed, recorded over the 31 knowledge and sharing suites). The engine reads each member of the chain against the head's record, and the head is skipped by the same decision.",
+      "at": "2026-11-11T10:39:43.667Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "step": "tdd:AC-28",
+      "reason": "A revision of the preserve claim AC-85 supersedes (the same claim, restated after review rounds); retired with it by the person's decision D-10 (2026-11-11, 'ok aceito a tua proposta', then option 1) in favour of AC-92 (observed, recorded over the 31 knowledge and sharing suites). The engine reads each member of the chain against the head's record, and the head is skipped by the same decision.",
+      "at": "2026-11-11T10:39:43.733Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "step": "tdd:AC-34",
+      "reason": "A revision of the preserve claim AC-85 supersedes (the same claim, restated after review rounds); retired with it by the person's decision D-10 (2026-11-11, 'ok aceito a tua proposta', then option 1) in favour of AC-92 (observed, recorded over the 31 knowledge and sharing suites). The engine reads each member of the chain against the head's record, and the head is skipped by the same decision.",
+      "at": "2026-11-11T10:39:43.797Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "step": "tdd:AC-57",
+      "reason": "A revision of the preserve claim AC-85 supersedes (the same claim, restated after review rounds); retired with it by the person's decision D-10 (2026-11-11, 'ok aceito a tua proposta', then option 1) in favour of AC-92 (observed, recorded over the 31 knowledge and sharing suites). The engine reads each member of the chain against the head's record, and the head is skipped by the same decision.",
+      "at": "2026-11-11T10:39:43.860Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "step": "tdd:AC-82",
+      "reason": "A revision of the preserve claim AC-85 supersedes (the same claim, restated after review rounds); retired with it by the person's decision D-10 (2026-11-11, 'ok aceito a tua proposta', then option 1) in favour of AC-92 (observed, recorded over the 31 knowledge and sharing suites). The engine reads each member of the chain against the head's record, and the head is skipped by the same decision.",
+      "at": "2026-11-11T10:39:43.923Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "step": "tdd:AC-83",
+      "reason": "A revision of the preserve claim AC-85 supersedes (the same claim, restated after review rounds); retired with it by the person's decision D-10 (2026-11-11, 'ok aceito a tua proposta', then option 1) in favour of AC-92 (observed, recorded over the 31 knowledge and sharing suites). The engine reads each member of the chain against the head's record, and the head is skipped by the same decision.",
+      "at": "2026-11-11T10:39:43.986Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "step": "tdd:AC-84",
+      "reason": "A revision of the preserve claim AC-85 supersedes (the same claim, restated after review rounds); retired with it by the person's decision D-10 (2026-11-11, 'ok aceito a tua proposta', then option 1) in favour of AC-92 (observed, recorded over the 31 knowledge and sharing suites). The engine reads each member of the chain against the head's record, and the head is skipped by the same decision.",
+      "at": "2026-11-11T10:39:44.050Z",
+      "by": "user",
+      "relayed": true
+    }
+  ],
+  "baseCommit": "a2b1a572e392e93ec5ef05af9ab93c1a1415db01",
+  "createdAt": "2026-11-10T17:27:01.256Z",
+  "updatedAt": "2026-11-11T10:40:54.772Z",
+  "specReview": true,
+  "kind": "feature",
+  "kindFrom": "answer",
+  "knowledge": {
+    "readAt": "2026-11-10T17:27:21.482Z",
+    "listed": [
+      "K-363",
+      "K-346",
+      "K-335",
+      "K-343",
+      "K-319",
+      "K-316",
+      "K-311"
+    ]
+  },
+  "priority": "high",
+  "seats": [
+    {
+      "role": "researcher",
+      "team": "researchers",
+      "kind": "debate",
+      "reason": "full route"
+    },
+    {
+      "role": "review-code-quality",
+      "team": "backend",
+      "kind": "gate",
+      "gate": "code-quality",
+      "reason": "full route"
+    },
+    {
+      "role": "review-test-quality",
+      "team": "qa",
+      "kind": "gate",
+      "gate": "test-quality",
+      "reason": "full route"
+    },
+    {
+      "role": "review-security",
+      "team": "security",
+      "kind": "gate",
+      "gate": "security",
+      "reason": "full route"
+    },
+    {
+      "role": "review-ui-ux",
+      "team": "frontend",
+      "kind": "gate",
+      "gate": "ui-ux",
+      "reason": "interface files: ui/src/components/ProjectsView.vue, ui/src/components/Settings.vue, ui/src/components/settings/Card.vue, +2 more"
+    },
+    {
+      "role": "review-risk",
+      "team": "architects",
+      "kind": "gate",
+      "gate": "risk",
+      "reason": "full route"
+    },
+    {
+      "role": "review-architecture",
+      "team": "architects",
+      "kind": "gate",
+      "gate": "architecture",
+      "reason": "full route"
+    },
+    {
+      "role": "review-data",
+      "team": "etl",
+      "kind": "gate",
+      "gate": "data",
+      "reason": "risk area data-migration"
+    },
+    {
+      "role": "lead-qa",
+      "team": "qa",
+      "kind": "lead",
+      "reason": "full route"
+    },
+    {
+      "role": "lead-security",
+      "team": "security",
+      "kind": "lead",
+      "reason": "full route"
+    },
+    {
+      "role": "lead-architects",
+      "team": "architects",
+      "kind": "lead",
+      "reason": "full route"
+    },
+    {
+      "role": "lead-etl",
+      "team": "etl",
+      "kind": "lead",
+      "reason": "risk area data-migration"
+    },
+    {
+      "role": "lead-frontend",
+      "team": "frontend",
+      "kind": "lead",
+      "reason": "interface files: ui/src/components/ProjectsView.vue, ui/src/components/Settings.vue, ui/src/components/settings/Card.vue, +2 more"
+    },
+    {
+      "role": "judge",
+      "team": null,
+      "kind": "debate",
+      "reason": "a gate is planned"
+    }
+  ],
+  "primaryTeam": "frontend",
+  "runtimes": [
+    "claude"
+  ],
+  "phaseAt": {
+    "understand": "2026-11-10T17:27:53.523Z",
+    "specify": "2026-11-10T18:03:16.329Z",
+    "conclave": "2026-11-10T18:36:20.510Z",
+    "plan": "2026-11-10T20:58:35.583Z",
+    "spec-review": "2026-11-10T20:58:43.117Z",
+    "build": "2026-11-10T22:31:48.147Z",
+    "gate": "2026-11-11T10:37:52.367Z",
+    "deliver": "2026-11-11T10:40:40.717Z",
+    "learn": "2026-11-11T10:40:45.620Z"
+  },
+  "decisions": [
+    {
+      "id": "D-1",
+      "question": "Where does the sync run: its own detached process (wizardingcode-mem sync --auto, started by the session-start hook and by the viewer like ui --auto, one per data directory by a lease, alive while a session or the viewer is active, exiting after a quiet quarter hour), inside the viewer's process, or inside the MCP server's process?",
+      "default": "Its own detached process, started by the session-start hook and the viewer, one per data directory by a lease, never on a hook path; the hook only starts it and returns.",
+      "answer": "sim (default aceite): its own detached process, wizardingcode-mem sync --auto, started by the session-start hook and the viewer, one per data directory by a lease, never on a hook path",
+      "at": "2026-11-10T17:46:46.701Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-2",
+      "question": "When a received revision of an entry meets a local edit of the same entry (the push answered stale), which text ends in the file: the server's revision applied to the file with the local text kept as a proposal named as a sync conflict for the person to accept, the local text kept with the server's revision held back until the person decides, or last write wins?",
+      "default": "The server's revision is applied to the file; the local text is kept as a proposal of kind sync conflict, shown in the viewer and the status line, never lost and never sent until the person accepts it.",
+      "answer": "sim (default aceite): the server's revision is applied to the file; the local text is kept as a proposal of kind sync conflict, shown and never sent until the person accepts it",
+      "at": "2026-11-10T17:46:46.763Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-3",
+      "question": "Does this part ship the viewer's side (a Servers card under Settings, Sharing: add a server by URL and invitation code, list with status, remove; the project's selector naming the server when there is more than one) beside the CLI, or the CLI alone with the viewer in the viewer part?",
+      "default": "Both: the CLI (share server add, remove, list, status) and the viewer's Servers card, so the token is set in the local app as the person asked; the viewer's part stays minimal (no per-server area editor beyond the roots and areas lists).",
+      "answer": "sim (default aceite): the CLI and the viewer's Servers card, the viewer's part minimal",
+      "at": "2026-11-10T17:46:46.824Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-4",
+      "question": "What does the first run after a server is added send: everything the policy allows at once (batched under the server's limits, resumable, visible in status), or nothing until the person runs sync once by hand?",
+      "default": "Everything the policy allows, in batches of at most 200 items under the server's limits, resumable across restarts, shown by status and the viewer; nothing leaves while every level is Nothing.",
+      "answer": "sim (default aceite): the first run sends everything the policy allows, batched under the server's limits, resumable, shown by status",
+      "at": "2026-11-10T17:46:46.886Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-5",
+      "question": "On a machine that has a project whose remote alias the server knows, when does the team's project knowledge start arriving: only after the person sets the project's level on that machine (every default local, ADR 0025 D-2), or whenever there are changes, as soon as the machine has the project, since receiving is not sharing?",
+      "default": "Only after the person sets the project's level on that machine.",
+      "answer": "sempre que há alterações: the team's project items arrive whenever there are changes, as soon as this machine has the project and the server knows its alias; setting a level is needed only to send",
+      "at": "2026-11-10T17:49:07.394Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-6",
+      "question": "Where do received items live: in the person's own repositories (workspace, shared, the project's), or apart under knowledge/received/<serverId>/ as read-only files without version history, indexed with their server and member, never pinned, marked in the agents' results, deleted by a purge, adopted into the person's repository to be edited; received memories with a provenance table, capped at a third of a brief's slots, a server or member mutable?",
+      "default": "Apart, read-only, erasable, marked; adopt to edit.",
+      "answer": "sim: apart under knowledge/received/<serverId>/, read-only, erasable, marked, never pinned; adopt to edit; received memories with provenance, a third of the slots, mutable per server or member",
+      "at": "2026-11-10T18:03:15.989Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-7",
+      "question": "Where does the device token live: in the database (travels in backups, buckets and store copies), or in <data dir>/servers.json (0600) beside the env file, outside the backup and a store copy, with the server list, cursor and state in the database?",
+      "default": "In servers.json, outside the backup and a store copy.",
+      "answer": "sim: the token in servers.json (0600) beside the env file, outside the backup and a store copy; the server list, cursor and state in the database",
+      "at": "2026-11-10T18:03:16.101Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-8",
+      "question": "How is a sync conflict kept, given that a proposal's kind is the entry's kind: as a proposal by sync:<serverId> on behalf of the person, outside the quota, with the local text also in a sharing_conflicts row, and a server rollback told from a conflict by the sent-hash history; or as a new proposal key?",
+      "default": "A proposal by sync:<serverId> on behalf of the person, outside the quota, plus a sharing_conflicts row; the sent-hash history tells a rollback from a conflict.",
+      "answer": "sim: a proposal by sync:<serverId> on behalf of the person, outside the quota, plus a sharing_conflicts row; the sent-hash history tells a rollback from a conflict",
+      "at": "2026-11-10T18:03:16.212Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-9",
+      "question": "Which projects does a pull name to a server, which is what that server learns about the projects on this machine?",
+      "default": "Only the projects bound to that server (a level above Nothing, or the level receive, which sends nothing), so no server learns the names of projects the person did not bind to it; the alternative, every local project not bound to another server, needs no step per project on a second machine but tells each server the names of every unbound project, in a query string that proxies log",
+      "answer": "default",
+      "at": "2026-11-10T20:30:26.890Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-10",
+      "question": "AC-85 (preserve: the knowledge and sharing suites pass unchanged but for the named cases) has no engine record, because no before could be recorded once the schema had changed, and its text is false for tests/unit/ui-sharing-copy.test.ts; AC-92 (observed, recorded over the 31 suites) states the same claim with the changed cases named in full. Retire AC-85 in favour of AC-92, or restate it as a new preserve (which the same missing baseline leaves unprovable)?",
+      "default": "Retire AC-85 in favour of AC-92.",
+      "answer": "Retire AC-85 in favour of AC-92 (the person, 2026-11-11: 'ok aceito a tua proposta'). The engine keeps AC-85 all the same: it refuses the removal (AC-85 supersedes AC-84), an observed record (a preserve records before, then after), a before (the sources differ from the base) and an observed replacement (a replacement proves at least as much); so the proof of the preservation reads AC-92's observed run, and the item's test-quality gate stays not proven on AC-85 alone, by this decision.",
+      "at": "2026-11-11T09:54:02.593Z",
+      "by": "user",
+      "relayed": true
+    }
+  ],
+  "checklists": [
+    {
+      "kind": "sync",
+      "paths": [
+        "/Users/andreagroferreira/.local/share/wizardingcode-developer-crew/skills/crew/checklists/sync.md"
+      ],
+      "at": "2026-11-10T18:12:10.324Z"
+    },
+    {
+      "kind": "auth",
+      "paths": [
+        "/Users/andreagroferreira/.local/share/wizardingcode-developer-crew/skills/crew/checklists/auth.md"
+      ],
+      "at": "2026-11-10T18:12:10.384Z"
+    },
+    {
+      "kind": "migration-or-restore",
+      "paths": [
+        "/Users/andreagroferreira/.local/share/wizardingcode-developer-crew/skills/crew/checklists/migration-or-restore.md"
+      ],
+      "at": "2026-11-10T18:12:10.443Z"
+    },
+    {
+      "kind": "deletion",
+      "paths": [
+        "/Users/andreagroferreira/.local/share/wizardingcode-developer-crew/skills/crew/checklists/deletion.md"
+      ],
+      "at": "2026-11-10T18:12:10.505Z"
+    },
+    {
+      "kind": "screen",
+      "paths": [
+        "/Users/andreagroferreira/.local/share/wizardingcode-developer-crew/skills/crew/checklists/screen.md"
+      ],
+      "at": "2026-11-10T18:12:10.564Z"
+    }
+  ],
+  "knowledgeFiles": [],
+  "knowledgeLabels": [],
+  "validations": [
+    {
+      "what": "spec",
+      "by": "lead-qa",
+      "verdict": "returned",
+      "returns": 5,
+      "round": 1,
+      "file": "conclave/lead-qa.round2.md",
+      "hash": "sha256:779b91942cfe4e58d074126ac5194a226c8fc6957dbd19d4d455d0d379991d3e",
+      "fileHash": "sha256:044d5ba33e3b3118a35132809a4f101fe1ce3ec5e6f0d010132719f973931ab1",
+      "at": "2026-11-10T18:15:52.047Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-security",
+      "verdict": "returned",
+      "returns": 8,
+      "round": 1,
+      "file": "conclave/lead-security.round2.md",
+      "hash": "sha256:779b91942cfe4e58d074126ac5194a226c8fc6957dbd19d4d455d0d379991d3e",
+      "fileHash": "sha256:d9baade8c90b53c1867d64cc7b5041126cad7cd89e211caab71f2c8adf2cc957",
+      "at": "2026-11-10T18:17:38.513Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-architects",
+      "verdict": "returned",
+      "returns": 10,
+      "round": 1,
+      "file": "conclave/lead-architects.round2.md",
+      "hash": "sha256:779b91942cfe4e58d074126ac5194a226c8fc6957dbd19d4d455d0d379991d3e",
+      "fileHash": "sha256:79fd17ac444e34e7e4f48be656b61283890c94e584aaa81c4ab427264e9413de",
+      "at": "2026-11-10T18:18:27.019Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-etl",
+      "verdict": "returned",
+      "returns": 10,
+      "round": 1,
+      "file": "conclave/lead-etl.round2.md",
+      "hash": "sha256:779b91942cfe4e58d074126ac5194a226c8fc6957dbd19d4d455d0d379991d3e",
+      "fileHash": "sha256:0270a50504f5aaf8ee6dee98fab020330f3eac6feaaf6e0bbe32c5fcdb21912e",
+      "at": "2026-11-10T18:20:57.355Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-security",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 2,
+      "file": "conclave/lead-security-reply.md",
+      "hash": "sha256:cbf632e5f45bd6066e56f44dbc478a20beb4db01235c04fbc9feeeb142298ad4",
+      "fileHash": "sha256:e33291317984d6d7991848cd34f57743deffe183ebe1c57cc9180440ac3cc936",
+      "at": "2026-11-10T18:35:29.635Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-qa",
+      "verdict": "returned",
+      "returns": 1,
+      "round": 2,
+      "file": "conclave/lead-qa-reply.md",
+      "hash": "sha256:cbf632e5f45bd6066e56f44dbc478a20beb4db01235c04fbc9feeeb142298ad4",
+      "fileHash": "sha256:68d256dd5ca2da227f711efef3362927001e45f39424a7c9b22ebcdaad0fb3ce",
+      "at": "2026-11-10T18:35:29.690Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-architects",
+      "verdict": "returned",
+      "returns": 1,
+      "round": 2,
+      "file": "conclave/lead-architects-reply.md",
+      "hash": "sha256:cbf632e5f45bd6066e56f44dbc478a20beb4db01235c04fbc9feeeb142298ad4",
+      "fileHash": "sha256:d5029df26e832e448a4c488aebbdc24c9db22face9397c64303e65b37de8a1bd",
+      "at": "2026-11-10T18:36:13.926Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-etl",
+      "verdict": "returned",
+      "returns": 4,
+      "round": 2,
+      "file": "conclave/lead-etl-reply.md",
+      "hash": "sha256:cbf632e5f45bd6066e56f44dbc478a20beb4db01235c04fbc9feeeb142298ad4",
+      "fileHash": "sha256:51d53dad4720622b19ca2d5f5c167235f1200abcc386dad165a5bfb12f0bd1c3",
+      "at": "2026-11-10T18:36:13.980Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-qa",
+      "verdict": "returned",
+      "returns": 2,
+      "round": 3,
+      "file": "conclave/lead-qa.md",
+      "hash": "sha256:225a8afe00851b7293bc53a4377fd9403bfd09f2c7a45930b94e950d6e670c93",
+      "fileHash": "sha256:3daa58660f60496fc23091d6c97f93716a22851a7db439ad60a6ecc666ea2be8",
+      "at": "2026-11-10T20:34:31.893Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-security",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 3,
+      "file": "conclave/lead-security-reply.md",
+      "hash": "sha256:225a8afe00851b7293bc53a4377fd9403bfd09f2c7a45930b94e950d6e670c93",
+      "fileHash": "sha256:bb583e36b7f145872354672a19f1232a6c48b23e07cd4e255b2098299d81b537",
+      "at": "2026-11-10T20:34:31.951Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-architects",
+      "verdict": "returned",
+      "returns": 3,
+      "round": 3,
+      "file": "conclave/lead-architects-reply.md",
+      "hash": "sha256:225a8afe00851b7293bc53a4377fd9403bfd09f2c7a45930b94e950d6e670c93",
+      "fileHash": "sha256:3332eaffbc6ade5f152ef1e89e5a34f125f954c851490bf14a3956623a594a41",
+      "at": "2026-11-10T20:35:10.043Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-etl",
+      "verdict": "returned",
+      "returns": 4,
+      "round": 3,
+      "file": "conclave/lead-etl.md",
+      "hash": "sha256:225a8afe00851b7293bc53a4377fd9403bfd09f2c7a45930b94e950d6e670c93",
+      "fileHash": "sha256:e531280920cd72d99f2e842f5bd7e854eb0b80cef9112473b3beb182ccdced31",
+      "at": "2026-11-10T20:37:18.608Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-qa",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 4,
+      "file": "conclave/lead-qa-reply.md",
+      "hash": "sha256:d9ba8cdb8c0872c211f217ac3e3d199a9cfe3af817132f0539eb71c65c5493e7",
+      "fileHash": "sha256:488e77f3292da508622a7bed0fa71402f1753d8a5010775c5611b013b2f6321c",
+      "at": "2026-11-10T20:44:02.810Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-security",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 4,
+      "file": "conclave/lead-security-reply.md",
+      "hash": "sha256:d9ba8cdb8c0872c211f217ac3e3d199a9cfe3af817132f0539eb71c65c5493e7",
+      "fileHash": "sha256:38fd2972266c581ede468f1beab4d4550877228543961956b5a7a7a7d561ae48",
+      "at": "2026-11-10T20:44:02.861Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-architects",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 4,
+      "file": "conclave/lead-architects-reply.md",
+      "hash": "sha256:d9ba8cdb8c0872c211f217ac3e3d199a9cfe3af817132f0539eb71c65c5493e7",
+      "fileHash": "sha256:3c0afcb5d696b820599b78acbc1c064232a61c9c50c76f2ff50e581d5cc9c013",
+      "at": "2026-11-10T20:44:30.478Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-etl",
+      "verdict": "returned",
+      "returns": 4,
+      "round": 4,
+      "file": "conclave/lead-etl-reply.md",
+      "hash": "sha256:d9ba8cdb8c0872c211f217ac3e3d199a9cfe3af817132f0539eb71c65c5493e7",
+      "fileHash": "sha256:b16d33dfa6cbf413a39b785d50da82f2522df9aefa6053f77d607790da69e070",
+      "at": "2026-11-10T20:46:24.156Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-qa",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 5,
+      "file": "conclave/lead-qa-reply.md",
+      "hash": "sha256:031563766ade1c6f0f632e7e0d04a6b1f9d8c5186a056e67217647f3ad19f3bd",
+      "fileHash": "sha256:afdc041936c87b5e0df60fd016c8a1fbbfc6f4eb2e33b1a75be756e35818fa6d",
+      "at": "2026-11-10T20:48:40.860Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-security",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 5,
+      "file": "conclave/lead-security-reply.md",
+      "hash": "sha256:031563766ade1c6f0f632e7e0d04a6b1f9d8c5186a056e67217647f3ad19f3bd",
+      "fileHash": "sha256:39552903f13f2b05dc48d5a260ecc60ca6653e5db6e39cd312b3d25db432dffa",
+      "at": "2026-11-10T20:49:35.719Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-etl",
+      "verdict": "returned",
+      "returns": 2,
+      "round": 5,
+      "file": "conclave/lead-etl-reply.md",
+      "hash": "sha256:031563766ade1c6f0f632e7e0d04a6b1f9d8c5186a056e67217647f3ad19f3bd",
+      "fileHash": "sha256:1587d94728f42d9139f203cb2e0ab62fc41df82801af07169854a796b1dc3d21",
+      "at": "2026-11-10T20:49:35.779Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-architects",
+      "verdict": "returned",
+      "returns": 3,
+      "round": 5,
+      "file": "conclave/lead-architects-reply.md",
+      "hash": "sha256:031563766ade1c6f0f632e7e0d04a6b1f9d8c5186a056e67217647f3ad19f3bd",
+      "fileHash": "sha256:80dcd29dabd1d71bf01996712071139b65fbbdbb3faacd546d16e7fd8a64a3fa",
+      "at": "2026-11-10T20:50:30.021Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-etl",
+      "verdict": "returned",
+      "returns": 2,
+      "round": 6,
+      "file": "conclave/lead-etl-reply.md",
+      "hash": "sha256:4c0d7f920d1d801b3a3458873cc2f1dcbc42d405cc990c0aa4cadcd42d506156",
+      "fileHash": "sha256:016d739c9898fe0a25e32dd61b318c92c1441914cd934ed9f84f8c18ee88030e",
+      "at": "2026-11-10T20:52:55.611Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-qa",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 6,
+      "file": "conclave/lead-qa-reply.md",
+      "hash": "sha256:4c0d7f920d1d801b3a3458873cc2f1dcbc42d405cc990c0aa4cadcd42d506156",
+      "fileHash": "sha256:911696d43846f8c62bb5225be24b10451d0e015c9ced76984de102d4b6edd2e4",
+      "at": "2026-11-10T20:53:04.778Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-security",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 6,
+      "file": "conclave/lead-security-reply.md",
+      "hash": "sha256:4c0d7f920d1d801b3a3458873cc2f1dcbc42d405cc990c0aa4cadcd42d506156",
+      "fileHash": "sha256:9676db7c789165875983fadb3f1ce635ef6e53b5f0bfb8e53a94761d94b711b0",
+      "at": "2026-11-10T20:53:04.829Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-architects",
+      "verdict": "returned",
+      "returns": 2,
+      "round": 6,
+      "file": "conclave/lead-architects-reply.md",
+      "hash": "sha256:4c0d7f920d1d801b3a3458873cc2f1dcbc42d405cc990c0aa4cadcd42d506156",
+      "fileHash": "sha256:3f31d05f87f88418da920191ab34630a8cf57106ca292408b53d278f5d6b3f16",
+      "at": "2026-11-10T20:53:58.560Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-etl",
+      "verdict": "returned",
+      "returns": 1,
+      "round": 7,
+      "file": "conclave/lead-etl-reply.md",
+      "hash": "sha256:cb8f743cc52e5b40832cb3297a4bef079dc4321be06bc6fa6b1279675df6b748",
+      "fileHash": "sha256:f62dd990529c05b4a8a8ec8dc4dd130e511aefc29a49ec748feb97590f890750",
+      "at": "2026-11-10T20:56:16.302Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-qa",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 7,
+      "file": "conclave/lead-qa-reply.md",
+      "hash": "sha256:cb8f743cc52e5b40832cb3297a4bef079dc4321be06bc6fa6b1279675df6b748",
+      "fileHash": "sha256:d5f634e472ec59e0343152d17754efb799fde30dd04c73aa5629bfafe8fa315c",
+      "at": "2026-11-10T20:57:26.360Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-security",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 7,
+      "file": "conclave/lead-security-reply.md",
+      "hash": "sha256:cb8f743cc52e5b40832cb3297a4bef079dc4321be06bc6fa6b1279675df6b748",
+      "fileHash": "sha256:a5f174a3daea0d2b1cdb758d74034f08c3f9c75f7f6c274888f1b70176407bf0",
+      "at": "2026-11-10T20:57:26.416Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-architects",
+      "verdict": "returned",
+      "returns": 1,
+      "round": 7,
+      "file": "conclave/lead-architects-reply.md",
+      "hash": "sha256:cb8f743cc52e5b40832cb3297a4bef079dc4321be06bc6fa6b1279675df6b748",
+      "fileHash": "sha256:331768b4d81cbecf0b3b504824a6f012fcab31fbad21b5efa4526a50c8827bd9",
+      "at": "2026-11-10T20:57:26.473Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-etl",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 8,
+      "file": "conclave/lead-etl-reply.md",
+      "hash": "sha256:a93407262bf696254ff9794f12769453c6b2770e3e86d7a3e6e26a5df7e13ec5",
+      "fileHash": "sha256:9035fd46a37c7bb743c745b09b3f29690205d8b7c9f5ea6160915e8764f56f37",
+      "at": "2026-11-10T20:58:11.616Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-qa",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 8,
+      "file": "conclave/lead-qa-reply.md",
+      "hash": "sha256:a93407262bf696254ff9794f12769453c6b2770e3e86d7a3e6e26a5df7e13ec5",
+      "fileHash": "sha256:1f1a27f950857dc1ecdfb33838db11ab4d8412ff8eebc908c38bb581155dc801",
+      "at": "2026-11-10T20:58:17.300Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-architects",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 8,
+      "file": "conclave/lead-architects-reply.md",
+      "hash": "sha256:a93407262bf696254ff9794f12769453c6b2770e3e86d7a3e6e26a5df7e13ec5",
+      "fileHash": "sha256:7097492d7051404d3917770ab66f48f1bd89b390fa362542fb7c6ff1244f0d0b",
+      "at": "2026-11-10T20:58:23.419Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-security",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 8,
+      "file": "conclave/lead-security-reply.md",
+      "hash": "sha256:a93407262bf696254ff9794f12769453c6b2770e3e86d7a3e6e26a5df7e13ec5",
+      "fileHash": "sha256:c5fd2676ce56abca73b244c2c0e3330dc45d4b87a47ac9af467b6c1e2f09d5bd",
+      "at": "2026-11-10T20:58:35.441Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-qa",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 9,
+      "file": "conclave/lead-qa-reply.md",
+      "hash": "sha256:5570433e67eeec9db784e018fd1a2c19384e73d5e473c412880e0586f0c42612",
+      "fileHash": "sha256:b08097cae0ee7b15b604c1537088a1596ca6acc1eee6669f12ce8892b5484a6e",
+      "at": "2026-11-10T21:32:50.807Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-security",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 9,
+      "file": "conclave/lead-security-reply.md",
+      "hash": "sha256:5570433e67eeec9db784e018fd1a2c19384e73d5e473c412880e0586f0c42612",
+      "fileHash": "sha256:fd9831212b5d1adf784fd423fc246e58ce77eb8b9c5b9da44017f819e0d482af",
+      "at": "2026-11-10T21:33:05.346Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-etl",
+      "verdict": "returned",
+      "returns": 4,
+      "round": 9,
+      "file": "conclave/lead-etl-reply.md",
+      "hash": "sha256:5570433e67eeec9db784e018fd1a2c19384e73d5e473c412880e0586f0c42612",
+      "fileHash": "sha256:a09f6854f33bc581f1f1f0898c361892901e0deb8069091d382afe06ecc329e7",
+      "at": "2026-11-10T21:33:35.600Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-architects",
+      "verdict": "returned",
+      "returns": 3,
+      "round": 9,
+      "file": "conclave/lead-architects-reply.md",
+      "hash": "sha256:5570433e67eeec9db784e018fd1a2c19384e73d5e473c412880e0586f0c42612",
+      "fileHash": "sha256:4a1dfd776c8070eb51c745db2962506cccc50f2b568a20f6017784f57600ed34",
+      "at": "2026-11-10T21:34:16.568Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-etl",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 10,
+      "file": "conclave/lead-etl-reply.md",
+      "hash": "sha256:4ef484f911bca337a80471a323606598da33d2ac443d0b590dddb218f76c5951",
+      "fileHash": "sha256:b4cb660481f27214d38b6b1b2aa26b75fa9a4c8c44398c2d91f16125ef935481",
+      "at": "2026-11-10T21:36:40.445Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-qa",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 10,
+      "file": "conclave/lead-qa-reply.md",
+      "hash": "sha256:4ef484f911bca337a80471a323606598da33d2ac443d0b590dddb218f76c5951",
+      "fileHash": "sha256:194791e84581a2cb9c62461a1264b1128cd76a17a348e797ec3934ee16d67cf0",
+      "at": "2026-11-10T21:36:47.859Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-security",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 10,
+      "file": "conclave/lead-security-reply.md",
+      "hash": "sha256:4ef484f911bca337a80471a323606598da33d2ac443d0b590dddb218f76c5951",
+      "fileHash": "sha256:b8ac8381f5bba3920986792d89daac149c02a1f4dcd5dc4b3bd590405861ae37",
+      "at": "2026-11-10T21:36:53.921Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-architects",
+      "verdict": "returned",
+      "returns": 1,
+      "round": 10,
+      "file": "conclave/lead-architects-reply.md",
+      "hash": "sha256:4ef484f911bca337a80471a323606598da33d2ac443d0b590dddb218f76c5951",
+      "fileHash": "sha256:25b2f32f969b8ad088efbdb76cb97dbc5e3205d7bc8c00a416fecda0716c1fd8",
+      "at": "2026-11-10T21:37:42.165Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-etl",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 11,
+      "file": "conclave/lead-etl-reply.md",
+      "hash": "sha256:0d481be885e767e44c786edb35f19f3669d12a49e208f80b08bc28b8a8514129",
+      "fileHash": "sha256:298cdb06058351837e782fc4c91007a089362099d1e7c04967e7ae80cbcb2e53",
+      "at": "2026-11-10T21:38:27.462Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-qa",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 11,
+      "file": "conclave/lead-qa-reply.md",
+      "hash": "sha256:0d481be885e767e44c786edb35f19f3669d12a49e208f80b08bc28b8a8514129",
+      "fileHash": "sha256:1f0a12ba1fe335f55eeaa128acadbbcf0df9862dc4c2be19674c4a1376886baf",
+      "at": "2026-11-10T21:38:33.621Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-security",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 11,
+      "file": "conclave/lead-security-reply.md",
+      "hash": "sha256:0d481be885e767e44c786edb35f19f3669d12a49e208f80b08bc28b8a8514129",
+      "fileHash": "sha256:b4c885801d397f5df96ab76432e23b29e24bb2186eb1a0054207dd9f97755162",
+      "at": "2026-11-10T21:38:45.263Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-architects",
+      "verdict": "returned",
+      "returns": 1,
+      "round": 11,
+      "file": "conclave/lead-architects-reply.md",
+      "hash": "sha256:0d481be885e767e44c786edb35f19f3669d12a49e208f80b08bc28b8a8514129",
+      "fileHash": "sha256:007d8550b36f2dc52d09a68391b6fd624bcdee1341dca2dba09262c207c94b31",
+      "at": "2026-11-10T21:39:07.058Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-etl",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 12,
+      "file": "conclave/lead-etl-reply.md",
+      "hash": "sha256:8de40cccbe426ca4d6aae2ed43a9277f5f29780421d8be1fa065d89acc41b773",
+      "fileHash": "sha256:4fcdfd0f0d9d5d3752aacb97b02d96d9b449abec226dfe63982a86bc08f5c063",
+      "at": "2026-11-10T21:40:20.137Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-qa",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 12,
+      "file": "conclave/lead-qa-reply.md",
+      "hash": "sha256:8de40cccbe426ca4d6aae2ed43a9277f5f29780421d8be1fa065d89acc41b773",
+      "fileHash": "sha256:4e9c61af0dd17b55be626f255ed26e4b967a90a98b8b962be771e9e9d75b1439",
+      "at": "2026-11-10T21:40:26.394Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-security",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 12,
+      "file": "conclave/lead-security-reply.md",
+      "hash": "sha256:8de40cccbe426ca4d6aae2ed43a9277f5f29780421d8be1fa065d89acc41b773",
+      "fileHash": "sha256:03a5840b90c7a871e0c46c02dbfee3898346eefbd0f697bedaf0eb13557dfe6e",
+      "at": "2026-11-10T21:40:39.372Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-architects",
+      "verdict": "returned",
+      "returns": 1,
+      "round": 12,
+      "file": "conclave/lead-architects-reply.md",
+      "hash": "sha256:8de40cccbe426ca4d6aae2ed43a9277f5f29780421d8be1fa065d89acc41b773",
+      "fileHash": "sha256:c6b987ff0e22efa04a054023569e37a40570af6b5b9948920ea92603f588beec",
+      "at": "2026-11-10T21:40:39.429Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-architects",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 12,
+      "file": "conclave/lead-architects-reply.md",
+      "hash": "sha256:8de40cccbe426ca4d6aae2ed43a9277f5f29780421d8be1fa065d89acc41b773",
+      "fileHash": "sha256:c54d36cee4ec86ae71c55cd9b237d8505e0125480f41b485fed41ecc079d1b7f",
+      "at": "2026-11-10T21:41:38.195Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-etl",
+      "verdict": "returned",
+      "returns": 4,
+      "round": 13,
+      "file": "conclave/lead-etl-reply.md",
+      "hash": "sha256:ef9470d3834502e97101e42a27e2591a47d51be3ca6ddec152ac755105a136ca",
+      "fileHash": "sha256:1d66332e9e28633253e6b6d653f7f5c55c1cfbfbc666410810b8d4ee7ae5a4f3",
+      "at": "2026-11-10T22:23:49.501Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-qa",
+      "verdict": "returned",
+      "returns": 2,
+      "round": 13,
+      "file": "conclave/lead-qa-reply.md",
+      "hash": "sha256:ef9470d3834502e97101e42a27e2591a47d51be3ca6ddec152ac755105a136ca",
+      "fileHash": "sha256:c643bd1e5b583d4bcb39b9ac0e5bca6b2a4d792f69f487ad8b54310f823ec3dd",
+      "at": "2026-11-10T22:23:57.776Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-security",
+      "verdict": "returned",
+      "returns": 1,
+      "round": 13,
+      "file": "conclave/lead-security-reply.md",
+      "hash": "sha256:ef9470d3834502e97101e42a27e2591a47d51be3ca6ddec152ac755105a136ca",
+      "fileHash": "sha256:f7fda903ef3163925103b42e2e02b60495c0b6b0068c4052b0ebbf3a1e46cbba",
+      "at": "2026-11-10T22:24:19.663Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-architects",
+      "verdict": "returned",
+      "returns": 4,
+      "round": 13,
+      "file": "conclave/lead-architects-reply.md",
+      "hash": "sha256:ef9470d3834502e97101e42a27e2591a47d51be3ca6ddec152ac755105a136ca",
+      "fileHash": "sha256:8b5a680073c75d84d22fb527ca858437219d5ff8b61ed6504d34d1902ba868af",
+      "at": "2026-11-10T22:26:29.672Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-etl",
+      "verdict": "returned",
+      "returns": 2,
+      "round": 14,
+      "file": "conclave/lead-etl-reply.md",
+      "hash": "sha256:079266f9f14f43714877ab16a5a4a4a2109fc99818c50289136ed2ec97c89804",
+      "fileHash": "sha256:61e0f497f646434bd00d19c9a953c3f6cc11c3855cd6b8c655c159eaace5669a",
+      "at": "2026-11-10T22:28:49.956Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-qa",
+      "verdict": "returned",
+      "returns": 1,
+      "round": 14,
+      "file": "conclave/lead-qa-reply.md",
+      "hash": "sha256:079266f9f14f43714877ab16a5a4a4a2109fc99818c50289136ed2ec97c89804",
+      "fileHash": "sha256:2ac169c202824fdbe53942619ca4515ad8aa335d333dfee63ab8332fce12ae02",
+      "at": "2026-11-10T22:30:34.726Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-architects",
+      "verdict": "returned",
+      "returns": 1,
+      "round": 14,
+      "file": "conclave/lead-architects-reply.md",
+      "hash": "sha256:079266f9f14f43714877ab16a5a4a4a2109fc99818c50289136ed2ec97c89804",
+      "fileHash": "sha256:15b002bc6362120584b47c00a9a40b6ad26f1e3004ae6f906b310218fe6c48b0",
+      "at": "2026-11-10T22:30:34.783Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-security",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 14,
+      "file": "conclave/lead-security-reply.md",
+      "hash": "sha256:079266f9f14f43714877ab16a5a4a4a2109fc99818c50289136ed2ec97c89804",
+      "fileHash": "sha256:36e932fd37bd641257ffeec0ef7b3950341359bd0c47bcee7d322d34a33f6b73",
+      "at": "2026-11-10T22:30:34.842Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-etl",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 15,
+      "file": "conclave/lead-etl-reply.md",
+      "hash": "sha256:5116267d883a6e7b7ab4d8be5048b7d13ff1bf5849feb0c45cdac686d191fae2",
+      "fileHash": "sha256:7bc961e92f13368369bfc7070874fa7dd77e9d8f104908004dd6165b275b4918",
+      "at": "2026-11-10T22:31:27.328Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-qa",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 15,
+      "file": "conclave/lead-qa-reply.md",
+      "hash": "sha256:5116267d883a6e7b7ab4d8be5048b7d13ff1bf5849feb0c45cdac686d191fae2",
+      "fileHash": "sha256:cd38f672c17d508982147ed33e60fbe0c394c9ca92adddb2ec58a26c044b2ad3",
+      "at": "2026-11-10T22:31:47.917Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-architects",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 15,
+      "file": "conclave/lead-architects-reply.md",
+      "hash": "sha256:5116267d883a6e7b7ab4d8be5048b7d13ff1bf5849feb0c45cdac686d191fae2",
+      "fileHash": "sha256:88ce94359142ef1e7b903030f748639df362d8607474bbf958f83126103eee53",
+      "at": "2026-11-10T22:31:47.974Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-security",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 15,
+      "file": "conclave/lead-security-reply.md",
+      "hash": "sha256:5116267d883a6e7b7ab4d8be5048b7d13ff1bf5849feb0c45cdac686d191fae2",
+      "fileHash": "sha256:bd61143122b26069a13543c32f849ec192dd361e97bb26d61b25e6e3cf72c6bf",
+      "at": "2026-11-10T22:31:48.030Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-qa",
+      "verdict": "returned",
+      "returns": 1,
+      "round": 1,
+      "file": "conclave/lead-qa.delivery.md",
+      "hash": "sha256:5c8d0e59f215161533ec338a67ef6878d2a97caf1d03f59b9ac4882e1631a1cc",
+      "fileHash": "sha256:71dfe9465feaa2e67672a19d17d07d5ea3c232fd4052e8e3d261e4c0131423fb",
+      "at": "2026-11-11T09:57:36.191Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-frontend",
+      "verdict": "returned",
+      "returns": 2,
+      "round": 1,
+      "file": "conclave/lead-frontend.delivery.md",
+      "hash": "sha256:5c8d0e59f215161533ec338a67ef6878d2a97caf1d03f59b9ac4882e1631a1cc",
+      "fileHash": "sha256:f2eaf9f2a2b66e8d2291a9008c3ed7abf28ddfc24d6d6021b9cad0dcfa73229a",
+      "at": "2026-11-11T09:57:36.542Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-etl",
+      "verdict": "returned",
+      "returns": 1,
+      "round": 1,
+      "file": "conclave/lead-etl.delivery.md",
+      "hash": "sha256:5c8d0e59f215161533ec338a67ef6878d2a97caf1d03f59b9ac4882e1631a1cc",
+      "fileHash": "sha256:5481cc246319add317eda97868e827bf5f993ae5d8b32afd258e2cc07186c41b",
+      "at": "2026-11-11T09:57:36.882Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-architects",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-architects.delivery.md",
+      "hash": "sha256:5c8d0e59f215161533ec338a67ef6878d2a97caf1d03f59b9ac4882e1631a1cc",
+      "fileHash": "sha256:bb6bb02e862899347c8da26a7cf787e8dd6a8fe24d93f6efccb37b9b54d5b8e8",
+      "at": "2026-11-11T09:57:37.234Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-security",
+      "verdict": "returned",
+      "returns": 1,
+      "round": 1,
+      "file": "conclave/lead-security.delivery.md",
+      "hash": "sha256:5c8d0e59f215161533ec338a67ef6878d2a97caf1d03f59b9ac4882e1631a1cc",
+      "fileHash": "sha256:4b88f4dda9ad73d2dfdfd3f08647e02bf8a680777e7faaea47ab4dbaf2353cc2",
+      "at": "2026-11-11T09:58:07.313Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-etl",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-etl.delivery-reply.md",
+      "hash": "sha256:5c8d0e59f215161533ec338a67ef6878d2a97caf1d03f59b9ac4882e1631a1cc",
+      "fileHash": "sha256:8afc985b376876537768be73f33bea758de8c2f8c8b8ea38c60f44f00943101c",
+      "at": "2026-11-11T09:58:07.675Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-frontend",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-frontend.delivery-reply.md",
+      "hash": "sha256:5c8d0e59f215161533ec338a67ef6878d2a97caf1d03f59b9ac4882e1631a1cc",
+      "fileHash": "sha256:7153e2e46a6f5d5969f359ad6ea7956584467ca34aafa218bdef11aff0f4b820",
+      "at": "2026-11-11T09:58:08.035Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-security",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-security.delivery-reply.md",
+      "hash": "sha256:5c8d0e59f215161533ec338a67ef6878d2a97caf1d03f59b9ac4882e1631a1cc",
+      "fileHash": "sha256:3599a1c396aa14ede1c941bfa386db7b92c9e3a337406437fbd1d41e920c895d",
+      "at": "2026-11-11T09:58:38.073Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-qa",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-qa.delivery-reply.md",
+      "hash": "sha256:5c8d0e59f215161533ec338a67ef6878d2a97caf1d03f59b9ac4882e1631a1cc",
+      "fileHash": "sha256:4549cdd765be9ba6f24e58996beda75450770b70bfb83768ddc71d5abba6d723",
+      "at": "2026-11-11T10:40:40.303Z"
+    }
+  ],
+  "rounds": {
+    "judgement": 6,
+    "validation": 15,
+    "judgementCode": "sha256:5c8d0e59f215161533ec338a67ef6878d2a97caf1d03f59b9ac4882e1631a1cc"
+  },
+  "continued": [
+    {
+      "what": "validation",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-10T20:34:31.890Z",
+      "standing": true
+    },
+    {
+      "what": "validation",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-10T20:44:02.808Z",
+      "standing": true
+    },
+    {
+      "what": "validation",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-10T20:48:40.858Z",
+      "standing": true
+    },
+    {
+      "what": "validation",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-10T20:52:55.609Z",
+      "standing": true
+    },
+    {
+      "what": "validation",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-10T20:56:16.300Z",
+      "standing": true
+    },
+    {
+      "what": "validation",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-10T20:58:11.614Z",
+      "standing": true
+    },
+    {
+      "what": "validation",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-10T21:32:50.803Z",
+      "standing": true
+    },
+    {
+      "what": "validation",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-10T21:36:40.441Z",
+      "standing": true
+    },
+    {
+      "what": "validation",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-10T21:38:27.459Z",
+      "standing": true
+    },
+    {
+      "what": "validation",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-10T21:40:20.134Z",
+      "standing": true
+    },
+    {
+      "what": "validation",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-10T22:23:49.499Z",
+      "standing": true
+    },
+    {
+      "what": "validation",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-10T22:28:49.953Z",
+      "standing": true
+    },
+    {
+      "what": "validation",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-10T22:31:27.325Z",
+      "standing": true
+    },
+    {
+      "what": "judgement",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-11T04:39:15.461Z",
+      "standing": true
+    },
+    {
+      "what": "judgement",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-11T05:08:22.774Z",
+      "standing": true
+    },
+    {
+      "what": "judgement",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-11T05:29:14.562Z",
+      "standing": true
+    },
+    {
+      "what": "judgement",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-11T05:45:52.353Z",
+      "standing": true
+    }
+  ],
+  "removedCriteria": [
+    {
+      "id": "AC-81",
+      "kind": "observed",
+      "text": "the knowledge module's and the sharing module's existing tests keep passing unchanged, but for the named cases this part changes: tests/unit/sharing-contract.test.ts (AC-62), the levels-and-labels case of tests/unit/sharing-settings.test.ts (its widens case stays), the ledger column list and the invalid-level message of tests/unit/sharing-store.test.ts, the migration list of tests/unit/knowledge-migration-7.test.ts and of tests/unit/module-migrations.test.ts, and the two configured-server sentences of tests/unit/ui-sharing-copy.test.ts; everything else of tests/unit/knowledge-*.test.ts, tests/integration/knowledge-*.test.ts, tests/unit/sharing-policy.test.ts, tests/unit/sharing-report.test.ts, tests/unit/sharing-store-writes.test.ts, every other tests/unit/sharing-*.test.ts and tests/integration/sharing-*.test.ts, and tests/unit/ui-sharing-copy.test.ts passes unchanged on the final tree, proven by the gate's whole-suite run against the base's run (a before run could not be recorded once the schema had changed, so the criterion is observed, not preserved).",
+      "at": "2026-11-10T22:37:38.987Z"
+    }
+  ],
+  "pauses": [
+    {
+      "at": "2026-11-11T02:26:43.432Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T02:29:33.368Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T02:30:42.211Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T02:30:57.380Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T02:31:18.376Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T02:32:11.917Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T02:33:55.546Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T03:49:05.718Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T03:50:36.959Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T03:52:01.065Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T03:53:22.581Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T04:30:20.125Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T04:31:23.712Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T04:31:55.039Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T04:35:00.854Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T04:39:03.964Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T05:01:38.032Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T05:02:34.739Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T05:02:44.542Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T05:03:12.538Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T05:03:36.115Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T05:05:45.967Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T05:25:56.714Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T05:26:40.331Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T05:27:03.775Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T05:27:14.298Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T05:28:52.828Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T05:40:14.109Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T05:41:01.483Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T05:41:12.197Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T05:45:00.255Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T05:46:23.662Z",
+      "reason": "judgement gate test-quality not proven (2 findings)",
+      "kind": "user"
+    },
+    {
+      "at": "2026-11-11T10:11:51.605Z",
+      "reason": "judgement gate test-quality not proven (2 findings)",
+      "kind": "user"
+    },
+    {
+      "at": "2026-11-11T10:17:49.911Z",
+      "reason": "judgement gate test-quality not proven (2 findings)",
+      "kind": "user"
+    },
+    {
+      "at": "2026-11-11T10:37:28.915Z",
+      "reason": "judgement gate test-quality not proven (2 findings)",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T10:38:04.927Z",
+      "reason": "test-first record missing for AC-14 (superseded by AC-85)",
+      "kind": "user"
+    }
+  ],
+  "learned": {
+    "at": "2026-11-11T10:40:54.772Z",
+    "entries": [
+      "K-371"
+    ],
+    "confirmed": []
+  }
+}

@@ -8,7 +8,14 @@ import { inert } from "../../retrieve/render.ts";
 import { type Db, moduleSchemaState, withWrite } from "../../store/db.ts";
 import { logError } from "../../util/log.ts";
 import { clip } from "../../util/text.ts";
-import { type Hit, pinnedEntries, searchEntries, shownKey } from "./index-store.ts";
+import {
+  type Hit,
+  pinnedEntries,
+  RECEIVED_REPO_ID,
+  type ReceivedScope,
+  searchEntries,
+  shownKey,
+} from "./index-store.ts";
 import { KNOWLEDGE_MODULE, KNOWLEDGE_SCHEMA_VERSION } from "./migrations.ts";
 import {
   CANDIDATES,
@@ -17,7 +24,8 @@ import {
   MAX_PER_PROMPT,
   PARAGRAPH_MAX,
 } from "./policy.ts";
-import { visibleRepos } from "./visible.ts";
+import { provenanceOf, refOfHit } from "./received-ref.ts";
+import { visibleWithReceived } from "./visible.ts";
 
 // Entries are shown as the team's knowledge, never as instructions: text that came from a
 // file must not come back as a command, so every line goes through `inert`.
@@ -96,9 +104,48 @@ export function recordShown(db: Db, rows: ShownRow[]): void {
   }
 }
 
-/** An entry's line: where it is, so the agent can fetch it, what it is, and its title. */
-function entryLine(entry: Pick<Hit, "scope" | "slug" | "kind" | "area" | "title">): string {
-  return inert(`- ${entry.scope}/${entry.slug} · ${entry.kind} · ${entry.area} · ${entry.title}`);
+/** Whether the store has the conflicts table; asked once per open. */
+const conflictsKnown = new WeakMap<Db, boolean>();
+function hasConflictsTable(db: Db): boolean {
+  let known = conflictsKnown.get(db);
+  if (known === undefined) {
+    known =
+      db
+        .query<unknown, []>("SELECT 1 FROM sqlite_master WHERE name = 'sharing_conflicts'")
+        .get() !== null;
+    conflictsKnown.set(db, known);
+  }
+  return known;
+}
+
+/** The open conflicts with a team, by the module's own SQL over the sharing table; 0 without it. */
+export function openConflictsCount(db: Db): number {
+  if (!hasConflictsTable(db)) return 0;
+  return (
+    db
+      .query<{ n: number }, []>(
+        "SELECT count(*) AS n FROM sharing_conflicts WHERE resolved_at IS NULL",
+      )
+      .get()?.n ?? 0
+  );
+}
+
+/** The session-start line that counts the open conflicts with the team. */
+export const conflictsLine = (count: number) =>
+  `- ${count} open conflict${count === 1 ? "" : "s"} with the team: knowledge accept or reject decides them`;
+
+/**
+ * An entry's line: where it is, so the agent can fetch it (`refOfHit`: the reference
+ * `knowledge_get` takes), what it is, its title, and its provenance (`provenanceOf`: a
+ * teammate's name and server through `agentName`, as the tools render them).
+ */
+function entryLine(
+  entry: Pick<Hit, "scope" | "slug" | "kind" | "area" | "title" | "received" | "revisedBy">,
+): string {
+  const from = provenanceOf(entry);
+  return inert(
+    `- ${refOfHit(entry)} · ${entry.kind} · ${entry.area} · ${entry.title}${from === "" ? "" : ` · ${from}`}`,
+  );
 }
 
 /** A pinned entry's line at session start: `- <scope>/<slug> · <kind> · <area id> · <title>`. */
@@ -129,20 +176,33 @@ export const pinnedCountLine = (left: number) =>
  * entries that would then remain; one that does not fit is left out and the next tried.
  * When some are left out the last line counts them. Empty text when no line fits.
  */
-export function renderPinned(pins: Hit[], budgetChars: number): { text: string; shown: Hit[] } {
+export function renderPinned(
+  pins: Hit[],
+  budgetChars: number,
+  extraLines: string[] = [],
+): { text: string; shown: Hit[] } {
   const shown: Hit[] = [];
   const lines: string[] = [];
   for (const pin of pins) {
     const line = pinnedLine(pin);
     const left = pins.length - shown.length - 1;
     const tail = left > 0 ? [pinnedCountLine(left)] : [];
-    if (pinnedBlock([...lines, line, ...tail]).length > budgetChars) continue;
+    if (pinnedBlock([...lines, line, ...tail, ...extraLines]).length > budgetChars) continue;
     lines.push(line);
     shown.push(pin);
   }
-  if (shown.length === 0) return { text: "", shown };
+  // The extra lines (the conflicts count) render even with no pin, when they fit.
+  if (shown.length === 0) {
+    const alone = extraLines.length === 0 ? "" : pinnedBlock(extraLines);
+    return { text: alone.length > budgetChars ? "" : alone, shown };
+  }
   const left = pins.length - shown.length;
-  return { text: pinnedBlock(left > 0 ? [...lines, pinnedCountLine(left)] : lines), shown };
+  return {
+    text: pinnedBlock(
+      left > 0 ? [...lines, pinnedCountLine(left), ...extraLines] : [...lines, ...extraLines],
+    ),
+    shown,
+  };
 }
 
 /**
@@ -175,11 +235,24 @@ function forPrompt(input: MomentInput, prompt: string, repoIds: number[]): strin
   const { db, sessionId, epoch, now, budgetChars } = input;
   return withWrite(db, () => {
     const shown = alreadyShown(db, sessionId, epoch);
-    const candidates = searchEntries(db, matchTerms(query.match), repoIds, {}, shown, CANDIDATES);
+    const received: ReceivedScope = { projectId: input.projectId };
+    const candidates = searchEntries(
+      db,
+      matchTerms(query.match),
+      repoIds,
+      {},
+      shown,
+      CANDIDATES,
+      received,
+    );
     const rules = new Map<Hit, Evidence>();
+    // At most one received entry among a prompt's entries (ADR 0027).
+    let receivedKept = 0;
     for (const hit of candidates) {
       const rule = knowledgeEvidence(query, hit);
-      if (rule !== null) rules.set(hit, rule);
+      if (rule === null) continue;
+      if (hit.repoId === RECEIVED_REPO_ID && receivedKept++ > 0) continue;
+      rules.set(hit, rule);
     }
     const rendered = renderRelevant([...rules.keys()], budgetChars);
     if (rendered.shown.length === 0) return null;
@@ -215,8 +288,13 @@ function forSessionStart(input: MomentInput, repoIds: number[]): string | null {
     const pins = pinnedEntries(db, repoIds).filter(
       (pin) => !shown.has(shownKey(pin.repoId, pin.id)),
     );
-    const rendered = renderPinned(pins, budgetChars);
-    if (rendered.shown.length === 0) return null;
+    const conflicts = openConflictsCount(db);
+    const rendered = renderPinned(
+      pins,
+      budgetChars,
+      conflicts > 0 ? [conflictsLine(conflicts)] : [],
+    );
+    if (rendered.shown.length === 0) return rendered.text === "" ? null : rendered.text;
     recordShown(
       db,
       rendered.shown.map((pin) => ({
@@ -246,8 +324,10 @@ export function contribute(input: MomentInput): string | null {
     logNotCurrent();
     return null;
   }
-  const repos = visibleRepos(db, input.projectId);
-  if (repos.length === 0) return null;
+  // With no repository of its own a project still gets received hits (ADR 0027): silent only
+  // when nothing at all is visible, learnt in the same one query as before.
+  const { repos, received } = visibleWithReceived(db, input.projectId);
+  if (repos.length === 0 && !received) return null;
   const repoIds = repos.map((repo) => repo.id);
   if (input.moment === "session-start") return forSessionStart(input, repoIds);
   const prompt = input.prompt;

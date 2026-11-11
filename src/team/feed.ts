@@ -2,6 +2,7 @@
 // paged by count and by bytes, with the wait that makes the sync near-live (D-11, D-13, D-22).
 import { isHostLedAlias } from "../sharing/levels.ts";
 import type { OutgoingMemory } from "../sharing/types.ts";
+import type { FeedItemShape, PullPageShape } from "./contract.ts";
 import type { Db } from "./db.ts";
 import { HttpError } from "./errors.ts";
 import { OPERATOR_ID, splitMemoryKey } from "./ids.ts";
@@ -22,30 +23,9 @@ export interface PullQuery extends FeedQuery {
   wait: number;
 }
 
-export interface FeedItem {
-  seq: number;
-  kind: "entry" | "memory";
-  uid: string;
-  op: "upsert" | "tombstone" | "purge";
-  scope: string;
-  remoteAlias: string | null;
-  revision: number;
-  hash: string;
-  movedTo?: string;
-  payload?: { frontmatter: string; body: string } | OutgoingMemory;
-  member: { id: string; name: string };
-  device?: string;
-  at: number;
-}
-
-export interface PullPage {
-  serverId: string;
-  instance: string;
-  next: number;
-  more: boolean;
-  snapshot: boolean;
-  items: FeedItem[];
-}
+/** The shapes are the contract's; the names stay for the server's own modules and tests. */
+export type FeedItem = FeedItemShape;
+export type PullPage = PullPageShape;
 
 type Ids = { serverId: string; instance: string };
 

@@ -98,7 +98,7 @@ function seedShown(): { live: number; kept: number; goes: number } {
 }
 
 describe("compact", () => {
-  test("finished turns older than the retention window go, unless a memory came from them", () => {
+  test("finished turns older than the retention window go, unless a memory came from them", async () => {
     const old = session("old", NOW - 200 * DAY);
     const done = turn(old, 1, "done", NOW - 200 * DAY);
     turn(old, 2, "skipped", NOW - 150 * DAY);
@@ -123,7 +123,7 @@ describe("compact", () => {
     turn(recent, 1, "done", NOW - DAY);
     turn(recent, 2, "pending", NOW - 100 * DAY);
 
-    const report = compact(db, { now: NOW, vacuum: false });
+    const report = await compact(db, { now: NOW, vacuum: false });
     expect(report.turns).toBe(2);
     expect(db.query("SELECT id FROM turns ORDER BY id").all()).toEqual([
       { id: kept },
@@ -133,7 +133,7 @@ describe("compact", () => {
     expect(db.query("SELECT id FROM turns WHERE id = ?").get(done)).toBeNull();
   });
 
-  test("history turns inside the history window stay, so a later import does not queue them again", () => {
+  test("history turns inside the history window stay, so a later import does not queue them again", async () => {
     const at = NOW - 120 * DAY;
     const historyTurn = {
       agent: "claude-code" as const,
@@ -156,24 +156,24 @@ describe("compact", () => {
       turn(older, 1, "done", NOW - 200 * DAY),
     ]);
 
-    expect(compact(db, { now: NOW, vacuum: false }).turns).toBe(1);
+    expect((await compact(db, { now: NOW, vacuum: false })).turns).toBe(1);
     expect(enqueueHistory(db, [historyTurn], options).queued).toBe(0);
 
     // A shorter history window lets them go like any other turn.
-    expect(compact(db, { now: NOW, vacuum: false, historyDays: 100 }).turns).toBe(1);
+    expect((await compact(db, { now: NOW, vacuum: false, historyDays: 100 })).turns).toBe(1);
   });
 
-  test("sessions left with nothing, last seen long ago, go too; recent empty ones stay", () => {
+  test("sessions left with nothing, last seen long ago, go too; recent empty ones stay", async () => {
     session("stale-empty", NOW - (RETENTION_DAYS + 1) * DAY);
     session("fresh-empty", NOW - DAY);
-    const report = compact(db, { now: NOW, vacuum: false });
+    const report = await compact(db, { now: NOW, vacuum: false });
     expect(report.sessions).toBe(1);
     expect(db.query("SELECT agent_session_id AS id FROM sessions").all()).toEqual([
       { id: "fresh-empty" },
     ]);
   });
 
-  test("hook runs beyond the most recent ones are dropped; injections of gone sessions with them", () => {
+  test("hook runs beyond the most recent ones are dropped; injections of gone sessions with them", async () => {
     for (let i = 0; i < KEEP_HOOK_RUNS + 25; i++) {
       db.run(
         "INSERT INTO hook_runs (at, agent, event, ms, outcome) VALUES (?, 'claude-code', 'prompt', 1, 'ok')",
@@ -201,76 +201,78 @@ describe("compact", () => {
       "INSERT INTO injections (session_id, context_epoch, memory_id, event, tokens, at) VALUES (?, 0, ?, 'prompt', 0, 1)",
       [gone, memoryId],
     );
-    const report = compact(db, { now: NOW, vacuum: false });
+    const report = await compact(db, { now: NOW, vacuum: false });
     expect(report.hookRuns).toBe(25);
     expect(count("hook_runs")).toBe(KEEP_HOOK_RUNS);
     expect(db.query("SELECT min(at) AS first FROM hook_runs").get()).toEqual({ first: 25 });
     expect(count("injections")).toBe(0);
   });
 
-  test("a dry run reports what would go and changes nothing", () => {
+  test("a dry run reports what would go and changes nothing", async () => {
     const old = session("old", NOW - 200 * DAY);
     turn(old, 1, "done", NOW - 200 * DAY);
-    const report = compact(db, { now: NOW, vacuum: false, dryRun: true });
+    const report = await compact(db, { now: NOW, vacuum: false, dryRun: true });
     expect(report).toMatchObject({ turns: 1, sessions: 1, dryRun: true });
     expect(count("turns")).toBe(1);
     expect(count("sessions")).toBe(1);
   });
 
-  test("refuses while a history run holds its lease: the vacuum would stall it; a dry run still reports", () => {
+  test("refuses while a history run holds its lease: the vacuum would stall it; a dry run still reports", async () => {
     const old = session("old", NOW - 200 * DAY);
     turn(old, 1, "done", NOW - 200 * DAY);
     expect(claimLease(db, "history.lease", "run-1", NOW, 120_000)).toBe(true);
-    expect(() => compact(db, { now: NOW })).toThrow(CompactBusyError);
+    await expect(compact(db, { now: NOW })).rejects.toThrow(CompactBusyError);
     expect(count("turns")).toBe(1);
-    expect(compact(db, { now: NOW, dryRun: true })).toMatchObject({ turns: 1, dryRun: true });
+    expect(await compact(db, { now: NOW, dryRun: true })).toMatchObject({ turns: 1, dryRun: true });
   });
 
-  test("knowledge shown rows whose session or repository is gone go; the others stay", () => {
+  test("knowledge shown rows whose session or repository is gone go; the others stay", async () => {
     const { live, kept } = seedShown();
-    const report = compact(db, { now: NOW, vacuum: false });
+    const report = await compact(db, { now: NOW, vacuum: false });
     expect(report.sessions).toBe(1);
     expect(report.knowledgeShown).toBe(4);
     expect(shownRows()).toEqual([{ session_id: live, repo_id: kept, entry_id: "a" }]);
   });
 
-  test("a dry run counts the shown rows the real run deletes, each once, and deletes none", () => {
+  test("a dry run counts the shown rows the real run deletes, each once, and deletes none", async () => {
     seedShown();
-    const dry = compact(db, { now: NOW, vacuum: false, dryRun: true });
+    const dry = await compact(db, { now: NOW, vacuum: false, dryRun: true });
     expect(dry.knowledgeShown).toBe(4);
     expect(count("knowledge_shown")).toBe(5);
     expect(count("sessions")).toBe(2);
-    expect(compact(db, { now: NOW, vacuum: false }).knowledgeShown).toBe(dry.knowledgeShown);
+    expect((await compact(db, { now: NOW, vacuum: false })).knowledgeShown).toBe(
+      dry.knowledgeShown,
+    );
   });
 
-  test("runs on a store without the knowledge shown table, and reports 0", () => {
+  test("runs on a store without the knowledge shown table, and reports 0", async () => {
     const old = session("old", NOW - 200 * DAY);
     turn(old, 1, "done", NOW - 200 * DAY);
     db.run("DROP TABLE knowledge_shown");
-    expect(compact(db, { now: NOW, vacuum: false, dryRun: true }).knowledgeShown).toBe(0);
-    const report = compact(db, { now: NOW, vacuum: false });
+    expect((await compact(db, { now: NOW, vacuum: false, dryRun: true })).knowledgeShown).toBe(0);
+    const report = await compact(db, { now: NOW, vacuum: false });
     expect(report).toMatchObject({ turns: 1, sessions: 1, knowledgeShown: 0 });
   });
 
-  test("a knowledge module at a version this binary does not know keeps its shown rows, and reports 0", () => {
+  test("a knowledge module at a version this binary does not know keeps its shown rows, and reports 0", async () => {
     // The module's rule (ADR 0024): a too-new schema is left alone by every reader and
     // writer, compact included; the sessions still go.
     seedShown();
     db.run(
-      "INSERT INTO module_migrations (module, version, name, applied_at) VALUES ('knowledge', 8, 'later', 1)",
+      "INSERT INTO module_migrations (module, version, name, applied_at) VALUES ('knowledge', 9, 'later', 1)",
     );
-    expect(compact(db, { now: NOW, vacuum: false, dryRun: true }).knowledgeShown).toBe(0);
-    const report = compact(db, { now: NOW, vacuum: false });
+    expect((await compact(db, { now: NOW, vacuum: false, dryRun: true })).knowledgeShown).toBe(0);
+    const report = await compact(db, { now: NOW, vacuum: false });
     expect(report).toMatchObject({ sessions: 1, knowledgeShown: 0 });
     expect(count("knowledge_shown")).toBe(5);
   });
 
-  test("a row of a removed session goes with it, so a session that reuses its id starts unshown", () => {
+  test("a row of a removed session goes with it, so a session that reuses its id starts unshown", async () => {
     const kept = repo("knowledge/projects/kept");
     const old = session("old", NOW - 200 * DAY);
     turn(old, 1, "done", NOW - 200 * DAY);
     shown(old, kept, "a");
-    expect(compact(db, { now: NOW, vacuum: false })).toMatchObject({
+    expect(await compact(db, { now: NOW, vacuum: false })).toMatchObject({
       sessions: 1,
       knowledgeShown: 1,
     });
@@ -280,7 +282,7 @@ describe("compact", () => {
     expect(count("knowledge_shown")).toBe(0);
   });
 
-  test("the file shrinks after a vacuum", () => {
+  test("the file shrinks after a vacuum", async () => {
     const s = session("bulk", NOW - 200 * DAY);
     for (let i = 1; i <= 300; i++) {
       db.run(
@@ -290,7 +292,7 @@ describe("compact", () => {
     }
     db.run("PRAGMA wal_checkpoint(TRUNCATE)");
     const before = statSync(join(dataDir, DB_FILE)).size;
-    const report = compact(db, { now: NOW, vacuum: true });
+    const report = await compact(db, { now: NOW, vacuum: true });
     expect(report.bytesBefore).toBe(before);
     expect(report.bytesAfter).toBeLessThan(before);
   });

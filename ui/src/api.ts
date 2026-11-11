@@ -33,6 +33,8 @@ export interface Project {
   remote: boolean;
   /** Memory is off for it. */
   disabled: boolean;
+  /** The server its level binds it to; null when none. */
+  server: { id: string; name: string } | null;
 }
 export type Kind = "decision" | "fix" | "gotcha" | "convention" | "change" | "discovery";
 export const KINDS: Kind[] = ["decision", "fix", "gotcha", "convention", "change", "discovery"];
@@ -212,9 +214,70 @@ export interface SharingView {
 }
 /** A change about to be made, for its preview: a project's level, the roots, the areas. */
 export interface PolicyChange {
-  level?: { projectId: number; level: Level };
+  level?: { projectId: number; level: Level; server?: string };
   roots?: Root[];
   areas?: string[];
+}
+/** The sync as `GET /api/sync` says it (the `sync` object of `status --json`). */
+export interface SyncInfo {
+  state: "running" | "stopped" | "failed" | "idle";
+  pid: number | null;
+  alive: boolean | null;
+  idleSince: number | null;
+  stoppedBy: string | null;
+  failedStart: { at: number; reason: string; nextTryAt: number } | null;
+}
+/** One listed server, as `GET /api/servers` lists it; never a token. */
+export interface ServerEntry {
+  id: string;
+  name: string;
+  host: string;
+  url: string;
+  member: string;
+  role: string;
+  state: "pending" | "token missing" | "ok" | "stopped";
+  remedy: string | null;
+  cursor: number;
+  lastPushAt: number | null;
+  lastPushOkAt: number | null;
+  lastPullAt: number | null;
+  lastPullOkAt: number | null;
+  backlog: number;
+  dirty: number;
+  pending: number;
+  conflicts: number;
+  hold: { reason: "restore" | "bulk"; count: number } | null;
+  lastSyncAt: number | null;
+  muted: boolean;
+}
+export interface ServersView {
+  sync: SyncInfo;
+  servers: ServerEntry[];
+  /** Set when the list could not be read; the page says so in one sentence. */
+  error?: string;
+}
+/** A join's answer: the row is pending until the yes; the counts say what would leave. */
+export interface AddedServer {
+  confirm: true;
+  server: { id: string; name: string; member: string; role: string };
+  counts: { entries: number; memories: number; byProject: { project: number; entries: number; memories: number }[] };
+}
+/** What a resume would release for one server, per project. */
+export interface ResumePreviewEntry {
+  serverId: string;
+  name: string;
+  hold: { reason: "restore" | "bulk"; at: number; count: number } | null;
+  perProject: { projectId: number | null; count: number; uids: string[] }[];
+  total: number;
+}
+/** A refused route, with the status and the body the page switches on (`error`, and its details). */
+export class RouteError extends Error {
+  constructor(
+    public status: number,
+    public body: Record<string, unknown>,
+  ) {
+    super(typeof body.error === "string" ? body.error : `HTTP ${status}`);
+  }
 }
 /** A replacement either ran, or the count moved since it was shown (`stale`). */
 export type ReplaceOutcome =
@@ -235,9 +298,19 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { error?: string; errors?: Record<string, string> };
     if (body.errors) throw new SettingsError(body.errors);
-    throw new Error(body.error ?? res.statusText);
+    throw new RouteError(res.status, { error: body.error ?? res.statusText, ...body });
   }
   return (await res.json()) as T;
+}
+
+/**
+ * A route that answers an expected refusal as `200 { ok: false, error }` (the servers' add and
+ * its yes: a refused code, a URL that is not a server's), raised here as the route error the
+ * pages switch on, so the browser logs nothing for an outcome the page shows as a sentence.
+ */
+function okOrThrow<T extends { ok?: boolean; error?: string }>(body: T): T {
+  if (body.ok === false) throw new RouteError(200, { ...body, error: body.error ?? "refused" });
+  return body;
 }
 
 export const api = {
@@ -276,22 +349,53 @@ export const api = {
       headers: { Authorization: `Bearer ${TOKEN}` },
     }).catch(() => undefined),
   settings: () => call<SettingsView>("/api/settings"),
-  /** With `confirm`, the person said yes to sharing more: the server requires it to widen. */
-  saveSettings: (patch: SettingsPatch, options?: { confirm?: boolean }) =>
+  /** With `confirm`, the person said yes to sharing more: the server requires it to widen. With `server`, the sharing keys edit that server's lists. */
+  saveSettings: (patch: SettingsPatch, options?: { confirm?: boolean; server?: string }) =>
     call<SettingsView>("/api/settings", {
       method: "PUT",
-      body: JSON.stringify(options?.confirm ? { ...patch, confirm: true } : patch),
+      body: JSON.stringify({
+        ...patch,
+        ...(options?.confirm ? { confirm: true } : {}),
+        ...(options?.server ? { server: options.server } : {}),
+      }),
     }),
-  /** What may leave for the team's server; with `list`, each item that would. */
-  sharing: (list = false) => call<SharingView>(`/api/sharing${list ? "?list=1" : ""}`),
+  /** What may leave for the team's server; with `list`, each item that would; with `server`, under that server's lists. */
+  sharing: (list = false, server?: string) =>
+    call<SharingView>(`/api/sharing?${new URLSearchParams({ ...(list ? { list: "1" } : {}), ...(server ? { server } : {}) })}`),
   /** What would leave once a change is made. Writes nothing. */
   sharingPreview: (change: PolicyChange) =>
     call<{ report: SharingReport }>("/api/sharing/preview", { method: "POST", body: JSON.stringify(change) }),
-  /** Sets what one project shares; a wider level needs `confirm`. */
-  setProjectSharing: (id: number, level: Level, confirm: boolean) =>
+  /** Sets what one project shares; a wider level needs `confirm`; with several servers, `server` names the one. */
+  setProjectSharing: (id: number, level: Level, confirm: boolean, server?: string) =>
     call<{ level: Level; old: Level; boundAlias: string }>(`/api/projects/${id}/sharing`, {
       method: "PUT",
-      body: JSON.stringify(confirm ? { level, confirm: true } : { level }),
+      body: JSON.stringify({ level, ...(confirm ? { confirm: true } : {}), ...(server ? { server } : {}) }),
+    }),
+  /** The team servers and the sync (ADR 0027); no token in any answer. */
+  servers: () =>
+    call<ServersView>("/api/servers").then((view) => {
+      if (view.error !== undefined) throw new RouteError(200, { error: view.error });
+      return view;
+    }),
+  sync: () => call<SyncInfo>("/api/sync"),
+  runSync: () => call<{ started: boolean }>("/api/sync/run", { method: "POST", body: "{}" }),
+  addServer: (input: { url: string; code: string; label?: string; name?: string }) =>
+    call<AddedServer & { ok?: boolean; error?: string }>("/api/servers", { method: "POST", body: JSON.stringify(input) }).then(okOrThrow),
+  confirmServer: (url: string) =>
+    call<{ ok?: boolean; error?: string; confirmed?: true }>("/api/servers", { method: "POST", body: JSON.stringify({ url, yes: true }) }).then(okOrThrow),
+  rejoinServer: (id: string, code: string) =>
+    call<{ rejoined: true }>(`/api/servers/${id}/rejoin`, { method: "POST", body: JSON.stringify({ code }) }),
+  removeServer: (id: string, options: { withdraw?: boolean; yes?: boolean }) =>
+    call<{ removed: true }>(`/api/servers/${id}`, { method: "DELETE", body: JSON.stringify(options) }),
+  muteServer: (id: string, muted: boolean, member?: string) =>
+    call<{ muted: boolean }>(`/api/servers/${id}/${muted ? "mute" : "unmute"}`, {
+      method: "POST",
+      body: JSON.stringify(member === undefined ? {} : { member }),
+    }),
+  resumeServer: (id: string, yes: boolean) =>
+    call<{ preview?: ResumePreviewEntry[]; resumed?: true }>(`/api/servers/${id}/resume`, {
+      method: "POST",
+      body: JSON.stringify(yes ? { yes: true } : {}),
     }),
   doctor: () => call<Check[]>("/api/doctor"),
   backups: () => call<BackupsView>("/api/backups"),

@@ -54,6 +54,8 @@ export interface OpenOptions {
   migrations?: readonly Migration[];
   /** For tests: the modules' tables, in place of `MODULE_SCHEMAS`. */
   moduleSchemas?: readonly ModuleSchema[];
+  /** False: an upgrade makes no copy of the file first (a restore's own copy, ADR 0027). */
+  upgradeBackup?: boolean;
 }
 
 function userVersion(db: Db): number {
@@ -181,7 +183,7 @@ const byVersion = (a: Migration, b: Migration) => a.version - b.version;
 function migrateFile(
   db: Db,
   path: string,
-  options: { migrations: readonly Migration[]; backups: Backups },
+  options: { migrations: readonly Migration[]; backups: Backups; upgradeBackup?: boolean },
   busyTimeoutMs: number,
 ): void {
   const { migrations, backups } = options;
@@ -200,6 +202,7 @@ function migrateFile(
     },
     record: (lock, migration) => lock.run(`PRAGMA user_version = ${migration.version}`),
     backupVersion: (lock) => {
+      if (options.upgradeBackup === false) return null;
       const now = userVersion(lock);
       return now > 0 ? now : null;
     },
@@ -286,6 +289,7 @@ function migrateModules(
   path: string,
   backups: Backups,
   schemas: readonly ModuleSchema[],
+  upgradeBackup = true,
 ): void {
   const total = schemas.reduce((count, schema) => count + schema.migrations.length, 0);
   if (total === 0) return;
@@ -323,6 +327,7 @@ function migrateModules(
     // Decided per schema, by that schema's own recorded version: its first migration has
     // nothing of its own to lose, whatever other schemas the store holds; a later one does.
     backupVersion: (lock) =>
+      upgradeBackup &&
       pendingBySchema(lock).some((schema) => schema.recorded > 0 && schema.migrations.length > 0)
         ? userVersion(lock)
         : null,
@@ -341,6 +346,8 @@ export interface OpenFileOptions {
   before?: (db: Db) => void;
   /** Runs after the migration, inside the same guard: what else the file needs before it is handed out. */
   after?: (db: Db) => void;
+  /** False: the upgrade makes no copy of the file first; for a file that is itself a restored copy. */
+  upgradeBackup?: boolean;
 }
 
 /**
@@ -361,7 +368,11 @@ export function openFile(options: OpenFileOptions): Db {
     migrateFile(
       db,
       path,
-      { migrations: options.migrations, backups: options.backups },
+      {
+        migrations: options.migrations,
+        backups: options.backups,
+        ...(options.upgradeBackup === undefined ? {} : { upgradeBackup: options.upgradeBackup }),
+      },
       options.busyTimeoutMs,
     );
     options.after?.(db);
@@ -375,15 +386,46 @@ export function openFile(options: OpenFileOptions): Db {
 
 export function openDb(options: OpenOptions): Db {
   const dir = options.dataDir ?? resolvePaths().storeDir;
+  return openStoreFile(dir, DB_FILE, {
+    busyTimeoutMs: options.busyTimeoutMs,
+    ...(options.migrations === undefined ? {} : { migrations: options.migrations }),
+    ...(options.moduleSchemas === undefined ? {} : { moduleSchemas: options.moduleSchemas }),
+    ...(options.upgradeBackup === undefined ? {} : { upgradeBackup: options.upgradeBackup }),
+  });
+}
+
+/**
+ * Opens a database file by its name and brings it to this binary's core and module versions,
+ * as `openDb` does for the store; for another file (a restore's unpacked copy, ADR 0027)
+ * with `upgradeBackup: false`, since a copy of the copy would serve nobody.
+ */
+export function openStoreFile(
+  dir: string,
+  file: string,
+  options: {
+    migrations?: readonly Migration[];
+    moduleSchemas?: readonly ModuleSchema[];
+    upgradeBackup?: boolean;
+    busyTimeoutMs?: number;
+  } = {},
+): Db {
   const backups: Backups = { folder: join(dir, BACKUPS_DIR), prefix: "wizardingcode-mem" };
+  const upgradeBackup = options.upgradeBackup ?? true;
   return openFile({
     dir,
-    file: DB_FILE,
+    file,
     backups,
     migrations: options.migrations ?? MIGRATIONS,
-    busyTimeoutMs: options.busyTimeoutMs,
+    busyTimeoutMs: options.busyTimeoutMs ?? 2000,
+    upgradeBackup,
     after: (db) =>
-      migrateModules(db, join(dir, DB_FILE), backups, options.moduleSchemas ?? MODULE_SCHEMAS),
+      migrateModules(
+        db,
+        join(dir, file),
+        backups,
+        options.moduleSchemas ?? MODULE_SCHEMAS,
+        upgradeBackup,
+      ),
   });
 }
 

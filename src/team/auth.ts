@@ -1,5 +1,5 @@
 // Who is calling: the device token, the member's state, the role, the contract.
-import { ACCEPTED_CONTRACTS } from "./contract.ts";
+import { ACCEPTED_CONTRACTS, CONTRACT_HEADER } from "./contract.ts";
 import type { Db } from "./db.ts";
 import { HttpError } from "./errors.ts";
 import { hashSecret, sameHash } from "./ids.ts";
@@ -41,7 +41,7 @@ export function requireAdmin(caller: Caller): void {
 
 /** `X-WCM-Contract` absent or one the server accepts; another is 409 with the list. */
 export function checkContract(request: Request): void {
-  const header = request.headers.get("x-wcm-contract");
+  const header = request.headers.get(CONTRACT_HEADER);
   if (header === null) return;
   const contract = Number(header);
   if (!ACCEPTED_CONTRACTS.includes(contract)) {

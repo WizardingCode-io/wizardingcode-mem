@@ -1,0 +1,33 @@
+# security findings for 2026-11-10-002-part-6-of-the-knowledge-and-team-journey
+reviewer: review-security
+read: 24 files, risk areas: auth, personal-data, data-migration, public-api
+
+## Findings
+- F-1 · advisory · src/modules/knowledge/contribute.ts:175 · Still open from round 1. A received entry's line puts `received.memberName` (and `revisedBy.memberName` at line 174) into the hook's text exactly as the server sent it. `tools.ts:136-141` and `retrieve/received.ts:62` pass the same names through `agentName` first. The same server-supplied member is also used unchecked as the git author in `author.ts:52-53` (`writer.member.name`, and `writer.member.id` inside the email), which goes against `agent-name.ts`'s own rule that a teammate's name never enters a prompt or a commit as it came. Only a hostile or compromised server could send control characters here, since the team server's `checkName` refuses line breaks. That keeps this at hardening of the boundary (personal-data).
+- F-2 · advisory · src/sync/inbound.ts:137 · Still open from round 1. Pull-page items are used without a shape check where they enter: `payload.title`/`body`/`createdAt`, `member.id`/`name` and `seq`. `client.ts:247` also reads the whole answer body with no size cap. Path components are well checked (`naming.ts`, `receivedRelativePath`), and a throw now sets the row aside instead of losing it (lines 345-351), so this is hardening. The server validates what it receives; the client does not validate what the server answers (public-api).
+- F-3 · advisory · src/sync/inbound.ts:216 · A memory row is filed under whichever enabled local project holds `item.remoteAlias` (`projectIdOf` → `projectByAlias`), without checking that the alias is bound to the sending server. The entry path does check this (`readsRange`/`aliasBoundTo`). `receivedMarks` keeps such a row out of the brief and the prompt, so no agent sees it there. It is still stored and can be read through `memory_search` and the viewer, and it can be picked as a consolidation neighbour (see F-4). The audience is still only the receiving member (personal-data).
+- F-4 · advisory · src/sync/inbound.ts:262 · Still open from round 1. Received memories become ordinary `memories` rows. The brief and the prompt now hide muted or unbound copies, in linked projects too: the round-1 gap at brief.ts:159-166 and prompt.ts:129-139 is fixed. Other readers still apply no visibility check: `memory_search`, the viewer, and `findNeighbours` (`src/store/memories.ts:136`). So a muted member's note can reach the agent through search. With TypeSafe on, a teammate's memory can be sent to the person's model provider as a consolidation neighbour, and can be marked superseded through it (personal-data).
+- F-5 · advisory · src/backup/backup.ts:367 · Still open from round 1. A restore whose copy names servers that are no longer listed defers deleting those servers' received copies (`pendingDeletion`) to the sync's next start. With no listed server left, `startSync` returns `no-server` (`spawn.ts:77`), so that start never happens on its own. The erased copies stay readable through F-4's paths until the person runs `sync --once`, which `cli/commands/backup.ts:71` tells them to do. Erasure is still possible, but it takes a manual step (personal-data).
+- F-6 · advisory · src/cli/commands/share.ts:411 · Still open from round 1. `--code <code>` takes the invitation code on argv, where shell history and `ps` expose it. `askSecret` exists and is the fallback, but the usage lines (67-68) only advertise `--code` (auth).
+- F-7 · advisory · src/sync/join.ts:351 · Still open from round 1. `share server remove` only forgets the token locally. The device stays valid on the server until an admin revokes it, so any earlier copy of `servers.json` still authenticates. There is no self-revoke call, which the docstring at line 278 states (auth).
+- F-8 · advisory · src/ui/servers-api.ts:273 · Still open from round 1. On the yes, `resumeRoute` computes the previews again and authorises the uids that exist at that moment, not the ones the person was shown. `addServerRoute`'s yes (line 128) likewise confirms whatever row is pending for the URL, not the counts that were shown. This affects only withdrawals and the confirmation of what was previewed; nothing beyond what the policy allows is sent (auth).
+
+## Outside the change
+- src/mcp (memory_search) · An existing tool the diff does not touch. It reads `memories` with no notion of received, muted or unbound rows. It is the reader behind F-3 and F-4.
+- src/distill/consolidate.ts:50 · Unchanged neighbour search over every active memory of a project. Since this change it also covers teammates' copies (F-4).
+
+## Not answerable
+- public-api: does a test pin how the client reads the `/v1` answers (`FeedItemShape`, `PullPageShape`, `JoinAnswer`) · The server-side changes in `src/team/*` (diff.patch 5519-5968) are moves of types and helpers into `contract.ts` with no change in behaviour. I did not confirm that the `RESULT_SHAPES` fingerprint covers the hand-written answer types the client now relies on. The architecture gate's round-1 advisory on `contract.ts:168` says it does not.
+
+Files referenced (absolute):
+/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/src/modules/knowledge/contribute.ts
+/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/src/modules/knowledge/author.ts
+/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/src/sync/inbound.ts
+/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/src/sync/client.ts
+/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/src/sync/received.ts
+/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/src/sync/join.ts
+/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/src/sync/spawn.ts
+/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/src/backup/backup.ts
+/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/src/cli/commands/share.ts
+/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/src/ui/servers-api.ts
+/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/src/store/memories.ts

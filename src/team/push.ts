@@ -2,7 +2,8 @@
 // transaction, in the order the spec gives its rules (D-6, D-7, D-8, D-12, D-15, D-20).
 import { entryUid } from "../sharing/types.ts";
 import type { Caller } from "./auth.ts";
-import type { PushReason } from "./contract.ts";
+import type { PushItemShape, PushReason, PushResultShape } from "./contract.ts";
+import { parseEntryUid } from "./contract.ts";
 import type { Db } from "./db.ts";
 import { HttpError, unknownItem } from "./errors.ts";
 import { memoryKey, splitMemoryKey } from "./ids.ts";
@@ -32,27 +33,11 @@ import {
   workspaceEntriesOf,
 } from "./store.ts";
 import type { Context } from "./types.ts";
-import { checkEntryPayload, checkMemoryPayload, parseEntryUid, type Refusal } from "./validate.ts";
+import { checkEntryPayload, checkMemoryPayload, type Refusal } from "./validate.ts";
 
-export interface PushItem {
-  op: "send" | "withdraw";
-  kind: "entry" | "memory";
-  uid: string;
-  baseRevision: number;
-  baseHash: string;
-  payload?: unknown;
-}
-
-export interface PushResult {
-  uid: string;
-  result: "applied" | "stale" | "refused" | "withdrawn";
-  revision?: number;
-  hash?: string;
-  current?: { revision: number; hash: string; updatedAt?: number };
-  appliedAs?: number;
-  reason?: PushReason;
-  rule?: string;
-}
+/** The shapes are the contract's; the names stay for the server's own modules and tests. */
+export type PushItem = PushItemShape;
+export type PushResult = PushResultShape;
 
 /** Who writes a tombstone the item's owner did not ask for: an admin's ids, or the CLI's (`OPERATOR` in ids.ts). */
 export type Actor = { memberId: string; deviceId: string };

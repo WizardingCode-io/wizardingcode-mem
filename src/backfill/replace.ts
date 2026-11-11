@@ -53,6 +53,7 @@ function selectImports(db: Db, projectId: number): { archive: number[]; spared: 
     .query<{ id: number; confirmed: number }, [number, number, number]>(
       `SELECT m.id, ${CONFIRMED} AS confirmed FROM memories m
         WHERE m.project_id = ? AND m.origin = 'imported' AND m.status = 'active'
+          AND m.judge NOT LIKE 'team:%'
           AND m.created_at BETWEEN ? AND ?`,
     )
     .all(projectId, span.first, span.last);

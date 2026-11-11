@@ -15,7 +15,15 @@ import {
 import { type Env, loadSettings } from "../settings/settings.ts";
 import { type Db, moduleSchemaState } from "../store/db.ts";
 import { logError } from "../util/log.ts";
-import { DESTINATIONS, effectiveLevel, epochOf, levelKey, levelOf } from "./levels.ts";
+import {
+  confirmedServerRefs,
+  DESTINATIONS,
+  destinationsOf,
+  effectiveLevel,
+  epochOf,
+  levelKey,
+  levelOf,
+} from "./levels.ts";
 import { SHARING_MODULE, SHARING_SCHEMA_VERSION } from "./migrations.ts";
 import {
   changedLists,
@@ -23,6 +31,7 @@ import {
   fileListsOf,
   hasLevelsTable,
   levelRows,
+  serverLists,
   settingsSeen,
 } from "./store.ts";
 import {
@@ -162,7 +171,11 @@ function aliasesOf(db: Db): Map<number, string[]> {
  * `local`, under its own key: it never stands for another destination's. A row stored at
  * `local` chose nothing, so whatever it reads for is no problem.
  */
-function levelsOf(db: Db, projects: Map<number, ProjectRow>): Pick<Stored, "levels" | "problems"> {
+function levelsOf(
+  db: Db,
+  projects: Map<number, ProjectRow>,
+  destinations: ReadonlySet<string>,
+): Pick<Stored, "levels" | "problems"> {
   const levels = new Map<string, LevelRow>();
   const problems: string[] = [];
   const rows = levelRows(db);
@@ -175,7 +188,7 @@ function levelsOf(db: Db, projects: Map<number, ProjectRow>): Pick<Stored, "leve
       disabled: project.disabled === 1,
       aliases: aliases.get(row.projectId) ?? [],
     };
-    const { level, reason } = effectiveLevel(row, state, row.destination, DESTINATIONS);
+    const { level, reason } = effectiveLevel(row, state, row.destination, destinations);
     levels.set(levelKey(row.projectId, row.destination), {
       projectId: row.projectId,
       destination: row.destination,
@@ -195,11 +208,11 @@ function levelsOf(db: Db, projects: Map<number, ProjectRow>): Pick<Stored, "leve
  * since the recorded version cannot say; one that never did has no level, and every
  * project in it shares nothing.
  */
-function readStore(db: Db): Stored | null {
+function readStore(db: Db, destinations: ReadonlySet<string>): Stored | null {
   const hasLevels = hasLevelsTable(db);
   if (moduleSchemaState(db, SHARING_MODULE, SHARING_SCHEMA_VERSION) === "too-new") return null;
   const projects = projectsOf(db);
-  const { levels, problems } = hasLevels ? levelsOf(db, projects) : noStore();
+  const { levels, problems } = hasLevels ? levelsOf(db, projects, destinations) : noStore();
   return { projects, levels, problems, counter: counterOf(db), seen: settingsSeen(db) };
 }
 
@@ -211,22 +224,41 @@ function readStore(db: Db): Stored | null {
  * into force when its area is added to the taxonomy lets more leave, and moves the epoch
  * with no write, as a hand edit of the env file does.
  */
-function readPolicy(db: Db | null, dataDir: string, env: Env): SharingPolicy {
-  const { roots, areas: listed, problems: emptiedOrIgnored } = loadSettings(env, dataDir).sharing;
+function readPolicy(
+  db: Db | null,
+  dataDir: string,
+  env: Env,
+  serverId: string | undefined,
+): SharingPolicy {
+  const settings = loadSettings(env, dataDir).sharing;
   const fileLists = fileListsOf(dataDir);
-  const stored = db === null ? noStore() : readStore(db);
+  // The confirmed servers are the destinations; the team's default while none is. The policy
+  // is of one server: the one named, else the first confirmed by name; its lists narrow the
+  // settings' (the file's, narrowed by the environment), and its epoch is over the result.
+  const destinations = destinationsOf(db);
+  const server =
+    db === null || destinations === DESTINATIONS
+      ? (serverId ?? null)
+      : (serverId ?? confirmedServerRefs(db)[0]?.serverId ?? null);
+  const own = db !== null && server !== null ? serverLists(db, server) : null;
+  const roots =
+    own === null ? settings.roots : settings.roots.filter((root) => own.roots.includes(root));
+  const listed =
+    own === null ? settings.areas : settings.areas.filter((id) => own.areas.includes(id));
+  const stored = db === null ? noStore() : readStore(db, destinations);
   if (stored === null) return closedPolicy(TOO_NEW);
   const { areas, inert } = areasInForce(listed, knownAreas(dataDir));
-  const settings = { roots, areas: listed };
+  const emptiedOrIgnored = settings.problems;
   return {
     epoch: epochOf(stored.counter, { roots, areas }),
     closed: false,
-    destinations: new Set(DESTINATIONS),
+    destinations: new Set(destinations),
+    server,
     projects: new Set(stored.projects.keys()),
     roots: new Set(roots),
     areas: new Set(areas),
     inert,
-    settings,
+    settings: { roots, areas: listed },
     fileLists,
     settingsSeen: stored.seen,
     levels: stored.levels,
@@ -245,6 +277,7 @@ export function closedPolicy(problem: string): SharingPolicy {
     epoch: 0,
     closed: true,
     destinations: new Set(),
+    server: null,
     projects: new Set(),
     roots: new Set(),
     areas: new Set(),
@@ -271,9 +304,14 @@ export function resetSharingLog(): void {
  * throws: a failure to read anything gives a closed policy, under which nothing leaves,
  * logged once per process, since every reader would otherwise log the same failure.
  */
-export function loadPolicy(db: Db | null, dataDir: string, env: Env): SharingPolicy {
+export function loadPolicy(
+  db: Db | null,
+  dataDir: string,
+  env: Env,
+  serverId?: string,
+): SharingPolicy {
   try {
-    return readPolicy(db, dataDir, env);
+    return readPolicy(db, dataDir, env, serverId);
   } catch (error) {
     if (!failureLogged) {
       failureLogged = true;

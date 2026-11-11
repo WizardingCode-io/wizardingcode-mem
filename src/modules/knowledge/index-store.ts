@@ -373,6 +373,17 @@ export function countOpen(
   );
 }
 
+/** The slug of the entry an id names in a repository, as the index knows it; null when none. */
+export function entrySlugById(store: KnowledgeStore, repoId: number, id: string): string | null {
+  return (
+    store.db
+      .query<{ slug: string }, [number, string]>(
+        "SELECT slug FROM knowledge_entries WHERE repo_id = ? AND id = ?",
+      )
+      .get(repoId, id)?.slug ?? null
+  );
+}
+
 export function countOpenAll(store: KnowledgeStore, repoId: number): number {
   return (
     store.db
@@ -764,7 +775,9 @@ export function rebuildAll(
   // and this pass is how `knowledge rebuild` repairs it, whatever the scope rebuilt.
   withWrite(store.db, () => {
     store.db.run(
-      "DELETE FROM knowledge_fts WHERE rowid NOT IN (SELECT fts_rowid FROM knowledge_entries WHERE fts_rowid IS NOT NULL)",
+      `DELETE FROM knowledge_fts
+        WHERE rowid NOT IN (SELECT fts_rowid FROM knowledge_entries WHERE fts_rowid IS NOT NULL)
+          AND rowid NOT IN (SELECT fts_rowid FROM knowledge_received WHERE fts_rowid IS NOT NULL)`,
     );
   });
   return all;
@@ -863,14 +876,273 @@ export function refreshStale(store: KnowledgeStore, limit: number): number {
 
 // --- Reading the index on the hook path and in the tools ----------------------------------
 
+/** Where a received entry came from (ADR 0027). */
+export interface HitProvenance {
+  serverId: string;
+  serverName: string;
+  memberId: string;
+  memberName: string;
+  uid: string;
+  /** The entry's own uuid: what a reference's eight hex name, `knowledge take` and `knowledge_get`'s `id:` line show. */
+  id: string;
+  /** The member is this device's own: an item of theirs from another device. */
+  ownDevice: boolean;
+}
+
+/** A teammate's revision applied to an own entry, not yet edited by the person since. */
+export interface RevisedBy {
+  serverId: string;
+  serverName: string;
+  memberName: string;
+  /** The entry is pinned, and its pin is held until the person edits or pins it again. */
+  pinHeld: boolean;
+}
+
 /** An indexed entry as a search finds it: where it is, and how well it matched. */
 export type Hit = KnowledgeEntry & {
+  /** `RECEIVED_REPO_ID` for a received entry. */
   repoId: number;
   scope: "workspace" | "project" | "shared";
   hash: string;
   /** bm25's score, lower is better; 0 outside a search. */
   bm25: number;
+  /** Set on a received entry: the server and the member it came from. */
+  received?: HitProvenance;
+  /** Set on an own entry a teammate revised, by the `applied` ledger row whose local hash is the index's. */
+  revisedBy?: RevisedBy;
 };
+
+/**
+ * What a read passes to see received entries: the project asked for, or null for none. Its
+ * received project items are those under the alias its level binds it with (`RECEIVED_VISIBLE`
+ * reads the binding itself), so no caller names an alias.
+ */
+export interface ReceivedScope {
+  projectId: number | null;
+}
+
+/** Whether the store has the sharing tables these reads join; asked once per open. */
+const sharingKnown = new WeakMap<Db, boolean>();
+function hasSharingTables(db: Db): boolean {
+  let known = sharingKnown.get(db);
+  if (known === undefined) {
+    known =
+      (db
+        .query<{ n: number }, []>(
+          `SELECT count(*) AS n FROM sqlite_master
+            WHERE name IN ('sharing_servers', 'sharing_muted_members', 'sharing_levels', 'sharing_ledger')`,
+        )
+        .get()?.n ?? 0) === 4;
+    sharingKnown.set(db, known);
+  }
+  return known;
+}
+
+/**
+ * The received rows an agent may see, by the module's own SQL over the sharing tables: only
+ * listed, confirmed, unmuted servers; never a muted member; every server's shared and
+ * workspace items, and the project items under the alias the asked project's level binds it
+ * to that server with (`boundAliasesOf`'s rule: the level's `bound_alias`, still one of the
+ * project's aliases), so the copies of any other alias, which no pull refreshes, stay out.
+ * The one parameter is the project id, null for none.
+ */
+const RECEIVED_VISIBLE = `
+  JOIN sharing_servers s ON s.server_id = x.server_id AND s.confirmed_at IS NOT NULL AND s.muted = 0
+  WHERE x.status = 'active'
+    AND NOT EXISTS (SELECT 1 FROM knowledge_entries e2 WHERE e2.id = x.id)
+    AND NOT EXISTS (SELECT 1 FROM sharing_muted_members mm
+                     WHERE mm.server_id = x.server_id AND mm.member_id = x.member_id)
+    AND (x.scope IN ('workspace', 'shared')
+         OR (x.scope = 'project'
+             AND EXISTS (SELECT 1 FROM sharing_levels l
+                          JOIN projects p ON p.id = l.project_id
+                          JOIN project_aliases a ON a.project_id = l.project_id AND a.alias = l.bound_alias
+                         WHERE l.project_id = ? AND l.destination = x.server_id AND l.level != 'local'
+                           AND p.disabled = 0 AND l.bound_alias = x.remote_alias)))`;
+
+const RECEIVED_HIT_COLUMNS = `x.server_id, x.uid, x.scope, x.remote_alias, x.project_id, x.member_id, x.member_name,
+  x.id, x.slug, x.path, x.title, x.kind, x.area, x.context, x.subject, x.status, x.author, x.version,
+  x.body, x.hash, x.revision, x.received_at, x.fts_rowid, s.name AS server_name,
+  (x.member_id = s.member_id) AS own_device`;
+
+type ReceivedHitRow = ReceivedRaw & { server_name: string; own_device: number; rank?: number };
+
+/** A received row as a hit: repository 0, the entry id the search table keys it by, its provenance. */
+export function hitOfReceived(raw: ReceivedHitRow): Hit {
+  return {
+    id: receivedEntryId(raw.server_id, raw.uid),
+    slug: raw.slug,
+    title: raw.title,
+    kind: raw.kind,
+    area: raw.area,
+    context: raw.context,
+    subject: raw.subject,
+    status: raw.status,
+    author: raw.author,
+    version: raw.version,
+    created: null,
+    updated: null,
+    supersedes: null,
+    pinned: false,
+    body: raw.body,
+    extra: [],
+    problem: null,
+    repoId: RECEIVED_REPO_ID,
+    scope: raw.scope,
+    hash: raw.hash,
+    bm25: raw.rank ?? 0,
+    received: {
+      serverId: raw.server_id,
+      serverName: raw.server_name,
+      memberId: raw.member_id,
+      memberName: raw.member_name,
+      uid: raw.uid,
+      id: raw.id,
+      ownDevice: raw.own_device === 1,
+    },
+  };
+}
+
+/** The received hits a browse lists: active, visible, newest received first. */
+function browseReceived(
+  db: Db,
+  received: ReceivedScope,
+  filters: { area?: string; kind?: string },
+  limit: number,
+): Hit[] {
+  if (!hasSharingTables(db) || !hasReceivedTable(db)) return [];
+  return db
+    .query<ReceivedHitRow, (string | number | null)[]>(
+      `SELECT ${RECEIVED_HIT_COLUMNS}, 0 AS rank FROM knowledge_received x ${RECEIVED_VISIBLE}
+          AND (? IS NULL OR x.area = ?)
+          AND (? IS NULL OR x.kind = ?)
+        ORDER BY x.received_at DESC, x.server_id, x.slug
+        LIMIT ?`,
+    )
+    .all(
+      received.projectId,
+      filters.area ?? null,
+      filters.area ?? null,
+      filters.kind ?? null,
+      filters.kind ?? null,
+      limit,
+    )
+    .map(hitOfReceived);
+}
+
+/** The received hits a search finds, best first by bm25, those already shown left out. */
+function searchReceived(
+  db: Db,
+  match: string,
+  received: ReceivedScope,
+  filters: { area?: string; kind?: string },
+  excludeShown: Set<string> | null,
+  limit: number,
+): Hit[] {
+  if (!hasSharingTables(db) || !hasReceivedTable(db)) return [];
+  return db
+    .query<ReceivedHitRow, (string | number | null)[]>(
+      `SELECT ${RECEIVED_HIT_COLUMNS}, bm25(knowledge_fts, ${BM25_WEIGHTS.join(", ")}) AS rank
+         FROM knowledge_fts f
+         JOIN knowledge_received x ON x.fts_rowid = f.rowid ${RECEIVED_VISIBLE}
+          AND knowledge_fts MATCH ?
+          AND f.repo_id = ${RECEIVED_REPO_ID}
+          AND (? IS NULL OR x.area = ?)
+          AND (? IS NULL OR x.kind = ?)
+          AND (${RECEIVED_REPO_ID} || ':' || x.server_id || '|' || x.uid) NOT IN (SELECT value FROM json_each(?))
+        ORDER BY rank, x.server_id, x.slug
+        LIMIT ?`,
+    )
+    .all(
+      received.projectId,
+      match,
+      filters.area ?? null,
+      filters.area ?? null,
+      filters.kind ?? null,
+      filters.kind ?? null,
+      JSON.stringify([...(excludeShown ?? [])]),
+      limit,
+    )
+    .map(hitOfReceived);
+}
+
+/**
+ * Marks the own entries a teammate revised: an `applied` ledger row whose `local_hash` is the
+ * entry's index hash and whose uid ends with the entry's id, read from the sharing tables by
+ * the module's own SQL. A derived state: a rebuild loses nothing, and the person's next edit
+ * (a new hash) releases it. The pin of such an entry is held.
+ */
+function withRevisions(db: Db, hits: Hit[]): Hit[] {
+  if (hits.length === 0 || !hasSharingTables(db)) return hits;
+  const own = hits.filter((hit) => hit.repoId !== RECEIVED_REPO_ID);
+  if (own.length === 0) return hits;
+  const rows = db
+    .query<
+      {
+        repo_id: number;
+        id: string;
+        server_id: string;
+        server_name: string;
+        reason: string;
+      },
+      [string]
+    >(
+      `SELECT e.repo_id, e.id, l.destination AS server_id, s.name AS server_name, l.reason
+         FROM knowledge_entries e
+         JOIN sharing_ledger l ON ${APPLIED_ROW_OF_ENTRY}
+         JOIN sharing_servers s ON s.server_id = l.destination
+        WHERE e.repo_id || ':' || e.id IN (SELECT value FROM json_each(?))`,
+    )
+    .all(JSON.stringify(own.map((hit) => `${hit.repoId}:${hit.id}`)));
+  if (rows.length === 0) return hits;
+  const byEntry = new Map(rows.map((row) => [`${row.repo_id}:${row.id}`, row]));
+  return hits.map((hit) => {
+    const row =
+      hit.repoId === RECEIVED_REPO_ID ? undefined : byEntry.get(`${hit.repoId}:${hit.id}`);
+    if (row === undefined) return hit;
+    return {
+      ...hit,
+      revisedBy: {
+        serverId: row.server_id,
+        serverName: row.server_name,
+        memberName: row.reason,
+        pinHeld: hit.pinned,
+      },
+    };
+  });
+}
+
+/**
+ * The one rule that ties an own entry `e` to the `applied` ledger row `l` of a teammate's
+ * revision: the row's local hash is the entry's index hash (no edit since the apply) and its
+ * uid ends with the entry's id. The revised-by marker and the held pin both read it.
+ */
+const APPLIED_ROW_OF_ENTRY = `l.direction = 'applied' AND l.item_kind = 'entry'
+                     AND l.local_hash = e.hash AND l.item_uid LIKE '%:' || e.id`;
+
+/**
+ * The own entries whose pin is not held: no teammate's revision applied since the person's
+ * last edit (`APPLIED_ROW_OF_ENTRY` finds none). What the pinned block keeps.
+ */
+const PIN_NOT_HELD = `NOT EXISTS (SELECT 1 FROM sharing_ledger l WHERE ${APPLIED_ROW_OF_ENTRY})`;
+
+/** The received row a `knowledge_get` reference names: the server, the slug and the uuid's first eight. */
+export function receivedByFile(
+  db: Db,
+  serverId: string,
+  slug: string,
+  hex8: string,
+  received: ReceivedScope,
+): Hit | null {
+  if (!hasSharingTables(db) || !hasReceivedTable(db)) return null;
+  const raw = db
+    .query<ReceivedHitRow, [number | null, string, string, string]>(
+      `SELECT ${RECEIVED_HIT_COLUMNS}, 0 AS rank FROM knowledge_received x ${RECEIVED_VISIBLE}
+          AND x.server_id = ? AND x.slug = ? AND x.id LIKE ? || '%'`,
+    )
+    .get(received.projectId, serverId, slug, hex8);
+  return raw === null ? null : hitOfReceived(raw);
+}
 
 /**
  * The one match string the search table is given: any of the tokens, each quoted by
@@ -931,11 +1203,15 @@ export function browseEntries(
   repoIds: number[],
   filters: { area?: string; kind?: string },
   limit: number,
+  received?: ReceivedScope,
 ): Hit[] {
-  if (repoIds.length === 0 || limit <= 0) return [];
-  return db
-    .query<HitRow, (string | number | null)[]>(
-      `SELECT ${HIT_COLUMNS}, 0 AS rank
+  if (limit <= 0) return [];
+  const local =
+    repoIds.length === 0
+      ? []
+      : db
+          .query<HitRow, (string | number | null)[]>(
+            `SELECT ${HIT_COLUMNS}, 0 AS rank
          FROM knowledge_entries e
          JOIN knowledge_repos r ON r.id = e.repo_id
         WHERE e.repo_id IN (${placeholders(repoIds)})
@@ -944,16 +1220,22 @@ export function browseEntries(
           AND (? IS NULL OR e.kind = ?)
         ORDER BY e.pinned DESC, e.updated DESC, e.repo_id, e.slug
         LIMIT ?`,
-    )
-    .all(
-      ...repoIds,
-      filters.area ?? null,
-      filters.area ?? null,
-      filters.kind ?? null,
-      filters.kind ?? null,
-      limit,
-    )
-    .map(toHit);
+          )
+          .all(
+            ...repoIds,
+            filters.area ?? null,
+            filters.area ?? null,
+            filters.kind ?? null,
+            filters.kind ?? null,
+            limit,
+          )
+          .map(toHit);
+  if (received === undefined) return local;
+  // The own entries first (the pinned among them first), then the received, newest first.
+  return withRevisions(db, [...local, ...browseReceived(db, received, filters, limit)]).slice(
+    0,
+    limit,
+  );
 }
 
 /**
@@ -962,13 +1244,16 @@ export function browseEntries(
  */
 export function pinnedEntries(db: Db, repoIds: number[]): Hit[] {
   if (repoIds.length === 0) return [];
+  // An own entry a teammate revised keeps its pin out of the brief until the person edits or
+  // pins it again (ADR 0027); received entries are never pinned.
+  const notHeld = hasSharingTables(db) ? `AND ${PIN_NOT_HELD}` : "";
   return db
     .query<HitRow, number[]>(
       `SELECT ${HIT_COLUMNS}, 0 AS rank
          FROM knowledge_entries e
          JOIN knowledge_repos r ON r.id = e.repo_id
         WHERE e.repo_id IN (${placeholders(repoIds)})
-          AND e.pinned = 1 AND e.status = 'active' AND e.problem IS NULL
+          AND e.pinned = 1 AND e.status = 'active' AND e.problem IS NULL ${notHeld}
         ORDER BY e.updated DESC, e.repo_id, e.slug`,
     )
     .all(...repoIds)
@@ -982,11 +1267,14 @@ export function pinnedEntries(db: Db, repoIds: number[]): Hit[] {
  */
 export function ftsCount(db: Db): { rows: number; active: number } {
   const n = (sql: string) => db.query<{ n: number }, []>(sql).get()?.n ?? 0;
+  const received = hasReceivedTable(db)
+    ? n("SELECT count(*) AS n FROM knowledge_received WHERE status = 'active'")
+    : 0;
   return {
     rows: n("SELECT count(*) AS n FROM knowledge_fts"),
-    active: n(
-      "SELECT count(*) AS n FROM knowledge_entries WHERE status = 'active' AND problem IS NULL",
-    ),
+    active:
+      n("SELECT count(*) AS n FROM knowledge_entries WHERE status = 'active' AND problem IS NULL") +
+      received,
   };
 }
 
@@ -1036,13 +1324,18 @@ export function searchEntries(
   filters: { area?: string; kind?: string; without?: { repoId: number; entryId: string } },
   excludeShown: Set<string> | null,
   limit: number,
+  received?: ReceivedScope,
 ): Hit[] {
   const match = ftsMatch(tokens);
-  if (match === null || repoIds.length === 0 || limit <= 0) return [];
+  if (match === null || limit <= 0) return [];
+  if (repoIds.length === 0 && received === undefined) return [];
   const without = filters.without ?? null;
-  return db
-    .query<HitRow, (string | number | null)[]>(
-      `SELECT ${HIT_COLUMNS}, bm25(knowledge_fts, ${BM25_WEIGHTS.join(", ")}) AS rank
+  const local =
+    repoIds.length === 0
+      ? []
+      : db
+          .query<HitRow, (string | number | null)[]>(
+            `SELECT ${HIT_COLUMNS}, bm25(knowledge_fts, ${BM25_WEIGHTS.join(", ")}) AS rank
          FROM knowledge_fts f
          JOIN knowledge_entries e ON e.repo_id = f.repo_id AND e.id = f.entry_id
          JOIN knowledge_repos r ON r.id = e.repo_id
@@ -1055,18 +1348,270 @@ export function searchEntries(
           AND (e.repo_id || ':' || e.id) NOT IN (SELECT value FROM json_each(?))
         ORDER BY rank, e.repo_id, e.slug
         LIMIT ?`,
+          )
+          .all(
+            match,
+            ...repoIds,
+            filters.area ?? null,
+            filters.area ?? null,
+            filters.kind ?? null,
+            filters.kind ?? null,
+            without?.repoId ?? null,
+            without?.entryId ?? null,
+            JSON.stringify([...(excludeShown ?? [])]),
+            limit,
+          )
+          .map(toHit);
+  if (received === undefined) return local;
+  const merged = [...local, ...searchReceived(db, match, received, filters, excludeShown, limit)];
+  merged.sort((a, b) => a.bm25 - b.bm25 || a.repoId - b.repoId || a.slug.localeCompare(b.slug));
+  return withRevisions(db, merged.slice(0, limit));
+}
+
+// --- Received entries (ADR 0027) ------------------------------------------------------------------
+// Copies of teammates' entries, pulled from a team server by the sync client: rows of
+// `knowledge_received`, searchable through `knowledge_fts` under one repository id no
+// repository of the store has. This module is their one index writer; it reads the sharing
+// tables named here by its own SQL, read-only, and imports nothing of the sharing or sync code.
+
+/** The `repo_id` of every received search row: no repository of the store has it. */
+export const RECEIVED_REPO_ID = 0;
+
+/** A received hit's `entry_id` and `Hit.id`: the server and the uid, which no uuid collides with. */
+export const receivedEntryId = (serverId: string, uid: string): string => `${serverId}|${uid}`;
+
+export interface ReceivedRow {
+  serverId: string;
+  uid: string;
+  scope: "workspace" | "shared" | "project";
+  remoteAlias: string | null;
+  /** The enabled project with the alias and the lowest id; 0 outside a project. */
+  projectId: number;
+  memberId: string;
+  memberName: string;
+  /** The entry's uuid, as its frontmatter has it. */
+  id: string;
+  slug: string;
+  /** Relative to `knowledge/received/`. */
+  path: string;
+  title: string;
+  kind: string;
+  area: string;
+  context: string;
+  subject: string;
+  status: string;
+  author: string;
+  version: number;
+  body: string;
+  hash: string;
+  revision: number;
+  receivedAt: number;
+}
+
+interface ReceivedRaw {
+  server_id: string;
+  uid: string;
+  scope: ReceivedRow["scope"];
+  remote_alias: string | null;
+  project_id: number;
+  member_id: string;
+  member_name: string;
+  id: string;
+  slug: string;
+  path: string;
+  title: string;
+  kind: string;
+  area: string;
+  context: string;
+  subject: string;
+  status: string;
+  author: string;
+  version: number;
+  body: string;
+  hash: string;
+  revision: number;
+  received_at: number;
+  fts_rowid: number | null;
+}
+
+const RECEIVED_COLUMNS = `server_id, uid, scope, remote_alias, project_id, member_id, member_name, id, slug,
+  path, title, kind, area, context, subject, status, author, version, body, hash, revision,
+  received_at, fts_rowid`;
+
+const receivedOf = (raw: ReceivedRaw): ReceivedRow => ({
+  serverId: raw.server_id,
+  uid: raw.uid,
+  scope: raw.scope,
+  remoteAlias: raw.remote_alias,
+  projectId: raw.project_id,
+  memberId: raw.member_id,
+  memberName: raw.member_name,
+  id: raw.id,
+  slug: raw.slug,
+  path: raw.path,
+  title: raw.title,
+  kind: raw.kind,
+  area: raw.area,
+  context: raw.context,
+  subject: raw.subject,
+  status: raw.status,
+  author: raw.author,
+  version: raw.version,
+  body: raw.body,
+  hash: raw.hash,
+  revision: raw.revision,
+  receivedAt: raw.received_at,
+});
+
+/** Whether the store has the received table (knowledge v8); asked once per open. */
+const receivedKnown = new WeakMap<Db, boolean>();
+export function hasReceivedTable(db: Db): boolean {
+  let known = receivedKnown.get(db);
+  if (known === undefined) {
+    known =
+      db
+        .query<unknown, []>("SELECT 1 FROM sqlite_master WHERE name = 'knowledge_received'")
+        .get() !== null;
+    receivedKnown.set(db, known);
+  }
+  return known;
+}
+
+/**
+ * Writes or replaces a received row, and its search row when the entry is active: the one
+ * writer of `knowledge_fts` rows for received entries. Plain statements, inside the caller's
+ * transaction.
+ */
+export function indexReceivedRow(db: Db, row: ReceivedRow): void {
+  const old = db
+    .query<{ fts_rowid: number | null }, [string, string]>(
+      "SELECT fts_rowid FROM knowledge_received WHERE server_id = ? AND uid = ?",
     )
-    .all(
-      match,
-      ...repoIds,
-      filters.area ?? null,
-      filters.area ?? null,
-      filters.kind ?? null,
-      filters.kind ?? null,
-      without?.repoId ?? null,
-      without?.entryId ?? null,
-      JSON.stringify([...(excludeShown ?? [])]),
-      limit,
+    .get(row.serverId, row.uid);
+  if (old?.fts_rowid !== null && old?.fts_rowid !== undefined) {
+    db.query(DELETE_SEARCH_ROW).run(old.fts_rowid);
+  }
+  const ftsRowid =
+    row.status === "active"
+      ? Number(
+          db
+            .query(
+              `INSERT INTO knowledge_fts (title, area, context, subject, body, repo_id, entry_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            )
+            .run(
+              row.title,
+              row.area,
+              row.context,
+              row.subject,
+              row.body,
+              RECEIVED_REPO_ID,
+              receivedEntryId(row.serverId, row.uid),
+            ).lastInsertRowid,
+        )
+      : null;
+  db.run(
+    `INSERT OR REPLACE INTO knowledge_received (${RECEIVED_COLUMNS})
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      row.serverId,
+      row.uid,
+      row.scope,
+      row.remoteAlias,
+      row.projectId,
+      row.memberId,
+      row.memberName,
+      row.id,
+      row.slug,
+      row.path,
+      row.title,
+      row.kind,
+      row.area,
+      row.context,
+      row.subject,
+      row.status,
+      row.author,
+      row.version,
+      row.body,
+      row.hash,
+      row.revision,
+      row.receivedAt,
+      ftsRowid,
+    ],
+  );
+}
+
+/** Drops a received row and its search row; nothing when there is none. */
+export function dropReceivedRow(db: Db, serverId: string, uid: string): boolean {
+  const old = db
+    .query<{ fts_rowid: number | null }, [string, string]>(
+      "SELECT fts_rowid FROM knowledge_received WHERE server_id = ? AND uid = ?",
     )
-    .map(toHit);
+    .get(serverId, uid);
+  if (old === null) return false;
+  if (old.fts_rowid !== null) db.query(DELETE_SEARCH_ROW).run(old.fts_rowid);
+  db.run("DELETE FROM knowledge_received WHERE server_id = ? AND uid = ?", [serverId, uid]);
+  return true;
+}
+
+/** The received rows, every server's or one's, by server, scope and slug. */
+export function receivedRows(db: Db, serverId?: string): ReceivedRow[] {
+  if (!hasReceivedTable(db)) return [];
+  return db
+    .query<ReceivedRaw, [string | null]>(
+      `SELECT ${RECEIVED_COLUMNS} FROM knowledge_received
+        WHERE (?1 IS NULL OR server_id = ?1) ORDER BY server_id, scope, slug, uid`,
+    )
+    .all(serverId ?? null)
+    .map(receivedOf);
+}
+
+export function receivedRow(db: Db, serverId: string, uid: string): ReceivedRow | null {
+  if (!hasReceivedTable(db)) return null;
+  const raw = db
+    .query<ReceivedRaw, [string, string]>(
+      `SELECT ${RECEIVED_COLUMNS} FROM knowledge_received WHERE server_id = ? AND uid = ?`,
+    )
+    .get(serverId, uid);
+  return raw === null ? null : receivedOf(raw);
+}
+
+/** The server ids that have received rows. */
+export function receivedServerIds(db: Db): string[] {
+  if (!hasReceivedTable(db)) return [];
+  return db
+    .query<{ server_id: string }, []>(
+      "SELECT DISTINCT server_id FROM knowledge_received ORDER BY server_id",
+    )
+    .all()
+    .map((row) => row.server_id);
+}
+
+/**
+ * The server a name or an id names, read from the sharing module's table by this module's
+ * own SQL: `knowledge_get` resolves `<server>:<file>` with it. A name two servers share is
+ * `ambiguous` with their ids; a name with a colon can never be named. Null when the table is
+ * absent or nothing matches.
+ */
+export function serverByName(
+  db: Db,
+  name: string,
+): { serverId: string; name: string } | { ambiguous: string[] } | null {
+  const present =
+    db.query<unknown, []>("SELECT 1 FROM sqlite_master WHERE name = 'sharing_servers'").get() !==
+    null;
+  if (!present) return null;
+  const byId = db
+    .query<{ serverId: string; name: string }, [string]>(
+      "SELECT server_id AS serverId, name FROM sharing_servers WHERE server_id = ?",
+    )
+    .get(name);
+  if (byId !== null) return byId;
+  const byName = db
+    .query<{ serverId: string; name: string }, [string]>(
+      "SELECT server_id AS serverId, name FROM sharing_servers WHERE name = ? ORDER BY server_id",
+    )
+    .all(name);
+  if (byName.length > 1) return { ambiguous: byName.map((row) => row.serverId) };
+  return byName[0] ?? null;
 }

@@ -117,7 +117,7 @@ describe("status: knowledge", () => {
     // The module's rule: a too-new schema is left alone by every reader, status included.
     seed();
     fx.db.run(
-      "INSERT INTO module_migrations (module, version, name, applied_at) VALUES ('knowledge', 8, 'later', 1)",
+      "INSERT INTO module_migrations (module, version, name, applied_at) VALUES ('knowledge', 9, 'later', 1)",
     );
     expect(knowledgeStatus(fx.db, NOW, true)).toBeNull();
     const report = statusReport(fx.db, null, fx.dataDir, { env: {}, now: NOW });

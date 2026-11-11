@@ -1,6 +1,6 @@
 # ADR 0025 — The sharing policy: what may leave this machine
 
-Date: 2026-11-09 · Status: **draft**. This is part 4 of the knowledge and team journey (2026-11-08-001): the policy that says what may leave this machine for a team server, built and tested. The team server (part 5) and the sync client (part 6) are not built; nothing in this part opens the network, and nothing is sent. The twenty rulings below were recorded on 2026-11-09 under their stated conservative defaults by the crew's validator, with nobody present; the specification that carried them was approved by the author later that day, before the build. Building the code changed details of the design (which list changes a `roots` or `areas` row, the order of `setLevel`'s refusals, which ledger rows a count reads); where this record and the specification differ, this record is the later one.
+Date: 2026-11-09 · Status: **draft**. This is part 4 of the knowledge and team journey (2026-11-08-001): the policy that says what may leave this machine for a team server, built and tested. The team server (part 5, [ADR 0026](0026-team-server.md)) and the sync client (part 6, [ADR 0027](0027-sync-client.md)) were built after this part; nothing in this part opens the network, and what the policy allows leaves only through the sync. Part 6's amendments to this record are listed under [What parts 5 and 6 did](#what-parts-5-and-6-did). The twenty rulings below were recorded on 2026-11-09 under their stated conservative defaults by the crew's validator, with nobody present; the specification that carried them was approved by the author later that day, before the build. Building the code changed details of the design (which list changes a `roots` or `areas` row, the order of `setLevel`'s refusals, which ledger rows a count reads); where this record and the specification differ, this record is the later one.
 
 ## Context
 
@@ -44,10 +44,10 @@ Four clauses of the recorded answers were superseded by later rulings. D-1's "a 
 | Table | Holds | Key |
 | :- | :- | :- |
 | `sharing_levels` | A project's level for one destination, the `remote:` alias it is bound to, when and from where it was set (`viewer` or `cli`). | `(project_id, destination)`, `WITHOUT ROWID` |
-| `sharing_ledger` | What was sent to or received from a destination: version, hash, the epoch it was sent under, `withdrawn_at`. Written by parts 5 and 6; this part writes no row. | `(destination, item_kind, item_uid, direction)`, `WITHOUT ROWID` |
+| `sharing_ledger` | What was sent to or received from a destination: version, hash, the epoch it was sent under, `withdrawn_at`; since part 6 also `local_hash` (an entry's index hash; a memory's `memoryHash` at the last send or `stale`), `instance` (the server's) and `reason` (`moved`, `withdrawn-by-admin`, …; the member's name on an `applied` row), and the direction `applied` (a teammate's revision applied to the person's own entry). Written by part 6; this part writes no row. | `(destination, item_kind, item_uid, direction)`, `WITHOUT ROWID` |
 | `sharing_changes` | Every change: when, the source (`viewer`, `cli`, `restore`, `file`, `system`), what (`project:<id>`, `roots`, `areas`, `levels`), old and new. | `id`, indexed by `at` |
 
-No table has a foreign key or a trigger on a core table. Three `meta` keys complete it:
+No table has a foreign key or a trigger on a core table. Since part 6 the namespace's migration 2 owns two indexes on the core table `memories`, `sharing_memories_updated` (the sync tick's window) and `sharing_memories_superseded` (the received memories' deletion), which a core rebuild of that table would have to create again ([ADR 0027](0027-sync-client.md)). Three `meta` keys complete it:
 
 - `sharing.counter`: the number of changes made through the viewer, the CLI, a restore or the system reconcile, added to inside the same transaction as the change.
 - `sharing.settings_seen`: the baseline, the env file's own lists as last recorded. It exists for the audit only: a file that differs from it was edited by hand since.
@@ -83,7 +83,7 @@ Two stores is the cost of putting the settings where the mission puts them: the 
 | `MemoryItem` | `hash`, `isUserRule`, `kind`, `origin`, `projectId`, `scope`, `stale`, `status`, `uid`, `version` |
 | `OutgoingEntry` | `body`, `frontmatter`, `hash`, `kind`, `remoteAlias`, `scope`, `slug`, `uid`, `version` |
 | `OutgoingMemory` | `body`, `createdAt`, `hash`, `importance`, `kind`, `memoryKind`, `remoteAlias`, `status`, `title`, `uid`, `updatedAt`, `version` |
-| `LedgerRecord` | `destination`, `direction`, `hash`, `version`, `withdrawnAt` |
+| `LedgerRecord` | `destination`, `direction`, `hash`, `instance`, `localHash`, `reason`, `version`, `withdrawnAt` (the three in the middle since part 6) |
 | `Decision` | `answer`, `epoch`, `reason` |
 
 Six types are pinned: the four items above, and the ledger's record and the predicate's answer through `LEDGER_RECORD_KEYS` and `DECISION_KEYS`. A field added to any of the six fails the test until the lists and this record change together. A payload built outside these types is not covered: part 6 must build its payloads from them.
@@ -104,6 +104,7 @@ Six types are pinned: the four items above, and the ledger's record and the pred
 | `status` | Only active items leave. |
 | `root-off` | Its repository is not allowed to leave. |
 | `level-local` | This project shares nothing. |
+| `level-receive` | The project receives from this server and sends nothing. |
 | `level-knowledge` | This project shares knowledge only; memories stay. |
 | `disabled` | Memory is off for this project. |
 | `unbound-alias` | The level was set under a git remote this project no longer has. |
@@ -186,7 +187,10 @@ The policy protects what leaves this account's machine, not the account from its
 - A store file copied to another machine keeps its generation until part 5's device token scopes it.
 - The loader's target is 20 ms with ninety projects, measured by the gate and pinned by no test; a count over 90,000 memories has a 1,000 ms target and a 5,000 ms test bound.
 
-## What parts 5 and 6 must do
+## What parts 5 and 6 did
+
+Both are built: the server is [ADR 0026](0026-team-server.md), the sync [ADR 0027](0027-sync-client.md). Part 6 amended this record in four places. The destination of a level is a server's id: `team` is the default only while no server is confirmed, and once one is, `reconcileLevels` removes a `team` row with a logged `system` change (the reverse of the second item below, which bound `team` to the configured server). The level `receive` binds a project to a server without sending (`decide` answers `keep` with `level-receive`; Nothing to `receive` needs no confirmation, `receive` to Knowledge does), and `setLevel` refuses a level other than Nothing for a project bound to another server (`one-server`). `levels.ts` has two reads every reader uses: `boundServerOf` (the confirmed server a project's level binds it to) and `confirmedServerRefs`; `loadPolicy(db, dataDir, env, serverId)` intersects the server's own lists with the file's and the environment's. The ledger's columns and the `applied` direction are in [Storage](#storage-the-sharing-namespace) and the pinned keys in [The predicate's contract](#the-predicates-contract). The list that follows is what this part asked of them, kept as written.
+
 
 - Call `decide` for every item and every destination, and nothing else; send on `send`, withdraw on `withdraw`.
 - Bind the destination `team` to the configured server. A second server is a second destination: it starts with every level `local`, and needs its own roots and areas keys before anything leaves for it.
