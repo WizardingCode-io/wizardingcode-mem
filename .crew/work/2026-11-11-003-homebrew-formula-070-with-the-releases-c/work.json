@@ -1,0 +1,63 @@
+{
+  "id": "2026-11-11-003-homebrew-formula-070-with-the-releases-c",
+  "title": "Homebrew formula: 0.7.0 with the release's checksums. packaging/homebrew/wizardi",
+  "input": "Homebrew formula: 0.7.0 with the release's checksums. packaging/homebrew/wizardingcode-mem.rb names version 0.7.0, the four release assets of v0.7.0 and their sha256 from the release's checksums.txt, so brew install wizardingcode-io/wizardingcode/wizardingcode-mem gets 0.7.0 once the tap carries the same file.",
+  "type": "chore",
+  "route": "fast",
+  "routeReasons": [
+    "chore in one spot, clear request, no risk area"
+  ],
+  "riskAreas": [],
+  "phase": "learn",
+  "awaiting": null,
+  "criteria": [
+    {
+      "id": "AC-1",
+      "kind": "observed",
+      "text": "packaging/homebrew/wizardingcode-mem.rb has version 0.7.0, every url under releases/download/v0.7.0/, and for each of the four assets the sha256 that the release's checksums.txt publishes; checked by comparing the file with the checksums downloaded from the release."
+    }
+  ],
+  "approvals": [],
+  "skips": [],
+  "baseCommit": "829e4e5fc5e8f8170c239869a03c9a8da86a6e2d",
+  "createdAt": "2026-11-11T12:54:55.476Z",
+  "updatedAt": "2026-11-11T12:59:07.268Z",
+  "kind": "feature",
+  "kindFrom": "work_type chore",
+  "knowledge": {
+    "readAt": "2026-11-11T12:54:55.489Z",
+    "listed": [
+      "K-375",
+      "K-363",
+      "K-319",
+      "K-372",
+      "K-371",
+      "K-346",
+      "K-343",
+      "K-335",
+      "K-316",
+      "K-311"
+    ]
+  },
+  "priority": "normal",
+  "phaseAt": {
+    "build": "2026-11-11T12:54:55.770Z",
+    "gate": "2026-11-11T12:58:58.854Z",
+    "deliver": "2026-11-11T12:58:58.926Z",
+    "learn": "2026-11-11T12:59:06.954Z"
+  },
+  "runtimes": [
+    "claude"
+  ],
+  "seats": [],
+  "knowledgeFiles": [],
+  "knowledgeLabels": [],
+  "primaryTeam": "backend",
+  "learned": {
+    "at": "2026-11-11T12:59:07.268Z",
+    "entries": [
+      "K-376"
+    ],
+    "confirmed": []
+  }
+}

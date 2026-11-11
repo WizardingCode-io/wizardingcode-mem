@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "messages": [
+    {
+      "at": "2026-11-11T12:59:07.283Z",
+      "from": {
+        "workspace": "_alone",
+        "project": "ai-mem",
+        "item": "2026-11-11-003-homebrew-formula-070-with-the-releases-c",
+        "agent": "session"
+      },
+      "hops": 0,
+      "opened": null,
+      "id": "M-2026-11-11-004-ai-mem",
+      "to": {
+        "workspace": "_alone",
+        "project": "ai-mem",
+        "item": null,
+        "agent": null
+      },
+      "type": "notice",
+      "priority": "normal",
+      "subject": "Lane homebrew/0.7.0 (2026-11-11-003-homebrew-formula-070-with-the-releases-c,...",
+      "body": "Lane homebrew/0.7.0 (2026-11-11-003-homebrew-formula-070-with-the-releases-c, proven) is proven: commit it, then merge it from the main checkout.",
+      "replyTo": null,
+      "status": "sent"
+    }
+  ]
+}
