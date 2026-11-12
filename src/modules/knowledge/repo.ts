@@ -954,10 +954,12 @@ export function commitPaths(
  * git's own housekeeping, run by the runner after a commit and to its end: git decides by
  * its thresholds whether anything is due, and no process is left writing in the repository
  * when this returns. Nothing it throws is the commit's, which landed, so nothing it throws
- * changes what the caller does next: a git that fails or passes the timeout is logged by
- * `runGit`; a lease lost at the call's renewal is raised before git starts, so no git runs
- * without the lease, and the caller meets the loss at its own next call, where it already
- * handles it. An error of another kind is logged here.
+ * changes what the caller does next:
+ * - a git that fails or passes the timeout is a `KnowledgeError` that `runGit` has logged;
+ * - a lease lost at the call's renewal is raised before git starts, so no git runs without
+ *   the lease. The store's is a `KnowledgeError` (`locked`), dropped here. The mirror's is an
+ *   error of its own class, logged here like any error of another kind. Either way the
+ *   caller meets the loss at its own next git call, where it already handles it.
  */
 function maintain(
   host: GitHost,
@@ -967,7 +969,9 @@ function maintain(
   committer?: Identity,
 ): void {
   try {
-    // The environment of the commit it follows, identity included: one call apart, nothing else.
+    // The commit's identity too, though maintenance writes no commit: the two calls then run
+    // in one environment, and what a test or a log sees of git's environment after a commit
+    // is still the commit's.
     runGit(host, repoPath, ["maintenance", "run", "--auto", "--quiet"], {
       operation,
       identity,

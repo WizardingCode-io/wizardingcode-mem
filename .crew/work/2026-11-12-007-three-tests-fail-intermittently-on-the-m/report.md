@@ -9,8 +9,8 @@
 
 ## Not proven
 
-- judgement gate code-quality not run
-- judgement gate test-quality not run
+- judgement gate code-quality not proven (4 findings)
+- judgement gate test-quality not proven (3 findings)
 
 ## Analysis
 
@@ -48,12 +48,27 @@
 
 | Gate | Target | Status | Command | Duration | Log |
 | :- | :- | :- | :- | -: | :- |
-| secrets | . | pass | `built-in secret scan` | 39 ms |  |
-| prose | . | pass | `built-in prose scan` | 41 ms |  |
-| build | . | pass | `bun run build` | 2895 ms | logs/build-_-1794516164933.txt |
-| test | . | pass | `bun run test` | 216664 ms | logs/test-_-1794516167857.txt |
-| lint | . | pass: 1 untouched file with problems, none of the item's | `bun run lint` | 96 ms | logs/lint-_-1794516384521.txt |
-| typecheck | . | pass | `bun run typecheck` | 355 ms | logs/typecheck-_-1794516384618.txt |
+| secrets | . | pass | `built-in secret scan` | 34 ms |  |
+| prose | . | pass | `built-in prose scan` | 36 ms |  |
+| build | . | pass | `bun run build` | 2665 ms | logs/build-_-1794516410724.txt |
+| test | . | pass | `bun run test` | 209887 ms | logs/test-_-1794516413418.txt |
+| lint | . | pass: 1 untouched file with problems, none of the item's | `bun run lint` | 93 ms | logs/lint-_-1794516623306.txt |
+| typecheck | . | pass | `bun run typecheck` | 372 ms | logs/typecheck-_-1794516623399.txt |
+
+## Judgement gates
+
+| Gate | Verdict | Reviewer | Findings | Tokens |
+| :- | :- | :- | -: | -: |
+| code-quality | not proven | review-code-quality | 4 | 107410 |
+| test-quality | not proven | review-test-quality | 3 | 118326 |
+
+- code-quality: tests/integration/team-mirror-maintenance.test.ts:55 Upheld as a defect under question 2: the diff writes the same logic twice. The `recordArgsTo` parser `callsIn` appears here and again in tests/unit/knowledge-maintenance.test.ts (`callsIn`, beside it). The `GIT_TRACE` line parser is inlined in this file's first test and appears again as `tracedCommands` in knowledge-maintenance.test.ts. The check that each commit is followed by maintenance (`commands.forEach(... index % 2 ...)`) is also written in both new test files. These are multi-line parsers and checks, not boilerplate. The diff adds `traceTo` to tests/helpers/stub-git.ts, which already owns both record formats, so one reader there would replace the copies. (defect, verified by Jev (0.97))
+- code-quality: src/modules/knowledge/repo.ts:958 Kept as an advisory (questions 10 and 11, precision of a new comment; no old fact is dropped). The `maintain` docstring describes 'a lease lost at the call's renewal' as met by the caller at its next call. That holds only for the store's `KnowledgeError`. The mirror's `MirrorLeaseLostError` (src/team/mirror.ts:99, extends Error, thrown from the renew at mirror.ts:395) falls to the `logError` branch and is logged as an error of another kind. The comment should name the two cases separately. (advisory)
+- code-quality: src/modules/knowledge/repo.ts:970 Kept as an advisory (question 10): the comment 'one call apart, nothing else' does not say why the maintenance call carries the commit's identity, when `maintenance run` writes no commit. One clause giving the reason would read better. (advisory)
+- code-quality: tests/integration/team-mirror.test.ts:522 Lowered to an advisory as debt outside the change: the same record parser (`.split("\t\n")`) is already inlined here and at line 570, on lines this diff did not write. The single reader suggested for the defect at team-mirror-maintenance.test.ts:55 would absorb it too. (advisory, outside the change)
+- test-quality: tests/unit/knowledge-maintenance.test.ts:233 Upheld as a defect under question 1. The reviewer cited line 529, a line of diff.patch; the file's own line is 233 (`const paragraphs = adr.split("\n").filter(...)`). AC-10 is a behavior criterion and requires the ADR's paragraph on what `.git` may hold to say that the housekeeping still runs, started by the runner after a commit and in the foreground. The test checks only that `paragraphs.length >= 2`, which was already true before the change. Only the Known-limits paragraph is checked for 'started by the runner after a commit, in the foreground'. The `.git` paragraph (diff.patch line 21, which the diff does not change) still says only 'in its own housekeeping, removes'. No assertion fails when that clause of AC-10 is reverted or missing. (defect, verified by Jev (0.96))
+- test-quality: tests/integration/team-mirror-maintenance.test.ts:251 Kept as an advisory (questions 1 and 5). The steal is triggered by the next `now()` read after the second commit. Without the maintenance call, the same steal would happen at the next revision's renewal and the assertions would still pass. The test does fail if the swallowing of the lease error is reverted (commits would be 0, not 1), so AC-12's 'recorded' clause is proven. That the call exists is held by AC-7's trace test. (advisory)
+- test-quality: tests/unit/knowledge-maintenance.test.ts:479 Kept as an advisory. AC-13's red under a whole revert is a race: the commit's own detached maintenance may pack before the assertions run. The test does fail every time when the runner's call is removed and the settings are kept. Writing three loose objects where the spec says two is harmless for the `gc.auto=1` threshold. (advisory)
 
 ## Verifications
 
@@ -81,6 +96,8 @@
 | knowledge | K-382 | no 0.57 | - | jev-1.14.0 | 2026-11-12T20:24:26.547Z |
 | validator | complete-gap-round v1 | yes 0.82 | 0.82 | jev-1.14.0 | 2026-11-12T20:33:32.856Z |
 | validator | complete-gap-round v2 | yes 0.81 | 0.81 | jev-1.14.0 | 2026-11-12T20:33:32.856Z |
+| defect | code-quality tests/integration/team-mirror-maintenance.test.ts:55 | yes 0.97 | 0.97 | jev-1.14.0 | 2026-11-12T20:53:09.940Z |
+| defect | test-quality tests/unit/knowledge-maintenance.test.ts:233 | yes 0.96 | 0.96 | jev-1.14.0 | 2026-11-12T20:53:09.940Z |
 
 ## Team
 
@@ -95,7 +112,7 @@
 | lead-security | security | standard route |
 | judge |  | a gate is planned |
 
-- Rounds: judgement 0 of 2, validation 3 of 2
+- Rounds: judgement 1 of 2, validation 3 of 2
 - Runtimes: claude (context at start: enforced; the status line per prompt: enforced; the denial of engine files: enforced; the denial of forbidden commands: enforced; the hold at Stop: enforced; the roles' answers filed: enforced; the roles read-only: enforced)
 
 ## Validations
@@ -128,6 +145,9 @@
 | tech-lead | claude-fable-5-2 | - | 2026-11-12T20:33:27.230Z | 118089 | conclave/lead-qa-reply.round3.md | hook |
 | tech-lead | claude-fable-5-2 | - | 2026-11-12T20:42:51.667Z | 216810 | conclave/lead-security-reply.md | hook |
 | tech-lead | claude-fable-5-2 | - | 2026-11-12T20:42:53.285Z | 252591 | conclave/lead-qa-reply.md | hook |
+| review-code-quality | claude-opus-5-5 | - | 2026-11-12T20:51:26.045Z | 72562 | review/code-quality.findings.md | hook |
+| review-test-quality | claude-opus-5-5 | - | 2026-11-12T20:52:11.974Z | 83478 | review/test-quality.findings.md | hook |
+| judge | claude-opus-5-5 | - | 2026-11-12T20:52:57.459Z | 69696 | review/ruling.json | hook |
 
 ## Decisions
 
@@ -141,10 +161,13 @@
 ## Waits
 
 - for the roles (2026-11-12T20:43:04.662Z), not proven: gates have not run
+- for the roles (2026-11-12T20:50:47.252Z), not proven: judgement gate code-quality not run
+- for the roles (2026-11-12T20:51:40.031Z), not proven: judgement gate code-quality not run
+- for the roles (2026-11-12T20:52:20.682Z), not proven: judgement gate code-quality not run
 
 ## Objections
 
 - O-1 (advisory, raised by gap-round) open: The commit that crosses git's threshold waits for the repack inside the runner's timeout; a repack that exceeded it would report a failure for a commit that landed. Not measured at that size.
 - O-2 (advisory, raised by gap-round) open: The end of the three failures cannot be shown on the author's machine: the evidence is the runner's probe and the suite's later runs there.
 
-Fingerprint: sha256:b612519ccae0a4a5b449bcc701a0dc76e2f1ef8d9144869d3fc599701288d293
+Fingerprint: sha256:266f7111b9ee7c23f266542ec0bfa492f139bfe3f6e5a880c34af23bf43aeeba

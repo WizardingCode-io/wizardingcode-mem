@@ -1,14 +1,13 @@
 // The mirror commits through the store's runner: no commit of a run starts maintenance by
 // itself, the runner runs git's own after it, and a lease lost there stops the run.
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { teamPaths } from "../../src/team/db.ts";
 import { MIRROR_LEASE } from "../../src/team/lease.ts";
 import { createTeamLog } from "../../src/team/log.ts";
 import { runMirror } from "../../src/team/mirror.ts";
 import { leaseOf, setMeta } from "../../src/team/store.ts";
-import { realGit, stubGit } from "../helpers/stub-git.ts";
+import { commitsEachMaintained, realGit, recordedCalls, stubGit } from "../helpers/stub-git.ts";
 import {
   adminOf,
   cleanTestDirs,
@@ -52,14 +51,6 @@ function mirrorCtx(t: TestServer, gitPath: string) {
 
 const sharedRepo = (t: TestServer) => join(teamPaths(t.dir).repos, "shared");
 
-const callsIn = (file: string): string[][] =>
-  existsSync(file)
-    ? readFileSync(file, "utf8")
-        .split("\t\n")
-        .filter((record) => record !== "" && record !== "\n")
-        .map((record) => record.replace(/^\n/, "").split("\t"))
-    : [];
-
 const subjects = (repo: string) => realGit(repo, "log", "--format=%s").trim().split("\n");
 
 describe("a mirror run's git", () => {
@@ -74,24 +65,12 @@ describe("a mirror run's git", () => {
     const run = runMirror(mirrorCtx(t, stub), { rebuild: false });
     expect(run).toEqual({ commits: 2, errors: [] });
 
-    const calls = callsIn(record);
+    const calls = recordedCalls(record);
     expect(calls.length).toBeGreaterThan(4);
     for (const args of calls) for (const setting of SETTINGS) expect(args).toContain(setting);
 
-    const commands = readFileSync(trace, "utf8")
-      .split("\n")
-      .map((line) => /trace: built-in: git (.*)$/.exec(line)?.[1])
-      .filter((command): command is string => command !== undefined)
-      .filter((command) => /^(commit|maintenance)\b/.test(command));
-    const commits = commands.filter((command) => command.startsWith("commit"));
-    // The repository's first commit, then one per revision.
-    expect(commits.length).toBe(3);
-    expect(commands.length).toBe(commits.length * 2);
-    commands.forEach((command, index) => {
-      if (index % 2 === 0) expect(command.startsWith("commit ")).toBe(true);
-      else expect(command).toBe("maintenance run --auto --quiet");
-    });
-    expect(readFileSync(trace, "utf8")).not.toContain("--detach");
+    // The repository's first commit, then one per revision, each followed by the runner's call.
+    expect(commitsEachMaintained(trace)).toBe(3);
   });
 
   test("a lease lost at the maintenance call: no git runs without it, the landed revision is recorded, the run stops at its next git call, and the next run commits nothing twice", async () => {
@@ -104,13 +83,14 @@ describe("a mirror run's git", () => {
     // revision's) is the maintenance call's, and it hands the lease to another owner.
     let stolen = false;
     let callsWhenStolen = -1;
-    const commitsSoFar = () => callsIn(record).filter((args) => args.includes("commit")).length;
+    const commitsSoFar = () =>
+      recordedCalls(record).filter((args) => args.includes("commit")).length;
     const ctx = {
       ...mirrorCtx(t, stub),
       now: () => {
-        if (!stolen && commitsSoFar() === 2 && callsIn(record).at(-1)?.includes("commit")) {
+        if (!stolen && commitsSoFar() === 2 && recordedCalls(record).at(-1)?.includes("commit")) {
           stolen = true;
-          callsWhenStolen = callsIn(record).length;
+          callsWhenStolen = recordedCalls(record).length;
           setMeta(
             t.server.db,
             MIRROR_LEASE,
@@ -128,9 +108,15 @@ describe("a mirror run's git", () => {
     expect(aborted.errors.some((error) => /lease/.test(error.message))).toBe(true);
     expect(leaseOf(t.server.db, MIRROR_LEASE)?.owner).toBe("mirror-intruder");
     // No git ran after the lease was lost: neither the maintenance nor the next revision's.
-    expect(callsIn(record).length).toBe(callsWhenStolen);
-    expect(callsIn(record).at(-1)).toContain("commit");
+    expect(recordedCalls(record).length).toBe(callsWhenStolen);
+    expect(recordedCalls(record).at(-1)).toContain("commit");
     expect(subjects(sharedRepo(t)).length).toBe(2);
+    // The loss was met at the maintenance call itself: that call logs it once, under the
+    // mirror's scope, and the run's own git calls log nothing of the kind.
+    const logged = t.lines
+      .map((line) => JSON.parse(line) as { scope?: string; name?: string })
+      .filter((line) => line.name === "MirrorLeaseLostError");
+    expect(logged).toEqual([expect.objectContaining({ scope: "team.mirror" })]);
 
     t.server.db.run("DELETE FROM meta WHERE key = ?", [MIRROR_LEASE]);
     const next = runMirror(mirrorCtx(t, stub), { rebuild: false });

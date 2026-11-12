@@ -10,7 +10,7 @@ import { commitPaths, ensureRepo, type GitHost, runGit } from "../../src/modules
 import { writeEntry } from "../../src/modules/knowledge/store.ts";
 import type { EntryChange, KnowledgeStore } from "../../src/modules/knowledge/types.ts";
 import { type Fixture, knowledgeFixture } from "../helpers/knowledge.ts";
-import { realGit, stubGit } from "../helpers/stub-git.ts";
+import { commitsEachMaintained, realGit, recordedCalls, stubGit } from "../helpers/stub-git.ts";
 
 const WORKSPACE = { scope: "workspace" } as const;
 const SETTINGS = ["maintenance.auto=false", "maintenance.autoDetach=false", "gc.autoDetach=false"];
@@ -30,20 +30,6 @@ const change = (title: string): EntryChange => ({
   subject: "discovery call",
   body: "Ask about the budget before the timeline.",
 });
-
-/** One recorded call per record, each ended by a tab and a newline; a commit message spans lines. */
-const callsIn = (file: string): string[][] =>
-  readFileSync(file, "utf8")
-    .split("\t\n")
-    .filter((record) => record !== "" && record !== "\n")
-    .map((record) => record.replace(/^\n/, "").split("\t"));
-
-/** The commands git itself says it ran, in order: `commit …`, `maintenance run …`. */
-const tracedCommands = (file: string): string[] =>
-  readFileSync(file, "utf8")
-    .split("\n")
-    .map((line) => /trace: built-in: git (.*)$/.exec(line)?.[1])
-    .filter((command): command is string => command !== undefined);
 
 const write = (store: KnowledgeStore, title: string) =>
   writeEntry(store, WORKSPACE, change(title), personAuthor(store));
@@ -65,22 +51,13 @@ describe("the settings and the trace of a store write", () => {
     expect(write(store, "First entry").kind).toBe("written");
     expect(write(store, "Second entry").kind).toBe("written");
 
-    const calls = callsIn(record);
+    const calls = recordedCalls(record);
     expect(calls.length).toBeGreaterThan(4);
     for (const args of calls) for (const setting of SETTINGS) expect(args).toContain(setting);
 
-    const commands = tracedCommands(trace).filter((command) =>
-      /^(commit|maintenance)\b/.test(command),
-    );
-    const commits = commands.filter((command) => command.startsWith("commit"));
-    expect(commits.length).toBeGreaterThanOrEqual(2);
-    // Each commit is followed by the runner's own call, and that is the only maintenance there is.
-    expect(commands.length).toBe(commits.length * 2);
-    commands.forEach((command, index) => {
-      if (index % 2 === 0) expect(command.startsWith("commit ")).toBe(true);
-      else expect(command).toBe("maintenance run --auto --quiet");
-    });
-    expect(readFileSync(trace, "utf8")).not.toContain("--detach");
+    // Each commit is followed by the runner's own call, the only maintenance there is; a
+    // trace without it, or with anything detached, gives null.
+    expect(commitsEachMaintained(trace)).toBeGreaterThanOrEqual(2);
   });
 });
 
@@ -132,7 +109,7 @@ describe("a maintenance that does not end well is not the commit's", () => {
     // The renewal that comes right after the commit is the maintenance call's.
     let lost = 0;
     store.renew = () => {
-      const last = existsSync(record) ? callsIn(record).at(-1) : undefined;
+      const last = recordedCalls(record).at(-1);
       if (lost === 0 && last?.includes("commit") === true) {
         lost++;
         throw new KnowledgeError("locked", "another write to this repository is in progress");
@@ -147,7 +124,7 @@ describe("a maintenance that does not end well is not the commit's", () => {
     expect(subjects(repo.path)[0]).toContain("written-under-a-lost-lease");
     expect(clean(repo.path)).toBe(true);
     // No git ran without the lease: the last call recorded is still the commit.
-    expect(callsIn(record).at(-1)).toContain("commit");
+    expect(recordedCalls(record).at(-1)).toContain("commit");
   });
 
   test("an error that is not the store's is logged, and is not the commit's either", () => {
@@ -183,13 +160,13 @@ describe("git keeps compacting", () => {
   test("with work due, the runner's call packs the loose objects before commitPaths returns", () => {
     const store = fx.store();
     const repo = ensureRepo(store, WORKSPACE);
-    for (const seed of [1, 2, 3]) {
+    for (const seed of [1, 2]) {
       const file = join(fx.dir, `blob-${seed}`);
       writeFileSync(file, sampledBlob(seed));
       realGit(repo.path, "hash-object", "-w", file);
     }
     const sampled = join(repo.path, ".git", "objects", "17");
-    expect(readdirSync(sampled).length).toBe(3);
+    expect(readdirSync(sampled).length).toBe(2);
 
     // The host lowers git's threshold; the runner's own three settings ride on the same call.
     const host: GitHost = { ...store, extraConfig: ["-c", "gc.auto=1"] };
@@ -231,11 +208,15 @@ describe("the documents", () => {
   test("ADR 0024 says the housekeeping still runs, after a commit and in the foreground, and keeps the limit open", () => {
     expect(adr).not.toContain("the store does not turn off git's own housekeeping");
     const paragraphs = adr.split("\n").filter((line) => line.includes("housekeeping"));
-    // The paragraph on what `.git` may hold, and Known limits.
-    expect(paragraphs.length).toBeGreaterThanOrEqual(2);
+    const started = "started by the runner after a commit, in the foreground";
+    // The paragraph on what `.git` may hold says it too.
+    const held = flat(
+      paragraphs.find((line) => line.startsWith("- A `.git` that holds anything")) ?? "",
+    );
+    expect(held).toContain(started);
     const limit = flat(paragraphs.find((line) => line.includes("are not checked")) ?? "");
     expect(limit).toContain("The files inside the folders of `.git/objects/` are not checked");
-    expect(limit).toContain("started by the runner after a commit, in the foreground");
+    expect(limit).toContain(started);
     expect(limit).toContain("removes and rewrites files below `objects/`");
     expect(limit).toContain("The sync part closes both");
   });

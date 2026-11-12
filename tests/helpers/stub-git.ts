@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 export interface StubBehaviour {
@@ -89,6 +89,44 @@ export function stubGit(dir: string, behaviour: StubBehaviour): string {
   writeFileSync(script, `${lines.join("\n")}\n`);
   chmodSync(script, 0o755);
   return dir;
+}
+
+/**
+ * The calls a stub recorded with `recordArgsTo`, one argument list per call; none when the
+ * file is not there yet. A record ends with a tab and a newline, since a commit message
+ * spans lines inside its argument.
+ */
+export function recordedCalls(file: string): string[][] {
+  if (!existsSync(file)) return [];
+  return readFileSync(file, "utf8")
+    .split("\t\n")
+    .filter((record) => record !== "" && record !== "\n")
+    .map((record) => record.replace(/^\n/, "").split("\t"));
+}
+
+/** The commands git itself says it ran, in order, from a trace taken with `traceTo`: `commit …`, `maintenance run …`. */
+export function tracedCommands(file: string): string[] {
+  return readFileSync(file, "utf8")
+    .split("\n")
+    .map((line) => /trace: built-in: git (.*)$/.exec(line)?.[1])
+    .filter((command): command is string => command !== undefined);
+}
+
+/**
+ * The commits of a trace, when each is followed by the runner's own maintenance command and
+ * the trace holds no other maintenance and nothing detached; null otherwise, and for a trace
+ * with no commit.
+ */
+export function commitsEachMaintained(file: string): number | null {
+  const commands = tracedCommands(file).filter((command) =>
+    /^(commit|maintenance)\b/.test(command),
+  );
+  const commits = commands.filter((command) => command.startsWith("commit "));
+  const paired = commands.every((command, index) =>
+    index % 2 === 0 ? command.startsWith("commit ") : command === "maintenance run --auto --quiet",
+  );
+  const whole = commits.length > 0 && commands.length === commits.length * 2 && paired;
+  return whole && !readFileSync(file, "utf8").includes("--detach") ? commits.length : null;
 }
 
 /**
