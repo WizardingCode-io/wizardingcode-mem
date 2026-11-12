@@ -258,6 +258,15 @@ describe("the marketplace's manifests", () => {
     expect(() =>
       editManifest(claude.replaceAll('"wizardingcode-mem"', '"another"'), "claude", "9.0.0"),
     ).toThrow("the claude manifest has no wizardingcode-mem entry");
+    expect(() =>
+      editManifest(claude.replace(`"ref": "v${current}"`, '"ref": "main"'), "claude", "9.0.0"),
+    ).toThrow("the claude manifest's wizardingcode-mem entry's ref is not a version tag");
+    // The entry's own version, not another plugin's or the marketplace's, is the one read.
+    const noVersion = claude.replace(`"version": "${current}",`, "");
+    expect(noVersion).not.toBe(claude);
+    expect(() => editManifest(noVersion, "claude", "9.0.0")).toThrow(
+      "the claude manifest's wizardingcode-mem entry has no version",
+    );
   });
 
   test("when either manifest is at a higher version, neither is written", () => {
@@ -273,6 +282,16 @@ describe("the marketplace's manifests", () => {
     expect(both.claude).toContain('"ref": "v98.0.0"');
     expect(both.agents).toContain('"ref": "v98.0.0"');
     expect(editManifests(claude, agents, current).outcome).toBe("already-at");
+    // Either one: Claude's manifest higher stops the write to the agents' too.
+    const claudeHigher = claude
+      .replace(`"version": "${current}"`, '"version": "99.0.0"')
+      .replace(`"ref": "v${current}"`, '"ref": "v99.0.0"');
+    expect(editManifests(claudeHigher, agents, "98.0.0")).toEqual({
+      claude: claudeHigher,
+      agents,
+      outcome: "left-alone",
+      higher: "99.0.0",
+    });
   });
 
   interface Manifest {
@@ -585,7 +604,6 @@ describe("the marketplace token's state", () => {
 
   test("each failure has its sentence", () => {
     expect(decide({ token: false })).toEqual({
-      ok: false,
       level: "error",
       message: "the secret MARKETPLACE_TOKEN is not set in the environment release",
     });
@@ -595,14 +613,12 @@ describe("the marketplace token's state", () => {
     expect(decide({ status: 401 }).message).toBe("MARKETPLACE_TOKEN is invalid or expired (o/r)");
     for (const status of [403, 404]) {
       expect(decide({ status })).toEqual({
-        ok: false,
         level: "error",
         message: "MARKETPLACE_TOKEN is not granted to o/r, or the organisation has not approved it",
       });
     }
     expect(decide({ status: 500 }).message).toBe("o/r answered 500");
     expect(decide({ push: false })).toEqual({
-      ok: false,
       level: "error",
       message: "MARKETPLACE_TOKEN cannot push to o/r",
     });
@@ -610,7 +626,6 @@ describe("the marketplace token's state", () => {
 
   test("with no expiration header the expiry is unknown: a warning, and a pass", () => {
     const unknown = {
-      ok: true,
       level: "warning" as const,
       message:
         "MARKETPLACE_TOKEN: expiry unknown (no expiration header); check the date noted when it was created",
@@ -623,13 +638,11 @@ describe("the marketplace token's state", () => {
 
   test("thirty days or more is fine; fewer is a warning that still passes", () => {
     expect(decide({ expiration: "2027-11-12 10:00:00 UTC" })).toEqual({
-      ok: true,
       level: "ok",
       message: "MARKETPLACE_TOKEN expires on 2027-11-12 (365 days)",
     });
     expect(decide({ expiration: "2026-12-12T10:00:00Z" }).level).toBe("ok");
     expect(decide({ expiration: "2026-12-11T10:00:00Z" })).toEqual({
-      ok: true,
       level: "warning",
       message: "renew it: MARKETPLACE_TOKEN expires on 2026-12-11 (29 days)",
     });

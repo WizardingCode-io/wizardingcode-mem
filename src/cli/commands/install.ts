@@ -171,19 +171,18 @@ export function run(argv: string[]): number {
     });
     // Claude Desktop is no agent with hooks, but its chat should share the same memory.
     if (hasClaudeDesktop(claudeDesktopConfigPath())) found.push("claude-desktop");
-    const gemini = cleanUpGemini(rest);
     if (found.length === 0) {
+      const gemini = cleanUpGemini(rest);
       if (gemini.length > 0) process.stdout.write(`${gemini.join("\n")}\n`);
       process.stderr.write(
         "wizardingcode-mem install: No supported agent found on this machine. Name one: wizardingcode-mem install <agent>\n",
       );
       return 1;
     }
+    // Before anything of the install runs here: a newer staged binary does all of it.
     const binary = binaryOrHandOver(argv, rest);
-    if ("code" in binary) {
-      if (gemini.length > 0) process.stdout.write(`${gemini.join("\n")}\n`);
-      return binary.code;
-    }
+    if ("code" in binary) return binary.code;
+    const gemini = cleanUpGemini(rest);
     let code = 0;
     for (const each of found) code = Math.max(code, installOne(each, rest, binary.path, false));
     if (gemini.length > 0) process.stdout.write(`${gemini.join("\n")}\n`);
@@ -249,7 +248,10 @@ function binaryOrHandOver(argv: string[], rest: string[]): { path: string } | { 
       stderr: "inherit",
     });
     return { code: handed.exitCode ?? 1 };
-  } catch {
+  } catch (error) {
+    process.stderr.write(
+      `wizardingcode-mem install: could not run ${binary.path}: ${error instanceof Error ? error.message : String(error)}\n`,
+    );
     return { code: 1 };
   }
 }

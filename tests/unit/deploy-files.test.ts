@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { summaryLine } from "../../scripts/release/lib.ts";
 
 const ROOT = new URL("../../", import.meta.url).pathname;
 const read = (name: string) => readFileSync(join(ROOT, name), "utf8");
@@ -270,8 +272,32 @@ describe("the workflows", () => {
         TAP: expr("needs.tap.result"),
         MARKETPLACE: expr("needs.marketplace.result"),
       });
-      expect(first?.run).toContain("latest: not moved: $job did not succeed");
-      expect(first?.run).toContain("exit 1");
+      // The one line of the summary written in the workflow itself: the text is summaryLine's.
+      expect(first?.run).toContain(
+        `echo "${summaryLine("latest", { kind: "not-moved", job: "$job" })}"`,
+      );
+      // Run as the runner runs it: the first needed job that did not succeed is named, exit 1.
+      const step = (results: Record<string, string>) => {
+        const file = join(mkdtempSync(join(tmpdir(), "wizardingcode-mem-latest-")), "summary");
+        const out = Bun.spawnSync(["sh", "-e", "-c", first?.run ?? "exit 99"], {
+          env: { PATH: process.env.PATH ?? "", GITHUB_STEP_SUMMARY: file, ...results },
+          stdout: "pipe",
+          stderr: "pipe",
+        });
+        return { code: out.exitCode, summary: existsSync(file) ? readFileSync(file, "utf8") : "" };
+      };
+      expect(step({ NPM: "success", TAP: "failure", MARKETPLACE: "success" })).toEqual({
+        code: 1,
+        summary: "latest: not moved: tap did not succeed\n",
+      });
+      expect(step({ NPM: "success", TAP: "success", MARKETPLACE: "skipped" })).toEqual({
+        code: 1,
+        summary: "latest: not moved: marketplace did not succeed\n",
+      });
+      expect(step({ NPM: "success", TAP: "success", MARKETPLACE: "success" })).toEqual({
+        code: 0,
+        summary: "",
+      });
       const retag = latest?.steps.find((step) => step.run?.includes("imagetools create"));
       expect(retag?.if).toBe(expr("!inputs.dry_run"));
       expect(retag?.run).toContain(`-t ${IMAGE}:latest "${IMAGE}:$VERSION"`);

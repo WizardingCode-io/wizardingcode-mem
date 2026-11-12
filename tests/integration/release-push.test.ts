@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type Runner, run } from "../../scripts/release/lib.ts";
@@ -78,7 +78,6 @@ const options = (
   version: "1.0.0",
   dryRun: false,
   token: null,
-  target: "tap" as const,
   log: () => {},
   edit,
   ...more,
@@ -148,7 +147,7 @@ describe("the writer to another repository", () => {
   test("an edit that leaves the repository alone is passed through, and nothing is written", () => {
     const before = head(other);
     const outcome = commitAndPush(
-      options(() => ({ kind: "left-alone", higher: "9.9.9" }) as never, { target: "marketplace" }),
+      options(() => ({ kind: "left-alone", higher: "9.9.9" }) as never),
     );
     expect(outcome).toEqual({ kind: "left-alone", higher: "9.9.9" });
     expect(head(other)).toBe(before);
@@ -178,6 +177,31 @@ describe("the writer to another repository", () => {
       "written",
     );
     expect(() => commitAndPush(options(change, { tag: "v9.9.9" }))).toThrow("no longer names");
+    // The same refusal when the annotated tag exists and names another commit.
+    const before = head(other);
+    expect(() =>
+      commitAndPush(options(change, { tag: "v1.0.1", version: "1.0.1", sha: "0".repeat(40) })),
+    ).toThrow("v1.0.1 no longer names the commit that was judged");
+    expect(head(other)).toBe(before);
+  });
+
+  test("a push refused by a rule on the branch says so, and is not retried as a race", () => {
+    // The other repository refuses every push, the way a protected branch does.
+    const hook = join(other, "hooks", "pre-receive");
+    writeFileSync(
+      hook,
+      "#!/bin/sh\necho 'GH006: Protected branch update failed for refs/heads/main.' >&2\nexit 1\n",
+    );
+    chmodSync(hook, 0o755);
+    const calls: string[][] = [];
+    const runner: Runner = (cmd, more) => {
+      calls.push(cmd);
+      return run(cmd, more);
+    };
+    expect(() => commitAndPush(options(change, { runner }))).toThrow(
+      `the push to ${other} was refused by a rule on its branch: it must accept a direct push from the token's owner`,
+    );
+    expect(calls.filter((cmd) => cmd[1] === "pull")).toHaveLength(0);
   });
 
   test("the token travels in the child's environment only: never in an argument or a URL", () => {

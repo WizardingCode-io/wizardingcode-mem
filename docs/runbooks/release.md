@@ -7,7 +7,7 @@ For the author. A pushed tag `v<version>` builds the release and carries it to e
 1. Bring the version to `<version>` in `package.json`, `npm/package.json` and `.env.example`, run `bun run plugins`, and merge that to `main` by a pull request.
 2. Tag the merge commit and push the tag: `git tag -a v<version> <sha> -m "wizardingcode-mem <version>"`, then `git push origin v<version>`.
 3. `.github/workflows/release.yml` checks, builds five binaries, signs the macOS ones, pushes the image with the version as its tag, creates the GitHub release with `checksums.txt`, and starts `.github/workflows/distribute.yml` from `main` with the tag.
-4. `distribute.yml` publishes `wizardingcode-mem` and `wizardingcode-mem-opencode` to npm, writes the formula to `WizardingCode-io/homebrew-wizardingcode`, writes the plugin's entry to `WizardingCode-io/wizardingcode-plugins`, and then tags the image `latest`. Read its summary.
+4. `distribute.yml` publishes `wizardingcode-mem` and `wizardingcode-mem-opencode` to npm, writes the formula to `WizardingCode-io/homebrew-wizardingcode`, writes the plugin's entry to `WizardingCode-io/wizardingcode-plugins`, and then tags the image `latest`. It is a run of its own: `release.yml` turns green as soon as that run is started, whatever becomes of it. Open the run named `distribute v<version>` under Actions and read its summary; a release is distributed when that run is green, not when `release.yml` is.
 
 A tag with a hyphen (`v0.9.0-rc.1`) is a pre-release: the two npm packages go out under the dist-tag `next`, and the tap, the marketplace and `latest` are left as they are.
 
@@ -62,6 +62,7 @@ Wait for a run to end before starting another. The workflow runs one at a time a
 - **npm fails with the sentence about the trusted publisher.** Step 5 of the setup is missing for that package, or names another workflow or environment.
 - **`MARKETPLACE_TOKEN is not granted to <repository>, or the organisation has not approved it`.** The token does not cover that repository, or the organisation requires approval for fine-grained tokens and has not given it.
 - **`the push to <repository> was refused: MARKETPLACE_TOKEN may lack contents write there`.** The token reads but cannot write: give it "Contents: read and write", or lift a rule on that repository's default branch that stops a direct push.
+- **`the push to <repository> was refused by a rule on its branch`.** That repository's default branch does not take a direct push from the token's owner (step 4 of the setup): lift the rule for that person, then start the workflow again.
 - **`<tag> no longer names the commit that was judged`.** The tag was moved while the run was going. Find out who moved it and why before anything else.
 - **The image's retag fails.** The version's image is missing from `ghcr.io/wizardingcode-io/wizardingcode-mem` (look at `release.yml`'s `docker` job), or the package's settings do not let this repository's workflows write to it.
 
@@ -71,9 +72,13 @@ A release that should not have gone out is fixed by a higher version. npm versio
 
 A wrong write to the tap or the marketplace is reverted with a commit in that repository. Do not start `distribute.yml` again for that tag afterwards: it would write it again.
 
+The image's `latest` is moved back by hand, since the workflow only ever distributes the highest release: `docker buildx imagetools create -t ghcr.io/wizardingcode-io/wizardingcode-mem:latest ghcr.io/wizardingcode-io/wizardingcode-mem:<previous version>`, logged in to `ghcr.io` with an account that can write the package.
+
 ## A person's way back
 
 On one machine, to put an older binary in place of a newer one: run the older binary as `wizardingcode-mem install --force`. With the curl script, pass `--force` among its arguments. Without it, an older binary says that a newer one is in place and hands the install over to it.
+
+Two things limit it. An agent's plugin that is still at the newer version puts the newer binary back at its next session start, so the plugin has to go back too (or be removed) for the older binary to stay. And an older binary refuses a store the newer one has already migrated (`SchemaTooNewError`): going back across a schema change also means restoring the store from a backup made before it (`wizardingcode-mem backup --list`).
 
 ## Releasing a hold
 

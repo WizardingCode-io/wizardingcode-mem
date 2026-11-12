@@ -232,51 +232,42 @@ export function renderFormula(
 
 const PLUGIN = "wizardingcode-mem";
 
+/**
+ * Walks a JSON text's structure: `visit` gets each brace and each string's opening quote, with
+ * its index, and never a character inside a string. It stops when `visit` returns true.
+ */
+function walkStructure(
+  text: string,
+  visit: (char: string, index: number) => boolean | undefined,
+): void {
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i] as string;
+    if (char !== '"' && char !== "{" && char !== "}") continue;
+    if (visit(char, i) === true) return;
+    if (char !== '"') continue;
+    // Skip the string: an escaped character never closes it.
+    for (i++; i < text.length && text[i] !== '"'; i++) if (text[i] === "\\") i++;
+  }
+}
+
 /** Where the plugin's entry lies in a manifest's text: from its opening brace to the matching one. */
 function entrySpan(text: string): { start: number; end: number } | null {
   const name = new RegExp(`"name"\\s*:\\s*"${PLUGIN}"`).exec(text);
   if (name === null) return null;
-  // Braces inside strings do not count; the manifest holds none unescaped that would matter,
-  // but descriptions are free text.
-  const depthAt = (index: number, from: number, initial: number): number => {
-    let depth = initial;
-    let inString = false;
-    for (let i = from; i < index; i++) {
-      const char = text[i];
-      if (inString) {
-        if (char === "\\") i++;
-        else if (char === '"') inString = false;
-      } else if (char === '"') inString = true;
-      else if (char === "{") depth++;
-      else if (char === "}") depth--;
+  const open: number[] = [];
+  let span: { start: number; end: number } | null = null;
+  let entry = -1;
+  walkStructure(text, (char, index) => {
+    // The name is a key of the innermost object open where it stands.
+    if (entry === -1 && index >= name.index) entry = open.at(-1) ?? -1;
+    if (char === "{") open.push(index);
+    else if (char === "}" && open.pop() === entry && entry !== -1) {
+      span = { start: entry, end: index + 1 };
+      return true;
     }
-    return depth;
-  };
-  // The entry's opening brace: the last "{" before the name that is still open at it.
-  const depthAtName = depthAt(name.index, 0, 0);
-  let start = -1;
-  for (let i = name.index - 1; i >= 0; i--) {
-    if (text[i] === "{" && depthAt(i, 0, 0) === depthAtName - 1) {
-      start = i;
-      break;
-    }
-  }
-  if (start === -1) return null;
-  let depth = 0;
-  let inString = false;
-  for (let i = start; i < text.length; i++) {
-    const char = text[i];
-    if (inString) {
-      if (char === "\\") i++;
-      else if (char === '"') inString = false;
-    } else if (char === '"') inString = true;
-    else if (char === "{") depth++;
-    else if (char === "}") {
-      depth--;
-      if (depth === 0) return { start, end: i + 1 };
-    }
-  }
-  return null;
+    return undefined;
+  });
+  return span as { start: number; end: number } | null;
 }
 
 /** The value of a key at the top level of an entry's text: where it is, and what it holds. */
@@ -284,29 +275,24 @@ function topLevelValue(
   entry: string,
   key: string,
 ): { start: number; end: number; value: string } | null {
+  const pattern = new RegExp(`^"${key}"\\s*:\\s*"([^"]*)"`);
   let depth = 0;
-  let inString = false;
-  for (let i = 0; i < entry.length; i++) {
-    const char = entry[i];
-    if (inString) {
-      if (char === "\\") i++;
-      else if (char === '"') inString = false;
-      continue;
-    }
+  let found: { start: number; end: number; value: string } | null = null;
+  walkStructure(entry, (char, index) => {
     if (char === "{") depth++;
     else if (char === "}") depth--;
-    else if (char === '"') {
-      const match =
-        depth === 1 ? new RegExp(`^"${key}"\\s*:\\s*"([^"]*)"`).exec(entry.slice(i)) : null;
+    else if (depth === 1) {
+      const match = pattern.exec(entry.slice(index));
       if (match !== null) {
         const value = match[1] as string;
-        const end = i + match[0].length - 1;
-        return { start: end - value.length, end, value };
+        const end = index + match[0].length - 1;
+        found = { start: end - value.length, end, value };
+        return true;
       }
-      inString = true;
     }
-  }
-  return null;
+    return undefined;
+  });
+  return found as { start: number; end: number; value: string } | null;
 }
 
 export interface ManifestEdit {
@@ -404,8 +390,9 @@ export interface PlanFacts {
   environment: Environment;
 }
 
-const TAG = /^v\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/;
-export const isVersionTag = (tag: string): boolean => TAG.test(tag);
+/** A release's tag: `v` and a version. */
+export const isVersionTag = (tag: string): boolean =>
+  tag.startsWith("v") && isVersion(tag.slice(1));
 const isPrerelease = (tag: string): boolean => tag.includes("-");
 
 /** Facts with which every refusal passes: the command fills them in one by one, in the refusals' order. */
@@ -506,7 +493,7 @@ export function parseContract(source: string): { contract: number; accepted: num
 export function previousPlain(tag: string, tags: string[]): string | null {
   const below = tags
     .filter((other) => isVersionTag(other) && !isPrerelease(other))
-    .filter((other) => olderThan(other.slice(1), tag.slice(1)) && other !== tag)
+    .filter((other) => olderThan(other.slice(1), tag.slice(1)))
     .sort((a, b) => Bun.semver.order(b.slice(1), a.slice(1)));
   return below[0] ?? null;
 }
@@ -609,6 +596,7 @@ function expiryOf(header: string | null): Date | null {
 /**
  * The token's state from one read of a repository it must write: a failure with its sentence,
  * or a pass, with a warning when it expires within thirty days or says no expiry at all.
+ * Only the level "error" fails the step.
  */
 export function decideToken(input: {
   token: boolean;
@@ -620,8 +608,8 @@ export function decideToken(input: {
   expiration: string | null;
   now: Date;
   repo: string;
-}): { ok: boolean; level: "ok" | "warning" | "error"; message: string } {
-  const fail = (message: string) => ({ ok: false, level: "error" as const, message });
+}): { level: "ok" | "warning" | "error"; message: string } {
+  const fail = (message: string) => ({ level: "error" as const, message });
   const { repo } = input;
   if (!input.token)
     return fail("the secret MARKETPLACE_TOKEN is not set in the environment release");
@@ -636,13 +624,12 @@ export function decideToken(input: {
   if (input.push === false) return fail(`MARKETPLACE_TOKEN cannot push to ${repo}`);
   const expiry = expiryOf(input.expiration);
   if (expiry === null)
-    return { ok: true, level: "warning", message: summaryLine("token", { kind: "token-unknown" }) };
+    return { level: "warning", message: summaryLine("token", { kind: "token-unknown" }) };
   const days = Math.floor((expiry.getTime() - input.now.getTime()) / DAY_MS);
   const date = expiry.toISOString().slice(0, 10);
   return days >= RENEW_UNDER_DAYS
-    ? { ok: true, level: "ok", message: summaryLine("token", { kind: "token-ok", date, days }) }
+    ? { level: "ok", message: summaryLine("token", { kind: "token-ok", date, days }) }
     : {
-        ok: true,
         level: "warning",
         message: summaryLine("token", { kind: "token-renew", date, days }),
       };

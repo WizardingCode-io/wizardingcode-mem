@@ -67,7 +67,6 @@ export interface PushOptions {
   version: string;
   dryRun: boolean;
   token: string | null;
-  target: "tap" | "marketplace";
   /** Changes the clone; an outcome returned is the answer as it is, with nothing written. */
   edit: (dir: string) => Outcome | null;
   log: (line: string) => void;
@@ -124,6 +123,10 @@ export function commitAndPush(options: PushOptions): Outcome {
     must(["commit", "--quiet", "-m", `wizardingcode-mem ${version}`]);
     const first = git(["push", "--quiet", "origin", "HEAD"], authed);
     if (first.code !== 0) {
+      if (/GH006|protected branch/i.test(first.stderr))
+        throw new ReleaseError(
+          `the push to ${remote} was refused by a rule on its branch: it must accept a direct push from the token's owner`,
+        );
       if (/\b403\b|[Pp]ermission/.test(first.stderr))
         throw new ReleaseError(
           `the push to ${remote} was refused: MARKETPLACE_TOKEN may lack contents write there`,
@@ -209,7 +212,6 @@ if (import.meta.main) {
       version,
       dryRun: process.env.DRY_RUN === "true",
       token: process.env.MARKETPLACE_TOKEN || null,
-      target,
       edit: target === "tap" ? editTap(version, need("CHECKSUMS")) : editMarketplace(version),
       log: (line) => process.stdout.write(line.endsWith("\n") ? line : `${line}\n`),
     });

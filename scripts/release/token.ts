@@ -51,7 +51,7 @@ command("token", () => {
     now: new Date(),
     repo,
   });
-  if (!state.ok) throw new ReleaseError(state.message);
+  if (state.level === "error") throw new ReleaseError(state.message);
   if (state.level === "warning") process.stdout.write(`::warning::${state.message}\n`);
   summary(state.message);
 });
