@@ -7,6 +7,7 @@
 #
 # Arguments are passed on to `wizardingcode-mem install` (e.g. `sh install.sh claude-code --yes`);
 # `--download-only` stops after placing the binary. WIZARDINGCODE_MEM_BIN_DIR says where.
+# A newer binary already in place is left there, unless `--force` is among the arguments.
 set -eu
 
 download_only=0
@@ -14,6 +15,10 @@ if [ "${1:-}" = "--download-only" ]; then
   download_only=1
   shift
 fi
+force=0
+for arg in "$@"; do
+  if [ "$arg" = "--force" ]; then force=1; fi
+done
 
 repo="WizardingCode-io/wizardingcode-mem"
 version="${WIZARDINGCODE_MEM_VERSION:-latest}"
@@ -85,9 +90,34 @@ if [ "$actual" != "$expected" ]; then
   exit 1
 fi
 chmod 755 "$tmp"
-mv -f "$tmp" "$bin/wizardingcode-mem"
-trap - EXIT
-echo "wizardingcode-mem: installed $("$bin/wizardingcode-mem" --version) at $bin/wizardingcode-mem"
+
+# The version a binary answers: the first line of `--version`, when it is a version.
+version_of() {
+  answer="$("$1" --version 2> /dev/null | head -n 1 || true)"
+  if printf '%s\n' "$answer" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; then
+    printf '%s\n' "$answer"
+  fi
+}
+
+new="$(version_of "$tmp")"
+if [ -z "$new" ]; then
+  echo "wizardingcode-mem: the downloaded binary does not run" >&2
+  exit 1
+fi
+staged=""
+if [ -x "$bin/wizardingcode-mem" ]; then
+  staged="$(version_of "$bin/wizardingcode-mem")"
+fi
+# The binary in place only moves forward: a plugin or a newer install may have put it there.
+if [ "$force" = 0 ] && [ -n "$staged" ] && older "$new" "$staged"; then
+  rm -f "$tmp"
+  trap - EXIT
+  echo "wizardingcode-mem: $staged is already in $bin/wizardingcode-mem; the older $new was not put in its place (--force replaces it)"
+else
+  mv -f "$tmp" "$bin/wizardingcode-mem"
+  trap - EXIT
+  echo "wizardingcode-mem: installed $new at $bin/wizardingcode-mem"
+fi
 
 if [ "$download_only" = 1 ]; then
   exit 0

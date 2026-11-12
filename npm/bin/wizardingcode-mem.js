@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// wizardingcode-mem for npm: fetches the binary of this package's version on first use (from
-// the GitHub release, checksum verified), keeps it in ~/.wizardingcode/mem/bin, and runs it.
+// wizardingcode-mem for npm: fetches the binary of this package's version when none is in place
+// or the one in place is older (from the GitHub release, checksum verified), keeps it in
+// ~/.wizardingcode/mem/bin, and runs it.
 // Nothing runs at install time; `npx wizardingcode-mem install` is the whole setup.
 const { createHash } = require("node:crypto");
 const fs = require("node:fs");
@@ -91,13 +92,20 @@ async function download() {
 }
 
 async function main() {
-  if (installedVersion() !== version) {
+  // The staged binary only moves forward: a newer one, put there by a plugin or a newer
+  // package, is run as it is.
+  const staged = installedVersion();
+  if (older(staged, version)) {
     try {
       await download();
     } catch (error) {
       console.error(`wizardingcode-mem: ${error instanceof Error ? error.message : String(error)}`);
       process.exit(1);
     }
+  } else if (staged !== version) {
+    process.stderr.write(
+      `wizardingcode-mem: running ${staged} already in ${binary}; this package is ${version}\n`,
+    );
   }
   const run = spawnSync(binary, process.argv.slice(2), { stdio: "inherit" });
   if (run.error) {
