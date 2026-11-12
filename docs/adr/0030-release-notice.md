@@ -1,6 +1,6 @@
-# ADR 0030: the client is told of a release, and does not replace itself
+# ADR 0030 — The client is told of a release, and does not replace itself
 
-Status: draft (item `2026-11-12-006`, 2026-11-12). It narrows ADR 0029's piece 2, "the client that learns of a release and follows it": the client learns; it does not follow by itself.
+Date: 2026-11-12 · Status: **draft**. Work item 2026-11-12-006, piece 2 of 3 of 2026-11-11-004 ("updated everywhere on release"). It narrows [ADR 0029](0029-release-distribution.md)'s piece 2, "the client that learns of a release and follows it": the client learns; it does not follow by itself.
 
 ## Context
 

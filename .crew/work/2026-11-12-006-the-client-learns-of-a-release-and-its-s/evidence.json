@@ -1261,6 +1261,46 @@
       "tokensFrom": "transcript",
       "model": "claude-opus-5-5",
       "file": "review/ruling.json"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "a7be3682af2831861",
+      "at": "2026-11-12T19:31:04.705Z",
+      "tokens": 289281,
+      "tokensFrom": "transcript",
+      "model": "claude-fable-5-2",
+      "file": "conclave/lead-devops.delivery-reply.md",
+      "team": "devops"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "ac5d0eec6d035090c",
+      "at": "2026-11-12T19:31:16.120Z",
+      "tokens": 270319,
+      "tokensFrom": "transcript",
+      "model": "claude-fable-5-2",
+      "file": "conclave/lead-security.delivery-reply.md",
+      "team": "security"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "a84e4f60c226f27f7",
+      "at": "2026-11-12T19:31:22.750Z",
+      "tokens": 343550,
+      "tokensFrom": "transcript",
+      "model": "claude-fable-5-2",
+      "file": "conclave/lead-qa.delivery-reply.md",
+      "team": "qa"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "a969f1e5e0bc3630a",
+      "at": "2026-11-12T19:31:27.493Z",
+      "tokens": 317742,
+      "tokensFrom": "transcript",
+      "model": "claude-fable-5-2",
+      "file": "conclave/lead-architects.delivery-reply.md",
+      "team": "architects"
     }
   ],
   "specReview": {

@@ -11,7 +11,7 @@
     "infra",
     "public-api"
   ],
-  "phase": "gate",
+  "phase": "learn",
   "awaiting": null,
   "criteria": [
     {
@@ -86,7 +86,7 @@
   "skips": [],
   "baseCommit": "7d096f6a80d7edc81fb74dfd3dc9eba1f9448f96",
   "createdAt": "2026-11-12T17:55:06.868Z",
-  "updatedAt": "2026-11-12T19:29:55.844Z",
+  "updatedAt": "2026-11-12T19:31:41.227Z",
   "specReview": true,
   "kind": "feature",
   "kindFrom": "work_type feature",
@@ -197,7 +197,9 @@
     "plan": "2026-11-12T18:18:08.461Z",
     "spec-review": "2026-11-12T18:19:42.366Z",
     "build": "2026-11-12T18:50:16.162Z",
-    "gate": "2026-11-12T19:02:15.608Z"
+    "gate": "2026-11-12T19:02:15.608Z",
+    "deliver": "2026-11-12T19:31:40.903Z",
+    "learn": "2026-11-12T19:31:41.035Z"
   },
   "decisions": [
     {
@@ -369,6 +371,50 @@
       "hash": "sha256:83bc8d34ce4739fc7d5b5180669d1888087d208cdf157dc4dc12e2d0a9c541c7",
       "fileHash": "sha256:b4e597e632c384e910588f443730bd70755673e97874fa20aefb27ee51ede193",
       "at": "2026-11-12T18:18:07.820Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-qa",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-qa.delivery-reply.md",
+      "hash": "sha256:15f04ea811bc559ec5e2d2ee47383a6de821275cf2d6882bc48334c34920e04e",
+      "fileHash": "sha256:eb30f710d72e4025a8f4cbaa58ece2d57537b4fe45d3dc684a3b63af3597497a",
+      "at": "2026-11-12T19:31:40.550Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-security",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-security.delivery-reply.md",
+      "hash": "sha256:15f04ea811bc559ec5e2d2ee47383a6de821275cf2d6882bc48334c34920e04e",
+      "fileHash": "sha256:b37a5ddd996d32266d91494ff579ecc8b471703222796fdeb23dec2f0c5dd577",
+      "at": "2026-11-12T19:31:40.609Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-architects",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-architects.delivery-reply.md",
+      "hash": "sha256:15f04ea811bc559ec5e2d2ee47383a6de821275cf2d6882bc48334c34920e04e",
+      "fileHash": "sha256:e2e46a0121cef7b5a6a09361ddca657af6f4f5505894f737be70be9a12d3d6e5",
+      "at": "2026-11-12T19:31:40.669Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-devops",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-devops.delivery-reply.md",
+      "hash": "sha256:15f04ea811bc559ec5e2d2ee47383a6de821275cf2d6882bc48334c34920e04e",
+      "fileHash": "sha256:3a6c86764d3322f70a0272c9fbfdf63bd22b593e88a297cf72ccd6238f7464b2",
+      "at": "2026-11-12T19:31:40.729Z"
     }
   ],
   "rounds": {
@@ -564,5 +610,12 @@
       "reason": "judgement gate code-quality not run on the current code",
       "kind": "role"
     }
-  ]
+  ],
+  "learned": {
+    "at": "2026-11-12T19:31:41.227Z",
+    "entries": [
+      "K-394"
+    ],
+    "confirmed": []
+  }
 }
