@@ -1,5 +1,5 @@
 {
-  "fingerprint": "sha256:5b6bfb8fdbee3c359e1461dd0ed0b68bd522d96da5a2f9b2621a2bcf71e1d7bc",
+  "fingerprint": "sha256:043c68a3e16bd8be5f8062f13506595c1109997a37a7463c32badd5403d679b7",
   "tdd": [
     {
       "criterion": "AC-10",
@@ -343,14 +343,14 @@
     {
       "criterion": "AC-32",
       "red": {
-        "command": "./node_modules/.bin/bun test tests/unit/update-report.test.ts tests/unit/update-reconcile.test.ts",
+        "command": "./node_modules/.bin/bun test tests/unit/update-report.test.ts -t stagedFacts",
         "exit": 1,
-        "at": "2026-11-12T19:10:58.000Z",
-        "durationMs": 19,
-        "log": "logs/tdd-AC-32-red-1794510657980.txt",
-        "tail": "(fail) who may run the staged file > a folder whose owner cannot be read [0.03ms]\n160 |     [\"another user\", \"linux\", 502, 501, false],\n161 |     [\"no user id on a platform that has them\", \"linux\", null, 501, false],\n162 |     [\"a folder whose owner cannot be read\", \"darwin\", 501, null, false],\n163 |     [\"Windows, which has no user ids\", \"win32\", null, null, true],\n164 |   ])(\"%s\", (_what, platform, uid, binOwner, expected) => {\n165 |     expect(mayRunStaged({ platform, uid, binOwner })).toBe(expected);\n                 ^\nReferenceError: mayRunStaged is not defined\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/tests/unit/update-report.test.ts:165:12)\n(fail) who may run the staged file > Windows, which has no user ids [0.02ms]\n171 |       exists: true,\n172 |       version: null,\n173 |       isSelf: false,\n174 |       refused: true,\n175 |     };\n176 |     expect(agentsLine(\"0.9.0\", refused)).toBe(\n                                               ^\nerror: expect(received).toBe(expected)\n\nExpected: \"the staged binary at /data/bin/wizardingcode-mem was not run: this command runs as root, or the folder belongs to another user\"\nReceived: \"agents run an unreadable binary from /data/bin/wizardingcode-mem; this copy is 0.9.0: wizardingcode-mem install replaces it\"\n\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/tests/unit/update-report.test.ts:176:42)\n(fail) who may run the staged file > a staged file that was not run is said so, never called unreadable [0.07ms]\n180 | });\n181 | \n182 | describe(\"a report that cannot be built\", () => {\n183 |   test(\"is said with its reason, and a good one is passed through\", () => {\n184 |     expect(\n185 |       reportOrReason(() => {\n            ^\nReferenceError: reportOrReason is not defined\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/tests/unit/update-report.test.ts:185:7)\n(fail) a report that cannot be built > is said with its reason, and a good one is passed through [0.04ms]\n\n 25 pass\n 9 fail\n 66 expect() calls\nRan 34 tests across 2 files. [10.00ms]",
+        "at": "2026-11-12T19:23:31.802Z",
+        "durationMs": 546,
+        "log": "logs/tdd-AC-32-red-1794511411256.txt",
+        "tail": "    \"path\": \"/private/var/folders/n3/_83g89qj03g8gdw9f8hzz4s80000gn/T/wizardingcode-mem-facts-rQN11W/bin/wizardingcode-mem\",\n-   \"refused\": true,\n-   \"version\": null,\n+   \"refused\": false,\n+   \"version\": \"1.2.3\",\n  }\n\n- Expected  - 2\n+ Received  + 2\n\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/tests/unit/update-report.test.ts:254:67)\n(fail) stagedFacts > root does not run it, and the facts say it was refused [175.19ms]\n249 | \n250 |   test.each([\n251 |     [\"root\", 0],\n252 |     [\"another user\", me + 4242],\n253 |   ])(\"%s does not run it, and the facts say it was refused\", (_who, uid) => {\n254 |     expect(stagedFacts(dir, \"0.9.0\", { platform: \"linux\", uid })).toEqual({\n                                                                        ^\nerror: expect(received).toEqual(expected)\n\n@@ -4,4 +4,4 @@\n    \"path\": \"/private/var/folders/n3/_83g89qj03g8gdw9f8hzz4s80000gn/T/wizardingcode-mem-facts-uHIyvV/bin/wizardingcode-mem\",\n-   \"refused\": true,\n-   \"version\": null,\n+   \"refused\": false,\n+   \"version\": \"1.2.3\",\n  }\n\n- Expected  - 2\n+ Received  + 2\n\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/tests/unit/update-report.test.ts:254:67)\n(fail) stagedFacts > another user does not run it, and the facts say it was refused [170.51ms]\n\n 2 pass\n 20 filtered out\n 2 fail\n 5 expect() calls\nRan 4 tests across 1 file. [538.00ms]",
         "timedOut": false,
-        "passed": 25,
+        "passed": 2,
         "changedTests": [
           "tests/e2e/install-forward.test.ts",
           "tests/e2e/update-reconcile.test.ts",
@@ -367,15 +367,53 @@
         ]
       },
       "green": {
-        "command": "./node_modules/.bin/bun test tests/unit/update-report.test.ts tests/unit/update-reconcile.test.ts",
+        "command": "./node_modules/.bin/bun test tests/unit/update-report.test.ts tests/unit/update-reconcile.test.ts tests/integration/update-command.test.ts",
         "exit": 0,
-        "at": "2026-11-12T19:12:27.187Z",
-        "durationMs": 17,
-        "log": "logs/tdd-AC-32-green-1794510747170.txt",
-        "tail": "bun test v1.4.2 (744846f84)\n\n 35 pass\n 0 fail\n 76 expect() calls\nRan 35 tests across 2 files. [9.00ms]",
+        "at": "2026-11-12T19:24:23.333Z",
+        "durationMs": 540,
+        "log": "logs/tdd-AC-32-green-1794511462793.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\n 59 pass\n 0 fail\n 146 expect() calls\nRan 59 tests across 3 files. [530.00ms]",
         "timedOut": false,
-        "passed": 35
-      }
+        "passed": 59
+      },
+      "reds": [
+        {
+          "command": "./node_modules/.bin/bun test tests/unit/update-report.test.ts tests/unit/update-reconcile.test.ts",
+          "exit": 1,
+          "at": "2026-11-12T19:10:58.000Z",
+          "durationMs": 19,
+          "log": "logs/tdd-AC-32-red-1794510657980.txt",
+          "tail": "(fail) who may run the staged file > a folder whose owner cannot be read [0.03ms]\n160 |     [\"another user\", \"linux\", 502, 501, false],\n161 |     [\"no user id on a platform that has them\", \"linux\", null, 501, false],\n162 |     [\"a folder whose owner cannot be read\", \"darwin\", 501, null, false],\n163 |     [\"Windows, which has no user ids\", \"win32\", null, null, true],\n164 |   ])(\"%s\", (_what, platform, uid, binOwner, expected) => {\n165 |     expect(mayRunStaged({ platform, uid, binOwner })).toBe(expected);\n                 ^\nReferenceError: mayRunStaged is not defined\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/tests/unit/update-report.test.ts:165:12)\n(fail) who may run the staged file > Windows, which has no user ids [0.02ms]\n171 |       exists: true,\n172 |       version: null,\n173 |       isSelf: false,\n174 |       refused: true,\n175 |     };\n176 |     expect(agentsLine(\"0.9.0\", refused)).toBe(\n                                               ^\nerror: expect(received).toBe(expected)\n\nExpected: \"the staged binary at /data/bin/wizardingcode-mem was not run: this command runs as root, or the folder belongs to another user\"\nReceived: \"agents run an unreadable binary from /data/bin/wizardingcode-mem; this copy is 0.9.0: wizardingcode-mem install replaces it\"\n\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/tests/unit/update-report.test.ts:176:42)\n(fail) who may run the staged file > a staged file that was not run is said so, never called unreadable [0.07ms]\n180 | });\n181 | \n182 | describe(\"a report that cannot be built\", () => {\n183 |   test(\"is said with its reason, and a good one is passed through\", () => {\n184 |     expect(\n185 |       reportOrReason(() => {\n            ^\nReferenceError: reportOrReason is not defined\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/tests/unit/update-report.test.ts:185:7)\n(fail) a report that cannot be built > is said with its reason, and a good one is passed through [0.04ms]\n\n 25 pass\n 9 fail\n 66 expect() calls\nRan 34 tests across 2 files. [10.00ms]",
+          "timedOut": false,
+          "passed": 25,
+          "changedTests": [
+            "tests/e2e/install-forward.test.ts",
+            "tests/e2e/update-reconcile.test.ts",
+            "tests/integration/doctor.test.ts",
+            "tests/integration/update-command.test.ts",
+            "tests/preload.ts",
+            "tests/unit/release-docs.test.ts",
+            "tests/unit/settings.test.ts",
+            "tests/unit/update-boundary.test.ts",
+            "tests/unit/update-check.test.ts",
+            "tests/unit/update-docs.test.ts",
+            "tests/unit/update-reconcile.test.ts",
+            "tests/unit/update-report.test.ts"
+          ]
+        }
+      ],
+      "greens": [
+        {
+          "command": "./node_modules/.bin/bun test tests/unit/update-report.test.ts tests/unit/update-reconcile.test.ts",
+          "exit": 0,
+          "at": "2026-11-12T19:12:27.187Z",
+          "durationMs": 17,
+          "log": "logs/tdd-AC-32-green-1794510747170.txt",
+          "tail": "bun test v1.4.2 (744846f84)\n\n 35 pass\n 0 fail\n 76 expect() calls\nRan 35 tests across 2 files. [9.00ms]",
+          "timedOut": false,
+          "passed": 35
+        }
+      ]
     }
   ],
   "runs": [
@@ -387,11 +425,11 @@
       "confirmed": true,
       "exit": 0,
       "status": "pass",
-      "durationMs": 42,
-      "at": "2026-11-12T19:02:45.743Z",
+      "durationMs": 62,
+      "at": "2026-11-12T19:17:09.780Z",
       "log": null,
       "tail": "no secrets found in the change",
-      "fingerprint": "sha256:5b6bfb8fdbee3c359e1461dd0ed0b68bd522d96da5a2f9b2621a2bcf71e1d7bc"
+      "fingerprint": "sha256:043c68a3e16bd8be5f8062f13506595c1109997a37a7463c32badd5403d679b7"
     },
     {
       "gate": "prose",
@@ -401,11 +439,11 @@
       "confirmed": true,
       "exit": 0,
       "status": "pass",
-      "durationMs": 42,
-      "at": "2026-11-12T19:02:45.785Z",
+      "durationMs": 50,
+      "at": "2026-11-12T19:17:09.842Z",
       "log": null,
       "tail": "no chatbot artefacts in the change",
-      "fingerprint": "sha256:5b6bfb8fdbee3c359e1461dd0ed0b68bd522d96da5a2f9b2621a2bcf71e1d7bc"
+      "fingerprint": "sha256:043c68a3e16bd8be5f8062f13506595c1109997a37a7463c32badd5403d679b7"
     },
     {
       "gate": "build",
@@ -415,11 +453,11 @@
       "confirmed": true,
       "exit": 0,
       "status": "pass",
-      "durationMs": 2536,
-      "at": "2026-11-12T19:02:45.827Z",
-      "log": "logs/build-_-1794510165827.txt",
-      "tail": "$ bun run ui:build && bun scripts/build.ts\n$ vite build --config ui/vite.config.ts\nvite v8.3.3 building client environment for production...\ntransforming...\n\n/assets/unbounded-variable.woff2 referenced in /assets/unbounded-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/instrument-sans-variable.woff2 referenced in /assets/instrument-sans-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/jetbrains-mono-variable.woff2 referenced in /assets/jetbrains-mono-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n✓ 851 modules transformed.\nrendering chunks...\n[plugin vite:singlefile] \n\n[plugin vite:singlefile] Inlining: index-BdJDDbwQ.js\n[plugin vite:singlefile] Inlining: style-CMyPmnXo.css\nsrc/ui/dist/index.html  1,228.95 kB\n\n✓ built in 725ms\n✓ wizardingcode-mem-darwin-arm64  68.0 MB\n✓ wizardingcode-mem-darwin-x64  74.7 MB\n✓ wizardingcode-mem-linux-x64  86.1 MB\n✓ wizardingcode-mem-linux-arm64  86.1 MB\n✓ wizardingcode-mem-windows-x64.exe  90.7 MB",
-      "fingerprint": "sha256:5b6bfb8fdbee3c359e1461dd0ed0b68bd522d96da5a2f9b2621a2bcf71e1d7bc"
+      "durationMs": 2565,
+      "at": "2026-11-12T19:17:09.892Z",
+      "log": "logs/build-_-1794511029893.txt",
+      "tail": "$ bun run ui:build && bun scripts/build.ts\n$ vite build --config ui/vite.config.ts\nvite v8.3.3 building client environment for production...\ntransforming...\n\n/assets/unbounded-variable.woff2 referenced in /assets/unbounded-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/instrument-sans-variable.woff2 referenced in /assets/instrument-sans-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/jetbrains-mono-variable.woff2 referenced in /assets/jetbrains-mono-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n✓ 851 modules transformed.\nrendering chunks...\n[plugin vite:singlefile] \n\n[plugin vite:singlefile] Inlining: index-BdJDDbwQ.js\n[plugin vite:singlefile] Inlining: style-CMyPmnXo.css\nsrc/ui/dist/index.html  1,228.95 kB\n\n✓ built in 756ms\n✓ wizardingcode-mem-darwin-arm64  68.0 MB\n✓ wizardingcode-mem-darwin-x64  74.7 MB\n✓ wizardingcode-mem-linux-x64  86.1 MB\n✓ wizardingcode-mem-linux-arm64  86.1 MB\n✓ wizardingcode-mem-windows-x64.exe  90.7 MB",
+      "fingerprint": "sha256:043c68a3e16bd8be5f8062f13506595c1109997a37a7463c32badd5403d679b7"
     },
     {
       "gate": "test",
@@ -429,11 +467,11 @@
       "confirmed": true,
       "exit": 0,
       "status": "pass",
-      "durationMs": 216752,
-      "at": "2026-11-12T19:02:48.393Z",
-      "log": "logs/test-_-1794510168393.txt",
-      "tail": "heuristic precision 100%  recall 100%  kind 83%\ntypesafe  precision 85%  recall 94%  kind 88%  wrongly kept: en-none-obvious-from-code, en-none-general-knowledge, pt-none-your-turn  missed: en-change-json-flag\n\ntests/golden/search.test.ts:\ntop 5: 35/44 → 39/44; Portuguese of English: 1/8 → 4/8\nsemantic-only results for unrelated queries: 29/43\n\ntests/golden/retrieval.test.ts:\nrecall@5: 19/24 — missed: redact-first, pt-lingua, pt-cursor, ts-extension, hook-runs\nprecision: 19/21 notes given were the expected ones\nfalse injections: 0/23\n\ntests/perf/budgets.test.ts:\nrebuild write transaction, 2000 entries: median 34.6 ms over 5 (34.6, 40.3, 21.8, 40.1, 24.8)\nprompt: p50 65.7 ms, p95 70.7 ms\nsession-start: p50 21.5 ms, p95 22.6 ms\nturn-end: p50 15.4 ms, p95 17.1 ms\nfile-read: p50 17.7 ms, p95 19.4 ms\ntool-failed: p50 23.8 ms, p95 25.3 ms\nqwen prompt: p50 65.4 ms, p95 71.9 ms\nqwen session-start: p50 20.9 ms, p95 26.6 ms\ndroid prompt: p50 64.2 ms, p95 66.8 ms\ndroid session-start: p50 20.1 ms, p95 21.8 ms\ncopilot session-start: p50 20.7 ms, p95 22.4 ms\ncopilot prompt (capture only): p50 14.4 ms, p95 16.1 ms\nantigravity pre-invocation: p50 21.4 ms, p95 22.5 ms\nlinked prompt: p50 31.8 ms, p95 40.8 ms (30 of 30 with a note from outside)\nlinked session-start: p50 21.3 ms, p95 22.6 ms\n\ntests/perf/large-project.test.ts:\nlarge project prompt: p50 18.6 ms, p95 20.8 ms (40 of 40 given notes)\n\ntests/perf/semantic.test.ts:\nsemantic global median: 16.2 ms\n\n 3536 pass\n 4 skip\n 0 fail\n 26 snapshots, 40470 expect() calls\nRan 3540 tests across 223 files. [215.44s]",
-      "fingerprint": "sha256:5b6bfb8fdbee3c359e1461dd0ed0b68bd522d96da5a2f9b2621a2bcf71e1d7bc"
+      "durationMs": 218714,
+      "at": "2026-11-12T19:17:12.485Z",
+      "log": "logs/test-_-1794511032485.txt",
+      "tail": "heuristic precision 100%  recall 100%  kind 83%\ntypesafe  precision 85%  recall 94%  kind 88%  wrongly kept: en-none-obvious-from-code, en-none-general-knowledge, pt-none-your-turn  missed: en-change-json-flag\n\ntests/golden/search.test.ts:\ntop 5: 35/44 → 39/44; Portuguese of English: 1/8 → 4/8\nsemantic-only results for unrelated queries: 29/43\n\ntests/golden/retrieval.test.ts:\nrecall@5: 19/24 — missed: redact-first, pt-lingua, pt-cursor, ts-extension, hook-runs\nprecision: 19/21 notes given were the expected ones\nfalse injections: 0/23\n\ntests/perf/budgets.test.ts:\nrebuild write transaction, 2000 entries: median 34.3 ms over 5 (34.3, 43.7, 24.8, 41.7, 27.1)\nprompt: p50 64.8 ms, p95 68.2 ms\nsession-start: p50 20.5 ms, p95 23.5 ms\nturn-end: p50 14.6 ms, p95 15.9 ms\nfile-read: p50 17.7 ms, p95 19.3 ms\ntool-failed: p50 23.6 ms, p95 26.4 ms\nqwen prompt: p50 66.6 ms, p95 70.1 ms\nqwen session-start: p50 21.2 ms, p95 24.4 ms\ndroid prompt: p50 66.3 ms, p95 67.8 ms\ndroid session-start: p50 20.5 ms, p95 21.7 ms\ncopilot session-start: p50 20.2 ms, p95 21.9 ms\ncopilot prompt (capture only): p50 15.0 ms, p95 16.3 ms\nantigravity pre-invocation: p50 20.9 ms, p95 23.2 ms\nlinked prompt: p50 31.0 ms, p95 37.4 ms (30 of 30 with a note from outside)\nlinked session-start: p50 21.3 ms, p95 22.6 ms\n\ntests/perf/large-project.test.ts:\nlarge project prompt: p50 19.0 ms, p95 21.7 ms (40 of 40 given notes)\n\ntests/perf/semantic.test.ts:\nsemantic global median: 16.0 ms\n\n 3547 pass\n 4 skip\n 0 fail\n 26 snapshots, 40483 expect() calls\nRan 3551 tests across 223 files. [217.41s]",
+      "fingerprint": "sha256:043c68a3e16bd8be5f8062f13506595c1109997a37a7463c32badd5403d679b7"
     },
     {
       "gate": "lint",
@@ -443,11 +481,11 @@
       "confirmed": true,
       "exit": 1,
       "status": "pass",
-      "durationMs": 100,
-      "at": "2026-11-12T19:06:25.145Z",
-      "log": "logs/lint-_-1794510385145.txt",
+      "durationMs": 94,
+      "at": "2026-11-12T19:20:51.199Z",
+      "log": "logs/lint-_-1794511251199.txt",
       "tail": "$ biome check .\nChecked 0 files in 4ms. No fixes applied.\ncheck ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n  × No files were processed in the specified paths.\n  \n  i Check your biome.json or biome.jsonc to ensure the paths are not ignored by the configuration.\n  \n  i These paths were provided but ignored:\n  \n  - .\n  \n\nerror: script \"lint\" exited with code 1",
-      "fingerprint": "sha256:5b6bfb8fdbee3c359e1461dd0ed0b68bd522d96da5a2f9b2621a2bcf71e1d7bc",
+      "fingerprint": "sha256:043c68a3e16bd8be5f8062f13506595c1109997a37a7463c32badd5403d679b7",
       "reason": "1 file with problems, none changed by this item (pre-existing)",
       "problems": {
         "touched": [],
@@ -462,18 +500,16 @@
       "confirmed": true,
       "exit": 0,
       "status": "pass",
-      "durationMs": 390,
-      "at": "2026-11-12T19:06:25.246Z",
-      "log": "logs/typecheck-_-1794510385246.txt",
+      "durationMs": 392,
+      "at": "2026-11-12T19:20:51.294Z",
+      "log": "logs/typecheck-_-1794511251294.txt",
       "tail": "$ tsc --noEmit",
-      "fingerprint": "sha256:5b6bfb8fdbee3c359e1461dd0ed0b68bd522d96da5a2f9b2621a2bcf71e1d7bc"
+      "fingerprint": "sha256:043c68a3e16bd8be5f8062f13506595c1109997a37a7463c32badd5403d679b7"
     }
   ],
   "verdict": "unproven",
   "unproven": [
-    "judgement gate code-quality not proven (7 findings)",
-    "judgement gate test-quality not proven (5 findings)",
-    "judgement gate security not proven (4 findings)"
+    "judgement gate test-quality not proven (6 findings)"
   ],
   "verifications": [
     {
@@ -679,6 +715,30 @@
       "confidence": 0.97,
       "model": "jev-1.14.0",
       "at": "2026-11-12T19:10:40.142Z"
+    },
+    {
+      "what": "defect",
+      "ref": "test-quality tests/unit/update-report.test.ts:163",
+      "question": "Does the finding at `findings.d1`, taken at its word (its `text` about `file` at `line`), describe a defect of the kind `findings.d1.rubric` names?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.97
+      },
+      "confidence": 0.97,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T19:23:31.030Z"
+    },
+    {
+      "what": "defect",
+      "ref": "test-quality tests/integration/update-command.test.ts:222",
+      "question": "Does the finding at `findings.d2`, taken at its word (its `text` about `file` at `line`), describe a defect of the kind `findings.d2.rubric` names?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.96
+      },
+      "confidence": 0.96,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T19:23:31.030Z"
     }
   ],
   "roles": [
@@ -1064,6 +1124,74 @@
       "agentId": "abc4f5fea78c5fa8d",
       "at": "2026-11-12T19:10:18.411Z",
       "tokens": 81802,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/ruling.json"
+    },
+    {
+      "agent": "review-security",
+      "agentId": "a21707398d42e1b34",
+      "at": "2026-11-12T19:21:48.885Z",
+      "tokens": 170532,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/security.findings.md",
+      "team": "security"
+    },
+    {
+      "agent": "review-infra",
+      "agentId": "aa9aa50875dbef920",
+      "at": "2026-11-12T19:21:51.293Z",
+      "tokens": 199136,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/infra.findings.md",
+      "team": "devops"
+    },
+    {
+      "agent": "review-architecture",
+      "agentId": "ae594f125ae89b123",
+      "at": "2026-11-12T19:21:52.156Z",
+      "tokens": 259986,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/architecture.findings.md",
+      "team": "architects"
+    },
+    {
+      "agent": "review-code-quality",
+      "agentId": "ab5a095006bae1b44",
+      "at": "2026-11-12T19:21:58.291Z",
+      "tokens": 200755,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/code-quality.findings.md",
+      "team": "backend"
+    },
+    {
+      "agent": "review-risk",
+      "agentId": "a5a2e42a269dcdfc9",
+      "at": "2026-11-12T19:22:00.144Z",
+      "tokens": 241556,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/risk.findings.md"
+    },
+    {
+      "agent": "review-test-quality",
+      "agentId": "a7ac080d120508850",
+      "at": "2026-11-12T19:22:11.069Z",
+      "tokens": 222357,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/test-quality.findings.md",
+      "team": "qa"
+    },
+    {
+      "agent": "judge",
+      "agentId": "abc4f5fea78c5fa8d",
+      "at": "2026-11-12T19:23:09.659Z",
+      "tokens": 181108,
       "tokensFrom": "transcript",
       "model": "claude-opus-5-5",
       "file": "review/ruling.json"
@@ -2607,69 +2735,38 @@
   "judgement": [
     {
       "gate": "code-quality",
-      "verdict": "not-proven",
+      "verdict": "proven",
       "reviewer": "review-code-quality",
       "judge": "judge",
       "findings": [
         {
-          "file": "src/install/binary.ts",
-          "line": 18,
-          "text": "Upheld (question 4, dead path). The diff adds the parameter `timeoutMs = VERSION_TIMEOUT_MS` to the newly exported `stagedVersion`, and no caller passes it. I checked: binary.ts:52, reconcile.ts:95 and report.ts:30 all call `stagedVersion(path)` with one argument.",
-          "severity": "defect",
-          "verification": {
-            "status": "verified",
-            "confidence": 0.88
-          }
-        },
-        {
-          "file": "src/update/report.ts",
-          "line": 98,
-          "text": "Upheld (question 4, dead path). `updateCheck`'s fourth parameter `running: string = pkg.version` is never passed. I checked: doctor.ts:21 and the only test call (tests/integration/update-command.test.ts:176) both pass three arguments.",
-          "severity": "defect",
-          "verification": {
-            "status": "verified",
-            "confidence": 0.9
-          }
-        },
-        {
-          "file": "src/cli/commands/status.ts",
-          "line": 20,
-          "text": "Upheld (question 9, and question 6 on behaviour). `catch { update = undefined; }` drops whatever `updateReport` threw, for example a `realpathSync` failure in `stagedFacts`, and the release notice then disappears from `status` with no reason given. The same diff's `updateCheck` (report.ts:110-112) reports `not checked: <message>` for the same failure. This is an error swallowed where its neighbour reports it.",
-          "severity": "defect",
-          "verification": {
-            "status": "unverified",
-            "reason": "between the thresholds",
-            "confidence": 0.53
-          }
-        },
-        {
-          "file": "src/update/report.ts",
-          "line": 14,
-          "text": "Advisory (questions 2 and 8). The new `export type Source` repeats `Source` from src/settings/settings.ts:103, and nothing imports the new export. The rubric calls an unused export and a duplicated type advisory.",
+          "file": "src/update/reconcile.ts",
+          "line": 10,
+          "text": "Advisory, as filed (questions 1 and 6). `mayRunStaged` and `binOwner` live in `report.ts`, the module of sentences, and `reconcile.ts` imports them from there. The dependency stays inside `src/update/`. Moving them to a leaf would be cleaner, but no unit fails to change for a single reason.",
           "severity": "advisory"
         },
         {
-          "file": "src/status/report.ts",
-          "line": 154,
-          "text": "Advisory (question 5). `export { ago }` only forwards so that share.ts can keep importing `ago` from the status report. This is a small leftover layer.",
+          "file": "src/update/reconcile.ts",
+          "line": 75,
+          "text": "Advisory, as filed (questions 1 and 3). `gather` is described as a read but also deletes `WIZARDINGCODE_MEM_HANDED` from the environment. Its name does not say the opposite of what it does, so this is advisory under the rubric.",
           "severity": "advisory"
         },
         {
           "file": "src/update/report.ts",
-          "line": 29,
-          "text": "Advisory (question 2). The `existsSync` plus `realpathSync(staged) === realpathSync(process.execPath)` test is repeated in reconcile.ts:88-90. It is two lines, close to boilerplate, so it is not upheld as duplicated logic.",
+          "line": 133,
+          "text": "Advisory, as filed (questions 2 and 3). The one-line reduction of an error to its first line appears as `firstLine`, as `said` and inline in reconcile.ts. That is boilerplate-sized duplication, and `said` could be named more sharply.",
           "severity": "advisory"
         },
         {
-          "file": "src/update/check.ts",
-          "line": 93,
-          "text": "Advisory (question 3). The name `said` could be sharper (for example `errorReason`). It does not say the opposite of what the helper does.",
+          "file": "src/update/report.ts",
+          "line": 1,
+          "text": "Advisory, as filed (question 10). The header says `updateLine` and `agentsLine` are the only writers of these sentences, but `reportOrReason` and update.ts also write lines for the person. The comment is stale; the behaviour is not wrong.",
           "severity": "advisory"
         }
       ],
-      "tokens": 102957,
-      "at": "2026-11-12T19:10:39.852Z",
-      "fingerprint": "sha256:5b6bfb8fdbee3c359e1461dd0ed0b68bd522d96da5a2f9b2621a2bcf71e1d7bc"
+      "tokens": 230940,
+      "at": "2026-11-12T19:23:30.845Z",
+      "fingerprint": "sha256:043c68a3e16bd8be5f8062f13506595c1109997a37a7463c32badd5403d679b7"
     },
     {
       "gate": "test-quality",
@@ -2678,9 +2775,19 @@
       "judge": "judge",
       "findings": [
         {
+          "file": "tests/unit/update-report.test.ts",
+          "line": 163,
+          "text": "Upheld (question 1). The first part of AC-32: `status`, `doctor` and `update` must not run the staged file as root or from a folder another user owns. The tests cover `mayRunStaged`'s table (line 173) and `agentsLine` given a hand-built `refused: true` (line 177). No test reaches `stagedFacts` (src/update/report.ts:55-66), where the guard is applied. I checked: no test file references `stagedFacts`. If it always ran `stagedVersion` with `refused: false`, every test would still pass. A behaviour criterion has no test that fails on reversion.",
+          "severity": "defect",
+          "verification": {
+            "status": "verified",
+            "confidence": 0.97
+          }
+        },
+        {
           "file": "tests/integration/update-command.test.ts",
-          "line": 86,
-          "text": "Upheld (question 1). AC-13 is 'a check that throws does not change its exit code'. Its test gives `distill` a throwing `fetch`, which `latestRelease` turns into `offline`, and a folder where the state file should be, which `checkForRelease` returns as `result.error`. Neither reaches the `try/catch` in src/cli/commands/distill.ts:200-215. With that guard removed, every test still passes, so the behaviour criterion has no test that fails on reversion.",
+          "line": 222,
+          "text": "Upheld (question 1). AC-32 says 'a report that cannot be built is said with its reason in `status`, as in `doctor`'. `reportOrReason` is tested alone (update-report.test.ts:193). Every `status` case in this describe block (lines 236-280) builds a report that succeeds. If status.ts went back to swallowing the error silently, no test would fail.",
           "severity": "defect",
           "verification": {
             "status": "verified",
@@ -2690,70 +2797,66 @@
         {
           "file": "tests/unit/update-reconcile.test.ts",
           "line": 50,
-          "text": "Advisory. The `realpathSync` step for a symlinked staged path in `reconcile` is not exercised. AC-23's `decide` rule is still tested on its inputs, so this is coverage beyond what the criterion's assertions require.",
+          "text": "Advisory, as filed. The `realpathSync` step in `gather` is still not exercised. It is deferred in docs/real-use/findings.md, and AC-23's `decide` rule is tested on its inputs.",
           "severity": "advisory"
         },
         {
           "file": "tests/e2e/update-reconcile.test.ts",
           "line": 101,
-          "text": "Advisory. AC-31 is pinned only through `status`. `doctor`, `update` and `ui` call no stager today, so this is a gap in breadth, not a test that passes when the behaviour is reverted.",
+          "text": "Advisory, as filed. AC-31 is pinned only through `status`. This is a gap in breadth, deferred.",
           "severity": "advisory"
         },
         {
           "file": "tests/e2e/install-forward.test.ts",
           "line": 1247,
-          "text": "Advisory (questions 5 and 6). The test asserts the observable hand-over (the mark reaches the staged binary), not that the call goes through `handOver`. The comment claims more than the assertion proves, but the behaviour is still asserted.",
+          "text": "Advisory, as filed (questions 5 and 6). The test asserts the observable hand-over, not that `handOver` is the function used. Deferred.",
           "severity": "advisory"
         },
         {
           "file": "tests/unit/settings.test.ts",
           "line": 1733,
-          "text": "Advisory. Two new tests leave `mkdtempSync` folders behind. This is fixture hygiene and weakens no assertion.",
+          "text": "Advisory, as filed. Temporary folders are not removed. This is fixture hygiene, deferred.",
           "severity": "advisory"
         }
       ],
-      "tokens": 117399,
-      "at": "2026-11-12T19:10:39.852Z",
-      "fingerprint": "sha256:5b6bfb8fdbee3c359e1461dd0ed0b68bd522d96da5a2f9b2621a2bcf71e1d7bc"
+      "tokens": 252542,
+      "at": "2026-11-12T19:23:30.845Z",
+      "fingerprint": "sha256:043c68a3e16bd8be5f8062f13506595c1109997a37a7463c32badd5403d679b7"
     },
     {
       "gate": "security",
-      "verdict": "not-proven",
+      "verdict": "proven",
       "reviewer": "review-security",
       "judge": "judge",
       "findings": [
         {
           "file": "src/update/report.ts",
-          "line": 30,
-          "text": "Upheld (infra, question 8: what runs under which identity). `stagedFacts` runs `<data dir>/bin/wizardingcode-mem --version` for `status`, `doctor` and `update` from any copy, without the refusal this same diff writes into `decide` (reconcile.ts:885: no root, and `<data dir>/bin` must belong to the effective user). The path is: a process with the user's rights plants that file, and it runs as root when `status`, `doctor` or `update` is run as root with the user's data directory (for example under `sudo -E`). That contradicts spec.md:141, which limits the run to 'the user who owns `<data dir>/bin`'. Apply the same refusal before `stagedVersion` in `stagedFacts`.",
-          "severity": "defect",
-          "verification": {
-            "status": "verified",
-            "confidence": 0.97
-          }
+          "line": 55,
+          "text": "Advisory, as filed. Round 1's defect is closed. I checked diff lines 1036-1053: `stagedFacts` asks `mayRunStaged` (no root, and the folder must be the effective user's) before `stagedVersion`, and reports `refused` otherwise.",
+          "severity": "advisory"
         },
         {
           "file": "src/update/check.ts",
           "line": 740,
-          "text": "Advisory. Recorded by the reviewer as answered: the URL is fixed, redirects are not followed, `Location` is matched strictly and the state file is re-validated before display. Nothing to fix.",
+          "text": "Advisory, as filed. The request and the state-file boundary remain sound: the URL is fixed, redirects are not followed, `Location` is matched strictly and `readState` re-validates every field.",
           "severity": "advisory"
         },
         {
           "file": "src/cli/commands/status.ts",
-          "line": 349,
-          "text": "Advisory (public-api, question 6). `status --json` gains an `update` object, and on a store error it now writes `{version, update, error}` to stdout with exit 1. The change is additive, the exit code is unchanged, and ADR 0030 and the README state it. No field is removed or changed.",
+          "line": 44,
+          "text": "Advisory, as filed (public-api, question 6). `status --json` gains `update` (with `stagedPath` and `refused`), and a store error now writes JSON to stdout with exit 1. The change is additive and documented, and no field is removed or changed.",
           "severity": "advisory"
         },
         {
           "file": "src/install/binary.ts",
           "line": 52,
-          "text": "Advisory, debt (outside the change). `stageBinary` already ran the staged file's `--version` with no root or owner check before this diff.",
+          "text": "Advisory, debt (outside the change). `stageBinary` still runs the staged file's `--version` with no root or owner check. Recorded as deferred.",
           "severity": "advisory"
         }
       ],
-      "tokens": 95761,
-      "at": "2026-11-12T19:10:39.852Z",
-      "fingerprint": "sha256:5b6bfb8fdbee3c359e1461dd0ed0b68bd522d96da5a2f9b2621a2bcf71e1d7bc"
+      "tokens": 200717,
+      "at": "2026-11-12T19:23:30.845Z",
+      "fingerprint": "sha256:043c68a3e16bd8be5f8062f13506595c1109997a37a7463c32badd5403d679b7"
     },
     {
       "gate": "risk",
@@ -2762,47 +2865,40 @@
       "judge": "judge",
       "findings": [
         {
-          "file": "src/cli/main.ts",
-          "line": 94,
-          "text": "Advisory, as filed. If `reconcile(argv)` throws (for example from `realpathSync`), the diagnostic command fails instead of running in this copy. The failure is visible and is not a data risk.",
-          "severity": "advisory"
-        },
-        {
-          "file": "docs/adr/0030-release-notice.md",
-          "line": 112,
-          "text": "Advisory, as filed. A way back exists (`install --force`, ADR 0029 and the runbook). The `WIZARDINGCODE_MEM_HANDED=1` bypass is not documented for a person.",
-          "severity": "advisory",
-          "outside": true
-        },
-        {
           "file": "src/update/check.ts",
-          "line": 833,
-          "text": "Advisory, as filed. When the data directory cannot be written, one `update.check` log entry is written per ended turn. The spec's Limits state this case.",
+          "line": 124,
+          "text": "Advisory, as filed. When the data directory cannot be written, one log entry is written per turn and nothing caps the repetition. The spec's Limits state it, and it is recorded as deferred.",
           "severity": "advisory"
         },
         {
           "file": "src/update/reconcile.ts",
-          "line": 948,
-          "text": "Advisory, as filed. A hung staged binary can delay a command by up to about 20 s. The spec states the bound of 'at most twice, 10 s each'.",
+          "line": 972,
+          "text": "Advisory, as filed. A hung staged binary can delay a command by up to about 20 s. This is a stated limit, bounded in the code.",
           "severity": "advisory"
         },
         {
           "file": "src/install/binary.ts",
           "line": 45,
-          "text": "Advisory, debt (outside the change). The fixed `<target>.new` name can collide between two writers. It is already recorded as deferred.",
+          "text": "Advisory, debt (outside the change). `stageBinary` (and so `install`) still runs `--version` with no root or owner check. Recorded as deferred.",
+          "severity": "advisory"
+        },
+        {
+          "file": "src/install/binary.ts",
+          "line": 45,
+          "text": "Advisory, debt (outside the change). Two writers can collide on the fixed `<target>.new` name. Recorded as deferred.",
           "severity": "advisory"
         },
         {
           "file": "tests/helpers/cli.ts",
           "line": 52,
-          "text": "Advisory, debt (outside the change). `spawnCli` does not pass on the preload's `WIZARDINGCODE_MEM_UPDATE=off`, so each new test must set it itself.",
+          "text": "Advisory, debt (outside the change). `spawnCli` does not pass on the preload's `WIZARDINGCODE_MEM_UPDATE=off`. Recorded as deferred.",
           "severity": "advisory",
           "outside": true
         }
       ],
-      "tokens": 128138,
-      "at": "2026-11-12T19:10:39.852Z",
-      "fingerprint": "sha256:5b6bfb8fdbee3c359e1461dd0ed0b68bd522d96da5a2f9b2621a2bcf71e1d7bc"
+      "tokens": 271741,
+      "at": "2026-11-12T19:23:30.845Z",
+      "fingerprint": "sha256:043c68a3e16bd8be5f8062f13506595c1109997a37a7463c32badd5403d679b7"
     },
     {
       "gate": "architecture",
@@ -2811,41 +2907,15 @@
       "judge": "judge",
       "findings": [
         {
-          "file": "docs/adr/0030-release-notice.md",
-          "line": 3,
-          "text": "Advisory, as filed. ADR 0029's Status line does not yet say that ADR 0030 narrows its piece 2.",
-          "severity": "advisory",
-          "outside": true
-        },
-        {
-          "file": "src/update/report.ts",
-          "line": 14,
-          "text": "Advisory, as filed. `Source` restates the settings type. Import it from settings.",
+          "file": "src/update/reconcile.ts",
+          "line": 875,
+          "text": "Advisory, as filed. The staged-run rule lives in `report.ts`, so the hand-over loads the report's imports to read one rule. A leaf such as `src/update/staged.ts` would keep the rule apart. No boundary of AC-27 is crossed, and `main.ts` still loads `reconcile.ts` only through a dynamic import.",
           "severity": "advisory"
-        },
-        {
-          "file": "src/status/report.ts",
-          "line": 653,
-          "text": "Advisory, as filed. `ago` keeps two homes through the re-export, and share.ts still imports it from the status report.",
-          "severity": "advisory"
-        },
-        {
-          "file": "src/status/report.ts",
-          "line": 24,
-          "text": "Advisory, as filed. The status report now statically loads the update folder and the binary stager for the viewer and doctor. The direction is allowed by AC-27 and nothing is on a hook path.",
-          "severity": "advisory"
-        },
-        {
-          "file": "src/cli/commands/share.ts",
-          "line": 45,
-          "text": "Advisory, debt (outside the change). This import of `ago` from the status report was left in place by the diff.",
-          "severity": "advisory",
-          "outside": true
         }
       ],
-      "tokens": 132850,
-      "at": "2026-11-12T19:10:39.852Z",
-      "fingerprint": "sha256:5b6bfb8fdbee3c359e1461dd0ed0b68bd522d96da5a2f9b2621a2bcf71e1d7bc"
+      "tokens": 290171,
+      "at": "2026-11-12T19:23:30.845Z",
+      "fingerprint": "sha256:043c68a3e16bd8be5f8062f13506595c1109997a37a7463c32badd5403d679b7"
     },
     {
       "gate": "infra",
@@ -2856,27 +2926,27 @@
         {
           "file": "docs/runbooks/release.md",
           "line": 80,
-          "text": "Advisory, as filed. The rollback for a wrong notice is stated but has never been run, and the runbook says so.",
+          "text": "Advisory, as filed (question 4). The rollback for a wrong notice is stated but has never been run, and the runbook says so.",
           "severity": "advisory",
           "outside": true
         },
         {
           "file": "src/cli/commands/distill.ts",
-          "line": 197,
-          "text": "Advisory, as filed. The suite stays offline only because the preload sets the key and the helpers copy the environment. CI stays offline through `mode()` returning `ci`.",
+          "line": 210,
+          "text": "Advisory, as filed (question 1). The suite stays offline through the preload and the helpers' copied environment, and CI stays offline through `mode()` returning `ci`. Recorded as deferred.",
           "severity": "advisory"
         },
         {
           "file": ".github/workflows/release.yml",
           "line": 148,
-          "text": "Advisory, debt (outside the change). `gh release create` lets a patch on an older line become GitHub's latest. The runbook names the manual correction.",
+          "text": "Advisory, debt (outside the change). A plain release on an older line becomes GitHub's latest and moves the notice back. The runbook names the manual correction.",
           "severity": "advisory",
           "outside": true
         }
       ],
-      "tokens": 105828,
-      "at": "2026-11-12T19:10:39.852Z",
-      "fingerprint": "sha256:5b6bfb8fdbee3c359e1461dd0ed0b68bd522d96da5a2f9b2621a2bcf71e1d7bc"
+      "tokens": 229321,
+      "at": "2026-11-12T19:23:30.845Z",
+      "fingerprint": "sha256:043c68a3e16bd8be5f8062f13506595c1109997a37a7463c32badd5403d679b7"
     }
   ]
 }

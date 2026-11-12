@@ -2,6 +2,7 @@
 // redirect github.com answers for `releases/latest` and nothing else: no body, no API, no
 // download. Everything that is not that redirect is a reason, never a version.
 import { isPlainVersion } from "../util/version.ts";
+import { reason } from "./reason.ts";
 import { lastFailed, readState, type UpdateState, writeState } from "./state.ts";
 
 export const REQUEST_LIMIT_MS = 5000;
@@ -90,11 +91,6 @@ export interface CheckResult {
   error?: string;
 }
 
-const said = (error: unknown): string =>
-  (error as { code?: string }).code ??
-  (error instanceof Error ? error.message : String(error)).split("\n")[0] ??
-  "unknown";
-
 /**
  * Asks once and records what came of it. The automatic check asks only in mode `check` and
  * when due; a forced one (a person typed `update`) asks in CI too and whatever the age.
@@ -123,7 +119,7 @@ export async function checkForRelease(input: {
   try {
     writeState(input.dataDir, attempt);
   } catch (error) {
-    return { asked: false, state: before, error: said(error) };
+    return { asked: false, state: before, error: reason(error) };
   }
   const answer = await latestRelease(input.fetch, input.repository);
   const after: UpdateState = answer.ok
@@ -132,7 +128,7 @@ export async function checkForRelease(input: {
   try {
     writeState(input.dataDir, after);
   } catch (error) {
-    return { asked: true, state: attempt, error: said(error) };
+    return { asked: true, state: attempt, error: reason(error) };
   }
   return { asked: true, state: after };
 }

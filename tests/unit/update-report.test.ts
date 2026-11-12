@@ -1,15 +1,21 @@
 // The sentences a person reads about releases and about the copy their agents run: one
 // function writes them, and this table is all of them.
-import { describe, expect, test } from "bun:test";
-import { CHANNEL_COMMANDS } from "../../src/update/channels.ts";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
-  agentsLine,
-  commandLines,
-  mayRunStaged,
-  reportOrReason,
-  type StagedFacts,
-  updateLine,
-} from "../../src/update/report.ts";
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { CHANNEL_COMMANDS } from "../../src/update/channels.ts";
+import { agentsLine, commandLines, reportOrReason, updateLine } from "../../src/update/report.ts";
+import { mayRunStaged, type StagedFacts, stagedFacts } from "../../src/update/staged.ts";
 import type { UpdateState } from "../../src/update/state.ts";
 
 const NOW = 1_800_000_000_000;
@@ -199,5 +205,63 @@ describe("a report that cannot be built", () => {
     });
     const report = { lines: ["update: not checked yet"], out: false } as never;
     expect(reportOrReason(() => report)).toEqual({ report, lines: ["update: not checked yet"] });
+  });
+});
+
+describe("stagedFacts", () => {
+  let dir: string;
+  let staged: string;
+  beforeEach(() => {
+    dir = realpathSync(mkdtempSync(join(tmpdir(), "wizardingcode-mem-facts-")));
+    mkdirSync(join(dir, "bin"));
+    staged = join(dir, "bin", "wizardingcode-mem");
+    // A staged "binary" that leaves a trace each time it is run.
+    writeFileSync(staged, `#!/bin/sh\necho ran >> "${dir}/ran.txt"\necho 1.2.3\n`);
+    chmodSync(staged, 0o755);
+  });
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+  const ran = () => existsSync(join(dir, "ran.txt"));
+  const me = statSync(join(tmpdir())).uid;
+
+  test.skipIf(process.platform === "win32")(
+    "its owner runs the staged file to ask its version",
+    () => {
+      const owner = statSync(join(dir, "bin")).uid;
+      expect(stagedFacts(dir, "0.9.0", { platform: "linux", uid: owner })).toEqual({
+        path: staged,
+        exists: true,
+        version: "1.2.3",
+        isSelf: false,
+        refused: false,
+      });
+      expect(ran()).toBe(true);
+    },
+  );
+
+  test.each([
+    ["root", 0],
+    ["another user", me + 4242],
+  ])("%s does not run it, and the facts say it was refused", (_who, uid) => {
+    expect(stagedFacts(dir, "0.9.0", { platform: "linux", uid })).toEqual({
+      path: staged,
+      exists: true,
+      version: null,
+      isSelf: false,
+      refused: true,
+    });
+    expect(ran()).toBe(false);
+  });
+
+  test("with no staged file there is nothing to run or refuse", () => {
+    rmSync(staged);
+    expect(stagedFacts(dir, "0.9.0", { platform: "linux", uid: 0 })).toEqual({
+      path: staged,
+      exists: false,
+      version: null,
+      isSelf: false,
+      refused: false,
+    });
   });
 });

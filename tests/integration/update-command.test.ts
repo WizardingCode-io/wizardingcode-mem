@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import pkg from "../../package.json" with { type: "json" };
 import { run as distill } from "../../src/cli/commands/distill.ts";
+import { run as status } from "../../src/cli/commands/status.ts";
 import { run as update } from "../../src/cli/commands/update.ts";
 import { runChecks } from "../../src/doctor/checks.ts";
 import { doctorContext } from "../../src/doctor/context.ts";
@@ -273,6 +274,16 @@ describe("status", () => {
     const parsed = JSON.parse(json.stdout) as Record<string, unknown>;
     expect(Object.keys(parsed).sort()).toEqual(["error", "update", "version"]);
     expect((parsed.update as { latest: string }).latest).toBe("99.0.0");
+  });
+
+  test("a report that cannot be built is said with its reason, and status goes on", () => {
+    const failing = () => {
+      throw new Error("EACCES: permission denied, realpath '/data/bin'\nat somewhere");
+    };
+    expect(status([], failing)).toBe(0);
+    const lines = out.split("\n");
+    expect(lines[0]).toBe(`wizardingcode-mem ${pkg.version}`);
+    expect(lines[1]).toBe("update: not checked: EACCES: permission denied, realpath '/data/bin'");
   });
 
   test("--json carries the report beside what it already had", async () => {

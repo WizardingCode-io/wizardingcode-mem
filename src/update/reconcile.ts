@@ -7,7 +7,8 @@ import { stagedPath, stagedVersion } from "../install/binary.ts";
 import { defaultDataDir } from "../util/paths.ts";
 import { isCompiled } from "../util/self.ts";
 import { olderThan } from "../util/version.ts";
-import { binOwner, mayRunStaged } from "./report.ts";
+import { firstLine } from "./reason.ts";
+import { binOwner, mayRunStaged, whoAmI } from "./staged.ts";
 
 export type Decision = "skip" | "compare";
 const HANDED = "WIZARDINGCODE_MEM_HANDED";
@@ -58,31 +59,24 @@ export function handOver(
     });
     return handed.exitCode ?? 1;
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(fail(message.split("\n")[0] ?? message));
+    process.stderr.write(fail(firstLine(error)));
     return 1;
   }
 }
 
-/** What this process and the staged binary are, read from the machine. */
-function gather(): { path: string; decision: Decision } {
+/** What this process and the staged binary are, read from the machine. It changes nothing. */
+function gather(handed: boolean): { path: string; decision: Decision } {
   const path = stagedPath(defaultDataDir());
   const exists = existsSync(path);
-  const uid = process.geteuid?.() ?? null;
-  const owner = exists ? binOwner(path) : null;
-  // Read, then removed: nothing this command starts may inherit it.
-  const handed = Boolean(process.env[HANDED]);
-  delete process.env[HANDED];
   return {
     path,
     decision: decide({
-      platform: process.platform,
+      ...whoAmI(),
       compiled: isCompiled(),
       self: realpathSync(process.execPath),
       staged: exists ? realpathSync(path) : null,
       handed,
-      uid,
-      binOwner: owner,
+      binOwner: exists ? binOwner(path) : null,
     }),
   };
 }
@@ -94,11 +88,14 @@ function gather(): { path: string; decision: Decision } {
  */
 export function reconcile(
   argv: string[],
-  look: () => { path: string; decision: Decision } = gather,
+  look: (handed: boolean) => { path: string; decision: Decision } = gather,
 ): { code: number } | null {
+  // The mark of a hand-over is read, then removed: nothing this command starts may inherit it.
+  const handed = Boolean(process.env[HANDED]);
+  delete process.env[HANDED];
   let found: { path: string; decision: Decision };
   try {
-    found = look();
+    found = look(handed);
   } catch {
     return null;
   }
