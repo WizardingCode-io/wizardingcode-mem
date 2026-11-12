@@ -61,6 +61,8 @@ Start `distribute.yml` from `main` with the same tag. Every target checks what i
 
 Wait for a run to end before starting another. The workflow runs one at a time and keeps one waiting; a third started meanwhile replaces the one that waits.
 
+The job of `release.yml` that starts the distribution is cut after 5 minutes, and GitHub then shows it as cancelled or failed. The distribution may have started all the same. Look for the tag's run with `gh run list --workflow distribute.yml` (it is named `distribute <tag>`), and look again after a minute, since a dispatch accepted just before the cut appears late. If the run is there, the distribution is under way and nothing is to be started. If it is not, re-run the failed job of `release.yml`, or start `distribute.yml` from `main` with the tag. A second run for the same tag writes nothing the first already wrote, and writes what the first had not reached: npm answers `already published`, the tap and the marketplace answer `already at <version>`, and `latest` is tagged again onto the same version's image and answers `latest: moved to <version>` again. The one exception is in "A bad release": after a tap or marketplace write was reverted by hand, or `latest` was moved back by hand, a second run writes it again.
+
 ## Repairs
 
 - **`distribute: refused: the GitHub release <tag> lacks: …`** The release was created and an upload failed. Upload the missing files with `gh release upload <tag> <files>` if you still have the run's artifacts, or delete the release and the tag (an admin's act) and tag again.

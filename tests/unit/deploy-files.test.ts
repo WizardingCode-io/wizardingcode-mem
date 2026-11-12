@@ -198,6 +198,9 @@ describe("the workflows", () => {
     expect(distribute?.needs).toBe("publish");
     expect(distribute?.["runs-on"]).toBe("ubuntu-latest");
     expect(distribute?.permissions).toEqual({ actions: "write" });
+    // It only starts another workflow: a call that stalls is cut, not left to the runner's
+    // default of six hours.
+    expect(distribute?.["timeout-minutes"]).toBe(5);
     expect(distribute?.steps).toHaveLength(1);
     const start = distribute?.steps[0];
     expect(start?.uses).toBeUndefined();

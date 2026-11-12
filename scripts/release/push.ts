@@ -26,6 +26,19 @@ const BOT = {
   email: "41898282+github-actions[bot]@users.noreply.github.com",
 };
 
+/** The token as git's basic credential: the one derived form of it this file builds. */
+export function encodedCredential(token: string): string {
+  return Buffer.from(`x-access-token:${token}`).toString("base64");
+}
+
+/**
+ * A text of git's without the encoded credential. The match is exact: a text that splits or
+ * re-encodes the value is not covered, and another form of the credential needs its own.
+ */
+export function redact(text: string, token: string | null): string {
+  return token === null ? text : text.replaceAll(encodedCredential(token), "***");
+}
+
 /**
  * The environment of a git call to github.com: the token as an authorization header, so it is
  * never in a remote's URL, in an argument or in a file of the clone.
@@ -40,7 +53,7 @@ export function gitEnv(
     ...env,
     GIT_CONFIG_COUNT: "1",
     GIT_CONFIG_KEY_0: "http.https://github.com/.extraheader",
-    GIT_CONFIG_VALUE_0: `Authorization: Basic ${Buffer.from(`x-access-token:${token}`).toString("base64")}`,
+    GIT_CONFIG_VALUE_0: `Authorization: Basic ${encodedCredential(token)}`,
   };
 }
 
@@ -76,7 +89,13 @@ export interface PushOptions {
 /** Writes the edit to the other repository's default branch, or says why nothing was written. */
 export function commitAndPush(options: PushOptions): Outcome {
   const { remote, origin, tag, sha, version, token } = options;
-  const exec = options.runner ?? run;
+  // Every text git answers is redacted here, before a sentence or a dry run's line is built
+  // from it: what this script prints and writes to the summary never carries the credential.
+  const inner = options.runner ?? run;
+  const exec: Runner = (cmd, more) => {
+    const out = inner(cmd, more);
+    return { code: out.code, stdout: redact(out.stdout, token), stderr: redact(out.stderr, token) };
+  };
   // The values written name the tag: a tag moved since plan judged it stops here. This reads
   // this repository, so it never carries the other repositories' token.
   const refs = exec([
@@ -165,7 +184,7 @@ const MANIFESTS = {
 };
 
 /** The formula for this release, rendered from the template beside this script's repository. */
-function editTap(version: string, checksumsPath: string): PushOptions["edit"] {
+export function editTap(version: string, checksumsPath: string): PushOptions["edit"] {
   return (dir) => {
     const root = new URL("../../", import.meta.url).pathname;
     const template = readFileSync(
@@ -180,7 +199,7 @@ function editTap(version: string, checksumsPath: string): PushOptions["edit"] {
 }
 
 /** The plugin's entry in the two manifests; neither is written when either is at a higher version. */
-function editMarketplace(version: string): PushOptions["edit"] {
+export function editMarketplace(version: string): PushOptions["edit"] {
   return (dir) => {
     const claude = join(dir, MANIFESTS.claude);
     const agents = join(dir, MANIFESTS.agents);
@@ -212,14 +231,11 @@ if (import.meta.main) {
   }
   command(target, () => {
     const version = need("VERSION");
-    const onRunner = process.env.GITHUB_ACTIONS === "true";
     const outcome = commitAndPush({
-      // The two overrides exist for the command's test, which writes to local repositories;
-      // on a runner they are never read, so the token's writer goes only where it is meant to.
-      remote: (onRunner ? undefined : process.env.PUSH_REMOTE) || REMOTES[target],
-      origin:
-        (onRunner ? undefined : process.env.PUSH_ORIGIN) ||
-        `https://github.com/${need("GITHUB_REPOSITORY")}.git`,
+      // Where the token's writer goes is in this file and in the run's own repository: no
+      // variable of the environment names a destination.
+      remote: REMOTES[target],
+      origin: `https://github.com/${need("GITHUB_REPOSITORY")}.git`,
       tag: need("TAG"),
       sha: need("SHA"),
       version,
