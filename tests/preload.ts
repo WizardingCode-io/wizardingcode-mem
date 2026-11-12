@@ -9,6 +9,9 @@ import { join } from "node:path";
 process.env.WIZARDINGCODE_MEM_UI_AUTO_OPEN ??= "off";
 process.env.WIZARDINGCODE_MEM_UI_BROWSER ??= "none";
 process.env.WIZARDINGCODE_MEM_MIGRATE ??= "off";
+// The check for a newer release asks github.com: never from the suite. Set, not defaulted,
+// so a developer's shell cannot turn it on; a test that wants the check sets the key itself.
+process.env.WIZARDINGCODE_MEM_UPDATE = "off";
 // The brand's home (the app's state file, the data directories) is always a throwaway
 // directory, whatever the developer's shell exports: nothing here may touch a real
 // ~/.wizardingcode. Path overrides from the shell are dropped; tests set their own.

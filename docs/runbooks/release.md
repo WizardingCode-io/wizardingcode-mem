@@ -7,7 +7,7 @@ For the author. A pushed tag `v<version>` builds the release and carries it to e
 1. Bring the version to `<version>` in `package.json`, `npm/package.json` and `.env.example`, run `bun run plugins`, and merge that to `main` by a pull request.
 2. Tag the merge commit and push the tag: `git tag -a v<version> <sha> -m "wizardingcode-mem <version>"`, then `git push origin v<version>`.
 3. `.github/workflows/release.yml` checks, builds five binaries, signs the macOS ones, pushes the image with the version as its tag, creates the GitHub release with `checksums.txt`, and starts `.github/workflows/distribute.yml` from `main` with the tag.
-4. `distribute.yml` publishes `wizardingcode-mem` and `wizardingcode-mem-opencode` to npm, writes the formula to `WizardingCode-io/homebrew-wizardingcode`, writes the plugin's entry to `WizardingCode-io/wizardingcode-plugins`, and then tags the image `latest`. It is a run of its own: `release.yml` turns green as soon as that run is started, whatever becomes of it. Open the run named `distribute v<version>` under Actions and read its summary; a release is distributed when that run is green, not when `release.yml` is.
+4. `distribute.yml` publishes `wizardingcode-mem` and `wizardingcode-mem-opencode` to npm, writes the formula to `WizardingCode-io/homebrew-wizardingcode`, writes the plugin's entry to `WizardingCode-io/wizardingcode-plugins`, and then tags the image `latest`. It is a run of its own: `release.yml` turns green as soon as that run is started, whatever becomes of it. Open the run named `distribute v<version>` under Actions and read its summary; a release is distributed when that run is green, not when `release.yml` is. Clients are told from the GitHub release, not from the end of this run (ADR 0030): while it is stopped, failed or held, `status` and `doctor` already say the version is out, and the Homebrew, npm and plugin commands find nothing newer; only the curl script does.
 
 A tag with a hyphen (`v0.9.0-rc.1`) is a pre-release: the two npm packages go out under the dist-tag `next`, and the tap, the marketplace and `latest` are left as they are.
 
@@ -77,6 +77,8 @@ The job of `release.yml` that starts the distribution is cut after 5 minutes, an
 ## A bad release
 
 A release that should not have gone out is fixed by a higher version. npm versions cannot be reused, and nothing moves a channel back by itself: the plugins, the npm package, the curl script and `wizardingcode-mem install` all keep a newer binary that is already on a machine.
+
+The notice of a release (ADR 0030) reaches a client at its next successful check: about a day for a machine in use. To withdraw it before a higher version exists, move GitHub's latest back: `gh release edit <previous tag> --latest`. That also moves what `scripts/install.sh` downloads. A client that already runs the bad version then reads that it is ahead of the latest release. This procedure has not been run yet: check it on the first real release, with `wizardingcode-mem update` on a client. A plain tag cut on an older line can become GitHub's latest by itself; it is corrected with the same command on the right tag.
 
 A wrong write to the tap or the marketplace is reverted with a commit in that repository. Do not start `distribute.yml` again for that tag afterwards: it would write it again.
 

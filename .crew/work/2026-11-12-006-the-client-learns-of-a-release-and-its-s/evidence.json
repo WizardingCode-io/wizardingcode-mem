@@ -1,0 +1,2338 @@
+{
+  "fingerprint": null,
+  "tdd": [
+    {
+      "criterion": "AC-10",
+      "red": {
+        "command": "./node_modules/.bin/bun test tests/unit/update-check.test.ts",
+        "exit": 1,
+        "at": "2026-11-12T18:51:13.221Z",
+        "durationMs": 31,
+        "log": "logs/tdd-AC-10-red-1794509473188.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\ntests/unit/update-check.test.ts:\n\n# Unhandled error between tests\n-------------------------------\nerror: Cannot find module '../../src/update/check.ts' from '/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/tests/unit/update-check.test.ts'\n-------------------------------\n\n\n 0 pass\n 1 fail\n 1 error\nRan 1 test across 1 file. [23.00ms]",
+        "timedOut": false,
+        "passed": 0,
+        "changedTests": [
+          "tests/unit/update-check.test.ts"
+        ]
+      },
+      "green": {
+        "command": "./node_modules/.bin/bun test tests/unit/update-check.test.ts",
+        "exit": 0,
+        "at": "2026-11-12T18:52:10.887Z",
+        "durationMs": 64,
+        "log": "logs/tdd-AC-10-green-1794509530823.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\n 60 pass\n 0 fail\n 91 expect() calls\nRan 60 tests across 1 file. [57.00ms]",
+        "timedOut": false,
+        "passed": 60
+      }
+    },
+    {
+      "criterion": "AC-28",
+      "red": {
+        "command": "./node_modules/.bin/bun test tests/unit/update-check.test.ts",
+        "exit": 1,
+        "at": "2026-11-12T18:51:13.326Z",
+        "durationMs": 14,
+        "log": "logs/tdd-AC-28-red-1794509473312.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\ntests/unit/update-check.test.ts:\n\n# Unhandled error between tests\n-------------------------------\nerror: Cannot find module '../../src/update/check.ts' from '/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/tests/unit/update-check.test.ts'\n-------------------------------\n\n\n 0 pass\n 1 fail\n 1 error\nRan 1 test across 1 file. [7.00ms]",
+        "timedOut": false,
+        "passed": 0,
+        "changedTests": [
+          "tests/unit/update-check.test.ts"
+        ]
+      },
+      "green": {
+        "command": "./node_modules/.bin/bun test tests/unit/update-check.test.ts",
+        "exit": 0,
+        "at": "2026-11-12T18:52:11.014Z",
+        "durationMs": 65,
+        "log": "logs/tdd-AC-28-green-1794509530948.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\n 60 pass\n 0 fail\n 91 expect() calls\nRan 60 tests across 1 file. [58.00ms]",
+        "timedOut": false,
+        "passed": 60
+      }
+    },
+    {
+      "criterion": "AC-29",
+      "red": {
+        "command": "./node_modules/.bin/bun test tests/unit/update-check.test.ts",
+        "exit": 1,
+        "at": "2026-11-12T18:51:13.431Z",
+        "durationMs": 14,
+        "log": "logs/tdd-AC-29-red-1794509473417.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\ntests/unit/update-check.test.ts:\n\n# Unhandled error between tests\n-------------------------------\nerror: Cannot find module '../../src/update/check.ts' from '/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/tests/unit/update-check.test.ts'\n-------------------------------\n\n\n 0 pass\n 1 fail\n 1 error\nRan 1 test across 1 file. [6.00ms]",
+        "timedOut": false,
+        "passed": 0,
+        "changedTests": [
+          "tests/unit/update-check.test.ts"
+        ]
+      },
+      "green": {
+        "command": "./node_modules/.bin/bun test tests/unit/update-check.test.ts tests/unit/settings.test.ts",
+        "exit": 0,
+        "at": "2026-11-12T18:52:11.144Z",
+        "durationMs": 68,
+        "log": "logs/tdd-AC-29-green-1794509531076.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\n 79 pass\n 0 fail\n 168 expect() calls\nRan 79 tests across 2 files. [61.00ms]",
+        "timedOut": false,
+        "passed": 79
+      }
+    },
+    {
+      "criterion": "AC-31",
+      "red": {
+        "command": "./node_modules/.bin/bun test tests/unit/update-report.test.ts",
+        "exit": 1,
+        "at": "2026-11-12T18:52:55.155Z",
+        "durationMs": 13,
+        "log": "logs/tdd-AC-31-red-1794509575141.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\ntests/unit/update-report.test.ts:\n\n# Unhandled error between tests\n-------------------------------\nerror: Cannot find module '../../src/update/channels.ts' from '/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/tests/unit/update-report.test.ts'\n-------------------------------\n\n\n 0 pass\n 1 fail\n 1 error\nRan 1 test across 1 file. [6.00ms]",
+        "timedOut": false,
+        "passed": 0,
+        "changedTests": [
+          "tests/unit/settings.test.ts",
+          "tests/unit/update-check.test.ts",
+          "tests/unit/update-report.test.ts"
+        ]
+      },
+      "green": {
+        "command": "./node_modules/.bin/bun test tests/unit/update-report.test.ts tests/integration/update-command.test.ts",
+        "exit": 0,
+        "at": "2026-11-12T18:55:37.635Z",
+        "durationMs": 356,
+        "log": "logs/tdd-AC-31-green-1794509737279.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\n 29 pass\n 0 fail\n 83 expect() calls\nRan 29 tests across 2 files. [347.00ms]",
+        "timedOut": false,
+        "passed": 29
+      }
+    },
+    {
+      "criterion": "AC-23",
+      "red": {
+        "command": "./node_modules/.bin/bun test tests/unit/update-reconcile.test.ts",
+        "exit": 1,
+        "at": "2026-11-12T18:53:23.682Z",
+        "durationMs": 14,
+        "log": "logs/tdd-AC-23-red-1794509603668.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\ntests/unit/update-reconcile.test.ts:\n\n# Unhandled error between tests\n-------------------------------\nerror: Cannot find module '../../src/cli/reconciled.ts' from '/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/tests/unit/update-reconcile.test.ts'\n-------------------------------\n\n\n 0 pass\n 1 fail\n 1 error\nRan 1 test across 1 file. [7.00ms]",
+        "timedOut": false,
+        "passed": 0,
+        "changedTests": [
+          "tests/unit/settings.test.ts",
+          "tests/unit/update-boundary.test.ts",
+          "tests/unit/update-check.test.ts",
+          "tests/unit/update-reconcile.test.ts",
+          "tests/unit/update-report.test.ts"
+        ]
+      },
+      "green": {
+        "command": "./node_modules/.bin/bun test tests/unit/update-reconcile.test.ts",
+        "exit": 0,
+        "at": "2026-11-12T18:55:36.254Z",
+        "durationMs": 14,
+        "log": "logs/tdd-AC-23-green-1794509736240.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\n 14 pass\n 0 fail\n 40 expect() calls\nRan 14 tests across 1 file. [7.00ms]",
+        "timedOut": false,
+        "passed": 14
+      }
+    },
+    {
+      "criterion": "AC-27",
+      "red": {
+        "command": "./node_modules/.bin/bun test tests/unit/update-boundary.test.ts",
+        "exit": 1,
+        "at": "2026-11-12T18:53:23.795Z",
+        "durationMs": 21,
+        "log": "logs/tdd-AC-27-red-1794509603774.txt",
+        "tail": "Expected: >= 5\nReceived: 4\n\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/tests/unit/update-boundary.test.ts:21:26)\n(fail) the update folder's boundary > no file of it reaches the store, the modules, the engine, the sync, the status or the doctor [2.39ms]\n27 |     }\n28 |   });\n29 | \n30 |   test(\"loading the CLI loads none of it, and the leaf loads nothing\", () => {\n31 |     const main = staticImports(read(\"src/cli/main.ts\"));\n32 |     expect(main).toContain(\"./reconciled.ts\");\n                      ^\nerror: expect(received).toContain(expected)\n\nExpected to contain: \"./reconciled.ts\"\nReceived: [ \"../../package.json\", \"../util/legacy.ts\",\n  \"./exit.ts\"\n]\n\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/tests/unit/update-boundary.test.ts:32:18)\n(fail) the update folder's boundary > loading the CLI loads none of it, and the leaf loads nothing [2.11ms]\n39 |   });\n40 | });\n41 | \n42 | describe(\"the suite makes no request\", () => {\n43 |   test(\"the preload turns the check off, whatever the shell exports\", () => {\n44 |     expect(process.env.WIZARDINGCODE_MEM_UPDATE).toBe(\"off\");\n                                                      ^\nerror: expect(received).toBe(expected)\n\nExpected: \"off\"\nReceived: undefined\n\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/tests/unit/update-boundary.test.ts:44:50)\n(fail) the suite makes no request > the preload turns the check off, whatever the shell exports [0.25ms]\n\n 0 pass\n 3 fail\n 3 expect() calls\nRan 3 tests across 1 file. [13.00ms]",
+        "timedOut": false,
+        "passed": 0,
+        "changedTests": [
+          "tests/unit/settings.test.ts",
+          "tests/unit/update-boundary.test.ts",
+          "tests/unit/update-check.test.ts",
+          "tests/unit/update-reconcile.test.ts",
+          "tests/unit/update-report.test.ts"
+        ]
+      },
+      "green": {
+        "command": "./node_modules/.bin/bun test tests/unit/update-boundary.test.ts",
+        "exit": 0,
+        "at": "2026-11-12T18:55:36.328Z",
+        "durationMs": 13,
+        "log": "logs/tdd-AC-27-green-1794509736314.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\n 3 pass\n 0 fail\n 33 expect() calls\nRan 3 tests across 1 file. [7.00ms]",
+        "timedOut": false,
+        "passed": 3
+      }
+    },
+    {
+      "criterion": "AC-19",
+      "red": {
+        "command": "./node_modules/.bin/bun test tests/unit/update-boundary.test.ts -t 'makes no request'",
+        "exit": 1,
+        "at": "2026-11-12T18:53:23.906Z",
+        "durationMs": 16,
+        "log": "logs/tdd-AC-19-red-1794509603890.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\ntests/unit/update-boundary.test.ts:\n39 |   });\n40 | });\n41 | \n42 | describe(\"the suite makes no request\", () => {\n43 |   test(\"the preload turns the check off, whatever the shell exports\", () => {\n44 |     expect(process.env.WIZARDINGCODE_MEM_UPDATE).toBe(\"off\");\n                                                      ^\nerror: expect(received).toBe(expected)\n\nExpected: \"off\"\nReceived: undefined\n\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/tests/unit/update-boundary.test.ts:44:50)\n(fail) the suite makes no request > the preload turns the check off, whatever the shell exports [0.14ms]\n\n 0 pass\n 2 filtered out\n 1 fail\n 1 expect() calls\nRan 1 test across 1 file. [7.00ms]",
+        "timedOut": false,
+        "passed": 0,
+        "changedTests": [
+          "tests/unit/settings.test.ts",
+          "tests/unit/update-boundary.test.ts",
+          "tests/unit/update-check.test.ts",
+          "tests/unit/update-reconcile.test.ts",
+          "tests/unit/update-report.test.ts"
+        ]
+      },
+      "green": {
+        "command": "./node_modules/.bin/bun test tests/unit/update-boundary.test.ts -t 'makes no request'",
+        "exit": 0,
+        "at": "2026-11-12T18:55:36.402Z",
+        "durationMs": 13,
+        "log": "logs/tdd-AC-19-green-1794509736388.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\n 1 pass\n 2 filtered out\n 0 fail\n 2 expect() calls\nRan 1 test across 1 file. [6.00ms]",
+        "timedOut": false,
+        "passed": 1
+      }
+    },
+    {
+      "criterion": "AC-13",
+      "red": {
+        "command": "./node_modules/.bin/bun test tests/integration/update-command.test.ts",
+        "exit": 1,
+        "at": "2026-11-12T18:54:08.034Z",
+        "durationMs": 29,
+        "log": "logs/tdd-AC-13-red-1794509648004.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\ntests/integration/update-command.test.ts:\n\n# Unhandled error between tests\n-------------------------------\nerror: Cannot find module '../../src/cli/commands/update.ts' from '/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/tests/integration/update-command.test.ts'\n-------------------------------\n\n\n 0 pass\n 1 fail\n 1 error\nRan 1 test across 1 file. [20.00ms]",
+        "timedOut": false,
+        "passed": 0,
+        "changedTests": [
+          "tests/integration/update-command.test.ts",
+          "tests/unit/settings.test.ts",
+          "tests/unit/update-boundary.test.ts",
+          "tests/unit/update-check.test.ts",
+          "tests/unit/update-reconcile.test.ts",
+          "tests/unit/update-report.test.ts"
+        ]
+      },
+      "green": {
+        "command": "./node_modules/.bin/bun test tests/integration/update-command.test.ts",
+        "exit": 0,
+        "at": "2026-11-12T18:55:36.801Z",
+        "durationMs": 341,
+        "log": "logs/tdd-AC-13-green-1794509736460.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\n 18 pass\n 0 fail\n 58 expect() calls\nRan 18 tests across 1 file. [332.00ms]",
+        "timedOut": false,
+        "passed": 18
+      }
+    },
+    {
+      "criterion": "AC-30",
+      "red": {
+        "command": "./node_modules/.bin/bun test tests/integration/update-command.test.ts",
+        "exit": 1,
+        "at": "2026-11-12T18:54:08.151Z",
+        "durationMs": 20,
+        "log": "logs/tdd-AC-30-red-1794509648128.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\ntests/integration/update-command.test.ts:\n\n# Unhandled error between tests\n-------------------------------\nerror: Cannot find module '../../src/cli/commands/update.ts' from '/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/tests/integration/update-command.test.ts'\n-------------------------------\n\n\n 0 pass\n 1 fail\n 1 error\nRan 1 test across 1 file. [11.00ms]",
+        "timedOut": false,
+        "passed": 0,
+        "changedTests": [
+          "tests/integration/update-command.test.ts",
+          "tests/unit/settings.test.ts",
+          "tests/unit/update-boundary.test.ts",
+          "tests/unit/update-check.test.ts",
+          "tests/unit/update-reconcile.test.ts",
+          "tests/unit/update-report.test.ts"
+        ]
+      },
+      "green": {
+        "command": "./node_modules/.bin/bun test tests/integration/update-command.test.ts",
+        "exit": 0,
+        "at": "2026-11-12T18:55:37.216Z",
+        "durationMs": 352,
+        "log": "logs/tdd-AC-30-green-1794509736864.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\n 18 pass\n 0 fail\n 58 expect() calls\nRan 18 tests across 1 file. [343.00ms]",
+        "timedOut": false,
+        "passed": 18
+      }
+    },
+    {
+      "criterion": "AC-18",
+      "red": {
+        "command": "./node_modules/.bin/bun test tests/e2e/update-reconcile.test.ts",
+        "exit": 1,
+        "at": "2026-11-12T18:56:20.817Z",
+        "durationMs": 6746,
+        "log": "logs/tdd-AC-18-red-1794509774070.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\ntests/e2e/update-reconcile.test.ts:\n62 | \n63 | describe.skipIf(skipped)(\"a copy older than the staged binary\", () => {\n64 |   test(\"hands a person's command over, with its arguments and the guard set\", async () => {\n65 |     stage(\"99.0.0\");\n66 |     const result = await runBinary(binary, [\"doctor\", \"--x\"], { env });\n67 |     expect(result.stderr).toBe(\n                               ^\nerror: expect(received).toBe(expected)\n\n- \"wizardingcode-mem: running 99.0.0 from /private/var/folders/n3/_83g89qj03g8gdw9f8hzz4s80000gn/T/wizardingcode-mem-reconcile-zYgN4N/data/bin/wizardingcode-mem; this copy is 0.8.0\n- \"\n+ \"\"\n\n- Expected  - 2\n+ Received  + 1\n\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/tests/e2e/update-reconcile.test.ts:67:27)\n(fail) a copy older than the staged binary > hands a person's command over, with its arguments and the guard set [801.37ms]\nkilled 1 dangling process\n(fail) a copy older than the staged binary > the hook's own viewer never reaches the staged binary [5003.79ms]\n  ^ this test timed out after 5000ms.\n\n 9 pass\n 2 fail\n 26 expect() calls\nRan 11 tests across 1 file. [6.74s]",
+        "timedOut": false,
+        "passed": 9,
+        "changedTests": [
+          "tests/e2e/install-forward.test.ts",
+          "tests/e2e/update-reconcile.test.ts",
+          "tests/integration/update-command.test.ts",
+          "tests/preload.ts",
+          "tests/unit/settings.test.ts",
+          "tests/unit/update-boundary.test.ts",
+          "tests/unit/update-check.test.ts",
+          "tests/unit/update-reconcile.test.ts",
+          "tests/unit/update-report.test.ts"
+        ]
+      },
+      "green": {
+        "command": "./node_modules/.bin/bun test tests/e2e/update-reconcile.test.ts tests/e2e/install-forward.test.ts",
+        "exit": 0,
+        "at": "2026-11-12T18:56:37.865Z",
+        "durationMs": 2481,
+        "log": "logs/tdd-AC-18-green-1794509795382.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\n 12 pass\n 0 fail\n 41 expect() calls\nRan 12 tests across 2 files. [2.47s]",
+        "timedOut": false,
+        "passed": 12
+      }
+    },
+    {
+      "criterion": "AC-21",
+      "red": {
+        "command": "./node_modules/.bin/bun test tests/unit/update-docs.test.ts",
+        "exit": 1,
+        "at": "2026-11-12T18:56:55.342Z",
+        "durationMs": 15,
+        "log": "logs/tdd-AC-21-red-1794509815327.txt",
+        "tail": "    \"said\": \"told from the GitHub release\",\n\n- Expected  - 1\n+ Received  + 1\n\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/tests/unit/update-docs.test.ts:59:55)\n(fail) the release runbook, the ADR and CLAUDE.md > the runbook says where clients are told from and how a notice is withdrawn [0.09ms]\n59 |       expect({ said, found: runbook.includes(said) }).toEqual({ said, found: true });\n60 |   });\n61 | \n62 |   test(\"ADR 0030 records the decision and what must never follow from it\", () => {\n63 |     const path = \"docs/adr/0030-release-notice.md\";\n64 |     expect(existsSync(join(ROOT, path))).toBe(true);\n                                              ^\nerror: expect(received).toBe(expected)\n\nExpected: true\nReceived: false\n\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/tests/unit/update-docs.test.ts:64:42)\n(fail) the release runbook, the ADR and CLAUDE.md > ADR 0030 records the decision and what must never follow from it [0.06ms]\n76 | \n77 |   test(\"CLAUDE.md names the folder and the command\", () => {\n78 |     const claude = read(\"CLAUDE.md\");\n79 |     const start = claude.indexOf(\"## Commands\");\n80 |     const commands = claude.slice(start, claude.indexOf(\"\\n## \", start + 1));\n81 |     expect(commands).toContain(\"src/update/\");\n                          ^\nerror: expect(received).toContain(expected)\n\nExpected to contain: \"src/update/\"\nReceived: \"## Commands\\n\\n- `bun run check` — typecheck, lint and tests\\n- `bun run build` — compiles the five binaries into `dist/`\\n- `bun run format` — formats and fixes lint\\n- `bun run plugins` — rewrites what each agent installs (manifests, hooks, `wizardingcode-mem.sh`, the OpenCode package) from `scripts/plugins.ts`; run it after changing the version or the events\\n- Releasing (ADR 0029, `docs/runbooks/release.md`): a tag `v<version>` runs `.github/workflows/release.yml` (build, sign, the image by its version, the GitHub release), which starts `.github/workflows/distribute.yml` from `main`: `plan` (what may be distributed, `decidePlan`'s refusals in a fixed order; the hold of the image's `latest` by the contract rule), `npm` (both packages, trusted publishing, from the commit `plan` judged), `tap` and `marketplace` (the formula from `packaging/homebrew/wizardingcode-mem.rb.template`, the plugin's entry in the marketplace's two manifests), `latest` (the image's tag, last). The decisions are pure functions in `scripts/release/lib.ts` (which also holds what the commands share: `run`, `summary`, `output`, `command`), with the commands `plan.ts`, `npm.ts`, `token.ts` and `push.ts` beside it (Bun's and Node's built-ins only; no `bun install` runs in that workflow). The marketplace token and the publish right sit behind the GitHub environment `release` (branch `main` only), which `plan` checks. In `distribute.yml` no `run:` interpolates an expression, every action is pinned by commit and no checkout keeps credentials; `tests/unit/deploy-files.test.ts` holds both workflows' shape. `push.ts` redacts the token's encoded credential by exact match from every text git answers (`redact`; another form of the credential needs its own), and its command takes no destination from its environment: writes are tested through `commitAndPush`. The tap holds the only rendered formula.\\n- The staged binary (`<data dir>/bin`) only moves forward: the plugins' script, the OpenCode package, the npm shim (`npm/bin/wizardingcode-mem.js`), `stageBinary` (`src/install/binary.ts`) and `scripts/install.sh` each replace only an older or equal version, by one order (semantic versioning's; `src/util/version.ts`, `OLDER_JS` in `scripts/plugins.ts`, the shell `older()`), held equal by `tests/fixtures/version-order.ts`. A copy of `older()` is never edited alone: change `OLDER_JS` or the template and regenerate. `install` stages once per run and hands over to a newer staged binary; `install --force` replaces it.\\n- `wizardingcode-mem install [claude-code|claude-desktop|codex|cursor|opencode|qwen|droid|copilot|antigravity]` installs for one agent (Claude Desktop: its chat gets the MCP server with `--global`, across every project; Cowork gets the plugin; ADR 0012); with no agent, for every one it finds. In Claude Code it imports claude-mem's memories and retires it (with confirmation); `wizardingcode-mem import claude-mem` only imports. claude-mem's database is only read, never changed. Qwen Code, Droid, Copilot and Antigravity install directly (hooks file and MCP server, no plugin; ADR 0016). Gemini CLI is no longer supported: `install gemini` points to Antigravity, `uninstall gemini` removes an old install (`src/install/gemini-leftover.ts`; never touches Antigravity's `~/.gemini/config`).\\n- Adapters in `src/adapters/<agent>/`; installers in `src/install/`. The design per agent, and what was or was not confirmed in real sessions, is in ADR 0006 (Claude Code, Codex, Cursor, OpenCode) and ADR 0016 (Qwen Code, Droid, Copilot, Antigravity).\\n- Installation is native in each agent (plugin, extension, npm package): ADR 0009. The files in `.claude-plugin/`, `hooks/`, `plugin/` and `plugins/` are generated; do not edit them by hand.\\n- `wizardingcode-mem rejudge [--limit n] [--concurrency n]` asks TypeSafe for the kind and importance of imported memories; what is not worth keeping becomes `archived` (never deleted). Resumable; needs a key. It asks the version 1 questions and stamps judge_version 1, whatever the distillation questions' version (ADR 0023).\\n- Distillation quality (ADR 0023): `src/distill/noise.ts` removes the host's own blocks from a turn (`stripHost`) and drops the sentences that are never knowledge, by named pattern (`host-frame`, anchored to the host's fixed lines; `status-label`; `template-label`), before either judge, and takes the dropped sentences out of the texts the judge reads and the `Context:` line quotes; a turn left with no sentence is skipped without a request. A skipped turn keeps its reason in `turns.last_error` (`skip:saved`, `skip:empty`, `skip:not-worth`, `skip:no-title`; `skipMark` in `src/distill/pipeline.ts`, no migration); `distill` and `status` print the counts by reason, and a skipped turn with no reason (skipped before reasons were kept) counts as `unknown`. The notes a session was shown are removed from a turn only when shown before it ended, and never the turn's own memory. The judges are version 2: one `knowledge_<i>` question per sentence against a named `reader`, contrastive kinds; the title must be a knowledge sentence (`KNOWLEDGE_THRESHOLD`) and the `Context:` line needs `CONTEXT_MIN_WORDS` in the prompt. The heuristic judge penalises report sentences (hashes, \\\"PR #\\\", status verbs, verdicts, test counts); `heuristicJudgeV1` keeps its version 1 for the proof. Proof: `scripts/proof/quality.sh <work dir> sample|measure`, on a read-only copy at `<work dir>/home/mem`; it sends nothing to a model but TypeSafe, labels name candidate ids (`scripts/proof/quality-brief.md`), and the samples, the labels, `verdicts.json` and `full.md` never enter the repository.\\n- `wizardingcode-mem history import [--days n] [--agent claude-code|codex] [--max-seconds n]` distils the agents' own transcripts from the last days (`historyDays`, default 180) into memories dated when they happened, live turns first; resumable, never archives. `wizardingcode-mem history replace-imports` then archives the claude-mem imports inside each finished project's history span, sparing those history confirmed; `wizardingcode-mem history restore-imports` undoes it. `wizardingcode-mem history index [--agent] [--max-seconds n]` keeps a separate, redacted, searchable index of every past turn in `history.db` (store dir, rebuildable, not in backups; session end updates it once the file exists); `history search <words> [--project] [--limit]` reads it (also the MCP `history_search`), `history forget` deletes it; never injected. One run at a time (meta lease `history.lease`); `install` offers it once (`--import-history` / `--no-import-history`), the viewer has a banner offer, a Settings History card (progress via `/api/history/progress`) and a History view that searches `history.db`. ADR 0013.\\n- `wizardingcode-mem embed download [--backfill] | status | delete | backfill [--limit n]` manages the optional search model (`<data dir>/models/potion-multilingual-128M.wcpack`; fixed `MODEL_URL`, sha256 and size pinned in `src/embed/download.ts`; the feature's only network access). Vectors: `memory_vectors` in the main database (they travel in backups), `turn_vectors` in `history.db` (filled by `history index`). Used only by on-demand search (`memory_search`, `history_search`, the viewer's palette and History view), never by the hooks or injection (ADR 0014). `WIZARDINGCODE_MEM_SEMANTIC=off` turns it off; `install --semantic` / `--no-semantic` answers its offer; the viewer's Settings → Search card drives it through `/api/semantic` (GET) and `/api/semantic/download|backfill|on|off|delete` (POST); `doctor` has a `semantic search` line. Leases `embed.download.lease` (handed over to) `embed.lease`; both block move, restore and compact. Memories that lack a vector heal by themselves: each background drain and `history import` ends with a bounded backfill (`healVectors`, never on the hook path). Floor 0.32, proof `scripts/proof/semantic.sh`: ADR 0017.\\n- `wizardingcode-mem ui [--port n] [--no-open] [--auto]` opens the viewer (loopback, token in the URL, stops when idle and no tab is open; `--auto` is what the session-start hook runs: show the viewer already running, or become it). `wizardingcode-mem compact [--dry-run]` prunes old records; never deletes memories. `wizardingcode-mem backup [--list | --restore <name>]` copies the database to the configured folder or bucket.\\n- Linked projects and your rules (ADR 0018). Migration 7 adds `project_links`, `rule_proposals` and `user_memories`; a user rule is an active memory with a `user_memories` row (Ruling P1), never a `scope` value. 0.5.0 binaries refuse a v7 database (`SchemaTooNewError`, and `doctor` fails its database check). After the drain, `distill` runs, each in its own guard and never on a hook path: the vector heal, `suggestLinksSafely` (`src/links/suggest.ts`: same remote owner plus a shared name stem outside the generic list in `src/links/signals.ts`, a manifest dependency, one workspace) and `proposeRulesSafely` (`src/links/rules.ts`: a 5 s budget, a meta cursor `rules.cursor` (new rows by id, changed rows by `(updated_at, id)`) so a quiet drain costs two index reads, the `rules.lease` lease, 60% of the budget for the scan when the judge has `personal` and a bounded `rules.pending` list for groups it had no time for; \\\"said always\\\" is `saidAlways`: typed text only, a rule phrase and two of the title's words in one short sentence, one per turn, a sure `personal` verdict with a judge). Linking by hand is only the MCP tool `project_links` (`list`, `link`, `unlink`, `confirm`, `reject`; also on OpenCode's internal `tool` bridge) and the viewer: no `link`/`unlink` commands. Viewer routes: `GET/POST /api/links`, `POST /api/links/<id>/confirm|reject|unlink`, `GET /api/links/offer`, `POST /api/links/offer/dismiss`, `GET /api/rules`, `POST /api/rules/<id>/accept|reject|undo` (undo takes the rule's memory id). Retrieval reads `visibleProjects` (`src/store/links.ts`; links never chain, `uses` is one way, disabled projects are never visible; deciding one row of a pair rejects the pair's other suggestions in the same transaction); user rules from disabled projects are never read; the shares are in `src/retrieve/brief.ts`; with no confirmed link and no user rule, brief and prompt notes are byte for byte as before (pinned snapshots). Proof: `scripts/proof/links.sh`.\\n- Settings live in `<data dir>/env` (dotenv, 0600; `src/settings/`), edited from the viewer's Settings tab; keys are named like the environment variables and the environment wins, except for `WIZARDINGCODE_MEM_SHARE_ROOTS` and `WIZARDINGCODE_MEM_SHARE_AREAS`, which the environment can only narrow (ADR 0025). The data directory (`defaultDataDir`) holds the binary, the settings and the logs (`ui.json` is at the brand level); the database may live elsewhere (`resolvePaths().storeDir`, `WIZARDINGCODE_MEM_STORE_DIR`): open it with `openDb()` and its default, never from `dataDir` directly. ADR 0010.\\n\\nThe `bun` the scripts use is the one pinned in `devDependencies`, not the global one; run tests as `bun run test` (or `./node_modules/.bin/bun test <files>`).\\n\"\n\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/tests/unit/update-docs.test.ts:81:22)\n(fail) the release runbook, the ADR and CLAUDE.md > CLAUDE.md names the folder and the command [0.11ms]\n\n 0 pass\n 7 fail\n 10 expect() calls\nRan 7 tests across 1 file. [8.00ms]",
+        "timedOut": false,
+        "passed": 0,
+        "changedTests": [
+          "tests/e2e/install-forward.test.ts",
+          "tests/e2e/update-reconcile.test.ts",
+          "tests/integration/update-command.test.ts",
+          "tests/preload.ts",
+          "tests/unit/settings.test.ts",
+          "tests/unit/update-boundary.test.ts",
+          "tests/unit/update-check.test.ts",
+          "tests/unit/update-docs.test.ts",
+          "tests/unit/update-reconcile.test.ts",
+          "tests/unit/update-report.test.ts"
+        ]
+      },
+      "green": {
+        "command": "./node_modules/.bin/bun test tests/unit/update-docs.test.ts",
+        "exit": 0,
+        "at": "2026-11-12T18:57:59.352Z",
+        "durationMs": 15,
+        "log": "logs/tdd-AC-21-green-1794509879336.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\n 7 pass\n 0 fail\n 30 expect() calls\nRan 7 tests across 1 file. [7.00ms]",
+        "timedOut": false,
+        "passed": 7
+      }
+    }
+  ],
+  "runs": [],
+  "verdict": "unproven",
+  "unproven": [
+    "gates have not run"
+  ],
+  "verifications": [
+    {
+      "what": "knowledge",
+      "ref": "K-391",
+      "question": "Does the entry `entries.k1` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.79
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T17:55:07.122Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-390",
+      "question": "Does the entry `entries.k2` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.76
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T17:55:07.122Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-381",
+      "question": "Does the entry `entries.k3` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.2
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T17:55:07.122Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-363",
+      "question": "Does the entry `entries.k4` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.29
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T17:55:07.122Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-383",
+      "question": "Does the entry `entries.k5` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.72
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T17:55:07.122Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-376",
+      "question": "Does the entry `entries.k6` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.69
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T17:55:07.122Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-375",
+      "question": "Does the entry `entries.k7` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.71
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T17:55:07.122Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-372",
+      "question": "Does the entry `entries.k8` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.2
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T17:55:07.122Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-371",
+      "question": "Does the entry `entries.k9` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.25
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T17:55:07.122Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-343",
+      "question": "Does the entry `entries.k10` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.16
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T17:55:07.122Z"
+    },
+    {
+      "what": "validator",
+      "ref": "complete-gap-round v1",
+      "question": "Is every decision listed in `conclave` under the heading 'Decisions only the user can make' present in `decisions` with an answer or a stated default?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.99
+      },
+      "confidence": 0.99,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T18:18:08.329Z"
+    },
+    {
+      "what": "validator",
+      "ref": "complete-gap-round v2",
+      "question": "Is every warning listed in `conclave` under 'Warnings' that names a security, data or payment risk present in `objections`?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.26
+      },
+      "confidence": 0.26,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T18:18:08.330Z"
+    }
+  ],
+  "roles": [
+    {
+      "agent": "goldfish-structural",
+      "agentId": "a3ca8a94dd1572e60",
+      "at": "2026-11-12T17:57:30.095Z",
+      "tokens": 35269,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/brainstorm-goldfish-structural.md"
+    },
+    {
+      "agent": "goldfish-comprehension",
+      "agentId": "aa789fc4afcb8fe84",
+      "at": "2026-11-12T17:57:33.285Z",
+      "tokens": 48282,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/brainstorm-goldfish-comprehension.md"
+    },
+    {
+      "agent": "goldfish-zoom-out",
+      "agentId": "a76577a60aee5748a",
+      "at": "2026-11-12T17:58:28.941Z",
+      "tokens": 71836,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/brainstorm-goldfish-zoom-out.md"
+    },
+    {
+      "agent": "goldfish-design",
+      "agentId": "aa7ef67f7b7bdc6cf",
+      "at": "2026-11-12T17:59:04.586Z",
+      "tokens": 68202,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/brainstorm-goldfish-design.md"
+    },
+    {
+      "agent": "goldfish-readiness",
+      "agentId": "a37cedcd827ecf82b",
+      "at": "2026-11-12T17:59:11.133Z",
+      "tokens": 84018,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/brainstorm-goldfish-readiness.md"
+    },
+    {
+      "agent": "goldfish-codebase",
+      "agentId": "a51e83c1fa684e1aa",
+      "at": "2026-11-12T17:59:47.519Z",
+      "tokens": 100232,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/brainstorm-goldfish-codebase.md"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "ac5d0eec6d035090c",
+      "at": "2026-11-12T18:12:25.534Z",
+      "tokens": 82600,
+      "tokensFrom": "transcript",
+      "model": "claude-fable-5-2",
+      "file": "conclave/lead-security.md",
+      "team": "security"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "a969f1e5e0bc3630a",
+      "at": "2026-11-12T18:12:35.207Z",
+      "tokens": 94788,
+      "tokensFrom": "transcript",
+      "model": "claude-fable-5-2",
+      "file": "conclave/lead-architects.md",
+      "team": "architects"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "a7be3682af2831861",
+      "at": "2026-11-12T18:12:44.889Z",
+      "tokens": 91910,
+      "tokensFrom": "transcript",
+      "model": "claude-fable-5-2",
+      "file": "conclave/lead-devops.md",
+      "team": "devops"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "a84e4f60c226f27f7",
+      "at": "2026-11-12T18:13:35.083Z",
+      "tokens": 99664,
+      "tokensFrom": "transcript",
+      "model": "claude-fable-5-2",
+      "file": "conclave/lead-qa.md",
+      "team": "qa"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "ac5d0eec6d035090c",
+      "at": "2026-11-12T18:16:34.280Z",
+      "tokens": 100674,
+      "tokensFrom": "transcript",
+      "model": "claude-fable-5-2",
+      "file": "conclave/lead-security-reply.round2.md",
+      "team": "security"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "a969f1e5e0bc3630a",
+      "at": "2026-11-12T18:16:34.320Z",
+      "tokens": 115619,
+      "tokensFrom": "transcript",
+      "model": "claude-fable-5-2",
+      "file": "conclave/lead-architects-reply.round2.md",
+      "team": "architects"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "a7be3682af2831861",
+      "at": "2026-11-12T18:16:45.276Z",
+      "tokens": 117224,
+      "tokensFrom": "transcript",
+      "model": "claude-fable-5-2",
+      "file": "conclave/lead-devops-reply.round2.md",
+      "team": "devops"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "a84e4f60c226f27f7",
+      "at": "2026-11-12T18:17:09.001Z",
+      "tokens": 129091,
+      "tokensFrom": "transcript",
+      "model": "claude-fable-5-2",
+      "file": "conclave/lead-qa-reply.round2.md",
+      "team": "qa"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "a969f1e5e0bc3630a",
+      "at": "2026-11-12T18:17:51.096Z",
+      "tokens": 126288,
+      "tokensFrom": "transcript",
+      "model": "claude-fable-5-2",
+      "file": "conclave/lead-architects-reply.md",
+      "team": "architects"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "a7be3682af2831861",
+      "at": "2026-11-12T18:17:53.631Z",
+      "tokens": 129547,
+      "tokensFrom": "transcript",
+      "model": "claude-fable-5-2",
+      "file": "conclave/lead-devops-reply.md",
+      "team": "devops"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "ac5d0eec6d035090c",
+      "at": "2026-11-12T18:17:55.578Z",
+      "tokens": 112203,
+      "tokensFrom": "transcript",
+      "model": "claude-fable-5-2",
+      "file": "conclave/lead-security-reply.md",
+      "team": "security"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "a84e4f60c226f27f7",
+      "at": "2026-11-12T18:17:56.728Z",
+      "tokens": 142071,
+      "tokensFrom": "transcript",
+      "model": "claude-fable-5-2",
+      "file": "conclave/lead-qa-reply.md",
+      "team": "qa"
+    },
+    {
+      "agent": "goldfish-zoom-out",
+      "agentId": "ae0e0210c630e6a0f",
+      "at": "2026-11-12T18:20:38.314Z",
+      "tokens": 52722,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-zoom-out.round2.md"
+    },
+    {
+      "agent": "goldfish-structural",
+      "agentId": "ab2e24945341d3483",
+      "at": "2026-11-12T18:21:31.359Z",
+      "tokens": 33926,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-structural.round2.md"
+    },
+    {
+      "agent": "goldfish-style",
+      "agentId": "a0ad200b63a2570c7",
+      "at": "2026-11-12T18:21:43.190Z",
+      "tokens": 37093,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-style.round2.md"
+    },
+    {
+      "agent": "goldfish-design",
+      "agentId": "aacecb6ae6b5b3ad6",
+      "at": "2026-11-12T18:23:00.054Z",
+      "tokens": 63645,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-design.round2.md"
+    },
+    {
+      "agent": "goldfish-readiness",
+      "agentId": "ad4e25a8621746b76",
+      "at": "2026-11-12T18:25:50.254Z",
+      "tokens": 94997,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-readiness.round2.md"
+    },
+    {
+      "agent": "goldfish-codebase",
+      "agentId": "a451175dd5ec32543",
+      "at": "2026-11-12T18:27:13.895Z",
+      "tokens": 134044,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-codebase.round2.md"
+    },
+    {
+      "agent": "goldfish-zoom-out",
+      "agentId": "a1a2f3f3dbd0e46b0",
+      "at": "2026-11-12T18:32:09.326Z",
+      "tokens": 51360,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-zoom-out.round3.md"
+    },
+    {
+      "agent": "goldfish-structural",
+      "agentId": "a96bfb061064b4d41",
+      "at": "2026-11-12T18:33:02.264Z",
+      "tokens": 39135,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-structural.round3.md"
+    },
+    {
+      "agent": "goldfish-style",
+      "agentId": "a352c1afdf5dd9822",
+      "at": "2026-11-12T18:33:06.558Z",
+      "tokens": 37848,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-style.round3.md"
+    },
+    {
+      "agent": "goldfish-design",
+      "agentId": "a286f2246362e2776",
+      "at": "2026-11-12T18:34:38.129Z",
+      "tokens": 65531,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-design.round3.md"
+    },
+    {
+      "agent": "goldfish-zoom-out",
+      "agentId": "af9847e299a05807a",
+      "at": "2026-11-12T18:38:10.687Z",
+      "tokens": 61743,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-zoom-out.md"
+    },
+    {
+      "agent": "goldfish-structural",
+      "agentId": "aa50d90a17c052528",
+      "at": "2026-11-12T18:39:03.788Z",
+      "tokens": 34938,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-structural.md"
+    },
+    {
+      "agent": "goldfish-style",
+      "agentId": "a27c086371c1d12fa",
+      "at": "2026-11-12T18:39:25.308Z",
+      "tokens": 39098,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-style.md"
+    },
+    {
+      "agent": "goldfish-design",
+      "agentId": "ad62d807518aff8b3",
+      "at": "2026-11-12T18:40:53.321Z",
+      "tokens": 61371,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-design.md"
+    },
+    {
+      "agent": "goldfish-readiness",
+      "agentId": "a588c77e2fa88bab1",
+      "at": "2026-11-12T18:44:40.973Z",
+      "tokens": 106987,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-readiness.md"
+    },
+    {
+      "agent": "goldfish-codebase",
+      "agentId": "a6157101f863c8e49",
+      "at": "2026-11-12T18:45:54.482Z",
+      "tokens": 180339,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-codebase.md"
+    }
+  ],
+  "specReview": {
+    "rounds": [
+      {
+        "n": 1,
+        "hash": "c7814cea67d783de7391f4e5b31260560c3b7144f17fe98e6e4d103f659c0943",
+        "openedAt": "2026-11-12T18:19:42.418Z",
+        "stages": [
+          {
+            "stage": 5,
+            "reviewers": {
+              "goldfish-zoom-out": "completed"
+            }
+          },
+          {
+            "stage": 7,
+            "reviewers": {
+              "goldfish-design": "completed",
+              "goldfish-structural": "completed",
+              "goldfish-style": "completed"
+            }
+          },
+          {
+            "stage": 9,
+            "reviewers": {
+              "goldfish-readiness": "completed",
+              "goldfish-codebase": "completed"
+            }
+          }
+        ],
+        "findings": [
+          {
+            "id": "zoom-out-1.5-1",
+            "reviewer": "goldfish-zoom-out",
+            "round": 1,
+            "stage": 5,
+            "severity": "Major",
+            "scope": "plan.md Phase 1, `writeState` (\"<file>.<pid>.tmp, mode 0600, rename\"); spec Design 1 \"State\"",
+            "text": "`src/util/atomic-write.ts` already has `writeFileAtomic` (a 0600 temporary file, then a rename), and the plan writes a second version by hand. Its fixed `.update.json.tmp` name with `flag: \"wx\"` could clash when `distill` and `update` write at the same moment, so a builder would either copy it or call it and hit that clash. The design should say to reuse it, and to give it a per-process temporary name if concurrent writers matter, not add a parallel helper.",
+            "disposition": "propose-fix",
+            "reason": "Right: writeState calls writeFileAtomic from src/util/atomic-write.ts, which gains a temporary name per process so two writers cannot clash; no second helper."
+          },
+          {
+            "id": "zoom-out-1.5-2",
+            "reviewer": "goldfish-zoom-out",
+            "round": 1,
+            "stage": 5,
+            "severity": "Nit",
+            "scope": "plan.md Phase 2, \"it moves to or is imported from where it lives\"",
+            "text": "`agoLabel` is a private function in `src/doctor/checks.ts:178`, so it cannot simply be imported. Importing it from `src/update/` would also tie the update folder to doctor. The plan should decide: move it to `src/util/` and have both callers import it from there."
+          },
+          {
+            "id": "zoom-out-1.5-3",
+            "reviewer": "goldfish-zoom-out",
+            "round": 1,
+            "stage": 5,
+            "severity": "Nit",
+            "scope": "plan.md Phase 1, `PLAIN` \"exported from `check.ts`'s sibling\"",
+            "text": "`src/util/version.ts` already holds the project's version shape (`isVersion`). A second, stricter regex in `src/update/` is justified for the redirect and the strict read, but it should sit beside `isVersion` with a note on why it is narrower, so there is one place for version shapes."
+          },
+          {
+            "id": "zoom-out-1.5-4",
+            "reviewer": "goldfish-zoom-out",
+            "round": 1,
+            "stage": 5,
+            "severity": "Nit",
+            "scope": "spec Design 1, \"`check.ts` and `state.ts` ... name nothing of this product\"",
+            "text": "Making these two files product-neutral by taking the repository and mode as parameters serves a reuse no requirement states. Product-specific constants in a module only this product calls would be simpler. The parameters do help tests, but the stated reason is speculative."
+          },
+          {
+            "id": "zoom-out-1.5-5",
+            "reviewer": "goldfish-zoom-out",
+            "round": 1,
+            "stage": 5,
+            "severity": "Nit",
+            "scope": "spec Design 1 `due` / AC-11",
+            "text": "For one GET a day that runs only when a turn ends, the six-step exponential backoff, the 60 s in-flight window and the future-time healing take up a large share of the tests (the plan's `due` table). A flat \"1 h after a failure, 24 h after a success\", with any future time treated as due, would meet G-1/G-2 just as well. No measured need for the backoff curve is given."
+          },
+          {
+            "id": "zoom-out-1.5-6",
+            "reviewer": "goldfish-zoom-out",
+            "round": 1,
+            "stage": 5,
+            "severity": "Nit",
+            "scope": "spec Design 3, last paragraphs (`realpathSync` on both sides, `<target>.<pid>.new`, `lstat` sweep of day-old files, \"removed first if it exists\")",
+            "text": "These are file-system implementation steps in the spec's architecture section and repeat what the plan's Phase 4 says. The spec should state the rule (one temporary file per process; stale ones cleaned; never followed through a link) and leave the mechanics to the plan."
+          },
+          {
+            "id": "zoom-out-1.5-7",
+            "reviewer": "goldfish-zoom-out",
+            "round": 1,
+            "stage": 5,
+            "severity": "Nit",
+            "scope": "spec Design 3 \"runs the staged binary's `--version` at most twice (once to decide, once for the report)\"",
+            "text": "`reconcile` has already read the staged version when `status`/`doctor`/`update` run in the same process, yet the report spawns the staged binary again. Passing the value along, or caching it in the process, would shorten the data path and drop the second spawn of up to 10 s."
+          },
+          {
+            "id": "zoom-out-1.5-8",
+            "reviewer": "goldfish-zoom-out",
+            "round": 1,
+            "stage": 5,
+            "severity": "Nit",
+            "scope": "plan.md Phase 5 tests, \"the command names are taken from the source text of `src/cli/main.ts` ... by a regular expression over the object literal\"",
+            "text": "Parsing source text with a regex to list the commands is fragile. The new `reconciled.ts` leaf exists only because `main.ts` runs when it loads. Moving the command-name list into that leaf, or another leaf, would let the test import it."
+          },
+          {
+            "id": "zoom-out-1.5-9",
+            "reviewer": "goldfish-zoom-out",
+            "round": 1,
+            "stage": 5,
+            "severity": "Nit",
+            "scope": "plan.md Phase 4 test paragraph, \"(with a spy on `renameSync` through a source that records the temporary name, or by listing the folder from a `copyFileSync` wrapper is not available)\"",
+            "text": "This sentence does not parse. Of the three test approaches it mentions, only the planted link is a real choice. The other two should be cut."
+          },
+          {
+            "id": "design-1.7-1",
+            "reviewer": "goldfish-design",
+            "round": 1,
+            "stage": 7,
+            "severity": "Blocker",
+            "scope": "Risks and rollback, \"The shape is the one `scripts/install.sh` already relies on\" (also concepts_brief.md Analysis)",
+            "text": "False: scripts/install.sh:26 fetches `https://github.com/$repo/releases/latest/download/<file>` and lets curl follow it; it never requests `releases/latest` and never reads a `Location` matching `/releases/tag/v<x.y.z>`, so the one piece of evidence offered for the redirect's shape does not exist and the check's core assumption has no backing until the first real release.",
+            "disposition": "propose-fix",
+            "reason": "Right, the claim was false: scripts/install.sh follows releases/latest/download and reads no Location. The shape is now backed by a probe run on 2026-11-12 (probes/releases-latest.md): 302, an absolute Location to /releases/tag/v0.8.0, the owner and repository echoed in the request letter case, and Bun fetch with redirect manual exposing both. The spec cites the probe and drops the install.sh claim."
+          },
+          {
+            "id": "design-1.7-2",
+            "reviewer": "goldfish-design",
+            "round": 1,
+            "stage": 7,
+            "severity": "Major",
+            "scope": "Design 1 \"Where it runs\" and G-1",
+            "text": "The check runs only inside `distill`, and the hook spawns `distill` only after it opens the store and finds queued turns (src/hooks/handle.ts:191). So \"it runs whether or not the store opened\" never happens on the path that matters: when the staged binary refuses the store (`SchemaTooNewError`, the case used to justify keeping the state outside the store), or when no turn is queued, nothing ever checks. A builder will claim AC-13 is met while G-1 fails in exactly that case.",
+            "disposition": "propose-fix",
+            "reason": "Right: the hook starts distill only after it opened the store and found queued turns, so with a refused store or no turn nothing checks. The spec states this as a limit, drops the justification that the step runs when the store cannot be opened from the hook path, and keeps AC-13 for distill run by hand; wizardingcode-mem update checks in that case."
+          },
+          {
+            "id": "design-1.7-3",
+            "reviewer": "goldfish-design",
+            "round": 1,
+            "stage": 7,
+            "severity": "Major",
+            "scope": "Words used here, \"staged binary … the one copy the agents' hooks and MCP servers run, whatever channel put it there\"",
+            "text": "False for `install --binary <path>` (src/cli/commands/install.ts:208-216), where the hosts run `<path>` and not `<data dir>/bin`. For such installs, reconcile stages a channel copy that no agent runs, and `status` prints \"the agents run <v>\" about the wrong file. The spec neither excludes these installs nor detects them.",
+            "disposition": "propose-fix",
+            "reason": "Right: with install --binary the hosts run that path. The definition of the staged binary says so, reconcile and the lines speak of <data dir>/bin, and the limit is in ADR 0030: for such an install the second line and the staging concern a file the agents do not run."
+          },
+          {
+            "id": "design-1.7-4",
+            "reviewer": "goldfish-design",
+            "round": 1,
+            "stage": 7,
+            "severity": "Major",
+            "scope": "Design 3, `decide({ … uid, binOwner })` and the staging rename",
+            "text": "Windows is not addressed. `process.getuid` and the directory owner have no POSIX meaning there, so the root and owner rules are undefined. On Windows, `renameSync` over a staged .exe that a running `mcp` or viewer holds open fails, so every reconciled command from a downloaded Windows copy would print the staging-failure sentence while any agent runs. Neither the J-7 path nor AC-17 says what Windows does.",
+            "disposition": "propose-fix",
+            "reason": "Right: on Windows reconcile does nothing (decide answers none on win32: no user id, and a rename over an executable in use fails). The notice works there; stated in Design 3 and in a non-goal, with a case in the decide table."
+          },
+          {
+            "id": "design-1.7-5",
+            "reviewer": "goldfish-design",
+            "round": 1,
+            "stage": 7,
+            "severity": "Major",
+            "scope": "Design 3 `stageBinary(…, { known })` / ADR 0030 limit \"no lock is shared by the writers\"",
+            "text": "Passing `known` makes the forward-only decision from a version read before the copy and rename. This widens the existing check-then-rename window, so two writers racing (a plugin refresh against a Homebrew copy's `status`) can move the staged binary backwards, after which the agents meet `SchemaTooNewError`. The limit is named, but the spec neither mitigates it (for example by a re-read just before the rename) nor says the \"only moves forward\" invariant in CLAUDE.md no longer holds.",
+            "disposition": "propose-fix",
+            "reason": "Right: the known option is dropped. stageBinary reads the staged version itself just before it copies, as today, so the forward-only decision is not made from an older read. A per-process memo of stagedVersion, cleared by a staging, keeps the common path at one run."
+          },
+          {
+            "id": "design-1.7-6",
+            "reviewer": "goldfish-design",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "Design 1, `latestRelease` exact `Location` match",
+            "text": "The match is against a fixed repository string. A transfer or rename of the repository (the brand was already renamed once), or a difference in letter case from GitHub's canonical name, gives a 301 to the new repository or a non-matching `Location`, so every shipped client reads \"not a release redirect\" for good. Only \"github.com may change the shape\" is named, not the product's own repository moving."
+          },
+          {
+            "id": "design-1.7-7",
+            "reviewer": "goldfish-design",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "Design 1 State, \"written through a temporary file and a rename\"",
+            "text": "No temporary name is given for `update.json`, though the same spec moves `stageBinary` away from a fixed `.new` name because concurrent writers collided. `distill` and `update` can write at the same time."
+          },
+          {
+            "id": "design-1.7-8",
+            "reviewer": "goldfish-design",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "Design 1 `due` / `checkForRelease`, \"A second call at the same `now` … makes no request\"",
+            "text": "`attemptAt` is a plain read-then-write with no lease. Two `distill` processes, or `distill` and `update`, that both read before either writes both make the request. This is harmless at this scale but contradicts the stated guarantee."
+          },
+          {
+            "id": "design-1.7-9",
+            "reviewer": "goldfish-design",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "Design 3, \"runs the staged binary's `--version` at most twice\"",
+            "text": "After a hand-over, the staged child's own `status`/`doctor` report runs `stagedVersion` again. On macOS, a freshly staged, unscanned binary's first `--version` can be slow. Neither the per-command count nor the added latency of every `status` is stated correctly."
+          },
+          {
+            "id": "design-1.7-10",
+            "reviewer": "goldfish-design",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "Design 3 / main.ts",
+            "text": "`update` is a new command, but the spec never says it joins `COMMANDS` and `USAGE` in src/cli/main.ts. Reconciliation runs after the unknown-command return, so a missed entry silently disables `update`."
+          },
+          {
+            "id": "design-1.7-11",
+            "reviewer": "goldfish-design",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "whole document (spec-heilmeier Q6, Q7, Q8)",
+            "text": "No cost or effort estimate, no duration, and no midway check of success. The only check is reading `wizardingcode-mem update` on the day of the first release after the merge."
+          },
+          {
+            "id": "structural-1.7-1",
+            "reviewer": "goldfish-structural",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "### Alternatives (line 96)",
+            "text": "The rubric's \"Alternatives considered\" is a third-level heading inside \"## Design\" instead of its own second-level section, and it is the only unnumbered sibling after \"### 1.\" to \"### 4.\", so a reader scanning the outline sees it as a fifth part of the architecture."
+          },
+          {
+            "id": "structural-1.7-2",
+            "reviewer": "goldfish-structural",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "## Design (line 44)",
+            "text": "The rubric's \"Proposed architecture\" section is titled \"Design\", and \"Risks and mitigations\" is titled \"Risks and rollback\"; neither title matches the standard's section name."
+          },
+          {
+            "id": "structural-1.7-3",
+            "reviewer": "goldfish-structural",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "## Risks and rollback / ## Non-Functional Requirements (lines 119-131)",
+            "text": "The rubric puts rollout and rollback under non-functional requirements, but rollback is in Risks and the NFR section holds only three performance and hook-path sentences, so the material is split across two sections."
+          },
+          {
+            "id": "structural-1.7-4",
+            "reviewer": "goldfish-structural",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "whole document (spec-heilmeier.md Q6, Q7)",
+            "text": "Nothing answers the Heilmeier questions on cost in resources or people (Q6) or how long the work will take (Q7). Q1 (what is attempted, with no jargon) is also never stated plainly: the opening defines internal terms first."
+          },
+          {
+            "id": "structural-1.7-5",
+            "reviewer": "goldfish-structural",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "### 2, lines 62-67",
+            "text": "The line \"A second line when the running copy is not the staged binary…\" is indented two spaces with no blank line after the nested list, so Markdown joins it to the last nested bullet (`update: not checked in CI`) instead of showing it as a rule for every line."
+          },
+          {
+            "id": "structural-1.7-6",
+            "reviewer": "goldfish-structural",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "## Goals and Non-Goals vs ## Acceptance criteria",
+            "text": "AC-20 (import boundary) and AC-21 (documents) are cited by no goal, though every other AC from AC-10 to AC-19 is traced to a G-n."
+          },
+          {
+            "id": "structural-1.7-7",
+            "reviewer": "goldfish-structural",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "headings (lines 13-129)",
+            "text": "The second-level headings mix title case (\"Goals and Non-Goals\", \"Open Questions\", \"Critical User Journeys\", \"Non-Functional Requirements\") with sentence case (\"Acceptance criteria\", \"Risks and rollback\")."
+          },
+          {
+            "id": "structural-1.7-8",
+            "reviewer": "goldfish-structural",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "line 117 (Test files)",
+            "text": "Nine test files, each mapped to its ACs, are packed into one run-on paragraph separated by semicolons where a list or table would make the mapping from file to AC readable."
+          },
+          {
+            "id": "structural-1.7-9",
+            "reviewer": "goldfish-structural",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "lines 68 and 123",
+            "text": "Fixed output texts are written in plain quotes (\"run wizardingcode-mem update for the commands\", \"not a release redirect\") where every other fixed text in the document is in code spans, so it is unclear whether these are exact strings."
+          },
+          {
+            "id": "structural-1.7-10",
+            "reviewer": "goldfish-structural",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "### 1, line 50 onward vs ### 2 and ### 3",
+            "text": "Design 1 ties its bullets to ACs inline (AC-19, AC-20), but Designs 2 and 3 cite none, so the links between design and criteria are uneven."
+          },
+          {
+            "id": "style-1.7-1",
+            "reviewer": "goldfish-style",
+            "round": 1,
+            "stage": 7,
+            "severity": "Major",
+            "scope": "Design 4 (README bullet) and Non-Functional Requirements",
+            "text": "\"one request a day to github.com\" and \"One request a day per data directory while turns end; none otherwise\" are false under the spec's own design: after failures the backoff retries at 1, 2, 4, 8 and 16 hours (up to six requests in a day), and `wizardingcode-mem update` asks on every run, so the README would make a claim about network use that the product breaks.",
+            "disposition": "propose-fix",
+            "reason": "Right: with the backoff the README claim of one request a day was false. The backoff becomes flat (one hour after a failure, 24 hours after a success) and the README and the requirements say what is true: at most one request a day while checks succeed, at most one an hour while they fail, plus one for each wizardingcode-mem update typed."
+          },
+          {
+            "id": "style-1.7-2",
+            "reviewer": "goldfish-style",
+            "round": 1,
+            "stage": 7,
+            "severity": "Major",
+            "scope": "Design 3, the `decide` paragraph",
+            "text": "\"is a pure function that answers `none`, `stage` or `hand-over` candidates: `none` unless this process is a compiled binary; whose real path … is not the staged binary's; …\" has broken grammar and does not say whether `decide` compares versions (it takes `staged`, yet \"reconcile then reads the staged binary's version\"), so an implementer cannot tell what `decide` returns, or which of the conditions are guards and which are outcomes.",
+            "disposition": "propose-fix",
+            "reason": "Right: the paragraph is rewritten. decide takes the guards and answers skip or compare; it compares no version. reconcile reads the staged version and chooses stage, hand over or nothing."
+          },
+          {
+            "id": "style-1.7-3",
+            "reviewer": "goldfish-style",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "Goals, G-1",
+            "text": "\"within a day or two of use after a release\" is not measurable; the design gives the bound (a turn ending more than 24 hours after the last check), so the goal should state it."
+          },
+          {
+            "id": "style-1.7-4",
+            "reviewer": "goldfish-style",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "Goals, G-1",
+            "text": "\"the product has downloaded and changed nothing\" conflicts with G-3 and J-5, where `status` from a newer channel copy stages that copy and the check writes `update.json`; the claim needs its scope (\"nothing because of the notice\")."
+          },
+          {
+            "id": "style-1.7-5",
+            "reviewer": "goldfish-style",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "Goals, G-2",
+            "text": "\"carries nothing about the machine\" is an absolute claim that Risks qualify (\"tells github.com that an address runs the product\"); say what the request leaves out (version, platform, paths, projects), as Design 1 does, and do not make the absolute claim."
+          },
+          {
+            "id": "style-1.7-6",
+            "reviewer": "goldfish-style",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "Critical User Journeys, J-8",
+            "text": "\"within a day a client that already runs 0.10.0 reads …\" holds only while turns end and checks succeed; a client in backoff, or one where no turn ends, sees it later. The runbook line in Design 4 (\"within about a day\") carries the same unstated condition."
+          },
+          {
+            "id": "style-1.7-7",
+            "reviewer": "goldfish-style",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "Acceptance criteria, the opening line",
+            "text": "\"AC-1 to AC-9 were retired when the leads' returns changed their texts\" is process jargon that means nothing to a reader without the session (\"the engine's\", \"leads' returns\")."
+          },
+          {
+            "id": "style-1.7-8",
+            "reviewer": "goldfish-style",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "Design 4 (ADR 0030 and findings rows)",
+            "text": "\"the four blockers\" is never listed in this spec, so a reader writing ADR 0030 or the findings row has to go to `concepts_brief.md` to learn what they are."
+          },
+          {
+            "id": "style-1.7-9",
+            "reviewer": "goldfish-style",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "Non-goals",
+            "text": "\"a hold signal\" and \"its five readers\" are used undefined; the reader cannot tell what signal or which five readers are meant."
+          },
+          {
+            "id": "style-1.7-10",
+            "reviewer": "goldfish-style",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "Design 3, last paragraph",
+            "text": "\"A reconciled command therefore runs the staged binary's `--version` at most twice\" does not follow from the paragraph about temporary file names it closes; the \"therefore\" has no premise there."
+          },
+          {
+            "id": "style-1.7-11",
+            "reviewer": "goldfish-style",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "Risks and rollback, second bullet",
+            "text": "it repeats the closing sentence of Design 3 (at most twice, 10 seconds each) and adds no risk or answer of its own."
+          },
+          {
+            "id": "style-1.7-12",
+            "reviewer": "goldfish-style",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "Design 3, first paragraph",
+            "text": "a single sentence of about 120 words packs the decision point, the leaf module, its exports, its import limits and testability together; the reader has to parse it several times to find the rule."
+          },
+          {
+            "id": "style-1.7-13",
+            "reviewer": "goldfish-style",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "Design 2",
+            "text": "`<age>` is used in every line (\"checked 2 h ago\", \"3 h ago\" in the journeys), but its format (units, rounding, \"just now\") is never stated, so the exact text AC-14 tests is not fully defined."
+          },
+          {
+            "id": "style-1.7-14",
+            "reviewer": "goldfish-style",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "Words used here",
+            "text": "\"the four a person types to look at their install\" does not fit `update` (which makes a request) or `ui` (which opens the viewer); the label does not match the list it names."
+          },
+          {
+            "id": "readiness-1.9-1",
+            "reviewer": "goldfish-readiness",
+            "round": 1,
+            "stage": 9,
+            "severity": "Major",
+            "scope": "Phase 3 vs Phase 4",
+            "text": "Phase 3 has `status`, `doctor` and the report's callers read `staged` with `stagedVersion`, but `stagedVersion` is only exported (with its limit) in Phase 4, so Phase 3 does not typecheck as ordered and the phases are not each buildable.",
+            "disposition": "propose-fix",
+            "reason": "Right: the export of stagedVersion and the staged path helper move to the first phase, so each phase typechecks."
+          },
+          {
+            "id": "readiness-1.9-2",
+            "reviewer": "goldfish-readiness",
+            "round": 1,
+            "stage": 9,
+            "severity": "Major",
+            "scope": "Phase 2, \"Ages use the project's existing `agoLabel`\"",
+            "text": "`agoLabel` is a private function in src/doctor/checks.ts:178, a file that imports src/store, src/modules and src/sync and that itself imports src/status/report.ts; \"moves to or is imported from where it lives\" leaves the choice open, and importing it would create a cycle (checks → status/report → update/report → checks) and pull the store into src/update; an exported `ago(now, at)` that clamps negative ages already exists in src/status/report.ts:151 and the plan does not mention it (the Files table also calls it `ageLabel`).",
+            "disposition": "propose-fix",
+            "reason": "Right: ages use ago(now, at), already exported from src/status/report.ts, moved to src/util/ so src/update/ imports no status or doctor file; agoLabel is not used."
+          },
+          {
+            "id": "readiness-1.9-3",
+            "reviewer": "goldfish-readiness",
+            "round": 1,
+            "stage": 9,
+            "severity": "Major",
+            "scope": "Phase 2 / Phase 3, callers of `updateReport`",
+            "text": "no function gives the staged binary's path or `isStaged`: binary.ts computes the target inline (with `.exe` on win32), and status, doctor, the `update` command and reconcile each need it plus the realpath comparison, so every caller would write its own copy; doctor's check is told to use only `context.dataDir/now/env`, which do not include running, staged or isStaged.",
+            "disposition": "propose-fix",
+            "reason": "Right: src/install/binary.ts exports stagedPath(dataDir) and src/update/report.ts exports stagedFacts(dataDir) giving path, version and whether this process is that file (real paths); status, doctor, update and reconcile all call it."
+          },
+          {
+            "id": "readiness-1.9-4",
+            "reviewer": "goldfish-readiness",
+            "round": 1,
+            "stage": 9,
+            "severity": "Major",
+            "scope": "Phase 3, `src/status/report.ts`",
+            "text": "`StatusReport.update` is defined as the report without `lines`, yet `formatStatus(report)` must print the lines and the commands when `out`; the plan does not say where `formatStatus` gets `lines` and `out`, whether `update` is required or optional on `StatusReport` (src/ui/server.ts also calls `statusReport`), or that status.ts assigns it after `statusReport` returns.",
+            "disposition": "propose-fix",
+            "reason": "Right: StatusReport.update is optional and holds the whole report with its lines and out; statusReport does not compute it; status.ts assigns it after statusReport returns, as it does for history, and formatStatus prints it when present. The viewer is unchanged."
+          },
+          {
+            "id": "readiness-1.9-5",
+            "reviewer": "goldfish-readiness",
+            "round": 1,
+            "stage": 9,
+            "severity": "Major",
+            "scope": "Phase 3, `src/cli/commands/status.ts` catch",
+            "text": "\"in the `catch`, the version line and the update lines are printed on standard output\" says nothing about `--json`; as written, `status --json` against a broken store writes plain text to stdout, and the shape for that case is not decided.",
+            "disposition": "propose-fix",
+            "reason": "Right: with --json and a store that cannot be opened, status prints one JSON object {version, update, error} on standard output and exits 1; without --json the version line and the update lines, then the error on standard error."
+          },
+          {
+            "id": "readiness-1.9-6",
+            "reviewer": "goldfish-readiness",
+            "round": 1,
+            "stage": 9,
+            "severity": "Major",
+            "scope": "Phase 3, `src/cli/commands/update.ts`",
+            "text": "J-4 requires that when the check is off, `update` \"prints that the check is off and how to turn it on\"; the plan only says it prints the report's lines (`update: off (WIZARDINGCODE_MEM_UPDATE)`), with no text for how to turn it on and no exit code for off / off-unknown.",
+            "disposition": "propose-fix",
+            "reason": "Right: with the check off, update prints the off line and the sentence: set WIZARDINGCODE_MEM_UPDATE=check in <data dir>/env to turn it on, prints no commands, and exits 0."
+          },
+          {
+            "id": "readiness-1.9-7",
+            "reviewer": "goldfish-readiness",
+            "round": 1,
+            "stage": 9,
+            "severity": "Major",
+            "scope": "Phase 1, `due` (\"as the spec's Design 1\")",
+            "text": "the rule is not given for a state that has `attemptAt` but neither `checkedAt` nor `failedAt` (the first request killed mid-flight), or `failures > 0` with `failedAt` null after the future-time reset; a reader can make `due` return false forever and the client never checks again; the plan also does not say how \"after a success\" is told from \"after a failure\" (`failures > 0` or `failedAt > checkedAt`).",
+            "disposition": "propose-fix",
+            "reason": "Right: due is restated as total: no state, or no checkedAt and no failedAt, is due once 60 seconds have passed since attemptAt (or at once when attemptAt is null or in the future); the last event is a failure when failedAt is a number and checkedAt is null or earlier; then one hour after failedAt, else 24 hours after checkedAt."
+          },
+          {
+            "id": "readiness-1.9-8",
+            "reviewer": "goldfish-readiness",
+            "round": 1,
+            "stage": 9,
+            "severity": "Major",
+            "scope": "Phase 3 tests, `doctor` case",
+            "text": "the sentence says the summary is `1 warning.`, then says the count is not asserted because other checks may warn, then switches to `runChecks` in-process; the assertion to write for AC-15's \"exit code stays 0 with that warning alone\" cannot be read from it.",
+            "disposition": "propose-fix",
+            "reason": "Right: the doctor test is one statement: runChecks called in the test process with a state where a release is out; the update check has status warn and its line, and run() of doctor on a context whose only non-ok check is update returns 0 with the summary 1 warning."
+          },
+          {
+            "id": "readiness-1.9-9",
+            "reviewer": "goldfish-readiness",
+            "round": 1,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Phase 3, `src/doctor/checks.ts`",
+            "text": "`env` is described as \"a new optional field of `DoctorContext`\", but `env?` already exists (checks.ts:104) and doctorContext already sets it to `process.env` (context.ts:38); a reader may add a duplicate field."
+          },
+          {
+            "id": "readiness-1.9-10",
+            "reviewer": "goldfish-readiness",
+            "round": 1,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Phase 1, `PLAIN`",
+            "text": "\"exported from `check.ts`'s sibling so both use one\" does not name the file; the Files table puts `REASONS` in check.ts, and state.ts and check.ts import each other."
+          },
+          {
+            "id": "readiness-1.9-11",
+            "reviewer": "goldfish-readiness",
+            "round": 1,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Phase 4 tests",
+            "text": "the sentence \"(with a spy on `renameSync` through a source that records the temporary name, or by listing the folder from a `copyFileSync` wrapper is not available)\" is garbled; only the planted-link assertion that follows can be built."
+          },
+          {
+            "id": "readiness-1.9-12",
+            "reviewer": "goldfish-readiness",
+            "round": 1,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Phase 4, `known?: string | null`",
+            "text": "the plan does not say whether `known: null` counts as \"given\" (skip the read, treat as unreadable) or as absent."
+          },
+          {
+            "id": "readiness-1.9-13",
+            "reviewer": "goldfish-readiness",
+            "round": 1,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Phase 5, `handOver`",
+            "text": "the case where `Bun.spawnSync` returns a null `exitCode` (the child was killed by a signal) is not decided; the current `binaryOrHandOver` uses `?? 1`."
+          },
+          {
+            "id": "readiness-1.9-14",
+            "reviewer": "goldfish-readiness",
+            "round": 1,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Phase 5, `decide`",
+            "text": "on Windows `uid` is null and the `bin` owner is a number, so `decide` always answers `none`, and a downloaded Windows copy never reconciles; the plan neither states this nor rules it out (the e2e is skipped on Windows), and it does not say what `staged` is when the staged file is missing."
+          },
+          {
+            "id": "readiness-1.9-15",
+            "reviewer": "goldfish-readiness",
+            "round": 1,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Phase 2/3, the commands block",
+            "text": "the printed format of `CHANNEL_COMMANDS` in `status` and `update` (a heading, indentation, channel labels) is not given, and neither are the signatures of `updateLine` and `agentsLine`, which the Files table lists."
+          },
+          {
+            "id": "codebase-1.9-1",
+            "reviewer": "goldfish-codebase",
+            "round": 1,
+            "stage": 9,
+            "severity": "Blocker",
+            "scope": "Phase 3, `src/doctor/checks.ts` bullet",
+            "text": "Says `context.env` is \"a new optional field of `DoctorContext`, defaulting to `process.env` in `src/doctor/context.ts`\". It already exists: `env?: Record<string, string | undefined>` at src/doctor/checks.ts:104, set to `process.env` at src/doctor/context.ts:38, and read as `context.env ?? process.env` at checks.ts:638 and 928. The Files row \"`src/doctor/context.ts` Modify\" therefore has nothing to change.",
+            "disposition": "propose-fix",
+            "reason": "Right: DoctorContext already has env and doctorContext sets it; nothing is added there and src/doctor/context.ts leaves the Files table."
+          },
+          {
+            "id": "codebase-1.9-2",
+            "reviewer": "goldfish-codebase",
+            "round": 1,
+            "stage": 9,
+            "severity": "Major",
+            "scope": "Phase 2, \"Ages use the project's existing `agoLabel`\" (Files row says `ageLabel`)",
+            "text": "`agoLabel` is a private, unexported function in src/doctor/checks.ts:178. It works in minutes, so it prints \"0 min ago\" and gives negative output for a future time. The plan leaves \"moves to or is imported from where it lives\" undecided. Importing it from `src/doctor/checks.ts` would pull the store, modules and sync into `src/update/report.ts`, which breaks AC-20's intent while still passing its textual test. It also ignores `ago(now, at)`, which is already exported from src/status/report.ts:151 and handles seconds and null.",
+            "disposition": "propose-fix",
+            "reason": "Right, same as readiness-1.9-2: ago moves to src/util/ and both callers import it; agoLabel stays private to doctor."
+          },
+          {
+            "id": "codebase-1.9-3",
+            "reviewer": "goldfish-codebase",
+            "round": 1,
+            "stage": 9,
+            "severity": "Major",
+            "scope": "Phase 3, `src/status/report.ts` bullet",
+            "text": "`StatusReport` gains `update`, but the plan does not say whether `statusReport()` computes it or the field is optional and only `status.ts` fills it (as with `history?`). `statusReport` also serves the viewer's `/api/status` (src/ui/server.ts:767) and about 30 test call sites. The first choice spawns the staged binary's `--version` on every viewer poll and every test. The second leaves `--json` and the viewer different. `src/ui/server.ts` is not in the Files table either way.",
+            "disposition": "propose-fix",
+            "reason": "Right, same as readiness-1.9-4: update is an optional field status.ts fills; statusReport, the viewer and the existing tests are untouched."
+          },
+          {
+            "id": "codebase-1.9-4",
+            "reviewer": "goldfish-codebase",
+            "round": 1,
+            "stage": 9,
+            "severity": "Major",
+            "scope": "Phase 3, `src/doctor/checks.ts` bullet",
+            "text": "`updateReport` needs `running`, `staged`, `stagedPath` and `isStaged`, but the doctor check is described as built \"from `context.dataDir`, `context.now` and `context.env`\" only. Nothing says the check spawns `stagedVersion` or how it computes `isStaged` (realpath of `process.execPath`). `runChecks`' contract (\"Looks, and changes nothing\", checks.ts:1076) and its in-process tests are affected.",
+            "disposition": "propose-fix",
+            "reason": "Right: the doctor check calls stagedFacts(context.dataDir), which runs the staged binary --version (reads only, changes nothing, so runChecks keeps its contract); a test passes a facts function through the context to avoid the run."
+          },
+          {
+            "id": "codebase-1.9-5",
+            "reviewer": "goldfish-codebase",
+            "round": 1,
+            "stage": 9,
+            "severity": "Major",
+            "scope": "Phase 2 line-1 order vs Phase 3 `update` command",
+            "text": "Line 1 puts `ci` before any state, so `wizardingcode-mem update` run in CI makes its forced request (the plan allows force in mode `ci`) and then prints \"update: not checked in CI\". That contradicts what it just did and contradicts spec J-4 and Design 2 (\"in CI it checks\").",
+            "disposition": "propose-fix",
+            "reason": "Right: the report takes checked, true when this call made a request; line 1 is not checked in CI only when the mode is ci and nothing was asked, so update in CI prints what it found."
+          },
+          {
+            "id": "codebase-1.9-6",
+            "reviewer": "goldfish-codebase",
+            "round": 1,
+            "stage": 9,
+            "severity": "Major",
+            "scope": "Phase 3, `src/cli/commands/update.ts`",
+            "text": "Spec J-4 says that with the check off, `update` \"prints that the check is off and how to turn it on\". The plan defines no such sentence (the only off text is `update: off (WIZARDINGCODE_MEM_UPDATE)`). It also does not say whether the four channel commands are printed when off.",
+            "disposition": "propose-fix",
+            "reason": "Right, same as readiness-1.9-6: the sentence that says how to turn the check on, no commands, exit 0."
+          },
+          {
+            "id": "codebase-1.9-7",
+            "reviewer": "goldfish-codebase",
+            "round": 1,
+            "stage": 9,
+            "severity": "Major",
+            "scope": "Phase 1, `writeState`",
+            "text": "The data directory is never created (no `mkdirSync`). A forced `update`, or a `distill` check, on a machine with no `<data dir>` yet throws ENOENT. In `update`, nothing catches it, so main.ts:96 prints a raw error and exits 1. The plan also skips the existing `writeFileAtomic` (src/util/atomic-write.ts) without saying why.",
+            "disposition": "propose-fix",
+            "reason": "Right: writeState creates the data directory (mode 0700) before writing, through writeFileAtomic; update catches a write failure and prints one sentence."
+          },
+          {
+            "id": "codebase-1.9-8",
+            "reviewer": "goldfish-codebase",
+            "round": 1,
+            "stage": 9,
+            "severity": "Major",
+            "scope": "Phase 5, `decide` (`uid`, `binOwner`)",
+            "text": "On Windows `process.getuid` is undefined, so `uid` is null, while `lstat().uid` is 0. The rule \"binOwner is a number other than uid\" then always answers `none`, so Windows channel copies silently never reconcile; the plan does not say whether that is intended. On POSIX, `getuid` is the real uid while the spec says \"the effective user\" (`geteuid`).",
+            "disposition": "propose-fix",
+            "reason": "Right, same as design-1.7-4: decide answers none on win32, stated; on POSIX the effective user id (geteuid) is used."
+          },
+          {
+            "id": "codebase-1.9-9",
+            "reviewer": "goldfish-codebase",
+            "round": 1,
+            "stage": 9,
+            "severity": "Major",
+            "scope": "Phase 3, `tests/preload.ts`",
+            "text": "`process.env.WIZARDINGCODE_MEM_UPDATE ??= \"off\"` keeps a developer's shell export of `check`. Every hook-spawned `distill` in the suite would then make real github.com requests, against G-2 (\"never made by the project's own tests\"). The preload already deletes other behaviour variables from the shell for this reason (`WIZARDINGCODE_MODULES`, tests/preload.ts:40). Separately, `spawnCli` (tests/helpers/cli.ts:52) inherits nothing, and the plan only adds a comment there rather than any guard.",
+            "disposition": "propose-fix",
+            "reason": "Right: the preload sets the key to off unconditionally, as it drops other behaviour variables from the shell, and a test that wants the check sets it for itself; the boundary test asserts it."
+          },
+          {
+            "id": "codebase-1.9-10",
+            "reviewer": "goldfish-codebase",
+            "round": 1,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Phase 1, `PLAIN`",
+            "text": "\"exported from `check.ts`'s sibling so both use one\" does not say which file exports it, and neither Files row lists `PLAIN`."
+          },
+          {
+            "id": "codebase-1.9-11",
+            "reviewer": "goldfish-codebase",
+            "round": 1,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Phase 1, settings",
+            "text": "Adding `update` to `Settings` breaks the whole-object `toEqual` defaults test at tests/unit/settings.test.ts:27-45, and the plan's list of settings.test.ts changes does not name it."
+          },
+          {
+            "id": "codebase-1.9-12",
+            "reviewer": "goldfish-codebase",
+            "round": 1,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Phase 4, `tests/integration/install.test.ts` paragraph",
+            "text": "The sentence \"(with a spy on `renameSync` … or by listing the folder from a `copyFileSync` wrapper is not available)\" is garbled, and it leaves the choice of method open before settling on the planted link. The plan also does not say what `stageBinary` returns when `known` is newer (presumably `kept: known`)."
+          },
+          {
+            "id": "codebase-1.9-13",
+            "reviewer": "goldfish-codebase",
+            "round": 1,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Phase 4, temporary name",
+            "text": "The plan runs `rmSync(…, { force: true })` and then a plain `copyFileSync`, which still follows a link planted between the two calls. Spec Design 3 says the file is \"never written through a link\"; `fs.constants.COPYFILE_EXCL` would close that gap."
+          },
+          {
+            "id": "codebase-1.9-14",
+            "reviewer": "goldfish-codebase",
+            "round": 1,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Phase 5, `handOver`",
+            "text": "Bun's `spawnSync` `exitCode` can be null (killed by a signal), and the plan does not keep install's current `?? 1` (install.ts:250). The spawn-failure text also changes from `wizardingcode-mem install: could not run` to `wizardingcode-mem: could not run` without saying so."
+          },
+          {
+            "id": "codebase-1.9-15",
+            "reviewer": "goldfish-codebase",
+            "round": 1,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Phase 5",
+            "text": "`install` is not reconciled, so the `WIZARDINGCODE_MEM_HANDED=1` it now passes to the handed-over staged `install` is never deleted from that child's environment. That is against spec Design 3's \"removed from the environment the handed-over command gives its own children\"."
+          },
+          {
+            "id": "codebase-1.9-16",
+            "reviewer": "goldfish-codebase",
+            "round": 1,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Phase 5, `reconcile`",
+            "text": "The plan never says how the data directory is found (`defaultDataDir()` or `resolvePaths`). It also leaves `failedAt`-later-than-`checkedAt` undefined when `checkedAt` is null, and `status --json` output in the catch path unspecified."
+          },
+          {
+            "id": "codebase-1.9-17",
+            "reviewer": "goldfish-codebase",
+            "round": 1,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Phase 3, doctor test",
+            "text": "It says the summary is `1 warning.` and then says the count is asserted elsewhere through `runChecks`. The two statements contradict each other about what the test actually asserts."
+          }
+        ],
+        "clean": false,
+        "closedAt": "2026-11-12T18:27:53.694Z"
+      },
+      {
+        "n": 2,
+        "hash": "81e541f1d804bb397534f1010cac0bd3a15929326d2b7929383c0bff26e204d6",
+        "openedAt": "2026-11-12T18:36:34.800Z",
+        "stages": [
+          {
+            "stage": 5,
+            "reviewers": {
+              "goldfish-zoom-out": "completed"
+            }
+          },
+          {
+            "stage": 7,
+            "reviewers": {
+              "goldfish-design": "completed",
+              "goldfish-structural": "completed",
+              "goldfish-style": "completed"
+            }
+          },
+          {
+            "stage": 9,
+            "reviewers": {
+              "goldfish-readiness": "completed",
+              "goldfish-codebase": "completed"
+            }
+          }
+        ],
+        "findings": [
+          {
+            "id": "zoom-out-2.5-1",
+            "reviewer": "goldfish-zoom-out",
+            "round": 2,
+            "stage": 5,
+            "severity": "Major",
+            "scope": "spec.md Alternatives / Design 3",
+            "text": "The Alternatives never weigh the simplest answer to Problem 3: the older copy only tells, the same way D-3 makes the newer copy only tell (a second line naming the staged path, or the SchemaTooNewError text naming `<path> doctor`). The hand-over brings `decide` with its root and owner rules, `WIZARDINGCODE_MEM_HANDED`, the `reconciled.ts` leaf, `COMMAND_NAMES`, a new Limit (\"runs the staged file\") and an e2e suite. Without that comparison a reader cannot tell whether running a binary from the data directory on every `status`/`doctor`/`update`/`ui` is worth its cost over a one-line notice.",
+            "disposition": "propose-fix",
+            "reason": "Right that the comparison was missing. The Alternatives now weigh an older copy that only tells: it would leave the person with a schema error on the command they typed to diagnose, and install already hands over, so the mechanism exists. The hand-over stays (the author's D-1, untouched by D-3), with its cost stated: decide, the guard variable, the leaf, and an e2e."
+          },
+          {
+            "id": "zoom-out-2.5-2",
+            "reviewer": "goldfish-zoom-out",
+            "round": 2,
+            "stage": 5,
+            "severity": "Nit",
+            "scope": "spec.md Design 1 \"The state\" / plan.md Phase 2",
+            "text": "`failures` is counted, validated, tested (\"a failure … counts\") and reset, but nothing reads it: `due` uses a flat hour, and neither the lines nor the report show it. It is left over from the rejected 1-2-4-…-24 h backoff and could be dropped."
+          },
+          {
+            "id": "zoom-out-2.5-3",
+            "reviewer": "goldfish-zoom-out",
+            "round": 2,
+            "stage": 5,
+            "severity": "Nit",
+            "scope": "spec.md Design 1 \"The request\" and AC-10 vs plan.md Phase 2 `latestRelease`",
+            "text": "The spec says `Location` is \"matched whole\", but the plan compares it \"after lower-casing the owner and repository on both sides\". The two disagree on whether a `Location` whose letter case differs from the constant passes. The probe shows github.com echoes the request's case, so the exact match the spec states is enough."
+          },
+          {
+            "id": "zoom-out-2.5-4",
+            "reviewer": "goldfish-zoom-out",
+            "round": 2,
+            "stage": 5,
+            "severity": "Nit",
+            "scope": "spec.md Design 3 \"Whether\" vs plan.md Phase 5 `reconcile`",
+            "text": "The spec checks the owner of `<data dir>/bin` \"or, when it does not exist, its nearest existing parent\", but the plan uses `binOwner` null when `bin` is missing. The plan's version is enough because with no `bin` there is nothing to hand over to, so the spec's nearest-parent rule is over-built and the two should say the same thing."
+          },
+          {
+            "id": "zoom-out-2.5-5",
+            "reviewer": "goldfish-zoom-out",
+            "round": 2,
+            "stage": 5,
+            "severity": "Nit",
+            "scope": "spec.md AC-25 vs plan.md Phase 4 `update.ts`",
+            "text": "The spec says `update` \"exits 1 only when its check failed\", but the plan also exits 1 when the state cannot be written (\"could not record the check\")."
+          },
+          {
+            "id": "zoom-out-2.5-6",
+            "reviewer": "goldfish-zoom-out",
+            "round": 2,
+            "stage": 5,
+            "severity": "Nit",
+            "scope": "spec.md Design 2 vs plan.md Phase 3",
+            "text": "The parameter that says whether this call asked is named `checked` in the spec's `updateReport` signature and `asked` in the plan's."
+          },
+          {
+            "id": "zoom-out-2.5-7",
+            "reviewer": "goldfish-zoom-out",
+            "round": 2,
+            "stage": 5,
+            "severity": "Nit",
+            "scope": "plan.md Phase 3",
+            "text": "The `StagedFacts` interface has no `exists`, but the prose below it adds `exists: boolean`. The test line promises `agentsLine` \"in its five cases\" and then lists six."
+          },
+          {
+            "id": "zoom-out-2.5-8",
+            "reviewer": "goldfish-zoom-out",
+            "round": 2,
+            "stage": 5,
+            "severity": "Nit",
+            "scope": "spec.md Design 2 `stagedFacts` / plan.md Phase 3",
+            "text": "`stagedFacts` always runs the staged binary's `--version`, even when `isSelf` is true and the answer is already `pkg.version`. So every `status` and `doctor` typed through the staged binary or a hook-run path starts itself once for no reason."
+          },
+          {
+            "id": "zoom-out-2.5-9",
+            "reviewer": "goldfish-zoom-out",
+            "round": 2,
+            "stage": 5,
+            "severity": "Nit",
+            "scope": "plan.md Phase 1 `src/util/ago.ts`",
+            "text": "`ago` moves to `src/util/` for reuse, but `agoLabel` in `src/doctor/checks.ts:178` does the same job and stays. The new `update` check in that same file will then use one form and the `backups` check the other."
+          },
+          {
+            "id": "zoom-out-2.5-10",
+            "reviewer": "goldfish-zoom-out",
+            "round": 2,
+            "stage": 5,
+            "severity": "Nit",
+            "scope": "spec.md Design 1 and 3 (`due` order, regex digit limits, `decide`/`handOver` signatures)",
+            "text": "The spec holds algorithm- and signature-level detail that the plan repeats. Keeping two copies is why F-3, F-4 and F-6 have already drifted apart. The spec could state the rules and leave the step order and signatures to the plan."
+          },
+          {
+            "id": "zoom-out-2.5-11",
+            "reviewer": "goldfish-zoom-out",
+            "round": 2,
+            "stage": 5,
+            "severity": "Nit",
+            "scope": "plan.md Phase 4 / Phase 5 `COMMAND_NAMES`",
+            "text": "The full list of commands in a leaf, with `main.ts`'s table typed by it, exists mainly so that a test can check `reconciles` is true for exactly four names. A check of `RECONCILED` and the `ui --auto` case would cover the same rule without a second list of commands to keep in sync."
+          },
+          {
+            "id": "design-2.7-1",
+            "reviewer": "goldfish-design",
+            "round": 2,
+            "stage": 7,
+            "severity": "Major",
+            "scope": "Design 2, table row order (\"the last event is a failure\" before \"the latest is higher\") and the doctor bullet",
+            "text": "once a check has recorded a newer release, any later failed check (a flaky network, a captive portal, a corporate block on github.com, a 429) changes `status` to \"could not check …; last known 0.10.0\", leaves out the commands and turns `doctor`'s `update` check from `warn` to `ok`; under hourly retries the notice flips on and off, and on a network that keeps failing it never comes back, so G-1 fails exactly where people are least likely to notice a release by other means.",
+            "disposition": "propose-fix",
+            "reason": "Right: a release already found stays announced. When the latest known is higher than the current version, line 1 is the is-out line whatever the last event, with the failure appended (last check failed: reason, age); doctor stays warn and status keeps the commands."
+          },
+          {
+            "id": "design-2.7-2",
+            "reviewer": "goldfish-design",
+            "round": 2,
+            "stage": 7,
+            "severity": "Major",
+            "scope": "Design 1 \"The mode\" with J-3 and the README bullet",
+            "text": "the mode comes from the process's own environment, so `status` typed in a shell that exports `WIZARDINGCODE_MEM_UPDATE=off` (or `CI`) prints `update: off`, while the `distill` that the agent's hooks start (often from a GUI-launched agent that does not inherit that shell's environment) still sends the request; for a privacy switch the report can say \"off\" while requests are going out, and the spec neither names this nor makes `<data dir>/env` the documented way to turn it off.",
+            "disposition": "propose-fix",
+            "reason": "Right: the mode is read by each process from its own environment and the file, so a shell export does not reach a hook started elsewhere. The documented way to turn the check off is the file <data dir>/env, which every process reads; the off line says where the value came from (this command's environment, or the file), and when it came from the environment it adds that other processes may not see it."
+          },
+          {
+            "id": "design-2.7-3",
+            "reviewer": "goldfish-design",
+            "round": 2,
+            "stage": 7,
+            "severity": "Major",
+            "scope": "Problem 3 and G-4 / J-6",
+            "text": "the hand-over runs only in a copy that already contains this item, so every channel copy shipped before it (0.8.x Homebrew and downloaded binaries) still fails with `SchemaTooNewError` against a store a newer staged binary migrated; the first copies that benefit are those released after this item, and neither Limits nor Risks says so, which overstates what the item fixes.",
+            "disposition": "propose-fix",
+            "reason": "Right: stated in Limits and in the README's install section: the hand-over exists only in copies that carry this item; an older channel copy still fails against a migrated store."
+          },
+          {
+            "id": "design-2.7-4",
+            "reviewer": "goldfish-design",
+            "round": 2,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "J-4 and Design 2 (`update` with mode `off`)",
+            "text": "the fixed hint \"set WIZARDINGCODE_MEM_UPDATE=check in <data dir>/env to turn it on\" does nothing when the `off` came from the environment, which wins over the file; the line does not say where the value came from."
+          },
+          {
+            "id": "design-2.7-5",
+            "reviewer": "goldfish-design",
+            "round": 2,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "Design 1 \"One check\"",
+            "text": "`attemptAt` is written before the request, so in a data directory that cannot be written the check throws every time and is only logged, and `status` stays at \"not checked yet\" with no reason; the spec does not name this case."
+          },
+          {
+            "id": "design-2.7-6",
+            "reviewer": "goldfish-design",
+            "round": 2,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "Risks \"Not verifiable here\"",
+            "text": "the probe says it did not test Bun's `fetch` with `redirect: \"manual\"` inside a compiled binary, which is what ships; this can be checked by building, but it is in neither Risks nor an acceptance criterion (the AC-18 e2e covers the hand-over, not the request)."
+          },
+          {
+            "id": "design-2.7-7",
+            "reviewer": "goldfish-design",
+            "round": 2,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "Design 2 `stagedFacts`",
+            "text": "`stagedVersion` is said to be \"remembered for the process\" but the spec does not say what key it is remembered by, and `stageBinary` calls it too; it should be kept by path so a later read cannot get a stale answer. Even when this process is the staged binary, `status` from it still spawns its own `--version` (up to 10 s), which the NFR does not count."
+          },
+          {
+            "id": "design-2.7-8",
+            "reviewer": "goldfish-design",
+            "round": 2,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "AC-12",
+            "text": "it says `checkForRelease` makes no request \"when `CI` is set\" with no exception, while Design 1 and AC-25 make a forced `update` ask in CI; the two criteria read as contradicting each other."
+          },
+          {
+            "id": "design-2.7-9",
+            "reviewer": "goldfish-design",
+            "round": 2,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "Heilmeier Q7/Q8",
+            "text": "how long the work takes and what the midway check is are not stated; \"one item and one pull request\" covers cost, and the only check of success named is the author reading `update` on the first release after the merge."
+          },
+          {
+            "id": "structural-2.7-1",
+            "reviewer": "goldfish-structural",
+            "round": 2,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "AC-23 (line 136) vs G-3 (line 21)",
+            "text": "AC-23 cites G-3, but G-3 cites only AC-26, so the goal-to-criterion links do not match both ways. AC-23 tests `reconciles` and `decide`, which belong to the hand-over (G-4), not the telling (G-3), so the G-3 citation is probably wrong."
+          },
+          {
+            "id": "structural-2.7-2",
+            "reviewer": "goldfish-structural",
+            "round": 2,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "Acceptance criteria, line 133",
+            "text": "A blank line between AC-19 and AC-21 splits the criteria list into two lists, or makes it a loose list. No other item in the list has this gap."
+          },
+          {
+            "id": "structural-2.7-3",
+            "reviewer": "goldfish-structural",
+            "round": 2,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "`### Limits (stated in ADR 0030)` (line 112)",
+            "text": "This level-3 heading sits under `## Design` next to the numbered subsections 1 to 4, but it is not numbered and holds limits and failure modes. The rubric puts those under risks. `## Risks and rollback` does not point to it, so the limits are split across two sections."
+          },
+          {
+            "id": "structural-2.7-4",
+            "reviewer": "goldfish-structural",
+            "round": 2,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "`## Design`, `## Alternatives`, `## Risks and rollback`",
+            "text": "The headings differ from the rubric's section names (\"Proposed architecture\", \"Alternatives considered\", \"Risks and mitigations\"). The rubric names no Acceptance criteria section, and this one sits between Alternatives and Risks."
+          },
+          {
+            "id": "structural-2.7-5",
+            "reviewer": "goldfish-structural",
+            "round": 2,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "`## Alternatives` (line 124)",
+            "text": "About a dozen rejected options are written as one dense paragraph with no list items, so the options and the reason for rejecting each are hard to tell apart and check."
+          },
+          {
+            "id": "structural-2.7-6",
+            "reviewer": "goldfish-structural",
+            "round": 2,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "whole document vs spec-heilmeier.md question 7",
+            "text": "Nothing says how long the work will take. The cost (question 6) is answered only by \"one item and one pull request\" in the non-functional requirements."
+          },
+          {
+            "id": "style-2.7-1",
+            "reviewer": "goldfish-style",
+            "round": 2,
+            "stage": 7,
+            "severity": "Major",
+            "scope": "G-2, AC-12, Documents (README bullet \"never in CI\")",
+            "text": "G-2 says the request \"is never made in CI\" and AC-12 says `checkForRelease` makes no request \"when `CI` is set\", but Design 1 (\"One check\": with `force` it also asks in mode `ci`) and AC-25 (\"`update` checks now, in CI too\") make a request in CI, so a builder following AC-12 would block `update` in CI, or the README would state something false.",
+            "disposition": "propose-fix",
+            "reason": "Right: one rule. The automatic check never runs in CI; a typed wizardingcode-mem update asks anywhere but when off. G-2, AC-12 and the README bullet say automatic."
+          },
+          {
+            "id": "style-2.7-2",
+            "reviewer": "goldfish-style",
+            "round": 2,
+            "stage": 7,
+            "severity": "Major",
+            "scope": "AC-22",
+            "text": "\"makes a request only when due\" has no exception for `force`, which Design 1 and J-4 say asks \"whatever the state's age\", so a test written to AC-22 would contradict AC-25.",
+            "disposition": "propose-fix",
+            "reason": "Right: the criterion says the automatic check asks only when due and that a forced one, from update, asks whatever the age."
+          },
+          {
+            "id": "style-2.7-3",
+            "reviewer": "goldfish-style",
+            "round": 2,
+            "stage": 7,
+            "severity": "Major",
+            "scope": "Design 3 \"What\", second bullet",
+            "text": "\"older, equal, missing or unreadable: … the report's second line (Design 2) says what the agents run and that `install` moves them\" contradicts Design 2 and AC-26, where the second line is empty when the versions are equal or no staged file exists, and says \"replaces it\" when the file is unreadable, so a builder could print a line in the equal and missing cases.",
+            "disposition": "propose-fix",
+            "reason": "Right: Design 3 no longer restates the second line; it points to the table of Design 2, where equal and missing give no line and unreadable gives replaces it."
+          },
+          {
+            "id": "style-2.7-4",
+            "reviewer": "goldfish-style",
+            "round": 2,
+            "stage": 7,
+            "severity": "Major",
+            "scope": "J-4 and Design 2 (`update` with the check off)",
+            "text": "the fixed sentence \"set WIZARDINGCODE_MEM_UPDATE=check in <data dir>/env to turn it on\" is false when `off` comes from the environment, which J-3 allows and Design 1 \"The mode\" says wins over `<data dir>/env`, so the user follows the instruction and the check stays off.",
+            "disposition": "propose-fix",
+            "reason": "Right, same as design-2.7-2: the sentence says where the off value came from and what to change there: unset the variable in this environment, or set WIZARDINGCODE_MEM_UPDATE=check in the file."
+          },
+          {
+            "id": "style-2.7-5",
+            "reviewer": "goldfish-style",
+            "round": 2,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "J-4",
+            "text": "\"Given off\" does not say whether it covers `off-unknown`, which Design 2 handles the same way. Without that, the journey and the design read differently."
+          },
+          {
+            "id": "style-2.7-6",
+            "reviewer": "goldfish-style",
+            "round": 2,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "G-1",
+            "text": "\"once a turn has ended more than 24 hours after the last check, `status` and `doctor` say that a newer release exists\" reads as unconditional. It leaves out \"when one exists\", the one-hour retry after a failure, and the modes off and CI."
+          },
+          {
+            "id": "style-2.7-7",
+            "reviewer": "goldfish-style",
+            "round": 2,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "G-1",
+            "text": "\"changes nothing but its own state file\" leaves out that Design 1 \"The state\" also creates the data directory when it is missing."
+          },
+          {
+            "id": "style-2.7-8",
+            "reviewer": "goldfish-style",
+            "round": 2,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "G-4",
+            "text": "\"a reconciled command typed from an older copy runs the staged binary\" leaves out the `skip` cases of Design 3 \"Whether\" (root, `<data dir>/bin` owned by another user, `WIZARDINGCODE_MEM_HANDED` set, not compiled)."
+          },
+          {
+            "id": "style-2.7-9",
+            "reviewer": "goldfish-style",
+            "round": 2,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "J-1",
+            "text": "\"`doctor` shows a warning line `update` with the same sentence\", but Design 2 adds \"; run wizardingcode-mem update for the commands\", so the two texts are not the same."
+          },
+          {
+            "id": "style-2.7-10",
+            "reviewer": "goldfish-style",
+            "round": 2,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "Non-goals, last two bullets",
+            "text": "the fragments \"A later item, after release assets are signed or…\", \"…: its own item.\" and \"The team server's upgrade.\" have no verb, so the reader has to guess what is deferred and to where."
+          },
+          {
+            "id": "style-2.7-11",
+            "reviewer": "goldfish-style",
+            "round": 2,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "Design 1 \"When a check is due\"",
+            "text": "\"(a request lasts at most 5)\" gives no unit. The reader has to connect it to `REQUEST_LIMIT_MS = 5000` to know it means seconds."
+          },
+          {
+            "id": "style-2.7-12",
+            "reviewer": "goldfish-style",
+            "round": 2,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "J-7",
+            "text": "\"the second line\" is used before that line is defined (Design 2), so the journey cannot be read on its own."
+          },
+          {
+            "id": "style-2.7-13",
+            "reviewer": "goldfish-style",
+            "round": 2,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "Design 2, `status` bullet",
+            "text": "\"The viewer's status is unchanged: the field is optional\" contradicts itself, because the status type gains a field."
+          },
+          {
+            "id": "style-2.7-14",
+            "reviewer": "goldfish-style",
+            "round": 2,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "Documents, `CLAUDE.md` bullet",
+            "text": "\"with the developer's hazard\" does not say what the hazard is. It most likely means the Limits item about a lower compiled build handing over, but the bullet does not point there."
+          },
+          {
+            "id": "style-2.7-15",
+            "reviewer": "goldfish-style",
+            "round": 2,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "Alternatives",
+            "text": "the whole section is one paragraph of about a dozen rejected options separated by semicolons, so it is hard to see which reason goes with which option. A list would fix that."
+          },
+          {
+            "id": "readiness-2.9-1",
+            "reviewer": "goldfish-readiness",
+            "round": 2,
+            "stage": 9,
+            "severity": "Major",
+            "scope": "Phase 4, `src/doctor/checks.ts` (\"a check `update` after `backups`\")",
+            "text": "tests/unit/doctor-knowledge.test.ts:69 asserts that `knowledge` comes right after `backups`, so putting `update` there breaks an existing test the plan does not list; `bun run test` fails unless the position changes or the test is added to the Files table.",
+            "disposition": "propose-fix",
+            "reason": "Right: the update check is not added inside runChecks. The doctor command appends it to the list runChecks returns, so the order tests of runChecks and its viewer caller are untouched."
+          },
+          {
+            "id": "readiness-2.9-2",
+            "reviewer": "goldfish-readiness",
+            "round": 2,
+            "stage": 9,
+            "severity": "Major",
+            "scope": "Phase 4, doctor check, and Files (\"`src/ui/server.ts` [is] not changed\")",
+            "text": "the viewer's `GET /api/doctor` calls `runChecks` (src/ui/server.ts:601), so the new check runs `stagedVersion` through a synchronous `Bun.spawnSync` (up to 10 s) inside the long-running viewer, and the per-process memo means the viewer keeps showing an old staged version after another process stages a new one; the spec says the viewer's side is the next item, and the plan never decides whether the viewer gets this check or how the memo is invalidated there.",
+            "disposition": "propose-fix",
+            "reason": "Right, same fix: runChecks, and so the viewer's /api/doctor, do not run the check; only the doctor command does. The per-process memo of stagedVersion is dropped: the staged binary is asked at most twice by a reconciled command, and not at all when the process is the staged binary."
+          },
+          {
+            "id": "readiness-2.9-3",
+            "reviewer": "goldfish-readiness",
+            "round": 2,
+            "stage": 9,
+            "severity": "Major",
+            "scope": "Phase 1, last paragraph (\"`src/util/atomic-write.ts`'s existing test gains\")",
+            "text": "there is no test for src/util/atomic-write.ts (the only `writeFileAtomic` test, tests/unit/knowledge-repo.test.ts:1815, tests it through the knowledge module's re-export), so the plan names no file and the engineer has to choose where the new test goes.",
+            "disposition": "propose-fix",
+            "reason": "Right: src/util/atomic-write.ts is not changed, so no test of it is needed; writeState uses it as it is, and a write that collides with another writer throws and is logged by the guard."
+          },
+          {
+            "id": "readiness-2.9-4",
+            "reviewer": "goldfish-readiness",
+            "round": 2,
+            "stage": 9,
+            "severity": "Major",
+            "scope": "Phase 2 tests, AC-10 (\"a `fetch` that never settles with `timeoutMs: 20` gives `timed out`\")",
+            "text": "the design says the timeout comes from an `AbortController` signal passed to fetch, but a fake that never settles ignores the signal, so built as written the test hangs; the plan must say either that the fake rejects when its `signal` aborts or that `latestRelease` races the fetch against the timer (and that the timer is cleared after the fetch settles, so `distill` does not stay alive 5 s).",
+            "disposition": "propose-fix",
+            "reason": "Right: latestRelease races the fetch against a timer and clears the timer in a finally; the test's fetch never settles and ignores the signal, and the case ends at the limit given."
+          },
+          {
+            "id": "readiness-2.9-5",
+            "reviewer": "goldfish-readiness",
+            "round": 2,
+            "stage": 9,
+            "severity": "Major",
+            "scope": "Phase 5 tests (AC-23 \"`--version`, `--help`, no command and an unknown command never reach it\")",
+            "text": "the only case is `--version` with staged `0.0.1`, which reconciliation would not hand over to anyway, so it cannot fail; `--help`, no command and an unknown command have no case. A case with staged `99.0.0` and no `called.txt` is needed for each.",
+            "disposition": "propose-fix",
+            "reason": "Right: the e2e gains --version, --help, no command and an unknown command, each with a staged 99.0.0 and no called.txt."
+          },
+          {
+            "id": "readiness-2.9-6",
+            "reviewer": "goldfish-readiness",
+            "round": 2,
+            "stage": 9,
+            "severity": "Major",
+            "scope": "Phase 5 tests (AC-18 \"`install` hands over through the same function\")",
+            "text": "no test checks that `install`'s hand-over now passes `WIZARDINGCODE_MEM_HANDED=1` through `handOver`, or that `install`'s `run` deletes the variable; tests/e2e/install-forward.test.ts is declared unchanged, so an `install` that still calls `Bun.spawnSync` itself passes the suite.",
+            "disposition": "propose-fix",
+            "reason": "Right: tests/e2e/install-forward.test.ts gains one assertion: the fake staged binary records WIZARDINGCODE_MEM_HANDED and it is 1, which fails while install spawns by itself; and a unit case that install's run deletes the variable from process.env."
+          },
+          {
+            "id": "readiness-2.9-7",
+            "reviewer": "goldfish-readiness",
+            "round": 2,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Files table vs Phase 1 vs spec Design 3",
+            "text": "the Files table says \"`stageBinary` is not changed\", Phase 1 says it deletes the memo entry, and the spec says \"`stageBinary` and its callers are not changed by this item\" while the plan also changes its caller `binaryOrHandOver` in install.ts; the three statements disagree."
+          },
+          {
+            "id": "readiness-2.9-8",
+            "reviewer": "goldfish-readiness",
+            "round": 2,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Phase 5 `reconcile` vs spec Design 3 \"Whether\"",
+            "text": "the spec judges the owner of the nearest existing parent when `<data dir>/bin` is missing; the plan sets `binOwner` to null (no skip) in that case."
+          },
+          {
+            "id": "readiness-2.9-9",
+            "reviewer": "goldfish-readiness",
+            "round": 2,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Phase 5 `reconcile` (\"reads `stagedVersion(path)` once\")",
+            "text": "the plan does not say whether `path` is the real path it gathered or `stagedPath(dataDir)`. The memo is keyed by that text, so passing the real path while `stagedFacts` passes `stagedPath` runs `--version` twice, against the spec's NFR of once."
+          },
+          {
+            "id": "readiness-2.9-10",
+            "reviewer": "goldfish-readiness",
+            "round": 2,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Phase 3 `update/report.ts`",
+            "text": "the `StagedFacts` interface is printed without `exists`, which the prose adds two paragraphs later; the spec's `updateReport(… checked)` and `updateLine(report)` differ from the plan's `asked` and its separate input object."
+          },
+          {
+            "id": "readiness-2.9-11",
+            "reviewer": "goldfish-readiness",
+            "round": 2,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Phase 3 tests (\"`agentsLine` in its five cases\")",
+            "text": "the list in brackets has six cases."
+          },
+          {
+            "id": "readiness-2.9-12",
+            "reviewer": "goldfish-readiness",
+            "round": 2,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Phase 3, `updateLine`",
+            "text": "a state that `readState` accepts with `latest` null and `checkedAt` set (or with only a `failedAt` older than `checkedAt` and no latest) matches no row of the spec's table, so its line is left to the engineer."
+          },
+          {
+            "id": "readiness-2.9-13",
+            "reviewer": "goldfish-readiness",
+            "round": 2,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Phase 4, `src/cli/commands/update.ts`",
+            "text": "`updateReport` needs `facts` and `running`, but the step does not say that `update` calls `stagedFacts(dataDir)` and passes `pkg.version`."
+          },
+          {
+            "id": "readiness-2.9-14",
+            "reviewer": "goldfish-readiness",
+            "round": 2,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Phase 4, `status.ts` (report built \"before the store's `try`\")",
+            "text": "a throw from `stagedFacts` (for example `realpath` refused) escapes to `main`'s handler and ends `status` with no output; the plan does not say whether a failing update report should stop `status`."
+          },
+          {
+            "id": "readiness-2.9-15",
+            "reviewer": "goldfish-readiness",
+            "round": 2,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Phase 4 tests, AC-26 for `status` and the `doctor` `runCli` case",
+            "text": "the state's `latest` is not given; the \"no `bin`\" case and the child-process `doctor` case both need a `latest` higher than `pkg.version`, not just higher than `0.0.1` or the fixed `facts` version."
+          },
+          {
+            "id": "readiness-2.9-16",
+            "reviewer": "goldfish-readiness",
+            "round": 2,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Phase 2, `latestRelease` (lower-cased owner and repository) and Phase 6 (README test only for `shell` true commands; \"Nothing leaves your machine for knowledge\" kept)",
+            "text": "both loosen the spec's wording (\"`Location`, matched whole\"; \"every command of `CHANNEL_COMMANDS`\"; \"no longer says 'nothing leaves your machine'\") without saying the spec is being narrowed."
+          },
+          {
+            "id": "readiness-2.9-17",
+            "reviewer": "goldfish-readiness",
+            "round": 2,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Phase 1, `atomic-write.ts` (\"Nothing else changes\")",
+            "text": "with a temporary name per process, the `rmSync` before the write no longer clears a leftover from a crash, so stale `.<base>.<pid>.tmp` files build up beside update.json, servers.json and the received knowledge files; the plan does not say whether that is accepted."
+          },
+          {
+            "id": "readiness-2.9-18",
+            "reviewer": "goldfish-readiness",
+            "round": 2,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Phase 3, `channels.ts`",
+            "text": "the exact `channel` labels printed in `  <channel>: <command>` and the plugin sentence are not written out; \"the four lines of the spec\" leaves the label text to be inferred from the spec's bullets."
+          },
+          {
+            "id": "codebase-2.9-1",
+            "reviewer": "goldfish-codebase",
+            "round": 2,
+            "stage": 9,
+            "severity": "Major",
+            "scope": "Phase 1, atomic-write test",
+            "text": "The plan says \"`src/util/atomic-write.ts`'s existing test gains\" two cases, but no test file for atomic-write exists. Its only test is tests/unit/knowledge-repo.test.ts:1810 (\"a temporary file name that is already a link is not written through\"), which plants a symlink at the fixed `.target.md.tmp`. Once the name becomes `.<base>.<pid>.tmp`, that test still passes but no longer tests anything, and the file is missing from the Files table. The implementer has to guess where the new cases go and will leave the symlink guard with no real test.",
+            "disposition": "propose-fix",
+            "reason": "Right, same as readiness-2.9-3: atomic-write.ts stays as it is and its symlink test keeps its meaning."
+          },
+          {
+            "id": "codebase-2.9-2",
+            "reviewer": "goldfish-codebase",
+            "round": 2,
+            "stage": 9,
+            "severity": "Major",
+            "scope": "Phase 4, doctor check `update`",
+            "text": "src/ui/server.ts:601 serves `/api/doctor` from `runChecks`, so the new check also runs inside the long-lived viewer. There it runs the staged binary's `--version` and keeps the answer in the per-process memo for the viewer's whole life, because only a `stageBinary` in the same process clears the entry. The plan says `src/ui/server.ts` \"is not changed\", and the spec says the viewer is left for the next item. Neither says that the viewer's doctor panel gains this row, or that its version can go stale.",
+            "disposition": "propose-fix",
+            "reason": "Right, same as readiness-2.9-1 and 2.9-2: the check is appended by the doctor command only, and there is no memo."
+          },
+          {
+            "id": "codebase-2.9-3",
+            "reviewer": "goldfish-codebase",
+            "round": 2,
+            "stage": 9,
+            "severity": "Major",
+            "scope": "Phase 2, `latestRelease`",
+            "text": "The plan never says to clear (or unref) the `timeoutMs` timer once `fetch` settles. main.ts only sets `process.exitCode` and never calls exit, so an armed 5000 ms timer keeps `wizardingcode-mem update`, and every `distill`, alive for up to 5 s after the answer. The plan should state `clearTimeout` in a `finally`.",
+            "disposition": "propose-fix",
+            "reason": "Right: clearTimeout in a finally, stated in the plan, so distill and update do not stay alive after the answer."
+          },
+          {
+            "id": "codebase-2.9-4",
+            "reviewer": "goldfish-codebase",
+            "round": 2,
+            "stage": 9,
+            "severity": "Major",
+            "scope": "Phase 2, AC-10 timeout case",
+            "text": "The plan's only mechanism is an AbortController \"aborted by a timer\". A fake `fetch` that \"never settles\" and ignores `signal` would never reject, so the case hangs instead of giving `timed out`. The plan has to say either that the fake honours `signal` or that `latestRelease` races the call against the timer; otherwise the implementer picks one and the test may not test what AC-10 says.",
+            "disposition": "propose-fix",
+            "reason": "Right, same as readiness-2.9-4: a race against the timer."
+          },
+          {
+            "id": "codebase-2.9-5",
+            "reviewer": "goldfish-codebase",
+            "round": 2,
+            "stage": 9,
+            "severity": "Major",
+            "scope": "Phase 5, `reconcile` vs Phase 3, `stagedFacts`",
+            "text": "`reconcile` takes \"the real path of `stagedPath(dataDir)`\" and then calls `stagedVersion(path)`, while `stagedFacts` calls it with `stagedPath`, which is not resolved. The memo is keyed by `target` (src/install/binary.ts), so where the data directory sits behind a symlink (macOS `/var` → `/private/var`, a linked `~/.wizardingcode`) the staged binary's `--version` runs twice. That breaks the spec's NFR \"once\", and `stageBinary`'s memo deletion misses the resolved key. The e2e realpaths its home, so it cannot catch this. The plan must name which path is the memo key and which path is printed in J-6.",
+            "disposition": "propose-fix",
+            "reason": "Right: with no memo the key question goes away; reconcile and stagedFacts both run the path stagedPath(dataDir) gives, and the path printed in the lines is that one."
+          },
+          {
+            "id": "codebase-2.9-6",
+            "reviewer": "goldfish-codebase",
+            "round": 2,
+            "stage": 9,
+            "severity": "Major",
+            "scope": "Phase 2, tests/unit/settings.test.ts",
+            "text": "Only \"the whole-object defaults case (line 27)\" is named as gaining `update: \"check\"`. The \"reads the file\" case (lines 48–69) also compares the whole `Settings` object with `toEqual` and goes red once `Settings` gains `update`.",
+            "disposition": "propose-fix",
+            "reason": "Right: both whole-object cases of tests/unit/settings.test.ts (the defaults and the file) gain the field, named in the plan."
+          },
+          {
+            "id": "codebase-2.9-7",
+            "reviewer": "goldfish-codebase",
+            "round": 2,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Phase 4, `src/cli/main.ts`",
+            "text": "With `\"strict\": true` (tsconfig.json), typing `COMMANDS` as `Record<(typeof COMMAND_NAMES)[number], …>` makes the existing `COMMANDS[name]` (name: string, main.ts:62) a TS7053 error. The plan does not give the lookup guard that keeps unknown commands at `EXIT_USAGE`."
+          },
+          {
+            "id": "codebase-2.9-8",
+            "reviewer": "goldfish-codebase",
+            "round": 2,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Phase 5, `reconcile`",
+            "text": "`binOwner` is \"the uid of `lstatSync` on `<data dir>/bin` or null when it does not exist\". The spec's Design 3 says \"or, when it does not exist, its nearest existing parent\". The outcome is the same today because no staged file means no hand-over, but plan and spec disagree."
+          },
+          {
+            "id": "codebase-2.9-9",
+            "reviewer": "goldfish-codebase",
+            "round": 2,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Phase 3, `src/update/report.ts`",
+            "text": "The `StagedFacts` interface in the code block has no `exists` field; the prose then says it \"gains `exists: boolean`\". Also, the `agentsLine` test is said to have \"five cases\" but lists six."
+          },
+          {
+            "id": "codebase-2.9-10",
+            "reviewer": "goldfish-codebase",
+            "round": 2,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Phase 3, `updateReport`",
+            "text": "The plan calls the input `asked?`; spec Design 2 calls it `checked`."
+          },
+          {
+            "id": "codebase-2.9-11",
+            "reviewer": "goldfish-codebase",
+            "round": 2,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Phase 4, distill guard",
+            "text": "The snippet uses `REPOSITORY`, `defaultDataDir` and `loadSettings` without saying where they are imported from (distill.ts imports none of them today; it uses `resolvePaths`). The doctor check also does not say that its mode comes from `mode(loadSettings(env, dataDir).update, env)`, and checks.ts does not import `pkg` today."
+          },
+          {
+            "id": "codebase-2.9-12",
+            "reviewer": "goldfish-codebase",
+            "round": 2,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Phase 2, `Settings.update`",
+            "text": "\"the raw value … never normalised\": `rawSettings` (src/settings/settings.ts:116) trims the environment's value and treats an empty variable as unset, so `loadSettings` does not return the environment value byte for byte. The test \"returns the raw unknown value\" should expect the trimmed value."
+          },
+          {
+            "id": "codebase-2.9-13",
+            "reviewer": "goldfish-codebase",
+            "round": 2,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Phase 1, `src/util/atomic-write.ts`",
+            "text": "Removing the fixed-name `rmSync` means a crashed writer's `.<base>.<pid>.tmp` is never cleaned up and builds up beside knowledge entries, `.git` intent records and `servers.json`. The plan does not say this is accepted."
+          },
+          {
+            "id": "codebase-2.9-14",
+            "reviewer": "goldfish-codebase",
+            "round": 2,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Phase 4, doctor check `update`",
+            "text": "Unlike `knowledge` and the `readingDb` checks, nothing is said to contain a throw from `stagedFacts` or `updateReport`. One exception would end all of `runChecks`, for both `doctor` and `/api/doctor`."
+          }
+        ],
+        "clean": true,
+        "closedAt": "2026-11-12T18:46:32.627Z"
+      }
+    ],
+    "agentIds": [
+      "aa7ef67f7b7bdc6cf",
+      "a51e83c1fa684e1aa",
+      "a76577a60aee5748a",
+      "aa789fc4afcb8fe84",
+      "a37cedcd827ecf82b",
+      "a3ca8a94dd1572e60",
+      "ae0e0210c630e6a0f",
+      "aacecb6ae6b5b3ad6",
+      "ab2e24945341d3483",
+      "a0ad200b63a2570c7",
+      "ad4e25a8621746b76",
+      "a451175dd5ec32543",
+      "a1a2f3f3dbd0e46b0",
+      "a286f2246362e2776",
+      "a96bfb061064b4d41",
+      "a352c1afdf5dd9822",
+      "af9847e299a05807a",
+      "ad62d807518aff8b3",
+      "aa50d90a17c052528",
+      "a27c086371c1d12fa",
+      "a588c77e2fa88bab1",
+      "a6157101f863c8e49"
+    ],
+    "brief": {
+      "hash": "dbefee7169d79cbdec184d03963ef467b66b39272ce56f32b880ff1b2a1756ce",
+      "agents": {
+        "goldfish-design": "aa7ef67f7b7bdc6cf",
+        "goldfish-codebase": "a51e83c1fa684e1aa",
+        "goldfish-zoom-out": "a76577a60aee5748a",
+        "goldfish-comprehension": "aa789fc4afcb8fe84",
+        "goldfish-readiness": "a37cedcd827ecf82b",
+        "goldfish-structural": "a3ca8a94dd1572e60"
+      },
+      "at": "2026-11-12T18:07:02.315Z"
+    }
+  }
+}

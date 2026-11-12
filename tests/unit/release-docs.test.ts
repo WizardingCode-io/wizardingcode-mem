@@ -149,7 +149,7 @@ describe("the release's documents", () => {
     expect(rows.some((row) => row.outcome === "deferred, first of the follow-up")).toBe(false);
     // The version rule went to the next item; the rest of what stays open is named.
     const version = rows.filter((row) => row.line.includes("`version_of`"));
-    expect(version.map((row) => row.outcome)).toEqual(["deferred, to the client update item"]);
+    expect(version.map((row) => row.outcome)).toEqual(["deferred, its own item (ADR 0030)"]);
     for (const open of ["`GIT_CONFIG_GLOBAL`", "time limit", "`MARKETPLACE_TOKEN`"])
       expect({ open, named: rows.some((row) => row.line.includes(open)) }).toEqual({
         open,

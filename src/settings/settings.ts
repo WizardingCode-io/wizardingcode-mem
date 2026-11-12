@@ -20,6 +20,7 @@ export const SETTING_KEYS = [
   "WIZARDINGCODE_MEM_RETENTION_DAYS",
   "WIZARDINGCODE_MEM_HISTORY_DAYS",
   "WIZARDINGCODE_MEM_UI_AUTO_OPEN",
+  "WIZARDINGCODE_MEM_UPDATE",
   "WIZARDINGCODE_MEM_STORE_DIR",
   "WIZARDINGCODE_MODULES",
   SHARE_ROOTS,
@@ -237,6 +238,15 @@ export function effectiveSharing(
   return { [SHARE_ROOTS]: one(SHARE_ROOTS), [SHARE_AREAS]: one(SHARE_AREAS) };
 }
 
+/**
+ * The release check's key as this process sees it, with where it came from: the lines a
+ * person reads say so, since a variable exported in one shell does not reach a hook started
+ * elsewhere. The value is not normalised: an unknown one must be seen as unknown.
+ */
+export function updateSetting(env: Env, dataDir: string): { value: string | null; source: Source } {
+  return rawSettings(env, readEnvFile(join(dataDir, ENV_FILE))).WIZARDINGCODE_MEM_UPDATE;
+}
+
 export function loadSettings(env: Env = process.env, dataDir: string): Settings {
   const file = readEnvFile(join(dataDir, ENV_FILE));
   return settingsFrom(rawSettings(env, file), effectiveSharing(file, env));
@@ -333,6 +343,7 @@ const RULES: Record<SettingKey, (value: string) => string | null> = {
       ? null
       : `a whole number of days from ${HISTORY_DAYS.min} to ${HISTORY_DAYS.max}`,
   WIZARDINGCODE_MEM_UI_AUTO_OPEN: (v) => (v === "on" || v === "off" ? null : "on or off"),
+  WIZARDINGCODE_MEM_UPDATE: (v) => (v === "check" || v === "off" ? null : "check or off"),
   WIZARDINGCODE_MEM_STORE_DIR: () => "the store directory is changed by moving the store, not here",
   WIZARDINGCODE_MODULES: (v) => {
     const ids = moduleList(v).split(",");
@@ -444,6 +455,7 @@ export function publicSettings(env: Env = process.env, dataDir: string): PublicS
     WIZARDINGCODE_MEM_RETENTION_DAYS: String(settings.retentionDays),
     WIZARDINGCODE_MEM_HISTORY_DAYS: String(settings.historyDays),
     WIZARDINGCODE_MEM_UI_AUTO_OPEN: settings.uiAutoOpen ? "on" : "off",
+    WIZARDINGCODE_MEM_UPDATE: "check",
     WIZARDINGCODE_MEM_BACKUP_EVERY_HOURS: String(settings.backup.everyHours),
     WIZARDINGCODE_MEM_BACKUP_KEEP: String(settings.backup.keep),
     WIZARDINGCODE_MODULES: DEFAULTS.modules,

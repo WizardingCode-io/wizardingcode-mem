@@ -22,6 +22,8 @@ import { getMeta } from "../store/meta.ts";
 import { syncReport } from "../sync/report.ts";
 import type { NameStatus, ServerStatus, SyncState } from "../sync/state.ts";
 import { CONTRACT } from "../team/contract.ts";
+import { commandLines, type UpdateReport } from "../update/report.ts";
+import { ago } from "../util/ago.ts";
 import { plural } from "../util/text.ts";
 
 export interface Latency {
@@ -50,6 +52,8 @@ export interface StatusReport {
   dataDir: string;
   /** The history import across projects; set by callers that look at the transcripts. */
   history?: HistoryStatus;
+  /** The release notice and the staged binary: filled by the `status` command only. */
+  update?: UpdateReport;
   /** Null where the knowledge tables do not exist, or with no database. */
   knowledge: KnowledgeStatus | null;
   sharing: SharingStatus;
@@ -147,17 +151,7 @@ export const serverJson = (server: ServerStatus): ServerJson => ({
   names: server.names,
 });
 
-/** `3 s ago`, `12 min ago`, `5 h ago`, `3 d ago`; `never` for null. */
-export function ago(now: number, at: number | null): string {
-  if (at === null) return "never";
-  const seconds = Math.max(0, Math.round((now - at) / 1000));
-  if (seconds < 60) return `${seconds} s ago`;
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `${minutes} min ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 48) return `${hours} h ago`;
-  return `${Math.round(hours / 24)} d ago`;
-}
+export { ago };
 
 /** `in 4 min`, `in 2 h`; `now` once the time has come. */
 function inTime(now: number, at: number): string {
@@ -565,8 +559,14 @@ function formatHistory(h: HistoryStatus): string[] {
   return lines;
 }
 
+/** The notice's lines, and the commands when a release is out. */
+export function updateLines(update: UpdateReport | undefined): string[] {
+  if (update === undefined) return [];
+  return update.out ? [...update.lines, ...commandLines()] : update.lines;
+}
+
 export function formatStatus(report: StatusReport): string {
-  const lines = [`wizardingcode-mem ${report.version}`];
+  const lines = [`wizardingcode-mem ${report.version}`, ...updateLines(report.update)];
   const { memories, turns, hooks } = report;
   const empty =
     report.project === null ||
