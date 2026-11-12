@@ -11,7 +11,7 @@
     "infra",
     "public-api"
   ],
-  "phase": "build",
+  "phase": "gate",
   "awaiting": null,
   "criteria": [
     {
@@ -68,6 +68,11 @@
       "id": "AC-31",
       "kind": "behavior",
       "text": "updateLine gives line 1 by the Design's first table, top to bottom: off from the file; off from the environment; an unknown value; a latest known and higher than the current, with and without a failed last check, and with the staged binary answering a version and not; CI with nothing asked; never checked; a failed check with and without a last known version; the latest equal; the latest lower. Line 2 follows the second table: none for the staged binary itself, for no staged file and for equal versions; the plain sentence for a higher staged version; wizardingcode-mem install moves them to it for a lower one; wizardingcode-mem install replaces it for a staged file that answers no version. status prints them with the commands when a release is out; with a store that cannot be opened it still prints them and exits 1, and status --json then prints one object with version, update and error. No command but install stages a binary."
+    },
+    {
+      "id": "AC-32",
+      "kind": "behavior",
+      "text": "status, doctor and update do not run the staged file when the command runs as root or when <data dir>/bin belongs to another user: the report says the staged binary was not run and why, and takes the running copy as the current version. A report that cannot be built is said with its reason in status, as in doctor, and a reconciliation that throws lets the command run in this copy."
     }
   ],
   "approvals": [
@@ -81,7 +86,7 @@
   "skips": [],
   "baseCommit": "7d096f6a80d7edc81fb74dfd3dc9eba1f9448f96",
   "createdAt": "2026-11-12T17:55:06.868Z",
-  "updatedAt": "2026-11-12T18:50:16.162Z",
+  "updatedAt": "2026-11-12T19:10:40.296Z",
   "specReview": true,
   "kind": "feature",
   "kindFrom": "work_type feature",
@@ -191,7 +196,8 @@
     "conclave": "2026-11-12T18:09:31.306Z",
     "plan": "2026-11-12T18:18:08.461Z",
     "spec-review": "2026-11-12T18:19:42.366Z",
-    "build": "2026-11-12T18:50:16.162Z"
+    "build": "2026-11-12T18:50:16.162Z",
+    "gate": "2026-11-12T19:02:15.608Z"
   },
   "decisions": [
     {
@@ -366,8 +372,9 @@
     }
   ],
   "rounds": {
-    "judgement": 0,
-    "validation": 3
+    "judgement": 1,
+    "validation": 3,
+    "judgementCode": "sha256:5b6bfb8fdbee3c359e1461dd0ed0b68bd522d96da5a2f9b2621a2bcf71e1d7bc"
   },
   "removedCriteria": [
     {
@@ -499,6 +506,30 @@
       },
       "at": "2026-11-12T18:18:07.659Z",
       "standing": true
+    }
+  ],
+  "knowledgeFiles": [],
+  "knowledgeLabels": [],
+  "pauses": [
+    {
+      "at": "2026-11-12T19:07:16.624Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-12T19:08:35.626Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-12T19:08:57.638Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-12T19:09:27.161Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
     }
   ]
 }

@@ -42,7 +42,7 @@ Beside them: release assets are not signed and `checksums.txt` travels with the 
 ## Limits
 
 - Nothing checks while no turn ends, and nothing checks from the hooks when the store cannot be opened (the hook starts `distill` only after it opened the store and found queued turns). `wizardingcode-mem update` checks in both cases.
-- The hand-over exists only in copies that carry this change, on macOS and Linux, for the user who owns `<data dir>/bin` and is not root. A channel copy of an earlier version still fails against a migrated store. The other commands (`backup`, `compact`, `history` and the rest) do not hand over.
+- The hand-over exists only in copies that carry this change, on macOS and Linux, for the user who owns `<data dir>/bin` and is not root. For root, or over a folder of another user, the staged file is not run at all, not even for its version, and the lines say so. A person who needs their own copy's `doctor` when the newer staged binary is broken sets `WIZARDINGCODE_MEM_HANDED=1` for that command; `install --force` from the older copy is the way back for the binary itself (ADR 0029). A channel copy of an earlier version still fails against a migrated store. The other commands (`backup`, `compact`, `history` and the rest) do not hand over.
 - An install made with `install --binary <path>` runs that path: for it, the line about what the agents run and the hand-over concern a file the agents do not run.
 - A repository renamed or moved leaves every shipped client reading `not a release redirect`.
 - The request goes through a configured proxy (`HTTPS_PROXY`). github.com sees the address and the time.

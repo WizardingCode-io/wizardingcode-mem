@@ -2,7 +2,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { COMMAND_NAMES, RECONCILED, reconciles } from "../../src/cli/reconciled.ts";
-import { decide, handedEnv } from "../../src/update/reconcile.ts";
+import { decide, handedEnv, reconcile } from "../../src/update/reconcile.ts";
 
 describe("reconciles", () => {
   test("only the four commands a person types to look at their install", () => {
@@ -64,5 +64,12 @@ describe("decide", () => {
       X: undefined,
       WIZARDINGCODE_MEM_HANDED: "1",
     });
+  });
+
+  test("a reconciliation that cannot look at the staged binary lets the command run here", () => {
+    const failing = () => {
+      throw new Error("ENOENT: the staged file went away");
+    };
+    expect(reconcile(["status"], failing)).toBeNull();
   });
 });

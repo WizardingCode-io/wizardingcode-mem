@@ -189,7 +189,7 @@ To update, use the way you installed:
 - npm, and Windows: `npx wizardingcode-mem@latest install`;
 - the script: `curl -fsSL https://raw.githubusercontent.com/WizardingCode-io/wizardingcode-mem/main/scripts/install.sh | sh`.
 
-`wizardingcode-mem status` and `doctor` say when a newer release is out, and `wizardingcode-mem update` asks now and lists these commands. They also say when the copy you typed and the copy your agents run differ: a copy older than the one the agents run hands `status`, `doctor`, `update` and `ui` over to it (copies from before this version do not), and a newer copy tells you that `wizardingcode-mem install` moves the agents to it.
+`wizardingcode-mem status` and `doctor` say when a newer release is out, and `wizardingcode-mem update` asks now and lists these commands. They also say when the copy you typed and the copy your agents run differ: a copy older than the one the agents run hands `status`, `doctor`, `update` and `ui` over to it (copies from before this version do not; `WIZARDINGCODE_MEM_HANDED=1` in front of the command keeps it in the copy you typed), and a newer copy tells you that `wizardingcode-mem install` moves the agents to it.
 
 Each of these checks the binary's SHA-256 against the release before using it. The curl script and `npx … install` also set up every supported agent and app they find; `wizardingcode-mem install <name>` does one (`claude-code`, `claude-desktop`, `codex`, `cursor`, `opencode`, `qwen`, `droid`, `copilot`, `antigravity`). Configuration files are backed up first, and `wizardingcode-mem uninstall <name>` puts them back. Where an agent has both the plugin and this direct install, the plugin stands down, so nothing is said twice.
 

@@ -94,6 +94,18 @@ describe("distill", () => {
     expect(await distill([], deps(answering(302, TAG("99.0.0"))))).toBe(0);
   });
 
+  test("a check that throws out of its own code is caught by distill, not by the check", async () => {
+    // The clock is read inside distill's guard: nothing below it can catch this.
+    const broken = {
+      fetch: answering(302, TAG("99.0.0")),
+      now: () => {
+        throw new Error("no clock");
+      },
+    };
+    expect(await distill([], broken)).toBe(0);
+    expect(readState(dataDir)).toBeNull();
+  });
+
   test("a store that cannot be opened fails the drain, and the check still runs", async () => {
     mkdirSync(dataDir, { recursive: true });
     writeFileSync(join(dataDir, "wizardingcode-mem.db"), "not a database");

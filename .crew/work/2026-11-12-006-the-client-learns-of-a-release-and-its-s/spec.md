@@ -84,7 +84,7 @@ The **current** version is the staged binary's when it answers one, else the run
 | the latest equals the current | `update: <latest> is the latest (checked <age>)` |
 | the latest is lower | `update: <current> is ahead of the latest release <latest> (checked <age>)` |
 
-A second line when this process is not the staged binary and the staged file exists:
+A second line when this process is not the staged binary and the staged file exists. The staged file is run, here as for the hand-over, only by the user who owns `<data dir>/bin` and never by root (on Windows, which has no user ids, always); otherwise the line is `the staged binary at <path> was not run: this command runs as root, or the folder belongs to another user`, and the current version is the running copy's (AC-32).
 
 | The staged binary | Line 2 |
 | :- | :- |
@@ -177,6 +177,7 @@ About two copies:
 - AC-29 (G-2): the automatic check makes no request when `WIZARDINGCODE_MEM_UPDATE` is `off` or any value but `check`, from the environment or from `<data dir>/env`, or when `CI` is set; a forced check makes no request when the key is `off` or any value but `check`, and makes one when only `CI` is set; the settings refuse any value of the key but `check` and `off`.
 - AC-30 (G-1): `doctor` prints a check `update`: `warn` when a release is out, `ok` otherwise, the failed check included, and its exit code is what it is without that check; the checks `runChecks` returns do not include it. `wizardingcode-mem update` asks now, prints the lines and the four commands, and exits 1 when its check failed or its result could not be recorded; with the key `off` it asks nothing, prints the off line and how to turn the check on where the value was set (the file, or this environment), prints no commands, and exits 0.
 - AC-31 (G-1, G-3): `updateLine` gives line 1 by the Design's first table, top to bottom: off from the file; off from the environment; an unknown value; a latest known and higher than the current, with and without a failed last check, and with the staged binary answering a version and not; CI with nothing asked; never checked; a failed check with and without a last known version; the latest equal; the latest lower. Line 2 follows the second table: none for the staged binary itself, for no staged file and for equal versions; the plain sentence for a higher staged version; `wizardingcode-mem install moves them to it` for a lower one; `wizardingcode-mem install replaces it` for a staged file that answers no version. `status` prints them with the commands when a release is out; with a store that cannot be opened it still prints them and exits 1, and `status --json` then prints one object with `version`, `update` and `error`. No command but `install` stages a binary.
+- AC-32 (G-4, G-1): `status`, `doctor` and `update` do not run the staged file when the command runs as root or when `<data dir>/bin` belongs to another user: the report says the staged binary was not run and why, and takes the running copy as the current version. A report that cannot be built is said with its reason in `status`, as in `doctor`, and a reconciliation that throws lets the command run in this copy.
 
 The ids missing from the sequence are retired.
 
@@ -185,7 +186,7 @@ Test files:
 | File | Criteria |
 | :- | :- |
 | `tests/unit/update-check.test.ts` | AC-10, AC-28, AC-29 |
-| `tests/unit/update-report.test.ts` | AC-31 (the lines) |
+| `tests/unit/update-report.test.ts` | AC-31 (the lines), AC-32 |
 | `tests/unit/update-reconcile.test.ts` | AC-23 (two tables: `reconciles`, `decide`) |
 | `tests/unit/update-boundary.test.ts` | AC-19 (the preload), AC-27 |
 | `tests/integration/update-command.test.ts` | AC-13, AC-30, AC-31 (`status`), with `run` called in the test's process |

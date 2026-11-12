@@ -15,13 +15,13 @@ export function stagedPath(dataDir: string): string {
 }
 
 /** The version a staged binary answers, or null when it cannot be run or answers anything else. */
-export function stagedVersion(target: string, timeoutMs = VERSION_TIMEOUT_MS): string | null {
+export function stagedVersion(target: string): string | null {
   try {
     const out = Bun.spawnSync([target, "--version"], {
       stdin: "ignore",
       stdout: "pipe",
       stderr: "ignore",
-      timeout: timeoutMs,
+      timeout: VERSION_TIMEOUT_MS,
     });
     const answer = out.stdout.toString().trim();
     return out.exitCode === 0 && isVersion(answer) ? answer : null;

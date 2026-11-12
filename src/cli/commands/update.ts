@@ -3,7 +3,7 @@ import pkg from "../../../package.json" with { type: "json" };
 import { updateSetting } from "../../settings/settings.ts";
 import { REPOSITORY } from "../../update/channels.ts";
 import { checkForRelease, mode as modeOf } from "../../update/check.ts";
-import { commandLines, stagedFacts, updateReport } from "../../update/report.ts";
+import { commandLines, reportOrReason, updateReport } from "../../update/report.ts";
 import { lastFailed } from "../../update/state.ts";
 import { defaultDataDir } from "../../util/paths.ts";
 
@@ -18,16 +18,10 @@ export async function run(
   const dataDir = defaultDataDir();
   const setting = updateSetting(process.env, dataDir);
   const mode = modeOf(setting.value, process.env);
-  const facts = stagedFacts(dataDir, pkg.version);
   const report = (asked: boolean) =>
-    updateReport({
-      dataDir,
-      env: process.env,
-      now: deps.now(),
-      running: pkg.version,
-      facts,
-      asked,
-    });
+    reportOrReason(() =>
+      updateReport({ dataDir, env: process.env, now: deps.now(), running: pkg.version, asked }),
+    );
   if (mode === "off" || mode === "off-unknown") {
     const where =
       setting.source === "env"

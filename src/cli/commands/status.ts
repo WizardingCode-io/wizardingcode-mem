@@ -3,9 +3,9 @@ import { claudeCodeRoot } from "../../adapters/claude-code/history.ts";
 import { codexRoot } from "../../adapters/codex/history.ts";
 import { findProject } from "../../core/project.ts";
 import { historyStatus } from "../../history/status.ts";
-import { formatStatus, statusReport, updateLines } from "../../status/report.ts";
+import { formatStatus, statusReport } from "../../status/report.ts";
 import { type Db, openExisting } from "../../store/db.ts";
-import { type UpdateReport, updateReport } from "../../update/report.ts";
+import { reportOrReason, updateReport } from "../../update/report.ts";
 import { resolvePaths } from "../../util/paths.ts";
 
 /** `wizardingcode-mem status [--json]`: what is stored for this project, and how wizardingcode-mem is behaving. */
@@ -14,12 +14,10 @@ export function run(argv: string[]): number {
   const json = argv.includes("--json");
   // Read from the data directory alone, before the store: it is said also when the store
   // cannot be opened, which is when a person most needs to know which copy runs.
-  let update: UpdateReport | undefined;
-  try {
-    update = updateReport({ dataDir, env: process.env, now: Date.now(), running: pkg.version });
-  } catch {
-    update = undefined;
-  }
+  const { report: update, lines } = reportOrReason(() =>
+    updateReport({ dataDir, env: process.env, now: Date.now(), running: pkg.version }),
+  );
+  const notice = [...lines, ...(update?.commands ?? [])];
   let db: Db | null = null;
   try {
     db = openExisting(storeDir);
@@ -35,14 +33,16 @@ export function run(argv: string[]): number {
         now,
       );
     }
-    process.stdout.write(json ? `${JSON.stringify(report, null, 2)}\n` : formatStatus(report));
+    process.stdout.write(
+      json ? `${JSON.stringify(report, null, 2)}\n` : formatStatus(report, notice),
+    );
     return 0;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     process.stdout.write(
       json
         ? `${JSON.stringify({ version: pkg.version, update, error: message }, null, 2)}\n`
-        : `${[`wizardingcode-mem ${pkg.version}`, ...updateLines(update)].join("\n")}\n`,
+        : `${[`wizardingcode-mem ${pkg.version}`, ...notice].join("\n")}\n`,
     );
     process.stderr.write(`wizardingcode-mem: ${message}\n`);
     return 1;

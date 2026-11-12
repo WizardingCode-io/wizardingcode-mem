@@ -2,7 +2,14 @@
 // function writes them, and this table is all of them.
 import { describe, expect, test } from "bun:test";
 import { CHANNEL_COMMANDS } from "../../src/update/channels.ts";
-import { agentsLine, commandLines, type StagedFacts, updateLine } from "../../src/update/report.ts";
+import {
+  agentsLine,
+  commandLines,
+  mayRunStaged,
+  reportOrReason,
+  type StagedFacts,
+  updateLine,
+} from "../../src/update/report.ts";
 import type { UpdateState } from "../../src/update/state.ts";
 
 const NOW = 1_800_000_000_000;
@@ -110,6 +117,7 @@ describe("agentsLine", () => {
     exists: true,
     version: "0.9.0",
     isSelf: false,
+    refused: false,
     ...over,
   });
 
@@ -149,5 +157,47 @@ describe("the commands", () => {
     expect(commandLines()[1]).toBe(
       "  Homebrew: brew upgrade wizardingcode-mem && wizardingcode-mem install",
     );
+  });
+});
+
+describe("who may run the staged file", () => {
+  test.each<[string, string, number | null, number | null, boolean]>([
+    ["its owner", "darwin", 501, 501, true],
+    ["root", "linux", 0, 0, false],
+    ["root over a user's folder", "darwin", 0, 501, false],
+    ["another user", "linux", 502, 501, false],
+    ["no user id on a platform that has them", "linux", null, 501, false],
+    ["a folder whose owner cannot be read", "darwin", 501, null, false],
+    ["Windows, which has no user ids", "win32", null, null, true],
+  ])("%s", (_what, platform, uid, binOwner, expected) => {
+    expect(mayRunStaged({ platform, uid, binOwner })).toBe(expected);
+  });
+
+  test("a staged file that was not run is said so, never called unreadable", () => {
+    const refused: StagedFacts = {
+      path: "/data/bin/wizardingcode-mem",
+      exists: true,
+      version: null,
+      isSelf: false,
+      refused: true,
+    };
+    expect(agentsLine("0.9.0", refused)).toBe(
+      "the staged binary at /data/bin/wizardingcode-mem was not run: this command runs as root, or the folder belongs to another user",
+    );
+  });
+});
+
+describe("a report that cannot be built", () => {
+  test("is said with its reason, and a good one is passed through", () => {
+    expect(
+      reportOrReason(() => {
+        throw new Error("EACCES: permission denied, realpath '/data/bin'\nat somewhere");
+      }),
+    ).toEqual({
+      report: undefined,
+      lines: ["update: not checked: EACCES: permission denied, realpath '/data/bin'"],
+    });
+    const report = { lines: ["update: not checked yet"], out: false } as never;
+    expect(reportOrReason(() => report)).toEqual({ report, lines: ["update: not checked yet"] });
   });
 });

@@ -22,7 +22,7 @@ import { getMeta } from "../store/meta.ts";
 import { syncReport } from "../sync/report.ts";
 import type { NameStatus, ServerStatus, SyncState } from "../sync/state.ts";
 import { CONTRACT } from "../team/contract.ts";
-import { commandLines, type UpdateReport } from "../update/report.ts";
+import type { UpdateReport } from "../update/report.ts";
 import { ago } from "../util/ago.ts";
 import { plural } from "../util/text.ts";
 
@@ -150,8 +150,6 @@ export const serverJson = (server: ServerStatus): ServerJson => ({
   namesHeld: server.namesHeld,
   names: server.names,
 });
-
-export { ago };
 
 /** `in 4 min`, `in 2 h`; `now` once the time has come. */
 function inTime(now: number, at: number): string {
@@ -559,14 +557,9 @@ function formatHistory(h: HistoryStatus): string[] {
   return lines;
 }
 
-/** The notice's lines, and the commands when a release is out. */
-export function updateLines(update: UpdateReport | undefined): string[] {
-  if (update === undefined) return [];
-  return update.out ? [...update.lines, ...commandLines()] : update.lines;
-}
-
-export function formatStatus(report: StatusReport): string {
-  const lines = [`wizardingcode-mem ${report.version}`, ...updateLines(report.update)];
+/** `notice` is what the `status` command prints after the version line: the release notice. */
+export function formatStatus(report: StatusReport, notice: readonly string[] = []): string {
+  const lines = [`wizardingcode-mem ${report.version}`, ...notice];
   const { memories, turns, hooks } = report;
   const empty =
     report.project === null ||
