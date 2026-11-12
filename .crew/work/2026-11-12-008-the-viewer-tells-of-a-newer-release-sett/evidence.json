@@ -807,6 +807,16 @@
       "model": "claude-fable-5-2",
       "file": "conclave/lead-qa.delivery-reply.md",
       "team": "qa"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "a6a808466efb73f20",
+      "at": "2026-11-12T22:42:43.598Z",
+      "tokens": 98732,
+      "tokensFrom": "transcript",
+      "model": "claude-fable-5-2",
+      "file": "conclave/lead-frontend.delivery.md",
+      "team": "frontend"
     }
   ],
   "judgement": [
