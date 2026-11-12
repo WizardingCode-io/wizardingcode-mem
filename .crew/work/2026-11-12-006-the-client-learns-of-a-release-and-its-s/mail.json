@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "messages": [
+    {
+      "at": "2026-11-12T19:31:41.243Z",
+      "from": {
+        "workspace": "_alone",
+        "project": "ai-mem",
+        "item": "2026-11-12-006-the-client-learns-of-a-release-and-its-s",
+        "agent": "session"
+      },
+      "hops": 0,
+      "opened": null,
+      "id": "M-2026-11-12-006-ai-mem",
+      "to": {
+        "workspace": "_alone",
+        "project": "ai-mem",
+        "item": null,
+        "agent": null
+      },
+      "type": "notice",
+      "priority": "normal",
+      "subject": "Lane feature/client-update (2026-11-12-006-the-client-learns-of-a-release-and...",
+      "body": "Lane feature/client-update (2026-11-12-006-the-client-learns-of-a-release-and-its-s, proven) is proven: commit it, then merge it from the main checkout.",
+      "replyTo": null,
+      "status": "sent"
+    }
+  ]
+}

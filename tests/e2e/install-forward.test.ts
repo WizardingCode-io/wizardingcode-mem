@@ -36,7 +36,7 @@ beforeEach(() => {
   // A "newer binary": answers its version, and records how it was called.
   writeFileSync(
     staged,
-    `#!/bin/sh\nif [ "$1" = "--version" ]; then echo 99.0.0; exit 0; fi\necho "$*" >> "${home}/called.txt"\nexit 7\n`,
+    `#!/bin/sh\nif [ "$1" = "--version" ]; then echo 99.0.0; exit 0; fi\necho "$*" >> "${home}/called.txt"\necho "$WIZARDINGCODE_MEM_HANDED" > "${home}/handed.txt"\nexit 7\n`,
   );
   chmodSync(staged, 0o755);
   env = {
@@ -71,6 +71,8 @@ describe.skipIf(process.platform === "win32")("install, with a newer binary stag
     // The staged binary did the install, once, with the same arguments, and its exit code came back.
     expect(readFileSync(join(home, "called.txt"), "utf8")).toBe(`${ARGS.join(" ")}\n`);
     expect(result.exitCode).toBe(7);
+    // Through the one hand-over function: the staged binary is told it was handed the command.
+    expect(readFileSync(join(home, "handed.txt"), "utf8")).toBe("1\n");
     // Nothing of the install ran in the older binary.
     expect(existsSync(join(home, ".claude", "settings.json"))).toBe(false);
     expect(existsSync(codexContext("", env).settingsPath)).toBe(false);

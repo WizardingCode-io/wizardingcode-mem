@@ -1,0 +1,10 @@
+# security lead's validation of 2026-11-12-006-the-client-learns-of-a-release-and-its-s: spec
+verdict: validated
+## Returns
+none
+## Notes
+- The move of the list to `src/cli/reconciled.ts` (spec.md:78) opens nothing: the leaf imports nothing of `src/update/` or `src/install/binary.ts`, the dynamic import still happens only when `reconciles(name, rest)` is true, and the returns for `--version`, `--help`, no command and an unknown command still come first. AC-16 (spec.md:110) and AC-20 (spec.md:114) are unchanged and now have a table over every command (spec.md:117). The boundary test of AC-20 should also hold that `reconciled.ts` itself has no import of those two places.
+- `update` ignoring a fresh `attemptAt` (spec.md:69) is a request the person asked for by hand; no concern.
+- `due` reading a future time before the 60-second rule (spec.md:52): one edge to close in the build, not a return. A `checkedAt` in the future (the clock moved back, or a file written by hand) is cleared only by a success; while the checks fail, `failedAt` and `attemptAt` are rewritten but `checkedAt` stays in the future, so `due` answers true at every drain and the backoff and the 60-second rule never apply: one request per ended turn, against the README's "one request a day" (spec.md:90). Have `checkForRelease` drop or clamp any time in the future when it writes `attemptAt`, and add the case to `tests/unit/update-check.test.ts` beside AC-11's.
+- The round 2 notes stand as written (the README's line 343 and a case-sensitive docs test; the three statements of Design 3 without their own test case; `handOver` shared with `install` and the variable's removal from the children's environment; the staging failure's `<reason>` kept to the error's code or first line).
+- Files read: /Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/.crew/work/2026-11-12-006-the-client-learns-of-a-release-and-its-s/spec.md (lines 44 to 118), conclave.md in the same folder (round 2 section).

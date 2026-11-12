@@ -11,7 +11,7 @@ import { REFRESH_PER_DRAIN } from "../../modules/knowledge/policy.ts";
 import { openStore } from "../../modules/knowledge/store-open.ts";
 import { type Db, openDb } from "../../store/db.ts";
 import { logError } from "../../util/log.ts";
-import { resolvePaths } from "../../util/paths.ts";
+import { defaultDataDir, resolvePaths } from "../../util/paths.ts";
 
 const MAX_TURNS = 50;
 const MAX_MS = 30_000;
@@ -20,7 +20,33 @@ const MAX_MS = 30_000;
  * `wizardingcode-mem distill`: turns queued turns into memories. Hooks start it in the
  * background; it can also be run by hand. Only one instance works at a time.
  */
-export async function run(): Promise<number> {
+export async function run(
+  _argv: string[] = [],
+  deps: { fetch: typeof fetch; now: () => number } = { fetch, now: Date.now },
+): Promise<number> {
+  const code = await drain();
+  // Which release is the latest: asked at most once a day, in this background process and
+  // never on a hook's path, whether or not the store could be opened. Never fatal.
+  try {
+    const { checkForRelease, mode } = await import("../../update/check.ts");
+    const { REPOSITORY } = await import("../../update/channels.ts");
+    const { updateSetting } = await import("../../settings/settings.ts");
+    const dataDir = defaultDataDir();
+    const result = await checkForRelease({
+      dataDir,
+      mode: mode(updateSetting(process.env, dataDir).value, process.env),
+      now: deps.now(),
+      fetch: deps.fetch,
+      repository: REPOSITORY,
+    });
+    if (result.error !== undefined) logError("update.check", new Error(result.error));
+  } catch (error) {
+    logError("update.check", error);
+  }
+  return code;
+}
+
+async function drain(): Promise<number> {
   let db: Db | undefined;
   try {
     const { dataDir, storeDir } = resolvePaths();

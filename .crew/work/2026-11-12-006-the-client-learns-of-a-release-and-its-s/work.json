@@ -1,0 +1,621 @@
+{
+  "id": "2026-11-12-006-the-client-learns-of-a-release-and-its-s",
+  "title": "The client learns of a release and its staged binary follows (piece 2 of 2026-11",
+  "input": "The client learns of a release and its staged binary follows (piece 2 of 2026-11-11-004, goal 3 of its concept brief; decisions D-5, D-6, D-7). (1) A daily check from the session-start hook, in a detached process under a lease and a backoff, through one function latestVersion() that fails closed to unknown. (2) The staged binary under <data dir>/bin replaces itself with a verified download, only when no wizardingcode-mem process of an older version holds the store; macOS and Linux; Windows gets the notice only. (3) status, doctor and the viewer's About show the released version and the one command per channel; WIZARDINGCODE_MEM_UPDATE=off|check. (4) One rule for reading the version a staged binary answers, across its five readers (moved here from 2026-11-12-005). (5) The README's privacy section names the daily request and its hosts.",
+  "type": "feature",
+  "route": "full",
+  "routeReasons": [
+    "risk areas: infra, public-api"
+  ],
+  "riskAreas": [
+    "infra",
+    "public-api"
+  ],
+  "phase": "learn",
+  "awaiting": null,
+  "criteria": [
+    {
+      "id": "AC-10",
+      "kind": "behavior",
+      "text": "latestRelease sends one GET with redirect: \"manual\", no body and no header of its own but User-Agent: wizardingcode-mem; it answers the version for a 301 or a 302 whose whole Location is https://github.com/<repository>/releases/tag/v<a>.<b>.<c>, and one of the fixed reasons for anything else (a 200, a 404, a 429, another host, http://, a trailing path, v1.2, a pre-release tag, a number of six digits, a request that throws); it never reads a body; REQUEST_LIMIT_MS is 5000 and a request that never settles answers timed out at the limit given."
+    },
+    {
+      "id": "AC-13",
+      "kind": "behavior",
+      "text": "distill runs the check after the drain, also when the store cannot be opened, and a check that throws does not change its exit code."
+    },
+    {
+      "id": "AC-18",
+      "kind": "behavior",
+      "text": "a reconciled command run from a copy older than the staged binary prints the line of J-6 and runs the staged binary with the same arguments, with WIZARDINGCODE_MEM_HANDED=1, returning its exit code; a copy started with that variable set does not hand over; install hands over through the same function."
+    },
+    {
+      "id": "AC-19",
+      "kind": "behavior",
+      "text": "the test preload turns the check off for every test and every CLI a test starts unless the test sets the key, and distill's and update's tests give them a fake fetch in the test's own process."
+    },
+    {
+      "id": "AC-21",
+      "kind": "behavior",
+      "text": "the README no longer says \"nothing leaves your machine\" or \"nothing ever leaves your machine\", says the daily request in its network bullet with the key that turns it off, names the exception to \"every setting can be changed from the viewer\", has WIZARDINGCODE_MEM_UPDATE in its settings table and every command of CHANNEL_COMMANDS; the release runbook says that clients are told from the GitHub release and how a notice is withdrawn (gh release edit); ADR 0030 exists and names the redirect, update.json, the two rules for a channel copy and that latest must never start a download; CLAUDE.md names src/update/."
+    },
+    {
+      "id": "AC-23",
+      "kind": "behavior",
+      "text": "reconciles is true only for status, doctor, update and ui without --auto, over every command of the CLI; decide answers skip on Windows, for a process that is not compiled, whose real path is the staged binary's, with WIZARDINGCODE_MEM_HANDED set, running as root, or with <data dir>/bin not the effective user's, and compare otherwise. --version, --help, no command and an unknown command never reach it."
+    },
+    {
+      "id": "AC-27",
+      "kind": "behavior",
+      "text": "no file of src/update/ imports from src/store/, src/modules/, src/engine/, src/sync/, src/status/ or src/doctor/; src/cli/main.ts has no static import of src/update/ or src/install/binary.ts; src/cli/reconciled.ts imports nothing."
+    },
+    {
+      "id": "AC-28",
+      "kind": "behavior",
+      "text": "the automatic check asks only when due: with no state; with any time in the future; one hour after a failure; 24 hours after a success; and not within 60 seconds of an attempt. A forced check asks whatever the state's age. The result is written to <data dir>/update.json: a success records the latest, even a lower one, and clears the reason; a failure keeps the last known version and records the reason. A state file whose latest or reason holds any other text, an escape sequence or a line break included, reads as no state."
+    },
+    {
+      "id": "AC-29",
+      "kind": "behavior",
+      "text": "the automatic check makes no request when WIZARDINGCODE_MEM_UPDATE is off or any value but check, from the environment or from <data dir>/env, or when CI is set; a forced check makes no request when the key is off or any value but check, and makes one when only CI is set; the settings refuse any value of the key but check and off."
+    },
+    {
+      "id": "AC-30",
+      "kind": "behavior",
+      "text": "doctor prints a check update: warn when a release is out, ok otherwise, the failed check included, and its exit code is what it is without that check; the checks runChecks returns do not include it. wizardingcode-mem update asks now, prints the lines and the four commands, and exits 1 when its check failed or its result could not be recorded; with the key off it asks nothing, prints the off line and how to turn the check on where the value was set (the file, or this environment), prints no commands, and exits 0."
+    },
+    {
+      "id": "AC-31",
+      "kind": "behavior",
+      "text": "updateLine gives line 1 by the Design's first table, top to bottom: off from the file; off from the environment; an unknown value; a latest known and higher than the current, with and without a failed last check, and with the staged binary answering a version and not; CI with nothing asked; never checked; a failed check with and without a last known version; the latest equal; the latest lower. Line 2 follows the second table: none for the staged binary itself, for no staged file and for equal versions; the plain sentence for a higher staged version; wizardingcode-mem install moves them to it for a lower one; wizardingcode-mem install replaces it for a staged file that answers no version. status prints them with the commands when a release is out; with a store that cannot be opened it still prints them and exits 1, and status --json then prints one object with version, update and error. No command but install stages a binary."
+    },
+    {
+      "id": "AC-32",
+      "kind": "behavior",
+      "text": "status, doctor and update do not run the staged file when the command runs as root or when <data dir>/bin belongs to another user: the report says the staged binary was not run and why, and takes the running copy as the current version. A report that cannot be built is said with its reason in status, as in doctor, and a reconciliation that throws lets the command run in this copy."
+    }
+  ],
+  "approvals": [
+    {
+      "what": "spec",
+      "at": "2026-11-12T18:18:08.332Z",
+      "by": "validator",
+      "rule": "complete-gap-round"
+    }
+  ],
+  "skips": [],
+  "baseCommit": "7d096f6a80d7edc81fb74dfd3dc9eba1f9448f96",
+  "createdAt": "2026-11-12T17:55:06.868Z",
+  "updatedAt": "2026-11-12T19:31:41.227Z",
+  "specReview": true,
+  "kind": "feature",
+  "kindFrom": "work_type feature",
+  "knowledge": {
+    "readAt": "2026-11-12T17:55:06.880Z",
+    "listed": [
+      "K-391",
+      "K-390",
+      "K-381",
+      "K-363",
+      "K-383",
+      "K-376",
+      "K-375",
+      "K-372",
+      "K-371",
+      "K-343"
+    ]
+  },
+  "priority": "normal",
+  "seats": [
+    {
+      "role": "researcher",
+      "team": "researchers",
+      "kind": "debate",
+      "reason": "full route"
+    },
+    {
+      "role": "review-code-quality",
+      "team": "backend",
+      "kind": "gate",
+      "gate": "code-quality",
+      "reason": "full route"
+    },
+    {
+      "role": "review-test-quality",
+      "team": "qa",
+      "kind": "gate",
+      "gate": "test-quality",
+      "reason": "full route"
+    },
+    {
+      "role": "review-security",
+      "team": "security",
+      "kind": "gate",
+      "gate": "security",
+      "reason": "full route"
+    },
+    {
+      "role": "review-risk",
+      "team": "architects",
+      "kind": "gate",
+      "gate": "risk",
+      "reason": "full route"
+    },
+    {
+      "role": "review-architecture",
+      "team": "architects",
+      "kind": "gate",
+      "gate": "architecture",
+      "reason": "full route"
+    },
+    {
+      "role": "review-infra",
+      "team": "devops",
+      "kind": "gate",
+      "gate": "infra",
+      "reason": "risk area infra"
+    },
+    {
+      "role": "lead-qa",
+      "team": "qa",
+      "kind": "lead",
+      "reason": "full route"
+    },
+    {
+      "role": "lead-security",
+      "team": "security",
+      "kind": "lead",
+      "reason": "full route"
+    },
+    {
+      "role": "lead-architects",
+      "team": "architects",
+      "kind": "lead",
+      "reason": "full route"
+    },
+    {
+      "role": "lead-devops",
+      "team": "devops",
+      "kind": "lead",
+      "reason": "risk area infra"
+    },
+    {
+      "role": "judge",
+      "team": null,
+      "kind": "debate",
+      "reason": "a gate is planned"
+    }
+  ],
+  "primaryTeam": "backend",
+  "runtimes": [
+    "claude"
+  ],
+  "phaseAt": {
+    "understand": "2026-11-12T17:55:30.836Z",
+    "specify": "2026-11-12T18:07:11.905Z",
+    "conclave": "2026-11-12T18:09:31.306Z",
+    "plan": "2026-11-12T18:18:08.461Z",
+    "spec-review": "2026-11-12T18:19:42.366Z",
+    "build": "2026-11-12T18:50:16.162Z",
+    "gate": "2026-11-12T19:02:15.608Z",
+    "deliver": "2026-11-12T19:31:40.903Z",
+    "learn": "2026-11-12T19:31:41.035Z"
+  },
+  "decisions": [
+    {
+      "id": "D-1",
+      "question": "The scope after six lenses found four blockers in the self-replacement (D-6 of 2026-11-11-004): tell and add two pieces with no network, replace only where no channel manager exists, or keep the self-replacement on every channel?",
+      "default": "Tell, plus the two pieces with no network; the self-replacement becomes a later item of its own",
+      "answer": "Avisar + sem rede: this item tells (status, doctor, About) and adds the two pieces with no network (a newer Homebrew or npm copy stages itself when run; any command of an older copy hands over to the newer staged binary); the automatic replacement becomes an item of its own, after signatures or a hold signal exist. The author's choice in the question dialog on 2026-11-12.",
+      "at": "2026-11-12T18:09:31.144Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-2",
+      "question": "The default of WIZARDINGCODE_MEM_UPDATE for the daily request to github.com: on (notice only) or off?",
+      "default": "On, notice only; off with the key; never in CI",
+      "answer": "Ligada, só aviso: it checks once a day and shows the released version, never replaces anything; the README names the request among its exceptions; off with the key, and off in CI. The author's choice in the question dialog on 2026-11-12.",
+      "at": "2026-11-12T18:09:31.195Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-3",
+      "question": "A newer channel copy run with status or doctor: does it stage itself (the hooks then run it at once, in the open session, while that session's MCP server, sync and viewer stay on the old one), or does it only tell?",
+      "default": "It only tells, and names wizardingcode-mem install as the command that moves the agents",
+      "answer": "Só avisa: status and doctor from a newer copy say which version the agents run and that wizardingcode-mem install moves them; nothing changes without an explicit command, as today. The author's choice in the question dialog on 2026-11-12, after the review's design reader showed the staging would take effect in the open session.",
+      "at": "2026-11-12T18:36:07.600Z",
+      "by": "user",
+      "relayed": true
+    }
+  ],
+  "checklists": [
+    {
+      "kind": "sync",
+      "paths": [
+        "/Users/andreagroferreira/.local/share/wizardingcode-developer-crew/skills/crew/checklists/sync.md"
+      ],
+      "at": "2026-11-12T18:10:31.399Z"
+    }
+  ],
+  "validations": [
+    {
+      "what": "spec",
+      "by": "lead-qa",
+      "verdict": "returned",
+      "returns": 7,
+      "round": 1,
+      "file": "conclave/lead-qa.md",
+      "hash": "sha256:e06a38b89a76e6b4b4fc747e5294d260f25aca2c7063f54c1b82a7025a87558b",
+      "fileHash": "sha256:512aa081d6aeff40c063dd383e0f1b569987f842e4ad503dc75bbe56350bafc7",
+      "at": "2026-11-12T18:14:07.554Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-security",
+      "verdict": "returned",
+      "returns": 3,
+      "round": 1,
+      "file": "conclave/lead-security.md",
+      "hash": "sha256:e06a38b89a76e6b4b4fc747e5294d260f25aca2c7063f54c1b82a7025a87558b",
+      "fileHash": "sha256:f11202df7226f496ccb3d87be44ce80021dc043db0d0d5e258c89428886c3173",
+      "at": "2026-11-12T18:14:07.606Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-architects",
+      "verdict": "returned",
+      "returns": 6,
+      "round": 1,
+      "file": "conclave/lead-architects.md",
+      "hash": "sha256:e06a38b89a76e6b4b4fc747e5294d260f25aca2c7063f54c1b82a7025a87558b",
+      "fileHash": "sha256:73af9d7de0d1ec24bfbcbc42d27e24d9907b9afb2989980eda1b2d0d0ae0fda3",
+      "at": "2026-11-12T18:14:07.657Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-devops",
+      "verdict": "returned",
+      "returns": 3,
+      "round": 1,
+      "file": "conclave/lead-devops.md",
+      "hash": "sha256:e06a38b89a76e6b4b4fc747e5294d260f25aca2c7063f54c1b82a7025a87558b",
+      "fileHash": "sha256:35039c4a0b631e09ef2c976ed54c3a00209b1ac38331b86d0050acdf28601d1b",
+      "at": "2026-11-12T18:14:07.709Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-qa",
+      "verdict": "returned",
+      "returns": 1,
+      "round": 2,
+      "file": "conclave/lead-qa-reply.md",
+      "hash": "sha256:3f8d33f4e40ab289cbf25b2de4ec8dd17b9e2613d059ad870338902cf18d34a0",
+      "fileHash": "sha256:ce1eecccf0ab8e61c999f3de5af965505d5b0ad199322ef9966a156820aa1ae5",
+      "at": "2026-11-12T18:17:23.332Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-security",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 2,
+      "file": "conclave/lead-security-reply.md",
+      "hash": "sha256:3f8d33f4e40ab289cbf25b2de4ec8dd17b9e2613d059ad870338902cf18d34a0",
+      "fileHash": "sha256:7ca94fb252bb2b7ae0de11c88f7f73faf254d66ed1eb78b23a752f77a82d5d1b",
+      "at": "2026-11-12T18:17:23.385Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-architects",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 2,
+      "file": "conclave/lead-architects-reply.md",
+      "hash": "sha256:3f8d33f4e40ab289cbf25b2de4ec8dd17b9e2613d059ad870338902cf18d34a0",
+      "fileHash": "sha256:cf15ca808bada0d4002011729fc619d9a8990deb9512f984adfc9500712a2da7",
+      "at": "2026-11-12T18:17:23.435Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-devops",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 2,
+      "file": "conclave/lead-devops-reply.md",
+      "hash": "sha256:3f8d33f4e40ab289cbf25b2de4ec8dd17b9e2613d059ad870338902cf18d34a0",
+      "fileHash": "sha256:4ff1f1cd0e586f10658064498011bbff4d51c12a14df74beb8d328dce3a854b3",
+      "at": "2026-11-12T18:17:23.486Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-qa",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 3,
+      "file": "conclave/lead-qa-reply.md",
+      "hash": "sha256:83bc8d34ce4739fc7d5b5180669d1888087d208cdf157dc4dc12e2d0a9c541c7",
+      "fileHash": "sha256:547f5cdfdb770c77fdb275cd448196b4d646584f0548a1a78aef221a62da6f7f",
+      "at": "2026-11-12T18:18:07.663Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-security",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 3,
+      "file": "conclave/lead-security-reply.md",
+      "hash": "sha256:83bc8d34ce4739fc7d5b5180669d1888087d208cdf157dc4dc12e2d0a9c541c7",
+      "fileHash": "sha256:1bad0c18131f7083edbe9639448705eca4abb2692eb2f0c3380ea4561afd0b65",
+      "at": "2026-11-12T18:18:07.716Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-architects",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 3,
+      "file": "conclave/lead-architects-reply.md",
+      "hash": "sha256:83bc8d34ce4739fc7d5b5180669d1888087d208cdf157dc4dc12e2d0a9c541c7",
+      "fileHash": "sha256:c95541548bf29a40aa6ebc53a54c6d3d73490e23ca99d35207341cb5b65018f5",
+      "at": "2026-11-12T18:18:07.769Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-devops",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 3,
+      "file": "conclave/lead-devops-reply.md",
+      "hash": "sha256:83bc8d34ce4739fc7d5b5180669d1888087d208cdf157dc4dc12e2d0a9c541c7",
+      "fileHash": "sha256:b4e597e632c384e910588f443730bd70755673e97874fa20aefb27ee51ede193",
+      "at": "2026-11-12T18:18:07.820Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-qa",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-qa.delivery-reply.md",
+      "hash": "sha256:15f04ea811bc559ec5e2d2ee47383a6de821275cf2d6882bc48334c34920e04e",
+      "fileHash": "sha256:eb30f710d72e4025a8f4cbaa58ece2d57537b4fe45d3dc684a3b63af3597497a",
+      "at": "2026-11-12T19:31:40.550Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-security",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-security.delivery-reply.md",
+      "hash": "sha256:15f04ea811bc559ec5e2d2ee47383a6de821275cf2d6882bc48334c34920e04e",
+      "fileHash": "sha256:b37a5ddd996d32266d91494ff579ecc8b471703222796fdeb23dec2f0c5dd577",
+      "at": "2026-11-12T19:31:40.609Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-architects",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-architects.delivery-reply.md",
+      "hash": "sha256:15f04ea811bc559ec5e2d2ee47383a6de821275cf2d6882bc48334c34920e04e",
+      "fileHash": "sha256:e2e46a0121cef7b5a6a09361ddca657af6f4f5505894f737be70be9a12d3d6e5",
+      "at": "2026-11-12T19:31:40.669Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-devops",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-devops.delivery-reply.md",
+      "hash": "sha256:15f04ea811bc559ec5e2d2ee47383a6de821275cf2d6882bc48334c34920e04e",
+      "fileHash": "sha256:3a6c86764d3322f70a0272c9fbfdf63bd22b593e88a297cf72ccd6238f7464b2",
+      "at": "2026-11-12T19:31:40.729Z"
+    }
+  ],
+  "rounds": {
+    "judgement": 3,
+    "validation": 3,
+    "judgementCode": "sha256:15f04ea811bc559ec5e2d2ee47383a6de821275cf2d6882bc48334c34920e04e"
+  },
+  "removedCriteria": [
+    {
+      "id": "AC-1",
+      "kind": "behavior",
+      "text": "latestRelease answers the version for a redirect to https://github.com/<repository>/releases/tag/v<plain version>, and a reason for anything else: a 200, a 404, a 429, a redirect to another host or path, a pre-release tag, a request that throws, a request that passes 5 seconds. It never follows the redirect and never reads a body.",
+      "at": "2026-11-12T18:15:45.526Z"
+    },
+    {
+      "id": "AC-2",
+      "kind": "behavior",
+      "text": "checkForRelease makes a request only when due (no state, a time in the future, 24 hours after a success, the backoff after a failure) and writes the result to <data dir>/update.json: a success records the latest and clears the failures; a failure keeps the last known version, records the reason and counts.",
+      "at": "2026-11-12T18:15:45.579Z"
+    },
+    {
+      "id": "AC-3",
+      "kind": "behavior",
+      "text": "checkForRelease makes no request when WIZARDINGCODE_MEM_UPDATE is off (from the environment or <data dir>/env), when it holds an unknown value, or when CI is set; the settings refuse any value of the key but check and off.",
+      "at": "2026-11-12T18:15:45.632Z"
+    },
+    {
+      "id": "AC-4",
+      "kind": "behavior",
+      "text": "wizardingcode-mem distill runs the check as a step after the drain, and a check that throws does not change its exit code.",
+      "at": "2026-11-12T18:15:45.685Z"
+    },
+    {
+      "id": "AC-5",
+      "kind": "behavior",
+      "text": "updateLine gives the sentences of the spec for: up to date, a release out, a failed check with and without a last known version, never checked, off, CI; and the second line when the running copy and the staged binary differ. status prints them, and the commands when a release is out.",
+      "at": "2026-11-12T18:15:45.739Z"
+    },
+    {
+      "id": "AC-6",
+      "kind": "behavior",
+      "text": "doctor has a check update: warn when a release is out, ok otherwise, the failed check included; wizardingcode-mem update checks now, prints the lines and the four commands, makes no request when off, and exits 1 only when its check failed.",
+      "at": "2026-11-12T18:15:45.792Z"
+    },
+    {
+      "id": "AC-7",
+      "kind": "behavior",
+      "text": "A command a person runs from a compiled copy outside the data directory, with the staged binary older, missing or answering no version, stages that copy, prints on standard error that the version is now in the path with what was there, and runs the command; two stagings at once leave a whole binary.",
+      "at": "2026-11-12T18:15:45.846Z"
+    },
+    {
+      "id": "AC-8",
+      "kind": "behavior",
+      "text": "A command a person runs from a copy older than the staged binary prints on standard error that it runs the staged version, and runs the staged binary with the same arguments, returning its exit code; the staged binary, started so, does not hand over again; hook, mcp, tool, distill, sync, serve and ui --auto never stage and never hand over.",
+      "at": "2026-11-12T18:15:45.899Z"
+    },
+    {
+      "id": "AC-9",
+      "kind": "behavior",
+      "text": "The README says the daily request in its network bullet and its header no longer says nothing leaves your machine; its settings table has WIZARDINGCODE_MEM_UPDATE; every command of CHANNEL_COMMANDS is in the README; ADR 0030 exists and names the redirect, update.json and the two rules for a channel copy; CLAUDE.md names src/update/.",
+      "at": "2026-11-12T18:15:45.953Z"
+    },
+    {
+      "id": "AC-11",
+      "kind": "behavior",
+      "text": "checkForRelease makes a request only when due (no state; any time in the future; 24 hours after a success; 1, 2, 4, 8, 16 and at most 24 hours after 1 to 6 or more failures), not within 60 seconds of an attempt, and writes the result to <data dir>/update.json: a success records the latest, even a lower one, and clears the failures; a failure keeps the last known version, records the reason and counts. A state file whose latest or reason holds any other text, an escape sequence or a line break included, reads as no state.",
+      "at": "2026-11-12T18:29:33.406Z"
+    },
+    {
+      "id": "AC-14",
+      "kind": "behavior",
+      "text": "updateLine gives the sentences of Design 2 for: the latest equal to, higher than and lower than the current version, with the staged binary answering a version and not; a failed check with and without a last known version; never checked; off; an unknown value; CI; and the second line when the running copy is not the staged binary and their versions differ. status prints them, also when the store cannot be opened, with the commands when a release is out, and status --json carries the update fields.",
+      "at": "2026-11-12T18:29:33.461Z"
+    },
+    {
+      "id": "AC-15",
+      "kind": "behavior",
+      "text": "doctor has a check update: warn when a release is out, ok otherwise, the failed check included, and its exit code stays 0 with that warning alone; wizardingcode-mem update checks now, prints the lines and the four commands, makes no request when off, and exits 1 only when its check failed.",
+      "at": "2026-11-12T18:29:33.519Z"
+    },
+    {
+      "id": "AC-16",
+      "kind": "behavior",
+      "text": "the decision to reconcile is none for every command but status, doctor, update and ui without --auto; and for those, when the process is not compiled, when its real path is the staged binary's, when WIZARDINGCODE_MEM_HANDED is set, when it runs as root, or when <data dir>/bin is not the effective user's. --version, --help, no command and an unknown command never reach it.",
+      "at": "2026-11-12T18:29:33.578Z"
+    },
+    {
+      "id": "AC-17",
+      "kind": "behavior",
+      "text": "a reconciled command run from a compiled copy outside the data directory, with the staged binary older, missing or answering no version, stages that copy, prints the line of J-5 with what was there, and runs the command; a staging that fails prints one sentence and the command still runs. stageBinary's temporary name carries the process id and is gone after the run; another process's fresh temporary file is neither renamed nor removed; one older than a day is removed.",
+      "at": "2026-11-12T18:36:34.504Z"
+    },
+    {
+      "id": "AC-20",
+      "kind": "behavior",
+      "text": "no file of src/update/ imports from src/store/, src/modules/, src/engine/ or src/sync/, and src/cli/main.ts has no static import of src/update/ or src/install/binary.ts.",
+      "at": "2026-11-12T18:36:34.562Z"
+    },
+    {
+      "id": "AC-24",
+      "kind": "behavior",
+      "text": "updateLine gives the lines of the Design's table: off; an unknown value; CI with nothing asked; never checked; a failed check with and without a last known version; the latest equal to, higher than and lower than the current version, with the staged binary answering a version and not; and the second line when this process is not the staged binary and their versions differ. status prints them with the commands when a release is out; with a store that cannot be opened it still prints them and exits 1, and status --json then prints one object with version, update and error.",
+      "at": "2026-11-12T18:36:34.618Z"
+    },
+    {
+      "id": "AC-12",
+      "kind": "behavior",
+      "text": "checkForRelease makes no request when WIZARDINGCODE_MEM_UPDATE is off or any value but check, from the environment or from <data dir>/env, or when CI is set; the settings refuse any value of the key but check and off.",
+      "at": "2026-11-12T18:50:15.673Z"
+    },
+    {
+      "id": "AC-22",
+      "kind": "behavior",
+      "text": "checkForRelease makes a request only when due: with no state; with any time in the future; one hour after a failure; 24 hours after a success; and not within 60 seconds of an attempt. It writes the result to <data dir>/update.json: a success records the latest, even a lower one, and clears the failures; a failure keeps the last known version, records the reason and counts. A state file whose latest or reason holds any other text, an escape sequence or a line break included, reads as no state.",
+      "at": "2026-11-12T18:50:15.727Z"
+    },
+    {
+      "id": "AC-25",
+      "kind": "behavior",
+      "text": "doctor has a check update: warn when a release is out, ok otherwise, the failed check included, and its exit code stays 0 with that warning alone; wizardingcode-mem update checks now, in CI too, prints the lines and the four commands, and exits 1 only when its check failed; with the check off it makes no request, prints the off line and how to turn it on, no commands, and exits 0.",
+      "at": "2026-11-12T18:50:15.780Z"
+    },
+    {
+      "id": "AC-26",
+      "kind": "behavior",
+      "text": "updateLine gives the lines of the Design's table: off; an unknown value; CI with nothing asked; never checked; a failed check with and without a last known version; the latest equal to, higher than and lower than the current version, with the staged binary answering a version and not. The second line says what the agents run when this process is not the staged binary: with wizardingcode-mem install moves them to it when this copy is newer, with wizardingcode-mem install replaces it when the staged file answers no version, and nothing when the versions are equal or no staged file exists. status prints them with the commands when a release is out; with a store that cannot be opened it still prints them and exits 1, and status --json then prints one object with version, update and error. No command but install stages a binary.",
+      "at": "2026-11-12T18:50:15.834Z"
+    }
+  ],
+  "continued": [
+    {
+      "what": "validation",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-12T18:18:07.659Z",
+      "standing": true
+    },
+    {
+      "what": "judgement",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-12T19:29:55.765Z",
+      "standing": true
+    }
+  ],
+  "knowledgeFiles": [],
+  "knowledgeLabels": [],
+  "pauses": [
+    {
+      "at": "2026-11-12T19:07:16.624Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-12T19:08:35.626Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-12T19:08:57.638Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-12T19:09:27.161Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-12T19:21:34.998Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-12T19:22:05.097Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-12T19:22:29.891Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-12T19:28:56.487Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-12T19:29:28.035Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    }
+  ],
+  "learned": {
+    "at": "2026-11-12T19:31:41.227Z",
+    "entries": [
+      "K-394"
+    ],
+    "confirmed": []
+  }
+}

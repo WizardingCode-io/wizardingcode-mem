@@ -1,12 +1,21 @@
 import { chmodSync, copyFileSync, existsSync, mkdirSync, renameSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { isVersion, olderThan } from "../util/version.ts";
 
 /** How long a staged binary gets to answer `--version` before it counts as not answering. */
 const VERSION_TIMEOUT_MS = 10_000;
 
+/** Where the staged binary lives: the one path the hosts' configuration points at. */
+export function stagedPath(dataDir: string): string {
+  return join(
+    dataDir,
+    "bin",
+    process.platform === "win32" ? "wizardingcode-mem.exe" : "wizardingcode-mem",
+  );
+}
+
 /** The version a staged binary answers, or null when it cannot be run or answers anything else. */
-function stagedVersion(target: string): string | null {
+export function stagedVersion(target: string): string | null {
   try {
     const out = Bun.spawnSync([target, "--version"], {
       stdin: "ignore",
@@ -36,11 +45,8 @@ export function stageBinary(
   dataDir: string,
   options: { version: string; force: boolean },
 ): { path: string; kept: string | null } {
-  const dir = join(dataDir, "bin");
-  const target = join(
-    dir,
-    process.platform === "win32" ? "wizardingcode-mem.exe" : "wizardingcode-mem",
-  );
+  const target = stagedPath(dataDir);
+  const dir = dirname(target);
   if (resolve(source) === resolve(target)) return { path: target, kept: null };
   if (!options.force && existsSync(target)) {
     const staged = stagedVersion(target);

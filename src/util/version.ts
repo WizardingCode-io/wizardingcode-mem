@@ -5,6 +5,16 @@ export function isVersion(text: string): boolean {
   return VERSION.test(text);
 }
 
+/**
+ * `<major>.<minor>.<patch>` and nothing else, each number of at most five digits. Narrower
+ * than `isVersion` on purpose: for text that comes from the network or from a file a person
+ * can write, and may end up on a terminal.
+ */
+const PLAIN_VERSION = /^\d{1,5}\.\d{1,5}\.\d{1,5}$/;
+export function isPlainVersion(text: string): boolean {
+  return PLAIN_VERSION.test(text);
+}
+
 /** The highest of some versions by that order, or undefined for none. */
 export function highestVersion(versions: readonly string[]): string | undefined {
   return [...versions].sort((a, b) => Bun.semver.order(b, a))[0];

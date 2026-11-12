@@ -38,6 +38,7 @@ import {
   stopClaudeMem,
   takeoverContext,
 } from "../../install/takeover.ts";
+import { handOver } from "../../update/reconcile.ts";
 import { defaultDataDir } from "../../util/paths.ts";
 import { isCompiled } from "../../util/self.ts";
 import { EXIT_USAGE } from "../exit.ts";
@@ -149,6 +150,8 @@ function retireLegacy(agent: string, rest: string[]): string[] {
 
 /** `wizardingcode-mem install [<agent>] [options]` */
 export function run(argv: string[]): number {
+  // A copy that was handed this install must not pass the mark on to what it starts.
+  delete process.env.WIZARDINGCODE_MEM_HANDED;
   const named = argv[0] !== undefined && !argv[0].startsWith("--");
   const agent = named ? argv[0] : undefined;
   const rest = named ? argv.slice(1) : argv;
@@ -241,19 +244,14 @@ function binaryOrHandOver(argv: string[], rest: string[]): { path: string } | { 
   process.stdout.write(
     `A newer wizardingcode-mem (${binary.kept}) is already in ${binary.path}; this one is ${pkg.version} and was not put in its place. wizardingcode-mem install --force replaces it.\n`,
   );
-  try {
-    const handed = Bun.spawnSync([binary.path, "install", ...argv], {
-      stdin: "inherit",
-      stdout: "inherit",
-      stderr: "inherit",
-    });
-    return { code: handed.exitCode ?? 1 };
-  } catch (error) {
-    process.stderr.write(
-      `wizardingcode-mem install: could not run ${binary.path}: ${error instanceof Error ? error.message : String(error)}\n`,
-    );
-    return { code: 1 };
-  }
+  return {
+    code: handOver(
+      binary.path,
+      ["install", ...argv],
+      () => {},
+      (message) => `wizardingcode-mem install: could not run ${binary.path}: ${message}\n`,
+    ),
+  };
 }
 
 /** An old Gemini CLI install of ours: offered for removal, once per run. */

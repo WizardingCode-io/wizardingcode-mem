@@ -1,0 +1,23 @@
+# style findings for 2026-11-12-006-the-client-learns-of-a-release-and-its-s
+reviewer: goldfish-style
+read: /Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/.crew/work/2026-11-12-006-the-client-learns-of-a-release-and-its-s/spec.md (whole, lines 1-131); /Users/andreagroferreira/.claude/plugins/cache/wizardingcode-plugins/wizardingcode-developer-crew/0.23.3/skills/crew/references/writing.md; /Users/andreagroferreira/.claude/plugins/cache/wizardingcode-plugins/wizardingcode-developer-crew/0.23.3/skills/crew/rubrics/spec-feature.md; /Users/andreagroferreira/.claude/plugins/cache/wizardingcode-plugins/wizardingcode-developer-crew/0.23.3/skills/crew/rubrics/spec-heilmeier.md
+
+## Findings
+- F-1 · Major · Design 4 (README bullet) and Non-Functional Requirements · "one request a day to github.com" and "One request a day per data directory while turns end; none otherwise" are false under the spec's own design: after failures the backoff retries at 1, 2, 4, 8 and 16 hours (up to six requests in a day), and `wizardingcode-mem update` asks on every run, so the README would make a claim about network use that the product breaks.
+- F-2 · Major · Design 3, the `decide` paragraph · "is a pure function that answers `none`, `stage` or `hand-over` candidates: `none` unless this process is a compiled binary; whose real path … is not the staged binary's; …" has broken grammar and does not say whether `decide` compares versions (it takes `staged`, yet "reconcile then reads the staged binary's version"), so an implementer cannot tell what `decide` returns, or which of the conditions are guards and which are outcomes.
+- F-3 · Nit · Goals, G-1 · "within a day or two of use after a release" is not measurable; the design gives the bound (a turn ending more than 24 hours after the last check), so the goal should state it.
+- F-4 · Nit · Goals, G-1 · "the product has downloaded and changed nothing" conflicts with G-3 and J-5, where `status` from a newer channel copy stages that copy and the check writes `update.json`; the claim needs its scope ("nothing because of the notice").
+- F-5 · Nit · Goals, G-2 · "carries nothing about the machine" is an absolute claim that Risks qualify ("tells github.com that an address runs the product"); say what the request leaves out (version, platform, paths, projects), as Design 1 does, and do not make the absolute claim.
+- F-6 · Nit · Critical User Journeys, J-8 · "within a day a client that already runs 0.10.0 reads …" holds only while turns end and checks succeed; a client in backoff, or one where no turn ends, sees it later. The runbook line in Design 4 ("within about a day") carries the same unstated condition.
+- F-7 · Nit · Acceptance criteria, the opening line · "AC-1 to AC-9 were retired when the leads' returns changed their texts" is process jargon that means nothing to a reader without the session ("the engine's", "leads' returns").
+- F-8 · Nit · Design 4 (ADR 0030 and findings rows) · "the four blockers" is never listed in this spec, so a reader writing ADR 0030 or the findings row has to go to `concepts_brief.md` to learn what they are.
+- F-9 · Nit · Non-goals · "a hold signal" and "its five readers" are used undefined; the reader cannot tell what signal or which five readers are meant.
+- F-10 · Nit · Design 3, last paragraph · "A reconciled command therefore runs the staged binary's `--version` at most twice" does not follow from the paragraph about temporary file names it closes; the "therefore" has no premise there.
+- F-11 · Nit · Risks and rollback, second bullet · it repeats the closing sentence of Design 3 (at most twice, 10 seconds each) and adds no risk or answer of its own.
+- F-12 · Nit · Design 3, first paragraph · a single sentence of about 120 words packs the decision point, the leaf module, its exports, its import limits and testability together; the reader has to parse it several times to find the rule.
+- F-13 · Nit · Design 2 · `<age>` is used in every line ("checked 2 h ago", "3 h ago" in the journeys), but its format (units, rounding, "just now") is never stated, so the exact text AC-14 tests is not fully defined.
+- F-14 · Nit · Words used here · "the four a person types to look at their install" does not fit `update` (which makes a request) or `ui` (which opens the viewer); the label does not match the list it names.
+
+## Not answerable
+- `concepts_brief.md` (K-1, K-2, the Analysis, the four blockers) · not in the reading list, so I could not check whether the spec's references to it resolve.
+- The rubrics' coverage questions (Heilmeier cost and time, the completeness of alternatives) · outside the style lens; left to the other critics.

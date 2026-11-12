@@ -8,6 +8,7 @@ import {
   publicSettings,
   SETTING_KEYS,
   saveSettings,
+  updateSetting,
   validatePatch,
 } from "../../src/settings/settings.ts";
 
@@ -295,5 +296,38 @@ describe("saveSettings and publicSettings", () => {
     saveSettings(dataDir, { TYPESAFE_API_KEY: null });
     expect(readFileSync(join(dataDir, "env"), "utf8")).not.toContain("TYPESAFE_API_KEY");
     expect(publicSettings({}, dataDir).TYPESAFE_API_KEY).toMatchObject({ set: false });
+  });
+});
+
+describe("WIZARDINGCODE_MEM_UPDATE", () => {
+  test("only check and off can be written", () => {
+    expect(validatePatch({ WIZARDINGCODE_MEM_UPDATE: "check" })).toEqual({
+      ok: true,
+      changes: { WIZARDINGCODE_MEM_UPDATE: "check" },
+    });
+    expect(validatePatch({ WIZARDINGCODE_MEM_UPDATE: "off" }).ok).toBe(true);
+    const refused = validatePatch({ WIZARDINGCODE_MEM_UPDATE: "maybe" });
+    expect(refused).toEqual({ ok: false, errors: { WIZARDINGCODE_MEM_UPDATE: "check or off" } });
+  });
+
+  test("the value comes with where it was set, and an unknown one is not normalised", () => {
+    const dir = mkdtempSync(join(tmpdir(), "wizardingcode-mem-settings-"));
+    expect(updateSetting({}, dir)).toEqual({ value: null, source: "default" });
+    writeFileSync(join(dir, "env"), "WIZARDINGCODE_MEM_UPDATE=maybe\n");
+    expect(updateSetting({}, dir)).toEqual({ value: "maybe", source: "file" });
+    expect(updateSetting({ WIZARDINGCODE_MEM_UPDATE: " off " }, dir)).toEqual({
+      value: "off",
+      source: "env",
+    });
+    // An empty variable is unset, as for every key: the file is read.
+    expect(updateSetting({ WIZARDINGCODE_MEM_UPDATE: "" }, dir).source).toBe("file");
+  });
+
+  test("the public view lists the key with its default", () => {
+    const dir = mkdtempSync(join(tmpdir(), "wizardingcode-mem-settings-"));
+    expect(publicSettings({}, dir).WIZARDINGCODE_MEM_UPDATE).toEqual({
+      value: "check",
+      source: "default",
+    });
   });
 });

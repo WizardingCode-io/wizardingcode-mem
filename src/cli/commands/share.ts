@@ -42,7 +42,6 @@ import {
   shareListText,
   TEAM_DESTINATION,
 } from "../../sharing/types.ts";
-import { ago } from "../../status/report.ts";
 import { type Db, openDb } from "../../store/db.ts";
 import {
   type BindOutcome,
@@ -66,6 +65,7 @@ import { ledgerHistory } from "../../sync/ledger.ts";
 import { findServer, heldByContract } from "../../sync/servers.ts";
 import { startSync } from "../../sync/spawn.ts";
 import { nameStateOf, type ServerStatus, statusReport } from "../../sync/state.ts";
+import { ago } from "../../util/ago.ts";
 import { realClock, realTimers } from "../../util/clock.ts";
 import { logError } from "../../util/log.ts";
 import { resolvePaths } from "../../util/paths.ts";

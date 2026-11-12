@@ -2,13 +2,14 @@
 import pkg from "../../package.json" with { type: "json" };
 import { applyLegacyEnv, migrateLegacyData } from "../util/legacy.ts";
 import { EXIT_USAGE } from "./exit.ts";
+import { type CommandName, reconciles } from "./reconciled.ts";
 
 export interface CommandModule {
   run(argv: string[]): Promise<number> | number;
 }
 
 // Each command is loaded on demand so that hooks never pay for code they do not run.
-const COMMANDS: Record<string, () => Promise<CommandModule>> = {
+const COMMANDS: Record<CommandName, () => Promise<CommandModule>> = {
   hook: () => import("./commands/hook.ts"),
   distill: () => import("./commands/distill.ts"),
   mcp: () => import("./commands/mcp.ts"),
@@ -26,6 +27,7 @@ const COMMANDS: Record<string, () => Promise<CommandModule>> = {
   share: () => import("./commands/share.ts"),
   status: () => import("./commands/status.ts"),
   doctor: () => import("./commands/doctor.ts"),
+  update: () => import("./commands/update.ts"),
   serve: () => import("./commands/serve.ts"),
   sync: () => import("./commands/sync.ts"),
   __spike: () => import("./commands/spike.ts"),
@@ -39,7 +41,7 @@ const USAGE = `wizardingcode-mem ${pkg.version} — persistent memory for coding
 Usage: wizardingcode-mem <command> [options]
 
 Commands:
-  install, uninstall, status, doctor, ui, distill, history, embed, backup,
+  install, uninstall, status, doctor, update, ui, distill, history, embed, backup,
   compact, knowledge, share, import, rejudge, hook, mcp, tool,
   serve (the team server and its subcommands; wizardingcode-mem serve --help),
   sync (the sync client: --auto, --once, stop)
@@ -59,7 +61,7 @@ async function main(argv: string[]): Promise<number> {
     process.stdout.write(`${pkg.version}\n`);
     return 0;
   }
-  const load = COMMANDS[name];
+  const load = (COMMANDS as Record<string, (() => Promise<CommandModule>) | undefined>)[name];
   if (load === undefined) {
     process.stderr.write(`wizardingcode-mem: unknown command "${name}"\n\n${USAGE}`);
     return EXIT_USAGE;
@@ -83,6 +85,13 @@ async function main(argv: string[]): Promise<number> {
       );
       return 1;
     }
+  }
+  // A copy older than the staged binary hands a person's command over to it. Decided from
+  // the name alone, so every other command, the hooks first, loads none of this.
+  if (reconciles(name, rest)) {
+    const { reconcile } = await import("../update/reconcile.ts");
+    const handed = reconcile(argv);
+    if (handed !== null) return handed.code;
   }
   const command = await load();
   return await command.run(rest);

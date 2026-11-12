@@ -1,0 +1,23 @@
+# style findings for 2026-11-12-006-the-client-learns-of-a-release-and-its-s
+reviewer: goldfish-style
+read: /Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/.crew/work/2026-11-12-006-the-client-learns-of-a-release-and-its-s/spec.md (whole), /Users/andreagroferreira/.claude/plugins/cache/wizardingcode-plugins/wizardingcode-developer-crew/0.23.3/skills/crew/rubrics/spec-feature.md, /Users/andreagroferreira/.claude/plugins/cache/wizardingcode-plugins/wizardingcode-developer-crew/0.23.3/skills/crew/rubrics/spec-heilmeier.md, /Users/andreagroferreira/.claude/plugins/cache/wizardingcode-plugins/wizardingcode-developer-crew/0.23.3/skills/crew/references/writing.md
+
+## Findings
+- F-1 · Major · G-2, AC-12, Documents (README bullet "never in CI") · G-2 says the request "is never made in CI" and AC-12 says `checkForRelease` makes no request "when `CI` is set", but Design 1 ("One check": with `force` it also asks in mode `ci`) and AC-25 ("`update` checks now, in CI too") make a request in CI, so a builder following AC-12 would block `update` in CI, or the README would state something false.
+- F-2 · Major · AC-22 · "makes a request only when due" has no exception for `force`, which Design 1 and J-4 say asks "whatever the state's age", so a test written to AC-22 would contradict AC-25.
+- F-3 · Major · Design 3 "What", second bullet · "older, equal, missing or unreadable: … the report's second line (Design 2) says what the agents run and that `install` moves them" contradicts Design 2 and AC-26, where the second line is empty when the versions are equal or no staged file exists, and says "replaces it" when the file is unreadable, so a builder could print a line in the equal and missing cases.
+- F-4 · Major · J-4 and Design 2 (`update` with the check off) · the fixed sentence "set WIZARDINGCODE_MEM_UPDATE=check in <data dir>/env to turn it on" is false when `off` comes from the environment, which J-3 allows and Design 1 "The mode" says wins over `<data dir>/env`, so the user follows the instruction and the check stays off.
+- F-5 · Nit · J-4 · "Given off" does not say whether it covers `off-unknown`, which Design 2 handles the same way. Without that, the journey and the design read differently.
+- F-6 · Nit · G-1 · "once a turn has ended more than 24 hours after the last check, `status` and `doctor` say that a newer release exists" reads as unconditional. It leaves out "when one exists", the one-hour retry after a failure, and the modes off and CI.
+- F-7 · Nit · G-1 · "changes nothing but its own state file" leaves out that Design 1 "The state" also creates the data directory when it is missing.
+- F-8 · Nit · G-4 · "a reconciled command typed from an older copy runs the staged binary" leaves out the `skip` cases of Design 3 "Whether" (root, `<data dir>/bin` owned by another user, `WIZARDINGCODE_MEM_HANDED` set, not compiled).
+- F-9 · Nit · J-1 · "`doctor` shows a warning line `update` with the same sentence", but Design 2 adds "; run wizardingcode-mem update for the commands", so the two texts are not the same.
+- F-10 · Nit · Non-goals, last two bullets · the fragments "A later item, after release assets are signed or…", "…: its own item." and "The team server's upgrade." have no verb, so the reader has to guess what is deferred and to where.
+- F-11 · Nit · Design 1 "When a check is due" · "(a request lasts at most 5)" gives no unit. The reader has to connect it to `REQUEST_LIMIT_MS = 5000` to know it means seconds.
+- F-12 · Nit · J-7 · "the second line" is used before that line is defined (Design 2), so the journey cannot be read on its own.
+- F-13 · Nit · Design 2, `status` bullet · "The viewer's status is unchanged: the field is optional" contradicts itself, because the status type gains a field.
+- F-14 · Nit · Documents, `CLAUDE.md` bullet · "with the developer's hazard" does not say what the hazard is. It most likely means the Limits item about a lower compiled build handing over, but the bullet does not point there.
+- F-15 · Nit · Alternatives · the whole section is one paragraph of about a dozen rejected options separated by semicolons, so it is hard to see which reason goes with which option. A list would fix that.
+
+## Not answerable
+- `concepts_brief.md`, `probes/releases-latest.md`, ADR 0029 and the source files the spec names (`binaryOrHandOver`, `stagedVersion`, `loadSettings`, `ago`) · I was given only the spec and the standards, so I could not check the spec's claims against them (for example the precedence of the environment over `<data dir>/env`, or the existing `ago` format).

@@ -464,6 +464,8 @@ describe("wizardingcode-mem status", () => {
     expect(result.stdout).toBe(
       [
         `wizardingcode-mem ${pkg.version}`,
+        // The suite runs with the release check off (tests/preload.ts), and status says so.
+        "update: off (WIZARDINGCODE_MEM_UPDATE in this command's environment; other processes may not see it)",
         `project   demo (path:${project})`,
         "memories  3 active (1 stale) · 1 superseded · 1 archived",
         "turns     3 distilled · 1 skipped (unknown 1) · 1 failed · 1 queued",

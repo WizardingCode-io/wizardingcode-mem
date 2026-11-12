@@ -1,0 +1,2737 @@
+diff --git a/CLAUDE.md b/CLAUDE.md
+index a5a33db..99dd967 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -27,6 +27,7 @@ Brand conventions: products, plugins and skills are called `wizardingcode-<thing
+ - `bun run format` — formats and fixes lint
+ - `bun run plugins` — rewrites what each agent installs (manifests, hooks, `wizardingcode-mem.sh`, the OpenCode package) from `scripts/plugins.ts`; run it after changing the version or the events
+ - Releasing (ADR 0029, `docs/runbooks/release.md`): a tag `v<version>` runs `.github/workflows/release.yml` (build, sign, the image by its version, the GitHub release), which starts `.github/workflows/distribute.yml` from `main`: `plan` (what may be distributed, `decidePlan`'s refusals in a fixed order; the hold of the image's `latest` by the contract rule), `npm` (both packages, trusted publishing, from the commit `plan` judged), `tap` and `marketplace` (the formula from `packaging/homebrew/wizardingcode-mem.rb.template`, the plugin's entry in the marketplace's two manifests), `latest` (the image's tag, last). The decisions are pure functions in `scripts/release/lib.ts` (which also holds what the commands share: `run`, `summary`, `output`, `command`), with the commands `plan.ts`, `npm.ts`, `token.ts` and `push.ts` beside it (Bun's and Node's built-ins only; no `bun install` runs in that workflow). The marketplace token and the publish right sit behind the GitHub environment `release` (branch `main` only), which `plan` checks. In `distribute.yml` no `run:` interpolates an expression, every action is pinned by commit and no checkout keeps credentials; `tests/unit/deploy-files.test.ts` holds both workflows' shape. `push.ts` redacts the token's encoded credential by exact match from every text git answers (`redact`; another form of the credential needs its own), and its command takes no destination from its environment: writes are tested through `commitAndPush`. The tap holds the only rendered formula.
++- The release notice (ADR 0030): `src/update/` asks github.com which release is the latest (the `releases/latest` redirect, never the API; `checkForRelease`, at most once a day, as a step after the drain in `distill`, never on a hook path, never in CI) and keeps the answer in `<data dir>/update.json`, read strictly. It downloads nothing. `status`, `doctor` and `wizardingcode-mem update` say what is out and one command per channel (`CHANNEL_COMMANDS`); `WIZARDINGCODE_MEM_UPDATE=off` in `<data dir>/env` turns it off, and the test preload sets it off for the suite. A compiled copy older than the staged binary hands `status`, `doctor`, `update` and `ui` over to it (`src/cli/reconciled.ts`, `src/update/reconcile.ts`); a newer copy only tells, and only `install` stages. A compiled build of a lower version than your own staged binary therefore hands over to it unless `WIZARDINGCODE_HOME` points elsewhere. `src/update/` imports nothing from the store, the modules, the engine, the sync, the status or the doctor (`tests/unit/update-boundary.test.ts`).
+ - The staged binary (`<data dir>/bin`) only moves forward: the plugins' script, the OpenCode package, the npm shim (`npm/bin/wizardingcode-mem.js`), `stageBinary` (`src/install/binary.ts`) and `scripts/install.sh` each replace only an older or equal version, by one order (semantic versioning's; `src/util/version.ts`, `OLDER_JS` in `scripts/plugins.ts`, the shell `older()`), held equal by `tests/fixtures/version-order.ts`. A copy of `older()` is never edited alone: change `OLDER_JS` or the template and regenerate. `install` stages once per run and hands over to a newer staged binary; `install --force` replaces it.
+ - `wizardingcode-mem install [claude-code|claude-desktop|codex|cursor|opencode|qwen|droid|copilot|antigravity]` installs for one agent (Claude Desktop: its chat gets the MCP server with `--global`, across every project; Cowork gets the plugin; ADR 0012); with no agent, for every one it finds. In Claude Code it imports claude-mem's memories and retires it (with confirmation); `wizardingcode-mem import claude-mem` only imports. claude-mem's database is only read, never changed. Qwen Code, Droid, Copilot and Antigravity install directly (hooks file and MCP server, no plugin; ADR 0016). Gemini CLI is no longer supported: `install gemini` points to Antigravity, `uninstall gemini` removes an old install (`src/install/gemini-leftover.ts`; never touches Antigravity's `~/.gemini/config`).
+ - Adapters in `src/adapters/<agent>/`; installers in `src/install/`. The design per agent, and what was or was not confirmed in real sessions, is in ADR 0006 (Claude Code, Codex, Cursor, OpenCode) and ADR 0016 (Qwen Code, Droid, Copilot, Antigravity).
+diff --git a/README.md b/README.md
+index 275f8d9..ddac9a9 100644
+--- a/README.md
++++ b/README.md
+@@ -23,7 +23,7 @@
+ </p>
+ 
+ <p align="center">
+-  One local binary · no daemon · no model in the loop · nothing leaves your machine unless you ask
++  One local binary · no daemon · no model in the loop · none of your data leaves your machine unless you ask
+ </p>
+ 
+ <p align="center">
+@@ -182,6 +182,15 @@ needs Node.js 18 or later; or download `wizardingcode-mem-windows-x64.exe` from
+ </td></tr>
+ </table>
+ 
++To update, use the way you installed:
++
++- a plugin: update the wizardingcode-mem plugin from your agent's plugin manager;
++- Homebrew: `brew upgrade wizardingcode-mem && wizardingcode-mem install`;
++- npm, and Windows: `npx wizardingcode-mem@latest install`;
++- the script: `curl -fsSL https://raw.githubusercontent.com/WizardingCode-io/wizardingcode-mem/main/scripts/install.sh | sh`.
++
++`wizardingcode-mem status` and `doctor` say when a newer release is out, and `wizardingcode-mem update` asks now and lists these commands. They also say when the copy you typed and the copy your agents run differ: a copy older than the one the agents run hands `status`, `doctor`, `update` and `ui` over to it (copies from before this version do not; `WIZARDINGCODE_MEM_HANDED=1` in front of the command keeps it in the copy you typed), and a newer copy tells you that `wizardingcode-mem install` moves the agents to it.
++
+ Each of these checks the binary's SHA-256 against the release before using it. The curl script and `npx … install` also set up every supported agent and app they find; `wizardingcode-mem install <name>` does one (`claude-code`, `claude-desktop`, `codex`, `cursor`, `opencode`, `qwen`, `droid`, `copilot`, `antigravity`). Configuration files are backed up first, and `wizardingcode-mem uninstall <name>` puts them back. Where an agent has both the plugin and this direct install, the plugin stands down, so nothing is said twice.
+ 
+ ### Check it
+@@ -349,7 +358,7 @@ git 2.32 or newer is needed to write. Your own git hooks, templates, signing and
+ 
+ ## Settings
+ 
+-Every setting can be changed from the viewer, with no file to edit and no command to type. Open the viewer (it opens by itself when a session starts, or run `wizardingcode-mem ui`) and choose the gear at the bottom left.
++Every setting can be changed from the viewer, with no file to edit and no command to type (two have no field yet and are set by hand: `WIZARDINGCODE_MEM_AUTHOR` and `WIZARDINGCODE_MEM_UPDATE`). Open the viewer (it opens by itself when a session starts, or run `wizardingcode-mem ui`) and choose the gear at the bottom left.
+ 
+ <p align="center">
+   <picture>
+@@ -393,6 +402,7 @@ Edit `~/.wizardingcode/mem/env` yourself, or set the variable in the environment
+ | `WIZARDINGCODE_MEM_RETENTION_DAYS` | How long `compact` keeps finished turns no memory came from | `90` |
+ | `WIZARDINGCODE_MEM_SEMANTIC` | `off` keeps the search model but searches by words only | `on` |
+ | `WIZARDINGCODE_MEM_UI_AUTO_OPEN` | Open the viewer when a session starts | `on` |
++| `WIZARDINGCODE_MEM_UPDATE` | `off` stops the daily question to github.com about the latest release (set by hand: the viewer has no field for it yet) | `check` |
+ | `WIZARDINGCODE_MEM_AUTHOR` | Your name on the knowledge you write (set by hand: the viewer has no field for it yet) | your git `user.name`, else `you` |
+ | `WIZARDINGCODE_MEM_STORE_DIR` | Where the database lives, when it was moved to another disk (set by **Storage**, not by hand) | the data directory |
+ | `WIZARDINGCODE_MEM_BACKUP_TO` | Where backups go: a folder, or `s3://bucket/prefix` | — |
+@@ -429,7 +439,7 @@ The binary is at `~/.wizardingcode/mem/bin/wizardingcode-mem`; put that director
+ 
+ ## TypeSafe, if you want it
+ 
+-Without a key, the rules judge every turn and nothing ever leaves your machine. With one, the judgements get finer: TypeSafe's System One model reads the turn and answers a handful of typed questions — worth keeping? which kind? how important? which sentences stand on their own? — in about a quarter of a second, in the background, for about $0.00006 a turn.
++Without a key, the rules judge every turn and none of your data ever leaves your machine. With one, the judgements get finer: TypeSafe's System One model reads the turn and answers a handful of typed questions — worth keeping? which kind? how important? which sentences stand on their own? — in about a quarter of a second, in the background, for about $0.00006 a turn.
+ 
+ Paste the key in the viewer's **Settings** (it is kept in `~/.wizardingcode/mem/env`, readable by you only), or write it there yourself:
+ 
+@@ -443,7 +453,7 @@ What is sent is the text of the turn being judged, and only that. If the service
+ 
+ - **Redaction before storage.** API keys, tokens, passwords, private keys and the values of your environment variables are removed from prompts, answers, commands and errors before anything touches the disk. Text inside `<private>…</private>` is never stored.
+ - **One file, yours.** `~/.wizardingcode/mem/wizardingcode-mem.db`, SQLite in WAL mode. Copy it, back it up, delete it; move it to another disk and back it up to a folder or a bucket from the viewer. `WIZARDINGCODE_HOME` moves the whole `~/.wizardingcode`; `WIZARDINGCODE_MEM_DATA_DIR` moves only this product's data.
+-- **No telemetry, no account, no network** — except the TypeSafe requests you opt into, the one download of the binary, and the one download of the search model if you ask for it.
++- **No telemetry, no account, no network** — except the TypeSafe requests you opt into, the one download of the binary, the one download of the search model if you ask for it, and one small question to `github.com`: which release is the latest. It is asked in the background at most once a day while it succeeds and at most once an hour while it fails, never in CI, and once each time you type `wizardingcode-mem update`. It names no version, platform, path or project; github.com sees your address and the time, as for any request. Nothing is downloaded: `status` and `doctor` only tell you. `WIZARDINGCODE_MEM_UPDATE=off` in `~/.wizardingcode/mem/env` turns it off for every process.
+ - **A project is a repository.** Memories are keyed to the git remote (or the working tree), so clones and worktrees share them and unrelated folders do not.
+ - **Removable.** `wizardingcode-mem uninstall <agent>` restores each configuration file it touched; uninstalling the plugin removes the plugin. Delete `~/.wizardingcode/mem` to delete everything.
+ 
+diff --git a/docs/adr/0029-release-distribution.md b/docs/adr/0029-release-distribution.md
+index b46d8c8..d58cfdb 100644
+--- a/docs/adr/0029-release-distribution.md
++++ b/docs/adr/0029-release-distribution.md
+@@ -1,6 +1,6 @@
+ # ADR 0029 — The release distributes itself, and the staged binary only moves forward
+ 
+-Date: 2026-11-12 · Status: **draft**. Work item 2026-11-12-004, piece 1 of 3 of 2026-11-11-004 ("updated everywhere on release"). It supersedes the Homebrew row of [ADR 0008](0008-m5-distribution.md) (the source copy of the formula under `packaging/homebrew/`), amends its npm and curl rows (the npm package and the curl script now replace only an older binary) and carries out that ADR's follow-up to automate the rest of a release. It amends [ADR 0026](0026-team-server.md)'s paragraph on the image: the release's `docker` job no longer tags `latest`; the distribution does, last, and may hold it. [ADR 0009](0009-native-installation.md) is unchanged: the files each agent installs are still generated by `scripts/plugins.ts`. The author's procedure is `docs/runbooks/release.md`.
++Date: 2026-11-12 · Status: **draft**. Work item 2026-11-12-004, piece 1 of 3 of 2026-11-11-004 ("updated everywhere on release"). Its piece 2 is narrowed by [ADR 0030](0030-release-notice.md): the client is told of a release and does not follow by itself. It supersedes the Homebrew row of [ADR 0008](0008-m5-distribution.md) (the source copy of the formula under `packaging/homebrew/`), amends its npm and curl rows (the npm package and the curl script now replace only an older binary) and carries out that ADR's follow-up to automate the rest of a release. It amends [ADR 0026](0026-team-server.md)'s paragraph on the image: the release's `docker` job no longer tags `latest`; the distribution does, last, and may hold it. [ADR 0009](0009-native-installation.md) is unchanged: the files each agent installs are still generated by `scripts/plugins.ts`. The author's procedure is `docs/runbooks/release.md`.
+ 
+ ## Context
+ 
+diff --git a/docs/adr/0030-release-notice.md b/docs/adr/0030-release-notice.md
+new file mode 100644
+index 0000000..5e2bcf0
+--- /dev/null
++++ b/docs/adr/0030-release-notice.md
+@@ -0,0 +1,55 @@
++# ADR 0030: the client is told of a release, and does not replace itself
++
++Status: draft (item `2026-11-12-006`, 2026-11-12). It narrows ADR 0029's piece 2, "the client that learns of a release and follows it": the client learns; it does not follow by itself.
++
++## Context
++
++ADR 0029 made a release reach npm, the Homebrew tap and the plugin marketplace by itself, and made every writer of the staged binary (`<data dir>/bin/wizardingcode-mem`) move it only forward. What was left: nothing told a person that a release existed. An install through a plugin follows when the agent refreshes its marketplace; a direct install (ADR 0016), `scripts/install.sh` and a Homebrew copy stay where they were put.
++
++The first concept had the client check once a day and replace its own staged binary. Six readers of that concept found four blockers, all in the replacement:
++
++1. No binary version is recorded in the store, so the long-lived processes (`mcp`, the sync, the viewer) cannot know they are behind.
++2. The sync's "a newer version takes over" does not happen after an update: `startSync` answers "running" for any live lease and compares no version.
++3. The viewer and the sync open the store once and never check its schema again, so they keep writing to a store a newer binary migrated; `mcp` opens it per call and fails every call.
++4. A daily replacement undoes `install --force`, ADR 0029's way back.
++
++Beside them: release assets are not signed and `checksums.txt` travels with the binary, so whoever can publish a release would get code run on every machine within a day; a bad release would reach every machine with no hold; and nothing restores the store's upgrade copy.
++
++## Decision
++
++**Tell, do not replace.** The client asks which release is the latest and says so. It downloads nothing and changes nothing but its own state file. `latest` in that file is a notice, obtained with no authentication of a release's content: it must never start a download. A binary that replaces itself is a later item, to be taken up once release assets are signed, or once the author has a way to mark a release as not to be followed, and with the four blockers answered.
++
++**The request.** One `GET https://github.com/<repository>/releases/latest` with redirects not followed. The answer counts only when it is a 301 or a 302 whose `Location` is exactly `https://github.com/<repository>/releases/tag/v<a>.<b>.<c>`; anything else is one of four fixed reasons (`offline`, `timed out`, `HTTP <status>`, `not a release redirect`). The body is never read. The API is not used: it limits requests per address, which machines behind one address share. The request has no body, no cookie and no authorization, and the one header this code sets is `User-Agent: wizardingcode-mem`, with no version (the runtime adds `Accept`, `Host` and `Accept-Encoding`). The shape was read from github.com on 2026-11-12: a 302 with an absolute `Location` to the tag, the owner and repository in the letter case of the request.
++
++**When.** As a step after the drain in `wizardingcode-mem distill`: in the background process, never on a hook's path. At most once in 24 hours after a success and once an hour after a failure; a time in the future counts as stale; never in CI. `wizardingcode-mem update` asks at once, in CI too. `WIZARDINGCODE_MEM_UPDATE=off` stops both. Each process reads the key from its own environment and from `<data dir>/env`; a variable exported in a shell does not reach a hook started elsewhere, so the file is the way to turn the check off for every process, and the lines say where an `off` came from. An unknown value counts as off.
++
++**The state.** `<data dir>/update.json`, beside the binary it describes and outside the store: a store on another disk, restored, or refused by an older binary neither carries nor blocks it. It is read strictly (a plain version, one of the four reasons, numbers), so no byte of it that the product did not shape reaches a terminal. The latest is overwritten at each success and never kept as a maximum, so a forged or withdrawn value is replaced by the next good answer.
++
++**What a person sees.** `status`, `doctor` and `wizardingcode-mem update` say whether a release is out, and `status` and `update` list one command per channel (no channel is detected). A release already found stays announced when a later check fails. They also say, when the copy typed is not the staged binary, which version the agents run.
++
++**Two copies.** A compiled copy older than the staged binary hands over: `status`, `doctor`, `update` and `ui` typed from it run the staged binary with the same arguments, so they never meet a store the newer binary migrated. `install` already did this; the function is now one. A copy newer than the staged binary only tells: it says that `wizardingcode-mem install` moves the agents to it, and stages nothing (D-3). The first design had it stage itself; the review showed the hooks would then run the new binary in the open session while that session's MCP server, sync and viewer stayed on the old one, which is blocker 3 again. Only `install` stages.
++
++## Alternatives
++
++- Self-replacement on every channel, or only where no channel manager exists. Deferred, for the blockers above.
++- No check at all. Rejected: a direct install has no manager to tell it.
++- The check off by default. Rejected by the author: who does not turn it on goes on not knowing.
++- The state in the store's `meta`, and a detached process from the session-start hook under a lease. Rejected: the state is about the binary, and a daily task needs neither a spawn on the hook's path nor a lease.
++- A backoff that doubles after each failure. Rejected for a flat hour: nothing measured asks for it, and it made the README's sentence about requests false.
++- An older copy that only tells, as the newer one does. Weighed and not taken: the person typed `doctor` to diagnose and would get a schema error; `install` already handed over.
++- A test seam through an address read from the environment. Rejected: the process would take a destination from its environment. The commands take their `fetch` as an argument, and their tests call them in the test's own process.
++
++## Limits
++
++- Nothing checks while no turn ends, and nothing checks from the hooks when the store cannot be opened (the hook starts `distill` only after it opened the store and found queued turns). `wizardingcode-mem update` checks in both cases.
++- The hand-over exists only in copies that carry this change, on macOS and Linux, for the user who owns `<data dir>/bin` and is not root. For root, or over a folder of another user, the staged file is not run at all, not even for its version, and the lines say so. A person who needs their own copy's `doctor` when the newer staged binary is broken sets `WIZARDINGCODE_MEM_HANDED=1` for that command; `install --force` from the older copy is the way back for the binary itself (ADR 0029). A channel copy of an earlier version still fails against a migrated store. The other commands (`backup`, `compact`, `history` and the rest) do not hand over.
++- An install made with `install --binary <path>` runs that path: for it, the line about what the agents run and the hand-over concern a file the agents do not run.
++- A repository renamed or moved leaves every shipped client reading `not a release redirect`.
++- The request goes through a configured proxy (`HTTPS_PROXY`). github.com sees the address and the time.
++- `status`, `doctor`, `update` and `ui` typed from a channel copy run the staged file's `--version`, and the file itself when it is newer; hooks, and `install` for a newer staged binary, already did.
++- A compiled build of a lower version than the developer's own staged binary, run with one of those four commands and no throwaway `WIZARDINGCODE_HOME`, hands over to that staged binary.
++- A release is visible on github.com before `distribute.yml` has published it to the channels, and stays so if that run stops.
++- A shipped version keeps checking until its user upgrades. What it is told changes only by moving or withdrawing the release (`gh release edit <tag> --latest`, in `docs/runbooks/release.md`), a procedure not yet run.
++- A data directory that cannot be written keeps the state at "not checked yet"; the reason is in the log.
++- Not seen before a real release: github.com's rate limiting of one address and its answer while a release's assets upload.
++- The viewer has no About line and no Settings field for the key yet.
+diff --git a/docs/real-use/findings.md b/docs/real-use/findings.md
+index 424df13..85b0fcd 100644
+--- a/docs/real-use/findings.md
++++ b/docs/real-use/findings.md
+@@ -69,7 +69,10 @@ One row per finding left open: where it was found, what it is, and its outcome.
+ | 2026-11-12 | release distribution, every reviewer (rounds 1-3), outside the change | `release.yml` still references its actions by moving tag and its checkouts keep credentials, under a workflow-level `contents: write` that also covers `build`; its output now travels by itself to the tap and to `latest`. `src/store/meta.ts:158` orders versions with `Bun.semver.order` directly, not through `src/util/version.ts`. | deferred |
+ | 2026-11-12 | release distribution, security (round 4) | `gitEnv` (`scripts/release/push.ts`) puts the base64 form of the token's header into the child's environment, and nothing kept it out of what the script prints or writes to the run's summary when git quotes it. The row first said "Actions masks the raw secret only"; that was wrong for the log, where the runner also masks a secret's base64 (`ValueEncoders.cs` in `actions/runner`, read on 2026-11-12). | item 2026-11-12-005: `commitAndPush` passes every text git answers through `redact` (exact match). No `::add-mask::` line: the runner already masks the base64 of a secret in the log, and the line would print the credential |
+ | 2026-11-12 | release distribution, code-quality and infra (round 4) | `PUSH_REMOTE` and `PUSH_ORIGIN` were read by the command of `push.ts` off a runner. `release.yml`'s `distribute` job had no `timeout-minutes`. | item 2026-11-12-005: both variables removed, the command's writes tested through `commitAndPush`; `timeout-minutes: 5`, with the runbook's paragraph for a cut job |
+-| 2026-11-12 | release distribution, code-quality and test-quality (round 4) | `version_of` (`scripts/install.sh`) and `stagedVersion` (`src/install/binary.ts`) read a staged binary's version by different rules (first line and any exit code; the whole answer and exit 0). Six readers of item 2026-11-12-005's concept found it wider than those two: "trimmed" differs between JavaScript and shell (a carriage return, leading blanks); two of the five readers stop waiting after 10 seconds and three wait for ever; the OpenCode package's `ensureBinary` has no test harness; `version_of` also judges the downloaded binary; nothing tells the person when a binary "with no version" is replaced. It needs one table of answers run against the five readers. | deferred, to the client update item |
++| 2026-11-12 | release distribution, code-quality and test-quality (round 4) | `version_of` (`scripts/install.sh`) and `stagedVersion` (`src/install/binary.ts`) read a staged binary's version by different rules (first line and any exit code; the whole answer and exit 0). Six readers of item 2026-11-12-005's concept found it wider than those two: "trimmed" differs between JavaScript and shell (a carriage return, leading blanks); two of the five readers stop waiting after 10 seconds and three wait for ever; the OpenCode package's `ensureBinary` has no test harness; `version_of` also judges the downloaded binary; nothing tells the person when a binary "with no version" is replaced. It needs one table of answers run against the five readers. | deferred, its own item (ADR 0030) |
+ | 2026-11-12 | release distribution, test-quality (round 4) | `decideHold`'s `previous === null` branch has no case of its own; a test of `deploy-files.test.ts` leaves three temporary folders per run. | deferred |
+ | 2026-11-12 | release distribution, item 2026-11-12-005 (spec and its leads) | The token's git is not isolated from global and system configuration (`GIT_CONFIG_GLOBAL`, a home `.gitconfig`): only the calls that carry the header discard inherited `GIT_CONFIG_KEY_n`. The git calls of `push.ts` have no time limit of their own, only the job's 15 minutes. The calls that do not carry the header still inherit `MARKETPLACE_TOKEN` in their environment. That the runner's masking of a secret's base64 reaches the step summary is not established; the script's redaction is what covers it. | deferred |
+ | 2026-11-12 | release distribution, item 2026-11-12-005 (judgement and delivery) | `tests/unit/release-docs.test.ts` holds less than its criteria say: for ADR 0029 only the bare `::add-mask::`, not the sentence on the runner's own masking and why no line is printed; for this file `PUSH_REMOTE` without `PUSH_ORIGIN`, and the open time limit by a loose phrase. The command's tap case passes with an edit that writes nothing, since the stub git always reports a change (the formula is proven below the command). `parseYaml` and the fake checksums file are each written in two test files; `gitStub`'s `quote` option is a boolean spelled as a literal. The 5 minutes of `release.yml`'s `distribute` job, and the minute to wait for a late dispatch, are not measured. `redact` does not cover the raw token, which no path prints. The test of the command's redaction was written after the code that satisfies it; its red was recorded with the redaction switched off. | deferred |
++| 2026-11-12 | release notice, six readers of the concept and the spec's review (item 2026-11-12-006) | A staged binary that replaces itself from the network was not built. Its blockers: no binary version is recorded in the store, so `mcp`, the sync and the viewer cannot know they are behind; `startSync` never compares versions, so the sync's takeover does not happen after an update; the viewer and the sync open the store once and keep writing to a schema a newer binary migrated; a daily replacement undoes `install --force`. Beside them: release assets are unsigned and `checksums.txt` travels with the binary, a bad release would reach every machine within a day, and nothing restores the store's upgrade copy. For the same reason a newer channel copy only tells and does not stage itself (D-3). | deferred, its own item (ADR 0030) |
++| 2026-11-12 | release notice, item 2026-11-12-006 | The viewer has no About line for the latest release and no Settings field for `WIZARDINGCODE_MEM_UPDATE`; the key is set in `<data dir>/env`. `stageBinary` (`src/install/binary.ts`) copies through the fixed name `<target>.new`, which two writers can collide on. The hand-over covers `status`, `doctor`, `update` and `ui` only; the other commands typed from an older copy still meet `SchemaTooNewError`. Not seen before a real release: github.com's rate limiting of one address, its answer while a release's assets upload, and `gh release edit <tag> --latest` moving what clients read. | deferred |
++| 2026-11-12 | release notice, the gates' reviewers (round 1) | `stageBinary` and so `install` still run the staged file's `--version` with no root or owner check (`sudo -E wizardingcode-mem install`); the report of `status`, `doctor` and `update` now refuses. `release.yml` lets a plain release on an older line become GitHub's latest, which every client now reads; the runbook has the correction by hand, the workflow does not pass `--latest=false`. `status --json` now prints an object on a store error, where standard output was empty. A data directory that cannot be written logs `update.check` once per ended turn. `spawnCli` (`tests/helpers/cli.ts`) inherits nothing, so a test starting `distill` or `update` through it must set `WIZARDINGCODE_MEM_UPDATE` itself. No test runs the hand-over through a symlinked staged path, nor `doctor`, `update` and `ui` from a newer copy. | deferred |
+diff --git a/docs/runbooks/release.md b/docs/runbooks/release.md
+index 705714e..7379bbe 100644
+--- a/docs/runbooks/release.md
++++ b/docs/runbooks/release.md
+@@ -7,7 +7,7 @@ For the author. A pushed tag `v<version>` builds the release and carries it to e
+ 1. Bring the version to `<version>` in `package.json`, `npm/package.json` and `.env.example`, run `bun run plugins`, and merge that to `main` by a pull request.
+ 2. Tag the merge commit and push the tag: `git tag -a v<version> <sha> -m "wizardingcode-mem <version>"`, then `git push origin v<version>`.
+ 3. `.github/workflows/release.yml` checks, builds five binaries, signs the macOS ones, pushes the image with the version as its tag, creates the GitHub release with `checksums.txt`, and starts `.github/workflows/distribute.yml` from `main` with the tag.
+-4. `distribute.yml` publishes `wizardingcode-mem` and `wizardingcode-mem-opencode` to npm, writes the formula to `WizardingCode-io/homebrew-wizardingcode`, writes the plugin's entry to `WizardingCode-io/wizardingcode-plugins`, and then tags the image `latest`. It is a run of its own: `release.yml` turns green as soon as that run is started, whatever becomes of it. Open the run named `distribute v<version>` under Actions and read its summary; a release is distributed when that run is green, not when `release.yml` is.
++4. `distribute.yml` publishes `wizardingcode-mem` and `wizardingcode-mem-opencode` to npm, writes the formula to `WizardingCode-io/homebrew-wizardingcode`, writes the plugin's entry to `WizardingCode-io/wizardingcode-plugins`, and then tags the image `latest`. It is a run of its own: `release.yml` turns green as soon as that run is started, whatever becomes of it. Open the run named `distribute v<version>` under Actions and read its summary; a release is distributed when that run is green, not when `release.yml` is. Clients are told from the GitHub release, not from the end of this run (ADR 0030): while it is stopped, failed or held, `status` and `doctor` already say the version is out, and the Homebrew, npm and plugin commands find nothing newer; only the curl script does.
+ 
+ A tag with a hyphen (`v0.9.0-rc.1`) is a pre-release: the two npm packages go out under the dist-tag `next`, and the tap, the marketplace and `latest` are left as they are.
+ 
+@@ -78,6 +78,8 @@ The job of `release.yml` that starts the distribution is cut after 5 minutes, an
+ 
+ A release that should not have gone out is fixed by a higher version. npm versions cannot be reused, and nothing moves a channel back by itself: the plugins, the npm package, the curl script and `wizardingcode-mem install` all keep a newer binary that is already on a machine.
+ 
++The notice of a release (ADR 0030) reaches a client at its next successful check: about a day for a machine in use. To withdraw it before a higher version exists, move GitHub's latest back: `gh release edit <previous tag> --latest`. That also moves what `scripts/install.sh` downloads. A client that already runs the bad version then reads that it is ahead of the latest release. This procedure has not been run yet: check it on the first real release, with `wizardingcode-mem update` on a client. A plain tag cut on an older line can become GitHub's latest by itself; it is corrected with the same command on the right tag.
++
+ A wrong write to the tap or the marketplace is reverted with a commit in that repository. Do not start `distribute.yml` again for that tag afterwards: it would write it again.
+ 
+ The image's `latest` is moved back by hand, since the workflow only ever distributes the highest release: `docker buildx imagetools create -t ghcr.io/wizardingcode-io/wizardingcode-mem:latest ghcr.io/wizardingcode-io/wizardingcode-mem:<previous version>`, logged in to `ghcr.io` with an account that can write the package.
+diff --git a/src/cli/commands/distill.ts b/src/cli/commands/distill.ts
+index 2d3ffb2..44334c0 100644
+--- a/src/cli/commands/distill.ts
++++ b/src/cli/commands/distill.ts
+@@ -11,7 +11,7 @@ import { REFRESH_PER_DRAIN } from "../../modules/knowledge/policy.ts";
+ import { openStore } from "../../modules/knowledge/store-open.ts";
+ import { type Db, openDb } from "../../store/db.ts";
+ import { logError } from "../../util/log.ts";
+-import { resolvePaths } from "../../util/paths.ts";
++import { defaultDataDir, resolvePaths } from "../../util/paths.ts";
+ 
+ const MAX_TURNS = 50;
+ const MAX_MS = 30_000;
+@@ -20,7 +20,33 @@ const MAX_MS = 30_000;
+  * `wizardingcode-mem distill`: turns queued turns into memories. Hooks start it in the
+  * background; it can also be run by hand. Only one instance works at a time.
+  */
+-export async function run(): Promise<number> {
++export async function run(
++  _argv: string[] = [],
++  deps: { fetch: typeof fetch; now: () => number } = { fetch, now: Date.now },
++): Promise<number> {
++  const code = await drain();
++  // Which release is the latest: asked at most once a day, in this background process and
++  // never on a hook's path, whether or not the store could be opened. Never fatal.
++  try {
++    const { checkForRelease, mode } = await import("../../update/check.ts");
++    const { REPOSITORY } = await import("../../update/channels.ts");
++    const { updateSetting } = await import("../../settings/settings.ts");
++    const dataDir = defaultDataDir();
++    const result = await checkForRelease({
++      dataDir,
++      mode: mode(updateSetting(process.env, dataDir).value, process.env),
++      now: deps.now(),
++      fetch: deps.fetch,
++      repository: REPOSITORY,
++    });
++    if (result.error !== undefined) logError("update.check", new Error(result.error));
++  } catch (error) {
++    logError("update.check", error);
++  }
++  return code;
++}
++
++async function drain(): Promise<number> {
+   let db: Db | undefined;
+   try {
+     const { dataDir, storeDir } = resolvePaths();
+diff --git a/src/cli/commands/doctor.ts b/src/cli/commands/doctor.ts
+index c4459aa..471fc07 100644
+--- a/src/cli/commands/doctor.ts
++++ b/src/cli/commands/doctor.ts
+@@ -1,5 +1,6 @@
+ import { type Check, runChecks } from "../../doctor/checks.ts";
+ import { doctorContext } from "../../doctor/context.ts";
++import { updateCheck } from "../../update/report.ts";
+ import { defaultDataDir } from "../../util/paths.ts";
+ import { plural } from "../../util/text.ts";
+ 
+@@ -12,7 +13,13 @@ const LABEL: Record<Check["status"], string> = {
+ 
+ /** `wizardingcode-mem doctor`: checks the installation and says what to do about anything wrong. */
+ export function run(): number {
+-  const checks = runChecks(doctorContext(defaultDataDir()));
++  const dataDir = defaultDataDir();
++  // The release notice is this command's own line: the checks the viewer also runs do not
++  // carry it, since it runs the staged binary to ask its version.
++  const checks: Check[] = [
++    ...runChecks(doctorContext(dataDir)),
++    updateCheck(dataDir, process.env, Date.now()),
++  ];
+   const failures = checks.filter((check) => check.status === "fail").length;
+   const warnings = checks.filter((check) => check.status === "warn").length;
+   const summary =
+diff --git a/src/cli/commands/install.ts b/src/cli/commands/install.ts
+index 977fce1..0b7d56a 100644
+--- a/src/cli/commands/install.ts
++++ b/src/cli/commands/install.ts
+@@ -38,6 +38,7 @@ import {
+   stopClaudeMem,
+   takeoverContext,
+ } from "../../install/takeover.ts";
++import { handOver } from "../../update/reconcile.ts";
+ import { defaultDataDir } from "../../util/paths.ts";
+ import { isCompiled } from "../../util/self.ts";
+ import { EXIT_USAGE } from "../exit.ts";
+@@ -149,6 +150,8 @@ function retireLegacy(agent: string, rest: string[]): string[] {
+ 
+ /** `wizardingcode-mem install [<agent>] [options]` */
+ export function run(argv: string[]): number {
++  // A copy that was handed this install must not pass the mark on to what it starts.
++  delete process.env.WIZARDINGCODE_MEM_HANDED;
+   const named = argv[0] !== undefined && !argv[0].startsWith("--");
+   const agent = named ? argv[0] : undefined;
+   const rest = named ? argv.slice(1) : argv;
+@@ -241,19 +244,14 @@ function binaryOrHandOver(argv: string[], rest: string[]): { path: string } | {
+   process.stdout.write(
+     `A newer wizardingcode-mem (${binary.kept}) is already in ${binary.path}; this one is ${pkg.version} and was not put in its place. wizardingcode-mem install --force replaces it.\n`,
+   );
+-  try {
+-    const handed = Bun.spawnSync([binary.path, "install", ...argv], {
+-      stdin: "inherit",
+-      stdout: "inherit",
+-      stderr: "inherit",
+-    });
+-    return { code: handed.exitCode ?? 1 };
+-  } catch (error) {
+-    process.stderr.write(
+-      `wizardingcode-mem install: could not run ${binary.path}: ${error instanceof Error ? error.message : String(error)}\n`,
+-    );
+-    return { code: 1 };
+-  }
++  return {
++    code: handOver(
++      binary.path,
++      ["install", ...argv],
++      () => {},
++      (message) => `wizardingcode-mem install: could not run ${binary.path}: ${message}\n`,
++    ),
++  };
+ }
+ 
+ /** An old Gemini CLI install of ours: offered for removal, once per run. */
+diff --git a/src/cli/commands/share.ts b/src/cli/commands/share.ts
+index 00be5e3..94c4a08 100644
+--- a/src/cli/commands/share.ts
++++ b/src/cli/commands/share.ts
+@@ -42,7 +42,6 @@ import {
+   shareListText,
+   TEAM_DESTINATION,
+ } from "../../sharing/types.ts";
+-import { ago } from "../../status/report.ts";
+ import { type Db, openDb } from "../../store/db.ts";
+ import {
+   type BindOutcome,
+@@ -66,6 +65,7 @@ import { ledgerHistory } from "../../sync/ledger.ts";
+ import { findServer, heldByContract } from "../../sync/servers.ts";
+ import { startSync } from "../../sync/spawn.ts";
+ import { nameStateOf, type ServerStatus, statusReport } from "../../sync/state.ts";
++import { ago } from "../../util/ago.ts";
+ import { realClock, realTimers } from "../../util/clock.ts";
+ import { logError } from "../../util/log.ts";
+ import { resolvePaths } from "../../util/paths.ts";
+diff --git a/src/cli/commands/status.ts b/src/cli/commands/status.ts
+index 853e4ac..606667a 100644
+--- a/src/cli/commands/status.ts
++++ b/src/cli/commands/status.ts
+@@ -1,20 +1,32 @@
++import pkg from "../../../package.json" with { type: "json" };
+ import { claudeCodeRoot } from "../../adapters/claude-code/history.ts";
+ import { codexRoot } from "../../adapters/codex/history.ts";
+ import { findProject } from "../../core/project.ts";
+ import { historyStatus } from "../../history/status.ts";
+ import { formatStatus, statusReport } from "../../status/report.ts";
+ import { type Db, openExisting } from "../../store/db.ts";
++import { reportOrReason, type UpdateReport, updateReport } from "../../update/report.ts";
+ import { resolvePaths } from "../../util/paths.ts";
+ 
+ /** `wizardingcode-mem status [--json]`: what is stored for this project, and how wizardingcode-mem is behaving. */
+-export function run(argv: string[]): number {
++export function run(
++  argv: string[],
++  build: (dataDir: string) => UpdateReport = (dataDir) =>
++    updateReport({ dataDir, env: process.env, now: Date.now(), running: pkg.version }),
++): number {
+   const { dataDir, storeDir } = resolvePaths();
++  const json = argv.includes("--json");
++  // Read from the data directory alone, before the store: it is said also when the store
++  // cannot be opened, which is when a person most needs to know which copy runs.
++  const { report: update, lines } = reportOrReason(() => build(dataDir));
++  const notice = [...lines, ...(update?.commands ?? [])];
+   let db: Db | null = null;
+   try {
+     db = openExisting(storeDir);
+     const project = db === null ? null : findProject(db, process.cwd());
+     const now = Date.now();
+     const report = statusReport(db, project, dataDir, { env: process.env, now });
++    if (update !== undefined) report.update = update;
+     if (db !== null) {
+       report.history = historyStatus(
+         db,
+@@ -24,13 +36,17 @@ export function run(argv: string[]): number {
+       );
+     }
+     process.stdout.write(
+-      argv.includes("--json") ? `${JSON.stringify(report, null, 2)}\n` : formatStatus(report),
++      json ? `${JSON.stringify(report, null, 2)}\n` : formatStatus(report, notice),
+     );
+     return 0;
+   } catch (error) {
+-    process.stderr.write(
+-      `wizardingcode-mem: ${error instanceof Error ? error.message : String(error)}\n`,
++    const message = error instanceof Error ? error.message : String(error);
++    process.stdout.write(
++      json
++        ? `${JSON.stringify({ version: pkg.version, update, error: message }, null, 2)}\n`
++        : `${[`wizardingcode-mem ${pkg.version}`, ...notice].join("\n")}\n`,
+     );
++    process.stderr.write(`wizardingcode-mem: ${message}\n`);
+     return 1;
+   } finally {
+     db?.close();
+diff --git a/src/cli/commands/update.ts b/src/cli/commands/update.ts
+new file mode 100644
+index 0000000..e5841d8
+--- /dev/null
++++ b/src/cli/commands/update.ts
+@@ -0,0 +1,47 @@
++import { join } from "node:path";
++import pkg from "../../../package.json" with { type: "json" };
++import { updateSetting } from "../../settings/settings.ts";
++import { REPOSITORY } from "../../update/channels.ts";
++import { checkForRelease, mode as modeOf } from "../../update/check.ts";
++import { commandLines, reportOrReason, updateReport } from "../../update/report.ts";
++import { lastFailed } from "../../update/state.ts";
++import { defaultDataDir } from "../../util/paths.ts";
++
++/**
++ * `wizardingcode-mem update`: asks now which release is the latest and says how to get it.
++ * It downloads nothing and changes nothing but the check's own state.
++ */
++export async function run(
++  _argv: string[] = [],
++  deps: { fetch: typeof fetch; now: () => number } = { fetch, now: Date.now },
++): Promise<number> {
++  const dataDir = defaultDataDir();
++  const setting = updateSetting(process.env, dataDir);
++  const mode = modeOf(setting.value, process.env);
++  const report = (asked: boolean) =>
++    reportOrReason(() =>
++      updateReport({ dataDir, env: process.env, now: deps.now(), running: pkg.version, asked }),
++    );
++  if (mode === "off" || mode === "off-unknown") {
++    const where =
++      setting.source === "env"
++        ? "unset WIZARDINGCODE_MEM_UPDATE in this environment to turn it on"
++        : `set WIZARDINGCODE_MEM_UPDATE=check in ${join(dataDir, "env")} to turn it on`;
++    process.stdout.write(`${report(false).lines.join("\n")}\n${where}\n`);
++    return 0;
++  }
++  const result = await checkForRelease({
++    dataDir,
++    mode,
++    now: deps.now(),
++    fetch: deps.fetch,
++    repository: REPOSITORY,
++    force: true,
++  });
++  process.stdout.write(`${[...report(true).lines, ...commandLines()].join("\n")}\n`);
++  if (result.error !== undefined) {
++    process.stderr.write(`wizardingcode-mem: could not record the check: ${result.error}\n`);
++    return 1;
++  }
++  return result.state !== null && lastFailed(result.state) ? 1 : 0;
++}
+diff --git a/src/cli/main.ts b/src/cli/main.ts
+index 6595ce9..d600f78 100644
+--- a/src/cli/main.ts
++++ b/src/cli/main.ts
+@@ -2,13 +2,14 @@
+ import pkg from "../../package.json" with { type: "json" };
+ import { applyLegacyEnv, migrateLegacyData } from "../util/legacy.ts";
+ import { EXIT_USAGE } from "./exit.ts";
++import { type CommandName, reconciles } from "./reconciled.ts";
+ 
+ export interface CommandModule {
+   run(argv: string[]): Promise<number> | number;
+ }
+ 
+ // Each command is loaded on demand so that hooks never pay for code they do not run.
+-const COMMANDS: Record<string, () => Promise<CommandModule>> = {
++const COMMANDS: Record<CommandName, () => Promise<CommandModule>> = {
+   hook: () => import("./commands/hook.ts"),
+   distill: () => import("./commands/distill.ts"),
+   mcp: () => import("./commands/mcp.ts"),
+@@ -26,6 +27,7 @@ const COMMANDS: Record<string, () => Promise<CommandModule>> = {
+   share: () => import("./commands/share.ts"),
+   status: () => import("./commands/status.ts"),
+   doctor: () => import("./commands/doctor.ts"),
++  update: () => import("./commands/update.ts"),
+   serve: () => import("./commands/serve.ts"),
+   sync: () => import("./commands/sync.ts"),
+   __spike: () => import("./commands/spike.ts"),
+@@ -39,7 +41,7 @@ const USAGE = `wizardingcode-mem ${pkg.version} — persistent memory for coding
+ Usage: wizardingcode-mem <command> [options]
+ 
+ Commands:
+-  install, uninstall, status, doctor, ui, distill, history, embed, backup,
++  install, uninstall, status, doctor, update, ui, distill, history, embed, backup,
+   compact, knowledge, share, import, rejudge, hook, mcp, tool,
+   serve (the team server and its subcommands; wizardingcode-mem serve --help),
+   sync (the sync client: --auto, --once, stop)
+@@ -59,7 +61,7 @@ async function main(argv: string[]): Promise<number> {
+     process.stdout.write(`${pkg.version}\n`);
+     return 0;
+   }
+-  const load = COMMANDS[name];
++  const load = (COMMANDS as Record<string, (() => Promise<CommandModule>) | undefined>)[name];
+   if (load === undefined) {
+     process.stderr.write(`wizardingcode-mem: unknown command "${name}"\n\n${USAGE}`);
+     return EXIT_USAGE;
+@@ -84,6 +86,13 @@ async function main(argv: string[]): Promise<number> {
+       return 1;
+     }
+   }
++  // A copy older than the staged binary hands a person's command over to it. Decided from
++  // the name alone, so every other command, the hooks first, loads none of this.
++  if (reconciles(name, rest)) {
++    const { reconcile } = await import("../update/reconcile.ts");
++    const handed = reconcile(argv);
++    if (handed !== null) return handed.code;
++  }
+   const command = await load();
+   return await command.run(rest);
+ }
+diff --git a/src/cli/reconciled.ts b/src/cli/reconciled.ts
+new file mode 100644
+index 0000000..a79be65
+--- /dev/null
++++ b/src/cli/reconciled.ts
+@@ -0,0 +1,40 @@
++// The CLI's command names, and the few that reconcile with the staged binary before they run.
++// A leaf: it imports nothing, so loading it costs a hook nothing and a test can read it
++// (main.ts runs at load and cannot be imported).
++
++export const COMMAND_NAMES = [
++  "hook",
++  "distill",
++  "mcp",
++  "tool",
++  "ui",
++  "install",
++  "uninstall",
++  "import",
++  "history",
++  "embed",
++  "rejudge",
++  "compact",
++  "backup",
++  "knowledge",
++  "share",
++  "status",
++  "doctor",
++  "update",
++  "serve",
++  "sync",
++  "__spike",
++] as const;
++export type CommandName = (typeof COMMAND_NAMES)[number];
++
++/**
++ * The commands a person types to look at their install: typed from a copy older than the
++ * staged binary, they run the staged binary. Never the ones agents and the background start.
++ */
++export const RECONCILED: readonly CommandName[] = ["status", "doctor", "update", "ui"];
++
++export function reconciles(name: string, rest: readonly string[]): boolean {
++  if (!(RECONCILED as readonly string[]).includes(name)) return false;
++  // The session-start hook's own viewer.
++  return !(name === "ui" && rest.includes("--auto"));
++}
+diff --git a/src/install/binary.ts b/src/install/binary.ts
+index 41c6628..05a914d 100644
+--- a/src/install/binary.ts
++++ b/src/install/binary.ts
+@@ -1,12 +1,21 @@
+ import { chmodSync, copyFileSync, existsSync, mkdirSync, renameSync } from "node:fs";
+-import { join, resolve } from "node:path";
++import { dirname, join, resolve } from "node:path";
+ import { isVersion, olderThan } from "../util/version.ts";
+ 
+ /** How long a staged binary gets to answer `--version` before it counts as not answering. */
+ const VERSION_TIMEOUT_MS = 10_000;
+ 
++/** Where the staged binary lives: the one path the hosts' configuration points at. */
++export function stagedPath(dataDir: string): string {
++  return join(
++    dataDir,
++    "bin",
++    process.platform === "win32" ? "wizardingcode-mem.exe" : "wizardingcode-mem",
++  );
++}
++
+ /** The version a staged binary answers, or null when it cannot be run or answers anything else. */
+-function stagedVersion(target: string): string | null {
++export function stagedVersion(target: string): string | null {
+   try {
+     const out = Bun.spawnSync([target, "--version"], {
+       stdin: "ignore",
+@@ -36,11 +45,8 @@ export function stageBinary(
+   dataDir: string,
+   options: { version: string; force: boolean },
+ ): { path: string; kept: string | null } {
+-  const dir = join(dataDir, "bin");
+-  const target = join(
+-    dir,
+-    process.platform === "win32" ? "wizardingcode-mem.exe" : "wizardingcode-mem",
+-  );
++  const target = stagedPath(dataDir);
++  const dir = dirname(target);
+   if (resolve(source) === resolve(target)) return { path: target, kept: null };
+   if (!options.force && existsSync(target)) {
+     const staged = stagedVersion(target);
+diff --git a/src/settings/settings.ts b/src/settings/settings.ts
+index 12ba7fe..32495c6 100644
+--- a/src/settings/settings.ts
++++ b/src/settings/settings.ts
+@@ -20,6 +20,7 @@ export const SETTING_KEYS = [
+   "WIZARDINGCODE_MEM_RETENTION_DAYS",
+   "WIZARDINGCODE_MEM_HISTORY_DAYS",
+   "WIZARDINGCODE_MEM_UI_AUTO_OPEN",
++  "WIZARDINGCODE_MEM_UPDATE",
+   "WIZARDINGCODE_MEM_STORE_DIR",
+   "WIZARDINGCODE_MODULES",
+   SHARE_ROOTS,
+@@ -237,6 +238,15 @@ export function effectiveSharing(
+   return { [SHARE_ROOTS]: one(SHARE_ROOTS), [SHARE_AREAS]: one(SHARE_AREAS) };
+ }
+ 
++/**
++ * The release check's key as this process sees it, with where it came from: the lines a
++ * person reads say so, since a variable exported in one shell does not reach a hook started
++ * elsewhere. The value is not normalised: an unknown one must be seen as unknown.
++ */
++export function updateSetting(env: Env, dataDir: string): { value: string | null; source: Source } {
++  return rawSettings(env, readEnvFile(join(dataDir, ENV_FILE))).WIZARDINGCODE_MEM_UPDATE;
++}
++
+ export function loadSettings(env: Env = process.env, dataDir: string): Settings {
+   const file = readEnvFile(join(dataDir, ENV_FILE));
+   return settingsFrom(rawSettings(env, file), effectiveSharing(file, env));
+@@ -333,6 +343,7 @@ const RULES: Record<SettingKey, (value: string) => string | null> = {
+       ? null
+       : `a whole number of days from ${HISTORY_DAYS.min} to ${HISTORY_DAYS.max}`,
+   WIZARDINGCODE_MEM_UI_AUTO_OPEN: (v) => (v === "on" || v === "off" ? null : "on or off"),
++  WIZARDINGCODE_MEM_UPDATE: (v) => (v === "check" || v === "off" ? null : "check or off"),
+   WIZARDINGCODE_MEM_STORE_DIR: () => "the store directory is changed by moving the store, not here",
+   WIZARDINGCODE_MODULES: (v) => {
+     const ids = moduleList(v).split(",");
+@@ -444,6 +455,7 @@ export function publicSettings(env: Env = process.env, dataDir: string): PublicS
+     WIZARDINGCODE_MEM_RETENTION_DAYS: String(settings.retentionDays),
+     WIZARDINGCODE_MEM_HISTORY_DAYS: String(settings.historyDays),
+     WIZARDINGCODE_MEM_UI_AUTO_OPEN: settings.uiAutoOpen ? "on" : "off",
++    WIZARDINGCODE_MEM_UPDATE: "check",
+     WIZARDINGCODE_MEM_BACKUP_EVERY_HOURS: String(settings.backup.everyHours),
+     WIZARDINGCODE_MEM_BACKUP_KEEP: String(settings.backup.keep),
+     WIZARDINGCODE_MODULES: DEFAULTS.modules,
+diff --git a/src/status/report.ts b/src/status/report.ts
+index 3bef8ef..bd2377d 100644
+--- a/src/status/report.ts
++++ b/src/status/report.ts
+@@ -22,6 +22,8 @@ import { getMeta } from "../store/meta.ts";
+ import { syncReport } from "../sync/report.ts";
+ import type { NameStatus, ServerStatus, SyncState } from "../sync/state.ts";
+ import { CONTRACT } from "../team/contract.ts";
++import type { UpdateReport } from "../update/report.ts";
++import { ago } from "../util/ago.ts";
+ import { plural } from "../util/text.ts";
+ 
+ export interface Latency {
+@@ -50,6 +52,8 @@ export interface StatusReport {
+   dataDir: string;
+   /** The history import across projects; set by callers that look at the transcripts. */
+   history?: HistoryStatus;
++  /** The release notice and the staged binary: filled by the `status` command only. */
++  update?: UpdateReport;
+   /** Null where the knowledge tables do not exist, or with no database. */
+   knowledge: KnowledgeStatus | null;
+   sharing: SharingStatus;
+@@ -147,18 +151,6 @@ export const serverJson = (server: ServerStatus): ServerJson => ({
+   names: server.names,
+ });
+ 
+-/** `3 s ago`, `12 min ago`, `5 h ago`, `3 d ago`; `never` for null. */
+-export function ago(now: number, at: number | null): string {
+-  if (at === null) return "never";
+-  const seconds = Math.max(0, Math.round((now - at) / 1000));
+-  if (seconds < 60) return `${seconds} s ago`;
+-  const minutes = Math.round(seconds / 60);
+-  if (minutes < 60) return `${minutes} min ago`;
+-  const hours = Math.round(minutes / 60);
+-  if (hours < 48) return `${hours} h ago`;
+-  return `${Math.round(hours / 24)} d ago`;
+-}
+-
+ /** `in 4 min`, `in 2 h`; `now` once the time has come. */
+ function inTime(now: number, at: number): string {
+   const seconds = Math.round((at - now) / 1000);
+@@ -565,8 +557,9 @@ function formatHistory(h: HistoryStatus): string[] {
+   return lines;
+ }
+ 
+-export function formatStatus(report: StatusReport): string {
+-  const lines = [`wizardingcode-mem ${report.version}`];
++/** `notice` is what the `status` command prints after the version line: the release notice. */
++export function formatStatus(report: StatusReport, notice: readonly string[] = []): string {
++  const lines = [`wizardingcode-mem ${report.version}`, ...notice];
+   const { memories, turns, hooks } = report;
+   const empty =
+     report.project === null ||
+diff --git a/src/update/channels.ts b/src/update/channels.ts
+new file mode 100644
+index 0000000..8560425
+--- /dev/null
++++ b/src/update/channels.ts
+@@ -0,0 +1,25 @@
++// Where releases are read from, and how a person gets one on each channel. The three shell
++// commands are also in the README (tests/unit/update-docs.test.ts holds them there).
++
++export const REPOSITORY = "WizardingCode-io/wizardingcode-mem";
++
++export const CHANNEL_COMMANDS: ReadonlyArray<{ channel: string; command: string; shell: boolean }> =
++  [
++    {
++      channel: "plugin",
++      command: "update the wizardingcode-mem plugin from your agent's plugin manager",
++      shell: false,
++    },
++    {
++      channel: "Homebrew",
++      command: "brew upgrade wizardingcode-mem && wizardingcode-mem install",
++      shell: true,
++    },
++    { channel: "npm (and Windows)", command: "npx wizardingcode-mem@latest install", shell: true },
++    {
++      channel: "script",
++      command:
++        "curl -fsSL https://raw.githubusercontent.com/WizardingCode-io/wizardingcode-mem/main/scripts/install.sh | sh",
++      shell: true,
++    },
++  ];
+diff --git a/src/update/check.ts b/src/update/check.ts
+new file mode 100644
+index 0000000..3720dfe
+--- /dev/null
++++ b/src/update/check.ts
+@@ -0,0 +1,134 @@
++// The one request this product makes by itself: which release is the latest. It reads the
++// redirect github.com answers for `releases/latest` and nothing else: no body, no API, no
++// download. Everything that is not that redirect is a reason, never a version.
++import { isPlainVersion } from "../util/version.ts";
++import { reason } from "./reason.ts";
++import { lastFailed, readState, type UpdateState, writeState } from "./state.ts";
++
++export const REQUEST_LIMIT_MS = 5000;
++const ATTEMPT_WINDOW_MS = 60_000;
++const AFTER_FAILURE_MS = 3_600_000;
++const AFTER_SUCCESS_MS = 86_400_000;
++
++export type Latest = { ok: true; version: string } | { ok: false; reason: string };
++
++/** The latest plain release of `repository`, or why it could not be read. */
++export async function latestRelease(
++  fetchImpl: typeof fetch,
++  repository: string,
++  options: { timeoutMs?: number } = {},
++): Promise<Latest> {
++  const base = `https://github.com/${repository}/releases`;
++  const abort = new AbortController();
++  let timer: ReturnType<typeof setTimeout> | undefined;
++  const limit = new Promise<"timed out">((resolve) => {
++    timer = setTimeout(() => {
++      abort.abort();
++      resolve("timed out");
++    }, options.timeoutMs ?? REQUEST_LIMIT_MS);
++  });
++  try {
++    const answer = await Promise.race([
++      fetchImpl(`${base}/latest`, {
++        method: "GET",
++        redirect: "manual",
++        // Nothing of the product's version, the platform or the machine.
++        headers: { "User-Agent": "wizardingcode-mem" },
++        signal: abort.signal,
++      }),
++      limit,
++    ]);
++    if (answer === "timed out") return { ok: false, reason: "timed out" };
++    if (answer.status !== 301 && answer.status !== 302) {
++      return {
++        ok: false,
++        reason: /^\d{3}$/.test(String(answer.status))
++          ? `HTTP ${answer.status}`
++          : "not a release redirect",
++      };
++    }
++    const location = answer.headers.get("location") ?? "";
++    const prefix = `${base}/tag/v`;
++    const version = location.startsWith(prefix) ? location.slice(prefix.length) : "";
++    return isPlainVersion(version)
++      ? { ok: true, version }
++      : { ok: false, reason: "not a release redirect" };
++  } catch {
++    return { ok: false, reason: abort.signal.aborted ? "timed out" : "offline" };
++  } finally {
++    // An armed timer would keep the process alive after the answer.
++    clearTimeout(timer);
++  }
++}
++
++/** Whether the automatic check may ask now. */
++export function due(state: UpdateState | null, now: number): boolean {
++  if (state === null) return true;
++  const { attemptAt, checkedAt, failedAt } = state;
++  // A clock that went back, or a file from another machine: never a reason to stop checking.
++  if ([attemptAt, checkedAt, failedAt].some((at) => at !== null && at > now)) return true;
++  // Another process is asking, or has just asked.
++  if (attemptAt !== null && now - attemptAt < ATTEMPT_WINDOW_MS) return false;
++  if (checkedAt === null && failedAt === null) return true;
++  if (lastFailed(state)) return now - (failedAt as number) >= AFTER_FAILURE_MS;
++  return now - (checkedAt as number) >= AFTER_SUCCESS_MS;
++}
++
++export type Mode = "check" | "off" | "off-unknown" | "ci";
++
++/** What the key's value and the environment allow; in doubt, no request. */
++export function mode(value: string | null, env: Record<string, string | undefined>): Mode {
++  if (value === "off") return "off";
++  if (value !== null && value !== "check") return "off-unknown";
++  return env.CI ? "ci" : "check";
++}
++
++export interface CheckResult {
++  /** Whether this call made a request. */
++  asked: boolean;
++  state: UpdateState | null;
++  /** Why the state could not be written, when it could not. */
++  error?: string;
++}
++
++/**
++ * Asks once and records what came of it. The automatic check asks only in mode `check` and
++ * when due; a forced one (a person typed `update`) asks in CI too and whatever the age.
++ */
++export async function checkForRelease(input: {
++  dataDir: string;
++  mode: Mode;
++  now: number;
++  fetch: typeof fetch;
++  repository: string;
++  force?: boolean;
++}): Promise<CheckResult> {
++  const before = readState(input.dataDir);
++  const allowed = input.force
++    ? input.mode === "check" || input.mode === "ci"
++    : input.mode === "check" && due(before, input.now);
++  if (!allowed) return { asked: false, state: before };
++  const past = (at: number | null) => (at !== null && at > input.now ? null : at);
++  const attempt: UpdateState = {
++    latest: before?.latest ?? null,
++    checkedAt: past(before?.checkedAt ?? null),
++    failedAt: past(before?.failedAt ?? null),
++    reason: before?.reason ?? null,
++    attemptAt: input.now,
++  };
++  try {
++    writeState(input.dataDir, attempt);
++  } catch (error) {
++    return { asked: false, state: before, error: reason(error) };
++  }
++  const answer = await latestRelease(input.fetch, input.repository);
++  const after: UpdateState = answer.ok
++    ? { ...attempt, latest: answer.version, checkedAt: input.now, reason: null }
++    : { ...attempt, failedAt: input.now, reason: answer.reason };
++  try {
++    writeState(input.dataDir, after);
++  } catch (error) {
++    return { asked: true, state: attempt, error: reason(error) };
++  }
++  return { asked: true, state: after };
++}
+diff --git a/src/update/reason.ts b/src/update/reason.ts
+new file mode 100644
+index 0000000..76a3747
+--- /dev/null
++++ b/src/update/reason.ts
+@@ -0,0 +1,11 @@
++/** An error as one line a person can read: its code when it has one, else its first line. */
++export function reason(error: unknown): string {
++  const code = (error as { code?: unknown } | null)?.code;
++  if (typeof code === "string" && code !== "") return code;
++  return (error instanceof Error ? error.message : String(error)).split("\n")[0] ?? "";
++}
++
++/** The first line of an error's message, whatever its code. */
++export function firstLine(error: unknown): string {
++  return (error instanceof Error ? error.message : String(error)).split("\n")[0] ?? "";
++}
+diff --git a/src/update/reconcile.ts b/src/update/reconcile.ts
+new file mode 100644
+index 0000000..caa1af4
+--- /dev/null
++++ b/src/update/reconcile.ts
+@@ -0,0 +1,113 @@
++// A copy older than the staged binary hands a person's command over to it, so that the
++// command never meets a store the newer binary migrated. Nothing here stages a binary:
++// only `install` does.
++import { existsSync, realpathSync } from "node:fs";
++import pkg from "../../package.json" with { type: "json" };
++import { stagedPath, stagedVersion } from "../install/binary.ts";
++import { defaultDataDir } from "../util/paths.ts";
++import { isCompiled } from "../util/self.ts";
++import { olderThan } from "../util/version.ts";
++import { firstLine } from "./reason.ts";
++import { binOwner, mayRunStaged, whoAmI } from "./staged.ts";
++
++export type Decision = "skip" | "compare";
++const HANDED = "WIZARDINGCODE_MEM_HANDED";
++
++/** Whether this process may look at the staged binary at all. It compares no version. */
++export function decide(input: {
++  platform: string;
++  compiled: boolean;
++  /** This process's real path. */
++  self: string;
++  /** The staged binary's real path, or null when there is none. */
++  staged: string | null;
++  handed: boolean;
++  /** The effective user, or null where there is none to compare. */
++  uid: number | null;
++  /** Who owns the folder the staged binary is in. */
++  binOwner: number | null;
++}): Decision {
++  if (input.platform === "win32" || !input.compiled) return "skip";
++  if (input.staged === null || input.self === input.staged || input.handed) return "skip";
++  // Never run, as root or for another user, a file that user can write.
++  if (!mayRunStaged(input)) return "skip";
++  return "compare";
++}
++
++/** The environment of the staged binary a command is handed to: it must not hand over again. */
++export function handedEnv(
++  env: Record<string, string | undefined>,
++): Record<string, string | undefined> {
++  return { ...env, [HANDED]: "1" };
++}
++
++/** Runs the staged binary with these arguments; its exit code is the answer. */
++export function handOver(
++  path: string,
++  argv: string[],
++  say: () => void,
++  fail: (message: string) => string = (message) =>
++    `wizardingcode-mem: could not run ${path}: ${message}\n`,
++): number {
++  say();
++  try {
++    const handed = Bun.spawnSync([path, ...argv], {
++      stdin: "inherit",
++      stdout: "inherit",
++      stderr: "inherit",
++      env: handedEnv(process.env),
++    });
++    return handed.exitCode ?? 1;
++  } catch (error) {
++    process.stderr.write(fail(firstLine(error)));
++    return 1;
++  }
++}
++
++/** What this process and the staged binary are, read from the machine. It changes nothing. */
++function gather(handed: boolean): { path: string; decision: Decision } {
++  const path = stagedPath(defaultDataDir());
++  const exists = existsSync(path);
++  return {
++    path,
++    decision: decide({
++      ...whoAmI(),
++      compiled: isCompiled(),
++      self: realpathSync(process.execPath),
++      staged: exists ? realpathSync(path) : null,
++      handed,
++      binOwner: exists ? binOwner(path) : null,
++    }),
++  };
++}
++
++/**
++ * Before a reconciled command runs: the exit code of the staged binary it was handed to, or
++ * null when the command runs here. A staged binary that cannot be looked at is never a
++ * reason to fail the command a person typed.
++ */
++export function reconcile(
++  argv: string[],
++  look: (handed: boolean) => { path: string; decision: Decision } = gather,
++): { code: number } | null {
++  // The mark of a hand-over is read, then removed: nothing this command starts may inherit it.
++  const handed = Boolean(process.env[HANDED]);
++  delete process.env[HANDED];
++  let found: { path: string; decision: Decision };
++  try {
++    found = look(handed);
++  } catch {
++    return null;
++  }
++  if (found.decision === "skip") return null;
++  const { path } = found;
++  const staged = stagedVersion(path);
++  if (staged === null || !olderThan(pkg.version, staged)) return null;
++  return {
++    code: handOver(path, argv, () => {
++      process.stderr.write(
++        `wizardingcode-mem: running ${staged} from ${path}; this copy is ${pkg.version}\n`,
++      );
++    }),
++  };
++}
+diff --git a/src/update/report.ts b/src/update/report.ts
+new file mode 100644
+index 0000000..5a83ab1
+--- /dev/null
++++ b/src/update/report.ts
+@@ -0,0 +1,170 @@
++// What a person is told about releases and about the copy their agents run. `updateLine`
++// and `agentsLine` write the two lines; `reportOrReason` writes the one said when they cannot
++// be built, and the `update` command adds how to turn the check on.
++import { join } from "node:path";
++import pkg from "../../package.json" with { type: "json" };
++import { type Source, updateSetting } from "../settings/settings.ts";
++import { ago } from "../util/ago.ts";
++import { olderThan } from "../util/version.ts";
++import { CHANNEL_COMMANDS } from "./channels.ts";
++import { type Mode, mode as modeOf } from "./check.ts";
++import { firstLine } from "./reason.ts";
++import { type StagedFacts, stagedFacts } from "./staged.ts";
++import { lastFailed, readState, type UpdateState } from "./state.ts";
++
++/** Line 1: the first row of the spec's table that applies. */
++export function updateLine(input: {
++  mode: Mode;
++  source: Source;
++  /** Whether this call made a request (a typed `update`), CI or not. */
++  asked: boolean;
++  state: UpdateState | null;
++  current: string;
++  /** Whether `current` is the staged binary's version (else the running copy's). */
++  currentIsStaged: boolean;
++  dataDir: string;
++  now: number;
++}): { line: string; out: boolean } {
++  const { state, current, now } = input;
++  const say = (line: string, out = false) => ({ line: `update: ${line}`, out });
++  if (input.mode === "off") {
++    return say(
++      input.source === "env"
++        ? "off (WIZARDINGCODE_MEM_UPDATE in this command's environment; other processes may not see it)"
++        : `off (WIZARDINGCODE_MEM_UPDATE in ${join(input.dataDir, "env")})`,
++    );
++  }
++  if (input.mode === "off-unknown")
++    return say("off (WIZARDINGCODE_MEM_UPDATE is neither check nor off)");
++  const failed = state !== null && lastFailed(state);
++  const failure = failed ? `${state.reason}, ${ago(now, state.failedAt)}` : "";
++  const latest = state?.latest ?? null;
++  if (state !== null && latest !== null && olderThan(current, latest)) {
++    const when = failed
++      ? `checked ${ago(now, state.checkedAt)}; last check failed: ${failure}`
++      : `checked ${ago(now, state.checkedAt)}`;
++    const who = input.currentIsStaged ? `the agents run ${current}` : `this copy is ${current}`;
++    return say(`${latest} is out (${when}); ${who}`, true);
++  }
++  if (input.mode === "ci" && !input.asked) return say("not checked in CI");
++  if (state === null || (latest === null && !failed)) return say("not checked yet");
++  if (failed) {
++    return say(
++      `could not check (${failure}); ${latest === null ? "no release known yet" : `last known ${latest}`}`,
++    );
++  }
++  const checked = `(checked ${ago(now, state.checkedAt)})`;
++  return latest === current
++    ? say(`${latest} is the latest ${checked}`)
++    : say(`${current} is ahead of the latest release ${latest} ${checked}`);
++}
++
++/** Line 2: what the agents run, when this process is another copy. */
++export function agentsLine(running: string, facts: StagedFacts): string | null {
++  if (facts.isSelf || !facts.exists) return null;
++  if (facts.refused) {
++    return `the staged binary at ${facts.path} was not run: this command runs as root, or the folder belongs to another user`;
++  }
++  if (facts.version === null) {
++    return `agents run an unreadable binary from ${facts.path}; this copy is ${running}: wizardingcode-mem install replaces it`;
++  }
++  if (facts.version === running) return null;
++  const plain = `agents run ${facts.version} from ${facts.path}; this copy is ${running}`;
++  return olderThan(facts.version, running)
++    ? `${plain}: wizardingcode-mem install moves them to it`
++    : plain;
++}
++
++/**
++ * The report, or the reason it could not be built: `status` and `doctor` both say it, so a
++ * notice never disappears without a word.
++ */
++export function reportOrReason(build: () => UpdateReport): {
++  report: UpdateReport | undefined;
++  lines: string[];
++} {
++  try {
++    const report = build();
++    return { report, lines: report.lines };
++  } catch (error) {
++    return { report: undefined, lines: [`update: not checked: ${firstLine(error)}`] };
++  }
++}
++
++/** `doctor`'s line: a warning when a release is out, fine otherwise. It reads; it changes nothing. */
++export function updateCheck(
++  dataDir: string,
++  env: Record<string, string | undefined>,
++  now: number,
++): { name: "update"; status: "ok" | "warn"; detail: string } {
++  const { report, lines } = reportOrReason(() =>
++    updateReport({ dataDir, env, now, running: pkg.version }),
++  );
++  const line = (lines[0] as string).replace(/^update: /, "");
++  return report?.out
++    ? {
++        name: "update",
++        status: "warn",
++        detail: `${line}; run wizardingcode-mem update for the commands`,
++      }
++    : { name: "update", status: "ok", detail: line };
++}
++
++export function commandLines(): string[] {
++  return CHANNEL_COMMANDS.map((entry) => `  ${entry.channel}: ${entry.command}`);
++}
++
++export interface UpdateReport {
++  running: string;
++  staged: string | null;
++  stagedPath: string;
++  latest: string | null;
++  checkedAt: number | null;
++  failedAt: number | null;
++  reason: string | null;
++  mode: Mode;
++  /** Whether a release newer than what runs here is known. */
++  out: boolean;
++  lines: string[];
++  /** One line per channel when a release is out; none otherwise. */
++  commands: string[];
++}
++
++/** Everything `status`, `doctor` and `update` say, from the data directory alone. */
++export function updateReport(input: {
++  dataDir: string;
++  env: Record<string, string | undefined>;
++  now: number;
++  running: string;
++  facts?: StagedFacts;
++  asked?: boolean;
++}): UpdateReport {
++  const facts = input.facts ?? stagedFacts(input.dataDir, input.running);
++  const setting = updateSetting(input.env, input.dataDir);
++  const mode = modeOf(setting.value, input.env);
++  const state = readState(input.dataDir);
++  const first = updateLine({
++    mode,
++    source: setting.source,
++    asked: input.asked ?? false,
++    state,
++    current: facts.version ?? input.running,
++    currentIsStaged: facts.version !== null,
++    dataDir: input.dataDir,
++    now: input.now,
++  });
++  const second = agentsLine(input.running, facts);
++  return {
++    running: input.running,
++    staged: facts.version,
++    stagedPath: facts.path,
++    latest: state?.latest ?? null,
++    checkedAt: state?.checkedAt ?? null,
++    failedAt: state?.failedAt ?? null,
++    reason: state?.reason ?? null,
++    mode,
++    out: first.out,
++    lines: second === null ? [first.line] : [first.line, second],
++    commands: first.out ? commandLines() : [],
++  };
++}
+diff --git a/src/update/staged.ts b/src/update/staged.ts
+new file mode 100644
+index 0000000..d515f54
+--- /dev/null
++++ b/src/update/staged.ts
+@@ -0,0 +1,66 @@
++// The staged binary as a process finds it, and the one rule on who may run it. A leaf of
++// this folder: the report and the hand-over both read it.
++import { existsSync, lstatSync, realpathSync } from "node:fs";
++import { dirname } from "node:path";
++import { stagedPath, stagedVersion } from "../install/binary.ts";
++
++export interface StagedFacts {
++  path: string;
++  exists: boolean;
++  /** The version the staged binary answers; null when there is none or it answers none. */
++  version: string | null;
++  /** Whether this process is the staged binary. */
++  isSelf: boolean;
++  /** Whether the file was left unrun: this command is root, or the folder is another user's. */
++  refused: boolean;
++}
++
++/** Who is asking: the platform and the effective user, null where there is none. */
++export interface Who {
++  platform: string;
++  uid: number | null;
++}
++export const whoAmI = (): Who => ({
++  platform: process.platform,
++  uid: process.geteuid?.() ?? null,
++});
++
++/**
++ * Whether this process may run the file staged in the data directory. Never as root and
++ * never from a folder of another user: that file is the user's to write. Windows has no
++ * user ids to compare.
++ */
++export function mayRunStaged(input: {
++  platform: string;
++  uid: number | null;
++  binOwner: number | null;
++}): boolean {
++  if (input.platform === "win32") return true;
++  return input.uid !== null && input.uid !== 0 && input.binOwner === input.uid;
++}
++
++/** Who owns the folder the staged binary is in, or null when that cannot be read. */
++export function binOwner(path: string): number | null {
++  try {
++    return lstatSync(dirname(path)).uid;
++  } catch {
++    return null;
++  }
++}
++
++/** The staged binary as this process finds it. It is run only when it is another file, and only by its owner. */
++export function stagedFacts(dataDir: string, running: string, who: Who = whoAmI()): StagedFacts {
++  const path = stagedPath(dataDir);
++  if (!existsSync(path))
++    return { path, exists: false, version: null, isSelf: false, refused: false };
++  if (realpathSync(path) === realpathSync(process.execPath))
++    return { path, exists: true, version: running, isSelf: true, refused: false };
++  const allowed = mayRunStaged({ ...who, binOwner: binOwner(path) });
++  return {
++    path,
++    exists: true,
++    version: allowed ? stagedVersion(path) : null,
++    isSelf: false,
++    refused: !allowed,
++  };
++}
+diff --git a/src/update/state.ts b/src/update/state.ts
+new file mode 100644
+index 0000000..da7ee1d
+--- /dev/null
++++ b/src/update/state.ts
+@@ -0,0 +1,51 @@
++// What the last check for a release found, kept beside the binary it describes and outside
++// the store. The file is read strictly: its text can end up on a terminal, so nothing the
++// product did not shape is ever let through.
++import { mkdirSync, readFileSync } from "node:fs";
++import { join } from "node:path";
++import { writeFileAtomic } from "../util/atomic-write.ts";
++import { isPlainVersion } from "../util/version.ts";
++
++export interface UpdateState {
++  /** The latest release found by the last check that succeeded. */
++  latest: string | null;
++  checkedAt: number | null;
++  /** When a request was last started, whatever became of it. */
++  attemptAt: number | null;
++  failedAt: number | null;
++  /** Why the last failed check failed: one of the fixed texts of `REASON`. */
++  reason: string | null;
++}
++
++export const STATE_FILE = "update.json";
++export const REASON = /^(offline|timed out|not a release redirect|HTTP \d{3})$/;
++
++const time = (value: unknown): value is number | null =>
++  value === null || (typeof value === "number" && Number.isFinite(value));
++
++/** The state on disk, or null when there is none or any field of it is not what we write. */
++export function readState(dataDir: string): UpdateState | null {
++  let parsed: unknown;
++  try {
++    parsed = JSON.parse(readFileSync(join(dataDir, STATE_FILE), "utf8"));
++  } catch {
++    return null;
++  }
++  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return null;
++  const { latest, checkedAt, attemptAt, failedAt, reason } = parsed as Record<string, unknown>;
++  if (latest === undefined || reason === undefined) return null;
++  if (latest !== null && !(typeof latest === "string" && isPlainVersion(latest))) return null;
++  if (reason !== null && !(typeof reason === "string" && REASON.test(reason))) return null;
++  if (!time(checkedAt) || !time(attemptAt) || !time(failedAt)) return null;
++  return { latest, checkedAt, attemptAt, failedAt, reason };
++}
++
++export function writeState(dataDir: string, state: UpdateState): void {
++  mkdirSync(dataDir, { recursive: true, mode: 0o700 });
++  writeFileAtomic(join(dataDir, STATE_FILE), `${JSON.stringify(state)}\n`);
++}
++
++/** True when the last thing that happened was a check that failed. */
++export function lastFailed(state: UpdateState): boolean {
++  return state.failedAt !== null && (state.checkedAt === null || state.failedAt > state.checkedAt);
++}
+diff --git a/src/util/ago.ts b/src/util/ago.ts
+new file mode 100644
+index 0000000..27dbe3a
+--- /dev/null
++++ b/src/util/ago.ts
+@@ -0,0 +1,11 @@
++/** `3 s ago`, `12 min ago`, `5 h ago`, `3 d ago`; `never` for null. */
++export function ago(now: number, at: number | null): string {
++  if (at === null) return "never";
++  const seconds = Math.max(0, Math.round((now - at) / 1000));
++  if (seconds < 60) return `${seconds} s ago`;
++  const minutes = Math.round(seconds / 60);
++  if (minutes < 60) return `${minutes} min ago`;
++  const hours = Math.round(minutes / 60);
++  if (hours < 48) return `${hours} h ago`;
++  return `${Math.round(hours / 24)} d ago`;
++}
+diff --git a/src/util/version.ts b/src/util/version.ts
+index 5709ed9..30bfb14 100644
+--- a/src/util/version.ts
++++ b/src/util/version.ts
+@@ -5,6 +5,16 @@ export function isVersion(text: string): boolean {
+   return VERSION.test(text);
+ }
+ 
++/**
++ * `<major>.<minor>.<patch>` and nothing else, each number of at most five digits. Narrower
++ * than `isVersion` on purpose: for text that comes from the network or from a file a person
++ * can write, and may end up on a terminal.
++ */
++const PLAIN_VERSION = /^\d{1,5}\.\d{1,5}\.\d{1,5}$/;
++export function isPlainVersion(text: string): boolean {
++  return PLAIN_VERSION.test(text);
++}
++
+ /** The highest of some versions by that order, or undefined for none. */
+ export function highestVersion(versions: readonly string[]): string | undefined {
+   return [...versions].sort((a, b) => Bun.semver.order(b, a))[0];
+diff --git a/tests/e2e/install-forward.test.ts b/tests/e2e/install-forward.test.ts
+index 2dc7b3d..b312ca5 100644
+--- a/tests/e2e/install-forward.test.ts
++++ b/tests/e2e/install-forward.test.ts
+@@ -36,7 +36,7 @@ beforeEach(() => {
+   // A "newer binary": answers its version, and records how it was called.
+   writeFileSync(
+     staged,
+-    `#!/bin/sh\nif [ "$1" = "--version" ]; then echo 99.0.0; exit 0; fi\necho "$*" >> "${home}/called.txt"\nexit 7\n`,
++    `#!/bin/sh\nif [ "$1" = "--version" ]; then echo 99.0.0; exit 0; fi\necho "$*" >> "${home}/called.txt"\necho "$WIZARDINGCODE_MEM_HANDED" > "${home}/handed.txt"\nexit 7\n`,
+   );
+   chmodSync(staged, 0o755);
+   env = {
+@@ -71,6 +71,8 @@ describe.skipIf(process.platform === "win32")("install, with a newer binary stag
+     // The staged binary did the install, once, with the same arguments, and its exit code came back.
+     expect(readFileSync(join(home, "called.txt"), "utf8")).toBe(`${ARGS.join(" ")}\n`);
+     expect(result.exitCode).toBe(7);
++    // Through the one hand-over function: the staged binary is told it was handed the command.
++    expect(readFileSync(join(home, "handed.txt"), "utf8")).toBe("1\n");
+     // Nothing of the install ran in the older binary.
+     expect(existsSync(join(home, ".claude", "settings.json"))).toBe(false);
+     expect(existsSync(codexContext("", env).settingsPath)).toBe(false);
+diff --git a/tests/e2e/update-reconcile.test.ts b/tests/e2e/update-reconcile.test.ts
+new file mode 100644
+index 0000000..02fda8d
+--- /dev/null
++++ b/tests/e2e/update-reconcile.test.ts
+@@ -0,0 +1,128 @@
++// A person's command typed from a copy older than the staged binary runs the staged binary;
++// typed from a newer copy it says so and stages nothing. Run on the compiled binary, since a
++// run from source never hands over.
++import { afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
++import {
++  chmodSync,
++  existsSync,
++  mkdirSync,
++  mkdtempSync,
++  readFileSync,
++  realpathSync,
++  rmSync,
++  writeFileSync,
++} from "node:fs";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++import pkg from "../../package.json" with { type: "json" };
++import { hostBinary, runBinary } from "../helpers/binary.ts";
++
++let binary: string;
++beforeAll(() => {
++  binary = hostBinary();
++}, 120_000);
++
++let home: string;
++let staged: string;
++let env: Record<string, string>;
++
++beforeEach(() => {
++  home = realpathSync(mkdtempSync(join(tmpdir(), "wizardingcode-mem-reconcile-")));
++  staged = join(home, "data", "bin", "wizardingcode-mem");
++  env = {
++    HOME: home,
++    WIZARDINGCODE_HOME: join(home, ".wizardingcode"),
++    WIZARDINGCODE_MEM_DATA_DIR: join(home, "data"),
++    WIZARDINGCODE_MEM_UI_AUTO_OPEN: "off",
++    WIZARDINGCODE_MEM_DISTILL: "off",
++    WIZARDINGCODE_MEM_MIGRATE: "off",
++    WIZARDINGCODE_MEM_UPDATE: "off",
++    WIZARDINGCODE_MEM_HANDED: "",
++    PATH: "/usr/bin:/bin",
++  };
++});
++afterEach(() => {
++  rmSync(home, { recursive: true, force: true });
++});
++
++/** A staged "binary": answers a version, and otherwise records how it was called and exits 7. */
++function stage(version: string | null): string {
++  mkdirSync(join(home, "data", "bin"), { recursive: true });
++  const answer = version === null ? "exit 1" : `echo ${version}; exit 0`;
++  const script = `#!/bin/sh\nif [ "$1" = "--version" ]; then ${answer}; fi\necho "$* handed=$WIZARDINGCODE_MEM_HANDED" >> "${home}/called.txt"\nexit 7\n`;
++  writeFileSync(staged, script);
++  chmodSync(staged, 0o755);
++  return script;
++}
++const called = () =>
++  existsSync(join(home, "called.txt")) ? readFileSync(join(home, "called.txt"), "utf8") : null;
++
++// As root nothing is handed over, so these cases would not hold there.
++const skipped = process.platform === "win32" || process.getuid?.() === 0;
++
++describe.skipIf(skipped)("a copy older than the staged binary", () => {
++  test("hands a person's command over, with its arguments and the guard set", async () => {
++    stage("99.0.0");
++    const result = await runBinary(binary, ["doctor", "--x"], { env });
++    expect(result.stderr).toBe(
++      `wizardingcode-mem: running 99.0.0 from ${staged}; this copy is ${pkg.version}\n`,
++    );
++    expect(called()).toBe("doctor --x handed=1\n");
++    expect(result.exitCode).toBe(7);
++    // Nothing of doctor ran in the older copy.
++    expect(result.stdout).toBe("");
++  });
++
++  test("does not hand over when it was itself handed the command", async () => {
++    stage("99.0.0");
++    const result = await runBinary(binary, ["status"], {
++      env: { ...env, WIZARDINGCODE_MEM_HANDED: "1" },
++    });
++    expect(called()).toBeNull();
++    expect(result.stderr).not.toContain("running 99.0.0");
++    expect(result.stdout).toStartWith(`wizardingcode-mem ${pkg.version}\n`);
++  });
++
++  test.each([
++    ["--version", ["--version"]],
++    ["--help", ["--help"]],
++    ["no command", []],
++    ["an unknown command", ["nonsense"]],
++    ["a hook", ["hook", "claude-code", "session-start"]],
++  ])("%s never reaches the staged binary", async (_what, args) => {
++    stage("99.0.0");
++    const result = await runBinary(binary, args, { env, input: "{}" });
++    expect(called()).toBeNull();
++    expect(result.stderr).not.toContain("running 99.0.0");
++    if (args[0] === "--version") expect(result.stdout).toBe(`${pkg.version}\n`);
++  });
++});
++
++describe.skipIf(skipped)("a copy newer than the staged binary", () => {
++  test("stages nothing and says how to move the agents", async () => {
++    const script = stage("0.0.1");
++    const result = await runBinary(binary, ["status"], { env });
++    expect(readFileSync(staged, "utf8")).toBe(script);
++    expect(called()).toBeNull();
++    expect(result.stdout).toContain(
++      `agents run 0.0.1 from ${staged}; this copy is ${pkg.version}: wizardingcode-mem install moves them to it\n`,
++    );
++    expect(result.exitCode).toBe(0);
++  });
++
++  test("a staged file that answers no version is left alone and named", async () => {
++    const script = stage(null);
++    const result = await runBinary(binary, ["status"], { env });
++    expect(readFileSync(staged, "utf8")).toBe(script);
++    expect(result.stdout).toContain(
++      `agents run an unreadable binary from ${staged}; this copy is ${pkg.version}: wizardingcode-mem install replaces it\n`,
++    );
++  });
++
++  test("with no staged binary, none is made", async () => {
++    const result = await runBinary(binary, ["status"], { env });
++    expect(existsSync(join(home, "data", "bin"))).toBe(false);
++    expect(result.stdout).not.toContain("agents run");
++    expect(result.exitCode).toBe(0);
++  });
++});
+diff --git a/tests/integration/doctor.test.ts b/tests/integration/doctor.test.ts
+index 9872ef7..93e08ad 100644
+--- a/tests/integration/doctor.test.ts
++++ b/tests/integration/doctor.test.ts
+@@ -464,6 +464,8 @@ describe("wizardingcode-mem status", () => {
+     expect(result.stdout).toBe(
+       [
+         `wizardingcode-mem ${pkg.version}`,
++        // The suite runs with the release check off (tests/preload.ts), and status says so.
++        "update: off (WIZARDINGCODE_MEM_UPDATE in this command's environment; other processes may not see it)",
+         `project   demo (path:${project})`,
+         "memories  3 active (1 stale) · 1 superseded · 1 archived",
+         "turns     3 distilled · 1 skipped (unknown 1) · 1 failed · 1 queued",
+diff --git a/tests/integration/update-command.test.ts b/tests/integration/update-command.test.ts
+new file mode 100644
+index 0000000..4fe4703
+--- /dev/null
++++ b/tests/integration/update-command.test.ts
+@@ -0,0 +1,296 @@
++// The release notice through its commands: the step after the drain, `update`, `doctor` and
++// `status`. `distill` and `update` run in this process with a fetch of the test's own, so
++// nothing here reaches github.com.
++import { afterEach, beforeEach, describe, expect, test } from "bun:test";
++import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++import pkg from "../../package.json" with { type: "json" };
++import { run as distill } from "../../src/cli/commands/distill.ts";
++import { run as status } from "../../src/cli/commands/status.ts";
++import { run as update } from "../../src/cli/commands/update.ts";
++import { runChecks } from "../../src/doctor/checks.ts";
++import { doctorContext } from "../../src/doctor/context.ts";
++import { CHANNEL_COMMANDS } from "../../src/update/channels.ts";
++import { updateCheck } from "../../src/update/report.ts";
++import { readState, STATE_FILE, type UpdateState, writeState } from "../../src/update/state.ts";
++import { runCliWith } from "../helpers/cli.ts";
++
++const NOW = Date.now();
++const HOUR = 3_600_000;
++const TAG = (version: string) =>
++  `https://github.com/WizardingCode-io/wizardingcode-mem/releases/tag/v${version}`;
++const answering = (status: number, location: string | null, calls: string[] = []) =>
++  (async (url: string) => {
++    calls.push(String(url));
++    return { status, headers: new Headers(location === null ? {} : { Location: location }) };
++  }) as unknown as typeof fetch;
++const state = (over: Partial<UpdateState> = {}): UpdateState => ({
++  latest: null,
++  checkedAt: null,
++  attemptAt: null,
++  failedAt: null,
++  reason: null,
++  ...over,
++});
++
++let home: string;
++let dataDir: string;
++let out: string;
++let err: string;
++const saved = {
++  env: { ...process.env },
++  stdout: process.stdout.write,
++  stderr: process.stderr.write,
++};
++
++beforeEach(() => {
++  home = realpathSync(mkdtempSync(join(tmpdir(), "wizardingcode-mem-updatecmd-")));
++  dataDir = join(home, "mem");
++  process.env.WIZARDINGCODE_HOME = home;
++  delete process.env.WIZARDINGCODE_MEM_DATA_DIR;
++  delete process.env.WIZARDINGCODE_MEM_STORE_DIR;
++  process.env.WIZARDINGCODE_MEM_UPDATE = "check";
++  delete process.env.CI;
++  out = "";
++  err = "";
++  process.stdout.write = ((text: string) => {
++    out += text;
++    return true;
++  }) as typeof process.stdout.write;
++  process.stderr.write = ((text: string) => {
++    err += text;
++    return true;
++  }) as typeof process.stderr.write;
++});
++afterEach(() => {
++  process.stdout.write = saved.stdout;
++  process.stderr.write = saved.stderr;
++  for (const key of ["WIZARDINGCODE_HOME", "WIZARDINGCODE_MEM_UPDATE", "CI"] as const) {
++    if (saved.env[key] === undefined) delete process.env[key];
++    else process.env[key] = saved.env[key];
++  }
++  rmSync(home, { recursive: true, force: true });
++});
++const deps = (fetchImpl: typeof fetch) => ({ fetch: fetchImpl, now: () => NOW });
++
++describe("distill", () => {
++  test("after the drain it asks which release is the latest, and keeps the answer", async () => {
++    const calls: string[] = [];
++    expect(await distill([], deps(answering(302, TAG("99.0.0"), calls)))).toBe(0);
++    expect(calls).toEqual([
++      "https://github.com/WizardingCode-io/wizardingcode-mem/releases/latest",
++    ]);
++    expect(readState(dataDir)).toEqual(state({ latest: "99.0.0", checkedAt: NOW, attemptAt: NOW }));
++  });
++
++  test("a check that throws, or cannot record, leaves its exit code alone", async () => {
++    const throwing = (() => {
++      throw new Error("no network stack");
++    }) as unknown as typeof fetch;
++    expect(await distill([], deps(throwing))).toBe(0);
++    // A folder where the state file should be: nothing can be recorded.
++    rmSync(join(dataDir, STATE_FILE), { force: true });
++    mkdirSync(join(dataDir, STATE_FILE), { recursive: true });
++    expect(await distill([], deps(answering(302, TAG("99.0.0"))))).toBe(0);
++  });
++
++  test("a check that throws out of its own code is caught by distill, not by the check", async () => {
++    // The clock is read inside distill's guard: nothing below it can catch this.
++    const broken = {
++      fetch: answering(302, TAG("99.0.0")),
++      now: () => {
++        throw new Error("no clock");
++      },
++    };
++    expect(await distill([], broken)).toBe(0);
++    expect(readState(dataDir)).toBeNull();
++  });
++
++  test("a store that cannot be opened fails the drain, and the check still runs", async () => {
++    mkdirSync(dataDir, { recursive: true });
++    writeFileSync(join(dataDir, "wizardingcode-mem.db"), "not a database");
++    const calls: string[] = [];
++    expect(await distill([], deps(answering(302, TAG("99.0.0"), calls)))).toBe(1);
++    expect(calls).toHaveLength(1);
++    expect(readState(dataDir)?.latest).toBe("99.0.0");
++  });
++
++  test("turned off in the file, it asks nothing", async () => {
++    delete process.env.WIZARDINGCODE_MEM_UPDATE;
++    mkdirSync(dataDir, { recursive: true });
++    writeFileSync(join(dataDir, "env"), "WIZARDINGCODE_MEM_UPDATE=off\n");
++    const calls: string[] = [];
++    expect(await distill([], deps(answering(302, TAG("99.0.0"), calls)))).toBe(0);
++    expect(calls).toHaveLength(0);
++  });
++});
++
++describe("wizardingcode-mem update", () => {
++  test("it asks now, says what is out and gives the four commands", async () => {
++    // A check one second old would keep the automatic one quiet; a typed one asks.
++    writeState(
++      dataDir,
++      state({ latest: pkg.version, checkedAt: NOW - 1000, attemptAt: NOW - 1000 }),
++    );
++    const calls: string[] = [];
++    expect(await update([], deps(answering(302, TAG("99.0.0"), calls)))).toBe(0);
++    expect(calls).toHaveLength(1);
++    expect(out).toContain(`update: 99.0.0 is out (checked 0 s ago); this copy is ${pkg.version}`);
++    for (const entry of CHANNEL_COMMANDS)
++      expect(out).toContain(`  ${entry.channel}: ${entry.command}`);
++  });
++
++  test("it asks in CI too", async () => {
++    process.env.CI = "true";
++    const calls: string[] = [];
++    expect(await update([], deps(answering(302, TAG(pkg.version), calls)))).toBe(0);
++    expect(calls).toHaveLength(1);
++    expect(out).toContain(`update: ${pkg.version} is the latest (checked 0 s ago)`);
++  });
++
++  test("a check that fails is said with its reason, and exits 1", async () => {
++    expect(await update([], deps(answering(429, null)))).toBe(1);
++    expect(out).toContain("update: could not check (HTTP 429, 0 s ago); no release known yet");
++  });
++
++  test("off in the file: no request, the line, and how to turn it on there", async () => {
++    delete process.env.WIZARDINGCODE_MEM_UPDATE;
++    mkdirSync(dataDir, { recursive: true });
++    writeFileSync(join(dataDir, "env"), "WIZARDINGCODE_MEM_UPDATE=off\n");
++    const calls: string[] = [];
++    expect(await update([], deps(answering(302, TAG("99.0.0"), calls)))).toBe(0);
++    expect(calls).toHaveLength(0);
++    expect(out).toBe(
++      `update: off (WIZARDINGCODE_MEM_UPDATE in ${join(dataDir, "env")})\nset WIZARDINGCODE_MEM_UPDATE=check in ${join(dataDir, "env")} to turn it on\n`,
++    );
++  });
++
++  test("off in the environment: how to turn it on is said for the environment", async () => {
++    process.env.WIZARDINGCODE_MEM_UPDATE = "off";
++    const calls: string[] = [];
++    expect(await update([], deps(answering(302, TAG("99.0.0"), calls)))).toBe(0);
++    expect(calls).toHaveLength(0);
++    expect(out).toContain("in this command's environment; other processes may not see it");
++    expect(out).toContain("unset WIZARDINGCODE_MEM_UPDATE in this environment to turn it on\n");
++    expect(out).not.toContain("Homebrew");
++  });
++
++  test("a result that cannot be recorded is said, and exits 1", async () => {
++    mkdirSync(join(dataDir, STATE_FILE), { recursive: true });
++    expect(await update([], deps(answering(302, TAG("99.0.0"))))).toBe(1);
++    expect(err).toContain("wizardingcode-mem: could not record the check: ");
++  });
++});
++
++describe("doctor", () => {
++  const check = (stateOver: Partial<UpdateState>) => {
++    writeState(dataDir, state(stateOver));
++    return updateCheck(dataDir, { WIZARDINGCODE_MEM_UPDATE: "check" }, NOW);
++  };
++
++  test("a release that is out is a warning that points to update", () => {
++    expect(check({ latest: "99.0.0", checkedAt: NOW - 2 * HOUR })).toEqual({
++      name: "update",
++      status: "warn",
++      detail: `99.0.0 is out (checked 2 h ago); this copy is ${pkg.version}; run wizardingcode-mem update for the commands`,
++    });
++  });
++
++  test("the latest, and a check that failed, are fine", () => {
++    expect(check({ latest: pkg.version, checkedAt: NOW - HOUR })).toEqual({
++      name: "update",
++      status: "ok",
++      detail: `${pkg.version} is the latest (checked 1 h ago)`,
++    });
++    expect(check({ failedAt: NOW - HOUR, reason: "offline" }).status).toBe("ok");
++  });
++
++  test("the command prints it and its exit code does not move; runChecks does not carry it", async () => {
++    mkdirSync(dataDir, { recursive: true });
++    const env = { WIZARDINGCODE_HOME: home, WIZARDINGCODE_MEM_UPDATE: "check", CI: "" };
++    const before = await runCliWith({ env }, "doctor");
++    writeState(dataDir, state({ latest: "99.0.0", checkedAt: Date.now() - 2 * HOUR }));
++    const after = await runCliWith({ env }, "doctor");
++    expect(before.stdout).toContain("ok    update: not checked yet");
++    expect(after.stdout).toContain("warn  update: 99.0.0 is out (checked 2 h ago); this copy is");
++    expect(after.exitCode).toBe(before.exitCode);
++    const names = runChecks(doctorContext(dataDir)).map((entry) => entry.name);
++    expect(names).not.toContain("update");
++  });
++});
++
++describe("status", () => {
++  const env = () => ({ WIZARDINGCODE_HOME: home, WIZARDINGCODE_MEM_UPDATE: "check", CI: "" });
++  const out99 = () =>
++    writeState(dataDir, state({ latest: "99.0.0", checkedAt: Date.now() - 2 * HOUR }));
++  const stage = (script: string) => {
++    mkdirSync(join(dataDir, "bin"), { recursive: true });
++    const file = join(dataDir, "bin", "wizardingcode-mem");
++    writeFileSync(file, script);
++    chmodSync(file, 0o755);
++    return file;
++  };
++
++  test("with no staged binary it speaks of this copy, and lists the commands", async () => {
++    out99();
++    const result = await runCliWith({ env: env() }, "status");
++    const lines = result.stdout.split("\n");
++    expect(lines[0]).toBe(`wizardingcode-mem ${pkg.version}`);
++    expect(lines[1]).toBe(`update: 99.0.0 is out (checked 2 h ago); this copy is ${pkg.version}`);
++    for (const entry of CHANNEL_COMMANDS)
++      expect(result.stdout).toContain(`  ${entry.channel}: ${entry.command}`);
++    expect(result.exitCode).toBe(0);
++  });
++
++  test("with an older staged binary it speaks of the agents, and names install", async () => {
++    out99();
++    const file = stage('#!/bin/sh\nif [ "$1" = "--version" ]; then echo 0.0.1; fi\n');
++    const result = await runCliWith({ env: env() }, "status");
++    expect(result.stdout).toContain(
++      "update: 99.0.0 is out (checked 2 h ago); the agents run 0.0.1\n",
++    );
++    expect(result.stdout).toContain(
++      `agents run 0.0.1 from ${file}; this copy is ${pkg.version}: wizardingcode-mem install moves them to it\n`,
++    );
++  });
++
++  test("nothing is listed when no release is out", async () => {
++    writeState(dataDir, state({ latest: pkg.version, checkedAt: Date.now() - HOUR }));
++    const result = await runCliWith({ env: env() }, "status");
++    expect(result.stdout).toContain(`update: ${pkg.version} is the latest (checked 1 h ago)\n`);
++    expect(result.stdout).not.toContain("Homebrew");
++  });
++
++  test("a store that cannot be opened: the lines are still printed, as text and as JSON", async () => {
++    out99();
++    writeFileSync(join(dataDir, "wizardingcode-mem.db"), "not a database");
++    const text = await runCliWith({ env: env() }, "status");
++    expect(text.exitCode).toBe(1);
++    expect(text.stdout).toContain(`wizardingcode-mem ${pkg.version}\nupdate: 99.0.0 is out`);
++    expect(text.stderr).toStartWith("wizardingcode-mem: ");
++    const json = await runCliWith({ env: env() }, "status", "--json");
++    expect(json.exitCode).toBe(1);
++    const parsed = JSON.parse(json.stdout) as Record<string, unknown>;
++    expect(Object.keys(parsed).sort()).toEqual(["error", "update", "version"]);
++    expect((parsed.update as { latest: string }).latest).toBe("99.0.0");
++  });
++
++  test("a report that cannot be built is said with its reason, and status goes on", () => {
++    const failing = () => {
++      throw new Error("EACCES: permission denied, realpath '/data/bin'\nat somewhere");
++    };
++    expect(status([], failing)).toBe(0);
++    const lines = out.split("\n");
++    expect(lines[0]).toBe(`wizardingcode-mem ${pkg.version}`);
++    expect(lines[1]).toBe("update: not checked: EACCES: permission denied, realpath '/data/bin'");
++  });
++
++  test("--json carries the report beside what it already had", async () => {
++    out99();
++    const result = await runCliWith({ env: env() }, "status", "--json");
++    const parsed = JSON.parse(result.stdout) as { version: string; update: { out: boolean } };
++    expect(parsed.version).toBe(pkg.version);
++    expect(parsed.update.out).toBe(true);
++  });
++});
+diff --git a/tests/preload.ts b/tests/preload.ts
+index 34bb6db..b629c46 100644
+--- a/tests/preload.ts
++++ b/tests/preload.ts
+@@ -9,6 +9,9 @@ import { join } from "node:path";
+ process.env.WIZARDINGCODE_MEM_UI_AUTO_OPEN ??= "off";
+ process.env.WIZARDINGCODE_MEM_UI_BROWSER ??= "none";
+ process.env.WIZARDINGCODE_MEM_MIGRATE ??= "off";
++// The check for a newer release asks github.com: never from the suite. Set, not defaulted,
++// so a developer's shell cannot turn it on; a test that wants the check sets the key itself.
++process.env.WIZARDINGCODE_MEM_UPDATE = "off";
+ // The brand's home (the app's state file, the data directories) is always a throwaway
+ // directory, whatever the developer's shell exports: nothing here may touch a real
+ // ~/.wizardingcode. Path overrides from the shell are dropped; tests set their own.
+diff --git a/tests/unit/release-docs.test.ts b/tests/unit/release-docs.test.ts
+index b5837e9..e1fdd66 100644
+--- a/tests/unit/release-docs.test.ts
++++ b/tests/unit/release-docs.test.ts
+@@ -149,7 +149,7 @@ describe("the release's documents", () => {
+     expect(rows.some((row) => row.outcome === "deferred, first of the follow-up")).toBe(false);
+     // The version rule went to the next item; the rest of what stays open is named.
+     const version = rows.filter((row) => row.line.includes("`version_of`"));
+-    expect(version.map((row) => row.outcome)).toEqual(["deferred, to the client update item"]);
++    expect(version.map((row) => row.outcome)).toEqual(["deferred, its own item (ADR 0030)"]);
+     for (const open of ["`GIT_CONFIG_GLOBAL`", "time limit", "`MARKETPLACE_TOKEN`"])
+       expect({ open, named: rows.some((row) => row.line.includes(open)) }).toEqual({
+         open,
+diff --git a/tests/unit/settings.test.ts b/tests/unit/settings.test.ts
+index 6482c8d..46fdeff 100644
+--- a/tests/unit/settings.test.ts
++++ b/tests/unit/settings.test.ts
+@@ -8,6 +8,7 @@ import {
+   publicSettings,
+   SETTING_KEYS,
+   saveSettings,
++  updateSetting,
+   validatePatch,
+ } from "../../src/settings/settings.ts";
+ 
+@@ -297,3 +298,36 @@ describe("saveSettings and publicSettings", () => {
+     expect(publicSettings({}, dataDir).TYPESAFE_API_KEY).toMatchObject({ set: false });
+   });
+ });
++
++describe("WIZARDINGCODE_MEM_UPDATE", () => {
++  test("only check and off can be written", () => {
++    expect(validatePatch({ WIZARDINGCODE_MEM_UPDATE: "check" })).toEqual({
++      ok: true,
++      changes: { WIZARDINGCODE_MEM_UPDATE: "check" },
++    });
++    expect(validatePatch({ WIZARDINGCODE_MEM_UPDATE: "off" }).ok).toBe(true);
++    const refused = validatePatch({ WIZARDINGCODE_MEM_UPDATE: "maybe" });
++    expect(refused).toEqual({ ok: false, errors: { WIZARDINGCODE_MEM_UPDATE: "check or off" } });
++  });
++
++  test("the value comes with where it was set, and an unknown one is not normalised", () => {
++    const dir = mkdtempSync(join(tmpdir(), "wizardingcode-mem-settings-"));
++    expect(updateSetting({}, dir)).toEqual({ value: null, source: "default" });
++    writeFileSync(join(dir, "env"), "WIZARDINGCODE_MEM_UPDATE=maybe\n");
++    expect(updateSetting({}, dir)).toEqual({ value: "maybe", source: "file" });
++    expect(updateSetting({ WIZARDINGCODE_MEM_UPDATE: " off " }, dir)).toEqual({
++      value: "off",
++      source: "env",
++    });
++    // An empty variable is unset, as for every key: the file is read.
++    expect(updateSetting({ WIZARDINGCODE_MEM_UPDATE: "" }, dir).source).toBe("file");
++  });
++
++  test("the public view lists the key with its default", () => {
++    const dir = mkdtempSync(join(tmpdir(), "wizardingcode-mem-settings-"));
++    expect(publicSettings({}, dir).WIZARDINGCODE_MEM_UPDATE).toEqual({
++      value: "check",
++      source: "default",
++    });
++  });
++});
+diff --git a/tests/unit/update-boundary.test.ts b/tests/unit/update-boundary.test.ts
+new file mode 100644
+index 0000000..2efb80b
+--- /dev/null
++++ b/tests/unit/update-boundary.test.ts
+@@ -0,0 +1,54 @@
++// Where the release notice may reach: it stays outside the store and off the hooks' path,
++// and the suite never asks github.com.
++import { describe, expect, test } from "bun:test";
++import { readdirSync, readFileSync } from "node:fs";
++import { join } from "node:path";
++
++const ROOT = join(import.meta.dir, "..", "..");
++const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
++/** Every module a file names in an import or a re-export, static or dynamic. */
++const imports = (source: string) =>
++  [...source.matchAll(/(?:from|import)\s*\(?\s*["']([^"']+)["']/g)].map(
++    (match) => match[1] as string,
++  );
++/** Only the static ones: what loading the file loads. */
++const staticImports = (source: string) =>
++  [...source.matchAll(/^(?:import|export)\b[^;]*?\bfrom\s+["']([^"']+)["']/gm)].map(
++    (match) => match[1] as string,
++  );
++
++describe("the update folder's boundary", () => {
++  test("no file of it reaches the store, the modules, the engine, the sync, the status or the doctor", () => {
++    const files = readdirSync(join(ROOT, "src/update")).filter((name) => name.endsWith(".ts"));
++    expect(files.length).toBeGreaterThanOrEqual(5);
++    for (const file of files) {
++      for (const path of imports(read(`src/update/${file}`))) {
++        expect({
++          file,
++          path,
++          allowed: !/\/(store|modules|engine|sync|status|doctor)\//.test(path),
++        }).toEqual({ file, path, allowed: true });
++      }
++    }
++  });
++
++  test("loading the CLI loads none of it, and the leaf loads nothing", () => {
++    const main = staticImports(read("src/cli/main.ts"));
++    expect(main).toContain("./reconciled.ts");
++    for (const path of main)
++      expect({ path, allowed: !/update\/|install\/binary/.test(path) }).toEqual({
++        path,
++        allowed: true,
++      });
++    const leaf = read("src/cli/reconciled.ts");
++    expect(staticImports(leaf)).toEqual([]);
++    expect(leaf).not.toMatch(/\bimport\s*\(/);
++  });
++});
++
++describe("the suite makes no request", () => {
++  test("the preload turns the check off, whatever the shell exports", () => {
++    expect(process.env.WIZARDINGCODE_MEM_UPDATE).toBe("off");
++    expect(read("tests/preload.ts")).toMatch(/process\.env\.WIZARDINGCODE_MEM_UPDATE = "off";/);
++  });
++});
+diff --git a/tests/unit/update-check.test.ts b/tests/unit/update-check.test.ts
+new file mode 100644
+index 0000000..2f5bd5f
+--- /dev/null
++++ b/tests/unit/update-check.test.ts
+@@ -0,0 +1,331 @@
++// The check for a newer release: one request whose answer is only a redirect's Location,
++// a state file read strictly, and the rules for when a request may be made at all.
++import { afterEach, beforeEach, describe, expect, test } from "bun:test";
++import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++import {
++  checkForRelease,
++  due,
++  latestRelease,
++  mode,
++  REQUEST_LIMIT_MS,
++} from "../../src/update/check.ts";
++import { readState, STATE_FILE, type UpdateState, writeState } from "../../src/update/state.ts";
++
++const REPO = "o/r";
++const TAG = (version: string) => `https://github.com/${REPO}/releases/tag/v${version}`;
++const HOUR = 3_600_000;
++const DAY = 24 * HOUR;
++const NOW = 1_800_000_000_000;
++
++interface Call {
++  url: string;
++  init: RequestInit | undefined;
++}
++/** A fetch that answers one status and Location, records how it was called, and has no readable body. */
++function redirect(status: number, location: string | null, calls: Call[] = []): typeof fetch {
++  return (async (url: string, init?: RequestInit) => {
++    calls.push({ url: String(url), init });
++    const untouchable = () => {
++      throw new Error("the body was read");
++    };
++    return {
++      status,
++      headers: new Headers(location === null ? {} : { Location: location }),
++      get body() {
++        return untouchable();
++      },
++      text: untouchable,
++      json: untouchable,
++    };
++  }) as unknown as typeof fetch;
++}
++const state = (over: Partial<UpdateState> = {}): UpdateState => ({
++  latest: null,
++  checkedAt: null,
++  attemptAt: null,
++  failedAt: null,
++  reason: null,
++  ...over,
++});
++
++describe("latestRelease", () => {
++  test.each([301, 302])("a %i to the release's tag gives its version", async (status) => {
++    const calls: Call[] = [];
++    expect(await latestRelease(redirect(status, TAG("1.2.3"), calls), REPO)).toEqual({
++      ok: true,
++      version: "1.2.3",
++    });
++    expect(calls).toHaveLength(1);
++    expect(calls[0]?.url).toBe(`https://github.com/${REPO}/releases/latest`);
++  });
++
++  test("the request is a GET that follows nothing and names nothing of the machine", async () => {
++    const calls: Call[] = [];
++    await latestRelease(redirect(302, TAG("1.2.3"), calls), REPO);
++    const init = calls[0]?.init as RequestInit & Record<string, unknown>;
++    expect(init.method).toBe("GET");
++    expect(init.redirect).toBe("manual");
++    expect(init.headers).toEqual({ "User-Agent": "wizardingcode-mem" });
++    expect("body" in init).toBe(false);
++    expect("credentials" in init).toBe(false);
++  });
++
++  test.each([
++    ["a page", 200, null, "HTTP 200"],
++    ["a missing repository", 404, null, "HTTP 404"],
++    ["a rate limit", 429, null, "HTTP 429"],
++    ["a redirect with no Location", 302, null, "not a release redirect"],
++    ["plain http", 302, `http://github.com/${REPO}/releases/tag/v1.2.3`, "not a release redirect"],
++    [
++      "another host",
++      302,
++      `https://example.com/${REPO}/releases/tag/v1.2.3`,
++      "not a release redirect",
++    ],
++    [
++      "another repository",
++      302,
++      "https://github.com/o/other/releases/tag/v1.2.3",
++      "not a release redirect",
++    ],
++    ["a trailing path", 302, `${TAG("1.2.3")}/x`, "not a release redirect"],
++    ["two numbers", 302, TAG("1.2"), "not a release redirect"],
++    ["a pre-release", 302, TAG("1.2.3-rc.1"), "not a release redirect"],
++    ["a number of six digits", 302, TAG("123456.0.0"), "not a release redirect"],
++    ["a status of two digits", 99, null, "not a release redirect"],
++  ])("%s is a reason, not a version", async (_what, status, location, reason) => {
++    expect(await latestRelease(redirect(status, location), REPO)).toEqual({ ok: false, reason });
++  });
++
++  test("a request that throws is offline", async () => {
++    const failing = (async () => {
++      throw new Error("ECONNREFUSED");
++    }) as unknown as typeof fetch;
++    expect(await latestRelease(failing, REPO)).toEqual({ ok: false, reason: "offline" });
++  });
++
++  test("the limit is five seconds, and a request that never settles is cut at the limit given", async () => {
++    expect(REQUEST_LIMIT_MS).toBe(5000);
++    const never = (() => new Promise(() => {})) as unknown as typeof fetch;
++    const started = performance.now();
++    expect(await latestRelease(never, REPO, { timeoutMs: 20 })).toEqual({
++      ok: false,
++      reason: "timed out",
++    });
++    expect(performance.now() - started).toBeLessThan(1000);
++  });
++});
++
++describe("due", () => {
++  test.each<[string, UpdateState | null, boolean]>([
++    ["no state", null, true],
++    ["nothing recorded", state(), true],
++    ["an attempt in the future", state({ attemptAt: NOW + 1, checkedAt: NOW - HOUR }), true],
++    ["a success in the future", state({ checkedAt: NOW + 1 }), true],
++    ["a failure in the future", state({ failedAt: NOW + 1, checkedAt: NOW - HOUR }), true],
++    ["an attempt 59 seconds old and nothing else", state({ attemptAt: NOW - 59_000 }), false],
++    ["an attempt 60 seconds old and nothing else", state({ attemptAt: NOW - 60_000 }), true],
++    ["a failure just under an hour old", state({ failedAt: NOW - HOUR + 1 }), false],
++    ["a failure an hour old", state({ failedAt: NOW - HOUR }), true],
++    [
++      "a failure an hour old, after an older success",
++      state({ failedAt: NOW - HOUR, checkedAt: NOW - 2 * HOUR }),
++      true,
++    ],
++    [
++      "a failure just under an hour old, after an older success",
++      state({ failedAt: NOW - HOUR + 1, checkedAt: NOW - 3 * DAY }),
++      false,
++    ],
++    ["a success just under a day old", state({ checkedAt: NOW - DAY + 1 }), false],
++    ["a success a day old", state({ checkedAt: NOW - DAY }), true],
++    [
++      "a success two hours old, after an older failure",
++      state({ checkedAt: NOW - 2 * HOUR, failedAt: NOW - 5 * HOUR }),
++      false,
++    ],
++  ])("%s", (_what, value, expected) => {
++    expect(due(value, NOW)).toBe(expected);
++  });
++});
++
++describe("mode", () => {
++  test.each<[string | null, string | undefined, string]>([
++    [null, undefined, "check"],
++    ["check", undefined, "check"],
++    ["off", undefined, "off"],
++    ["off", "1", "off"],
++    ["maybe", undefined, "off-unknown"],
++    ["maybe", "true", "off-unknown"],
++    [null, "true", "ci"],
++    ["check", "1", "ci"],
++    [null, "", "check"],
++  ])("the key %p with CI %p is %s", (value, ci, expected) => {
++    expect(mode(value, ci === undefined ? {} : { CI: ci })).toBe(
++      expected as ReturnType<typeof mode>,
++    );
++  });
++});
++
++describe("the state file", () => {
++  let dir: string;
++  beforeEach(() => {
++    dir = mkdtempSync(join(tmpdir(), "wizardingcode-mem-update-"));
++  });
++  afterEach(() => {
++    rmSync(dir, { recursive: true, force: true });
++  });
++  const raw = (value: unknown) => writeFileSync(join(dir, STATE_FILE), JSON.stringify(value));
++
++  test("what was written is read back, in a file only its owner reads", () => {
++    const written = state({ latest: "1.2.3", checkedAt: NOW, attemptAt: NOW });
++    writeState(dir, written);
++    expect(readState(dir)).toEqual(written);
++    expect(statSync(join(dir, STATE_FILE)).mode & 0o777).toBe(0o600);
++  });
++
++  test.each<[string, unknown]>([
++    ["a version with an escape sequence", { ...state(), latest: "1.0.0\u001b[31m" }],
++    ["a version with a pre-release", { ...state(), latest: "1.0.0-rc.1" }],
++    ["a reason with a line break", { ...state(), reason: "offline\nrm -rf" }],
++    ["a reason that is not one of the four", { ...state(), reason: "because" }],
++    ["a time that is a text", { ...state(), checkedAt: "x" }],
++    ["a missing field", { latest: null }],
++    ["an array", []],
++  ])("%s reads as no state", (_what, value) => {
++    raw(value);
++    expect(readState(dir)).toBeNull();
++  });
++
++  test("a missing file and a file that is not JSON read as no state", () => {
++    expect(readState(dir)).toBeNull();
++    writeFileSync(join(dir, STATE_FILE), "{ not json");
++    expect(readState(dir)).toBeNull();
++  });
++});
++
++describe("checkForRelease", () => {
++  let home: string;
++  let dir: string;
++  beforeEach(() => {
++    home = mkdtempSync(join(tmpdir(), "wizardingcode-mem-update-"));
++    // A data directory that does not exist yet: the first check creates it.
++    dir = join(home, "mem");
++  });
++  afterEach(() => {
++    rmSync(home, { recursive: true, force: true });
++  });
++  const input = (fetchImpl: typeof fetch, over: Record<string, unknown> = {}) => ({
++    dataDir: dir,
++    mode: "check" as const,
++    now: NOW,
++    fetch: fetchImpl,
++    repository: REPO,
++    ...over,
++  });
++
++  test("a success creates the folder and records the latest", async () => {
++    const calls: Call[] = [];
++    const result = await checkForRelease(input(redirect(302, TAG("1.2.3"), calls)));
++    expect(result.asked).toBe(true);
++    expect(existsSync(join(dir, STATE_FILE))).toBe(true);
++    expect(readState(dir)).toEqual(state({ latest: "1.2.3", checkedAt: NOW, attemptAt: NOW }));
++    expect(calls).toHaveLength(1);
++  });
++
++  test("a lower latest replaces a higher one, and a success clears the reason", async () => {
++    writeState(dir, state({ latest: "9.9.9", failedAt: NOW - 2 * HOUR, reason: "offline" }));
++    await checkForRelease(input(redirect(302, TAG("1.2.3"))));
++    expect(readState(dir)).toEqual(
++      state({ latest: "1.2.3", checkedAt: NOW, attemptAt: NOW, failedAt: NOW - 2 * HOUR }),
++    );
++  });
++
++  test("a failure keeps the last known version and records the reason", async () => {
++    writeState(dir, state({ latest: "1.2.3", checkedAt: NOW - 2 * DAY }));
++    await checkForRelease(input(redirect(429, null)));
++    expect(readState(dir)).toEqual(
++      state({
++        latest: "1.2.3",
++        checkedAt: NOW - 2 * DAY,
++        attemptAt: NOW,
++        failedAt: NOW,
++        reason: "HTTP 429",
++      }),
++    );
++  });
++
++  test("nothing is asked when the check is not due, and a forced one asks all the same", async () => {
++    writeState(dir, state({ latest: "1.2.3", checkedAt: NOW - HOUR }));
++    const calls: Call[] = [];
++    const quiet = await checkForRelease(input(redirect(302, TAG("1.2.4"), calls)));
++    expect(quiet.asked).toBe(false);
++    expect(calls).toHaveLength(0);
++    const forced = await checkForRelease(
++      input(redirect(302, TAG("1.2.4"), calls), { force: true }),
++    );
++    expect(forced.asked).toBe(true);
++    expect(readState(dir)?.latest).toBe("1.2.4");
++  });
++
++  test("a second check started while the first is waiting asks nothing", async () => {
++    const calls: Call[] = [];
++    let answer: (value: unknown) => void = () => {};
++    const slow = ((url: string, init?: RequestInit) => {
++      calls.push({ url: String(url), init });
++      return new Promise((resolve) => {
++        answer = resolve;
++      });
++    }) as unknown as typeof fetch;
++    const first = checkForRelease(input(slow));
++    // The first has recorded its attempt and is now waiting for github.com.
++    await new Promise((resolve) => setTimeout(resolve, 20));
++    const second = await checkForRelease(input(slow, { now: NOW + 1000 }));
++    expect(second.asked).toBe(false);
++    answer({ status: 302, headers: new Headers({ Location: TAG("1.2.3") }) });
++    expect((await first).asked).toBe(true);
++    expect(calls).toHaveLength(1);
++  });
++
++  test("a time in the future costs one request, not one at every drain", async () => {
++    writeState(dir, state({ latest: "1.2.3", checkedAt: NOW + 30 * DAY }));
++    const calls: Call[] = [];
++    await checkForRelease(input(redirect(429, null, calls)));
++    await checkForRelease(input(redirect(429, null, calls), { now: NOW + 5 * 60_000 }));
++    expect(calls).toHaveLength(1);
++    expect(readState(dir)).toEqual(
++      state({ latest: "1.2.3", attemptAt: NOW, failedAt: NOW, reason: "HTTP 429" }),
++    );
++  });
++
++  test.each(["off", "off-unknown", "ci"] as const)("in mode %s nothing is asked", async (value) => {
++    const calls: Call[] = [];
++    const result = await checkForRelease(
++      input(redirect(302, TAG("1.2.3"), calls), { mode: value }),
++    );
++    expect(result.asked).toBe(false);
++    expect(calls).toHaveLength(0);
++    expect(existsSync(dir)).toBe(false);
++  });
++
++  test("a forced check asks in CI, and still not when the key is off or unknown", async () => {
++    const calls: Call[] = [];
++    const fetchImpl = redirect(302, TAG("1.2.3"), calls);
++    expect((await checkForRelease(input(fetchImpl, { mode: "ci", force: true }))).asked).toBe(true);
++    for (const value of ["off", "off-unknown"] as const)
++      expect((await checkForRelease(input(fetchImpl, { mode: value, force: true }))).asked).toBe(
++        false,
++      );
++    expect(calls).toHaveLength(1);
++  });
++
++  test("a state that cannot be written is an error said, not thrown", async () => {
++    // A file where the data directory should be.
++    writeFileSync(dir, "in the way");
++    const result = await checkForRelease(input(redirect(302, TAG("1.2.3"))));
++    expect(result.error).toBeString();
++    expect(readFileSync(dir, "utf8")).toBe("in the way");
++  });
++});
+diff --git a/tests/unit/update-docs.test.ts b/tests/unit/update-docs.test.ts
+new file mode 100644
+index 0000000..e56c7fc
+--- /dev/null
++++ b/tests/unit/update-docs.test.ts
+@@ -0,0 +1,84 @@
++// The documents of the release notice, held to what the code does and to each other.
++import { describe, expect, test } from "bun:test";
++import { existsSync, readFileSync } from "node:fs";
++import { join } from "node:path";
++import { CHANNEL_COMMANDS } from "../../src/update/channels.ts";
++
++const ROOT = join(import.meta.dir, "..", "..");
++const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
++const lineWith = (text: string, needle: string) =>
++  text.split("\n").filter((line) => line.includes(needle));
++
++describe("the README", () => {
++  const readme = read("README.md");
++
++  test("no longer promises that nothing leaves the machine", () => {
++    // Case-sensitive: "Nothing leaves your machine for knowledge, except…" is scoped and stays.
++    expect(readme).not.toContain("nothing leaves your machine unless you ask");
++    expect(readme).not.toContain("nothing ever leaves your machine");
++    expect(readme).toContain("none of your data leaves your machine unless you ask");
++  });
++
++  test("says the request in its network bullet, with how often and how to turn it off", () => {
++    const bullet = lineWith(readme, "- **No telemetry");
++    expect(bullet).toHaveLength(1);
++    for (const said of [
++      "github.com",
++      "once a day",
++      "once an hour",
++      "never in CI",
++      "wizardingcode-mem update",
++      "WIZARDINGCODE_MEM_UPDATE=off",
++      "~/.wizardingcode/mem/env",
++    ])
++      expect({ said, found: (bullet[0] as string).includes(said) }).toEqual({ said, found: true });
++  });
++
++  test("names the one setting the viewer has no field for, and lists it", () => {
++    const sentence = lineWith(readme, "Every setting can be changed from the viewer");
++    expect(sentence).toHaveLength(1);
++    expect(sentence[0]).toContain("WIZARDINGCODE_MEM_UPDATE");
++    expect(lineWith(readme, "| `WIZARDINGCODE_MEM_UPDATE` |")).toHaveLength(1);
++  });
++
++  test("has every shell command the notice prints", () => {
++    const shell = CHANNEL_COMMANDS.filter((entry) => entry.shell);
++    expect(shell).toHaveLength(3);
++    for (const entry of shell)
++      expect({ command: entry.command, found: readme.includes(entry.command) }).toEqual({
++        command: entry.command,
++        found: true,
++      });
++  });
++});
++
++describe("the release runbook, the ADR and CLAUDE.md", () => {
++  test("the runbook says where clients are told from and how a notice is withdrawn", () => {
++    const runbook = read("docs/runbooks/release.md");
++    for (const said of ["told from the GitHub release", "gh release edit", "--latest"])
++      expect({ said, found: runbook.includes(said) }).toEqual({ said, found: true });
++  });
++
++  test("ADR 0030 records the decision and what must never follow from it", () => {
++    const path = "docs/adr/0030-release-notice.md";
++    expect(existsSync(join(ROOT, path))).toBe(true);
++    const adr = read(path);
++    for (const said of [
++      "releases/latest",
++      "update.json",
++      "hands over",
++      "only tells",
++      "must never start a download",
++      "0029",
++    ])
++      expect({ said, found: adr.includes(said) }).toEqual({ said, found: true });
++  });
++
++  test("CLAUDE.md names the folder and the command", () => {
++    const claude = read("CLAUDE.md");
++    const start = claude.indexOf("## Commands");
++    const commands = claude.slice(start, claude.indexOf("\n## ", start + 1));
++    expect(commands).toContain("src/update/");
++    expect(commands).toContain("wizardingcode-mem update");
++  });
++});
+diff --git a/tests/unit/update-reconcile.test.ts b/tests/unit/update-reconcile.test.ts
+new file mode 100644
+index 0000000..40309c5
+--- /dev/null
++++ b/tests/unit/update-reconcile.test.ts
+@@ -0,0 +1,75 @@
++// Which commands hand over to a newer staged binary, and when a copy may: two tables.
++import { describe, expect, test } from "bun:test";
++import { readFileSync } from "node:fs";
++import { COMMAND_NAMES, RECONCILED, reconciles } from "../../src/cli/reconciled.ts";
++import { decide, handedEnv, reconcile } from "../../src/update/reconcile.ts";
++
++describe("reconciles", () => {
++  test("only the four commands a person types to look at their install", () => {
++    expect([...RECONCILED].sort()).toEqual(["doctor", "status", "ui", "update"]);
++    // Over every command the CLI has: a new one is classified here or this fails.
++    expect(COMMAND_NAMES.length).toBeGreaterThanOrEqual(21);
++    for (const name of COMMAND_NAMES) {
++      expect({ name, reconciles: reconciles(name, []) }).toEqual({
++        name,
++        reconciles: (RECONCILED as readonly string[]).includes(name),
++      });
++    }
++    expect(reconciles("nonsense", [])).toBe(false);
++  });
++
++  test("the viewer the session-start hook starts does not", () => {
++    expect(reconciles("ui", ["--auto"])).toBe(false);
++    expect(reconciles("ui", ["--port", "1", "--auto"])).toBe(false);
++    expect(reconciles("ui", ["--port", "1"])).toBe(true);
++  });
++
++  test("the CLI's table and its usage text know every name", () => {
++    const main = readFileSync(new URL("../../src/cli/main.ts", import.meta.url), "utf8");
++    expect(main).toContain("Record<CommandName,");
++    expect(main).toMatch(/Commands:[\s\S]*\bupdate\b[\s\S]*Options:/);
++  });
++});
++
++describe("decide", () => {
++  const plain = {
++    platform: "darwin",
++    compiled: true,
++    self: "/opt/homebrew/bin/wizardingcode-mem",
++    staged: "/home/me/.wizardingcode/mem/bin/wizardingcode-mem",
++    handed: false,
++    uid: 501,
++    binOwner: 501,
++  };
++  test.each<[string, Record<string, unknown>, string]>([
++    ["a channel copy of the data directory's owner", {}, "compare"],
++    ["Linux", { platform: "linux" }, "compare"],
++    ["Windows", { platform: "win32" }, "skip"],
++    ["a run from source", { compiled: false }, "skip"],
++    ["no staged file", { staged: null }, "skip"],
++    ["the staged binary itself", { self: plain.staged }, "skip"],
++    ["a copy that was handed to", { handed: true }, "skip"],
++    ["root", { uid: 0, binOwner: 0 }, "skip"],
++    ["a bin folder of another user", { binOwner: 502 }, "skip"],
++    ["no user id to compare", { uid: null }, "skip"],
++  ])("%s: %s", (_what, over, expected) => {
++    expect(decide({ ...plain, ...over } as Parameters<typeof decide>[0])).toBe(
++      expected as ReturnType<typeof decide>,
++    );
++  });
++
++  test("the guard variable is set for the staged binary, and nothing else changes", () => {
++    expect(handedEnv({ PATH: "/bin", X: undefined })).toEqual({
++      PATH: "/bin",
++      X: undefined,
++      WIZARDINGCODE_MEM_HANDED: "1",
++    });
++  });
++
++  test("a reconciliation that cannot look at the staged binary lets the command run here", () => {
++    const failing = () => {
++      throw new Error("ENOENT: the staged file went away");
++    };
++    expect(reconcile(["status"], failing)).toBeNull();
++  });
++});
+diff --git a/tests/unit/update-report.test.ts b/tests/unit/update-report.test.ts
+new file mode 100644
+index 0000000..bc0e954
+--- /dev/null
++++ b/tests/unit/update-report.test.ts
+@@ -0,0 +1,267 @@
++// The sentences a person reads about releases and about the copy their agents run: one
++// function writes them, and this table is all of them.
++import { afterEach, beforeEach, describe, expect, test } from "bun:test";
++import {
++  chmodSync,
++  existsSync,
++  mkdirSync,
++  mkdtempSync,
++  realpathSync,
++  rmSync,
++  statSync,
++  writeFileSync,
++} from "node:fs";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++import { CHANNEL_COMMANDS } from "../../src/update/channels.ts";
++import { agentsLine, commandLines, reportOrReason, updateLine } from "../../src/update/report.ts";
++import { mayRunStaged, type StagedFacts, stagedFacts } from "../../src/update/staged.ts";
++import type { UpdateState } from "../../src/update/state.ts";
++
++const NOW = 1_800_000_000_000;
++const HOUR = 3_600_000;
++const state = (over: Partial<UpdateState> = {}): UpdateState => ({
++  latest: null,
++  checkedAt: null,
++  attemptAt: null,
++  failedAt: null,
++  reason: null,
++  ...over,
++});
++const line = (over: Partial<Parameters<typeof updateLine>[0]> = {}) =>
++  updateLine({
++    mode: "check",
++    source: "default",
++    asked: false,
++    state: null,
++    current: "0.9.0",
++    currentIsStaged: true,
++    dataDir: "/data",
++    now: NOW,
++    ...over,
++  });
++const found = state({ latest: "0.10.0", checkedAt: NOW - 2 * HOUR });
++
++describe("updateLine", () => {
++  test("off says where the value was set", () => {
++    expect(line({ mode: "off", source: "file", state: found })).toEqual({
++      line: "update: off (WIZARDINGCODE_MEM_UPDATE in /data/env)",
++      out: false,
++    });
++    expect(line({ mode: "off", source: "env" }).line).toBe(
++      "update: off (WIZARDINGCODE_MEM_UPDATE in this command's environment; other processes may not see it)",
++    );
++    expect(line({ mode: "off-unknown", source: "file" }).line).toBe(
++      "update: off (WIZARDINGCODE_MEM_UPDATE is neither check nor off)",
++    );
++  });
++
++  test("a newer release is out, in the words of what runs it", () => {
++    expect(line({ state: found })).toEqual({
++      line: "update: 0.10.0 is out (checked 2 h ago); the agents run 0.9.0",
++      out: true,
++    });
++    expect(line({ state: found, currentIsStaged: false }).line).toBe(
++      "update: 0.10.0 is out (checked 2 h ago); this copy is 0.9.0",
++    );
++  });
++
++  test("a release already found stays announced when a later check fails", () => {
++    const failing = state({
++      latest: "0.10.0",
++      checkedAt: NOW - 72 * HOUR,
++      failedAt: NOW - HOUR,
++      reason: "HTTP 429",
++    });
++    expect(line({ state: failing })).toEqual({
++      line: "update: 0.10.0 is out (checked 3 d ago; last check failed: HTTP 429, 1 h ago); the agents run 0.9.0",
++      out: true,
++    });
++    // Also in CI, where nothing new is asked.
++    expect(line({ state: failing, mode: "ci" }).out).toBe(true);
++  });
++
++  test("in CI with nothing asked, and when this call did ask", () => {
++    expect(line({ mode: "ci" }).line).toBe("update: not checked in CI");
++    const same = state({ latest: "0.9.0", checkedAt: NOW });
++    expect(line({ mode: "ci", state: same }).line).toBe("update: not checked in CI");
++    expect(line({ mode: "ci", asked: true, state: same }).line).toBe(
++      "update: 0.9.0 is the latest (checked 0 s ago)",
++    );
++  });
++
++  test("never checked", () => {
++    expect(line()).toEqual({ line: "update: not checked yet", out: false });
++    expect(line({ state: state({ attemptAt: NOW }) }).line).toBe("update: not checked yet");
++  });
++
++  test("a failed check, with and without a release known", () => {
++    const failed = state({ failedAt: NOW - 3 * HOUR, reason: "offline" });
++    expect(line({ state: failed }).line).toBe(
++      "update: could not check (offline, 3 h ago); no release known yet",
++    );
++    expect(line({ state: { ...failed, latest: "0.9.0", checkedAt: NOW - 30 * HOUR } }).line).toBe(
++      "update: could not check (offline, 3 h ago); last known 0.9.0",
++    );
++  });
++
++  test("the latest, and a copy ahead of it", () => {
++    expect(line({ state: state({ latest: "0.9.0", checkedAt: NOW - HOUR }) })).toEqual({
++      line: "update: 0.9.0 is the latest (checked 1 h ago)",
++      out: false,
++    });
++    expect(line({ state: state({ latest: "0.8.0", checkedAt: NOW - HOUR }) })).toEqual({
++      line: "update: 0.9.0 is ahead of the latest release 0.8.0 (checked 1 h ago)",
++      out: false,
++    });
++  });
++});
++
++describe("agentsLine", () => {
++  const facts = (over: Partial<StagedFacts> = {}): StagedFacts => ({
++    path: "/data/bin/wizardingcode-mem",
++    exists: true,
++    version: "0.9.0",
++    isSelf: false,
++    refused: false,
++    ...over,
++  });
++
++  test("nothing for the staged binary itself, for no staged file, and for equal versions", () => {
++    expect(agentsLine("0.9.0", facts({ isSelf: true }))).toBeNull();
++    expect(agentsLine("0.9.0", facts({ exists: false, version: null }))).toBeNull();
++    expect(agentsLine("0.9.0", facts())).toBeNull();
++  });
++
++  test("a newer staged binary is only named", () => {
++    expect(agentsLine("0.8.0", facts())).toBe(
++      "agents run 0.9.0 from /data/bin/wizardingcode-mem; this copy is 0.8.0",
++    );
++  });
++
++  test("an older one, and one that does not answer, name install", () => {
++    expect(agentsLine("0.10.0", facts())).toBe(
++      "agents run 0.9.0 from /data/bin/wizardingcode-mem; this copy is 0.10.0: wizardingcode-mem install moves them to it",
++    );
++    expect(agentsLine("0.10.0", facts({ version: null }))).toBe(
++      "agents run an unreadable binary from /data/bin/wizardingcode-mem; this copy is 0.10.0: wizardingcode-mem install replaces it",
++    );
++  });
++});
++
++describe("the commands", () => {
++  test("one per channel, in the order a person meets them", () => {
++    expect(CHANNEL_COMMANDS.map((entry) => entry.channel)).toEqual([
++      "plugin",
++      "Homebrew",
++      "npm (and Windows)",
++      "script",
++    ]);
++    expect(commandLines()).toEqual(
++      CHANNEL_COMMANDS.map((entry) => `  ${entry.channel}: ${entry.command}`),
++    );
++    expect(commandLines()[1]).toBe(
++      "  Homebrew: brew upgrade wizardingcode-mem && wizardingcode-mem install",
++    );
++  });
++});
++
++describe("who may run the staged file", () => {
++  test.each<[string, string, number | null, number | null, boolean]>([
++    ["its owner", "darwin", 501, 501, true],
++    ["root", "linux", 0, 0, false],
++    ["root over a user's folder", "darwin", 0, 501, false],
++    ["another user", "linux", 502, 501, false],
++    ["no user id on a platform that has them", "linux", null, 501, false],
++    ["a folder whose owner cannot be read", "darwin", 501, null, false],
++    ["Windows, which has no user ids", "win32", null, null, true],
++  ])("%s", (_what, platform, uid, binOwner, expected) => {
++    expect(mayRunStaged({ platform, uid, binOwner })).toBe(expected);
++  });
++
++  test("a staged file that was not run is said so, never called unreadable", () => {
++    const refused: StagedFacts = {
++      path: "/data/bin/wizardingcode-mem",
++      exists: true,
++      version: null,
++      isSelf: false,
++      refused: true,
++    };
++    expect(agentsLine("0.9.0", refused)).toBe(
++      "the staged binary at /data/bin/wizardingcode-mem was not run: this command runs as root, or the folder belongs to another user",
++    );
++  });
++});
++
++describe("a report that cannot be built", () => {
++  test("is said with its reason, and a good one is passed through", () => {
++    expect(
++      reportOrReason(() => {
++        throw new Error("EACCES: permission denied, realpath '/data/bin'\nat somewhere");
++      }),
++    ).toEqual({
++      report: undefined,
++      lines: ["update: not checked: EACCES: permission denied, realpath '/data/bin'"],
++    });
++    const report = { lines: ["update: not checked yet"], out: false } as never;
++    expect(reportOrReason(() => report)).toEqual({ report, lines: ["update: not checked yet"] });
++  });
++});
++
++describe("stagedFacts", () => {
++  let dir: string;
++  let staged: string;
++  beforeEach(() => {
++    dir = realpathSync(mkdtempSync(join(tmpdir(), "wizardingcode-mem-facts-")));
++    mkdirSync(join(dir, "bin"));
++    staged = join(dir, "bin", "wizardingcode-mem");
++    // A staged "binary" that leaves a trace each time it is run.
++    writeFileSync(staged, `#!/bin/sh\necho ran >> "${dir}/ran.txt"\necho 1.2.3\n`);
++    chmodSync(staged, 0o755);
++  });
++  afterEach(() => {
++    rmSync(dir, { recursive: true, force: true });
++  });
++  const ran = () => existsSync(join(dir, "ran.txt"));
++  const me = statSync(join(tmpdir())).uid;
++
++  test.skipIf(process.platform === "win32")(
++    "its owner runs the staged file to ask its version",
++    () => {
++      const owner = statSync(join(dir, "bin")).uid;
++      expect(stagedFacts(dir, "0.9.0", { platform: "linux", uid: owner })).toEqual({
++        path: staged,
++        exists: true,
++        version: "1.2.3",
++        isSelf: false,
++        refused: false,
++      });
++      expect(ran()).toBe(true);
++    },
++  );
++
++  test.each([
++    ["root", 0],
++    ["another user", me + 4242],
++  ])("%s does not run it, and the facts say it was refused", (_who, uid) => {
++    expect(stagedFacts(dir, "0.9.0", { platform: "linux", uid })).toEqual({
++      path: staged,
++      exists: true,
++      version: null,
++      isSelf: false,
++      refused: true,
++    });
++    expect(ran()).toBe(false);
++  });
++
++  test("with no staged file there is nothing to run or refuse", () => {
++    rmSync(staged);
++    expect(stagedFacts(dir, "0.9.0", { platform: "linux", uid: 0 })).toEqual({
++      path: staged,
++      exists: false,
++      version: null,
++      isSelf: false,
++      refused: false,
++    });
++  });
++});
+diff --git a/ui/src/api.ts b/ui/src/api.ts
+index 4be406d..a0dbcd1 100644
+--- a/ui/src/api.ts
++++ b/ui/src/api.ts
+@@ -140,6 +140,7 @@ export type SettingKey =
+   | "WIZARDINGCODE_MEM_RETENTION_DAYS"
+   | "WIZARDINGCODE_MEM_HISTORY_DAYS"
+   | "WIZARDINGCODE_MEM_UI_AUTO_OPEN"
++  | "WIZARDINGCODE_MEM_UPDATE"
+   | "WIZARDINGCODE_MEM_STORE_DIR"
+   | "WIZARDINGCODE_MODULES"
+   | "WIZARDINGCODE_MEM_SHARE_ROOTS"
