@@ -1,0 +1,228 @@
+{
+  "fingerprint": "sha256:be7035a189133c05a6748d4760be3979e0a26f7e438e752d7ec25bf7936e65fb",
+  "tdd": [
+    {
+      "criterion": "AC-1",
+      "observed": {
+        "command": "python3 -I /private/tmp/claude-501/-Users-andreagroferreira-AIProjects-ai-mem/918ec86e-c6ec-41e7-a49b-5a4605c9197f/scratchpad/verify-formula.py packaging/homebrew/wizardingcode-mem.rb /private/tmp/claude-501/-Users-andreagroferreira-AIProjects-ai-mem/918ec86e-c6ec-41e7-a49b-5a4605c9197f/scratchpad/release-080/checksums.txt 0.8.0",
+        "exit": 0,
+        "at": "2026-11-12T13:11:16.175Z",
+        "durationMs": 31,
+        "log": "logs/tdd-AC-1-observed-1794489076144.txt",
+        "tail": "version: 0.8.0\nwizardingcode-mem-darwin-arm64: formula 5db81910f7be… release 5db81910f7be… ok\nwizardingcode-mem-darwin-x64: formula f21124eff717… release f21124eff717… ok\nwizardingcode-mem-linux-arm64: formula bb4566ecb4a2… release bb4566ecb4a2… ok\nwizardingcode-mem-linux-x64: formula f713b5918b2f… release f713b5918b2f… ok\nformula matches release v0.8.0: 4 assets, 4 urls",
+        "timedOut": false
+      },
+      "reason": "the checksums live on the release, not in the repository: the proof downloads checksums.txt from the v0.8.0 release and compares every asset's sha256, the version and the urls with the formula"
+    }
+  ],
+  "runs": [
+    {
+      "gate": "secrets",
+      "target": ".",
+      "command": "built-in secret scan",
+      "commandSource": null,
+      "confirmed": true,
+      "exit": 0,
+      "status": "pass",
+      "durationMs": 33,
+      "at": "2026-11-12T13:11:16.701Z",
+      "log": null,
+      "tail": "no secrets found in the change",
+      "fingerprint": "sha256:be7035a189133c05a6748d4760be3979e0a26f7e438e752d7ec25bf7936e65fb"
+    },
+    {
+      "gate": "prose",
+      "target": ".",
+      "command": "built-in prose scan",
+      "commandSource": null,
+      "confirmed": true,
+      "exit": 0,
+      "status": "pass",
+      "durationMs": 33,
+      "at": "2026-11-12T13:11:16.734Z",
+      "log": null,
+      "tail": "no chatbot artefacts in the change",
+      "fingerprint": "sha256:be7035a189133c05a6748d4760be3979e0a26f7e438e752d7ec25bf7936e65fb"
+    },
+    {
+      "gate": "build",
+      "target": ".",
+      "command": "bun run build",
+      "commandSource": "detected",
+      "confirmed": true,
+      "exit": 0,
+      "status": "pass",
+      "durationMs": 2499,
+      "at": "2026-11-12T13:11:16.767Z",
+      "log": "logs/build-_-1794489076767.txt",
+      "tail": "$ bun run ui:build && bun scripts/build.ts\n$ vite build --config ui/vite.config.ts\nvite v8.3.3 building client environment for production...\ntransforming...\n\n/assets/unbounded-variable.woff2 referenced in /assets/unbounded-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/instrument-sans-variable.woff2 referenced in /assets/instrument-sans-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/jetbrains-mono-variable.woff2 referenced in /assets/jetbrains-mono-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n✓ 851 modules transformed.\nrendering chunks...\n[plugin vite:singlefile] \n\n[plugin vite:singlefile] Inlining: index-BdJDDbwQ.js\n[plugin vite:singlefile] Inlining: style-CMyPmnXo.css\nsrc/ui/dist/index.html  1,228.95 kB\n\n✓ built in 718ms\n✓ wizardingcode-mem-darwin-arm64  67.9 MB\n✓ wizardingcode-mem-darwin-x64  74.7 MB\n✓ wizardingcode-mem-linux-x64  86.1 MB\n✓ wizardingcode-mem-linux-arm64  86.0 MB\n✓ wizardingcode-mem-windows-x64.exe  90.6 MB",
+      "fingerprint": "sha256:be7035a189133c05a6748d4760be3979e0a26f7e438e752d7ec25bf7936e65fb"
+    },
+    {
+      "gate": "test",
+      "target": ".",
+      "command": "bun run test",
+      "commandSource": "detected",
+      "confirmed": true,
+      "exit": 0,
+      "status": "pass",
+      "durationMs": 211270,
+      "at": "2026-11-12T13:11:19.292Z",
+      "log": "logs/test-_-1794489079292.txt",
+      "tail": "heuristic precision 100%  recall 100%  kind 83%\ntypesafe  precision 85%  recall 94%  kind 88%  wrongly kept: en-none-obvious-from-code, en-none-general-knowledge, pt-none-your-turn  missed: en-change-json-flag\n\ntests/golden/search.test.ts:\ntop 5: 35/44 → 39/44; Portuguese of English: 1/8 → 4/8\nsemantic-only results for unrelated queries: 29/43\n\ntests/golden/retrieval.test.ts:\nrecall@5: 19/24 — missed: redact-first, pt-lingua, pt-cursor, ts-extension, hook-runs\nprecision: 19/21 notes given were the expected ones\nfalse injections: 0/23\n\ntests/perf/budgets.test.ts:\nrebuild write transaction, 2000 entries: median 26.6 ms over 5 (26.6, 26.6, 21.0, 29.4, 22.7)\nprompt: p50 65.0 ms, p95 71.0 ms\nsession-start: p50 22.0 ms, p95 23.4 ms\nturn-end: p50 16.0 ms, p95 17.5 ms\nfile-read: p50 18.9 ms, p95 19.8 ms\ntool-failed: p50 24.2 ms, p95 28.9 ms\nqwen prompt: p50 66.5 ms, p95 72.1 ms\nqwen session-start: p50 22.2 ms, p95 23.3 ms\ndroid prompt: p50 64.6 ms, p95 69.3 ms\ndroid session-start: p50 20.1 ms, p95 21.9 ms\ncopilot session-start: p50 19.9 ms, p95 21.8 ms\ncopilot prompt (capture only): p50 14.9 ms, p95 17.4 ms\nantigravity pre-invocation: p50 21.7 ms, p95 23.6 ms\nlinked prompt: p50 34.0 ms, p95 39.4 ms (30 of 30 with a note from outside)\nlinked session-start: p50 22.5 ms, p95 25.6 ms\n\ntests/perf/large-project.test.ts:\nlarge project prompt: p50 17.8 ms, p95 20.2 ms (40 of 40 given notes)\n\ntests/perf/semantic.test.ts:\nsemantic global median: 16.4 ms\n\n 3284 pass\n 4 skip\n 0 fail\n 26 snapshots, 39452 expect() calls\nRan 3288 tests across 210 files. [209.97s]",
+      "fingerprint": "sha256:be7035a189133c05a6748d4760be3979e0a26f7e438e752d7ec25bf7936e65fb"
+    },
+    {
+      "gate": "lint",
+      "target": ".",
+      "command": "bun run lint",
+      "commandSource": "detected",
+      "confirmed": true,
+      "exit": 0,
+      "status": "pass",
+      "durationMs": 949,
+      "at": "2026-11-12T13:14:50.562Z",
+      "log": "logs/lint-_-1794489290562.txt",
+      "tail": "  \n\nscripts/embed/spike.ts:229:61 lint/style/noNonNullAssertion ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n  ! Forbidden non-null assertion.\n  \n    227 │       prompt: item.prompt,\n    228 │       expect: item.expect,\n  > 229 │       lexicalFound: item.expect.every((key) => got.includes(ids.get(key)!)),\n        │                                                             ^^^^^^^^^^^^^\n    230 │       hits: item.expect.map((key) => {\n    231 │         const index = order.findIndex((o) => o.key === key);\n  \n\nscripts/embed/spike.ts:232:72 lint/style/noNonNullAssertion  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n  ! Forbidden non-null assertion.\n  \n    230 │       hits: item.expect.map((key) => {\n    231 │         const index = order.findIndex((o) => o.key === key);\n  > 232 │         return { key, rank: index + 1, score: index < 0 ? Number.NaN : order[index]!.score };\n        │                                                                        ^^^^^^^^^^^^^\n    233 │       }),\n    234 │       top: order.slice(0, 3),\n  \n  i Unsafe fix: Replace with optional chain operator ?. This operator includes runtime checks, so it is safer than the compile-only non-null assertion operator\n  \n    230 230 │         hits: item.expect.map((key) => {\n    231 231 │           const index = order.findIndex((o) => o.key === key);\n    232     │ - ········return·{·key,·rank:·index·+·1,·score:·index·<·0·?·Number.NaN·:·order[index]!.score·};\n        232 │ + ········return·{·key,·rank:·index·+·1,·score:·index·<·0·?·Number.NaN·:·order[index]?.score·};\n    233 233 │         }),\n    234 234 │         top: order.slice(0, 3),\n  \n\nThe number of diagnostics exceeds the limit allowed. Use --max-diagnostics to increase it.\nDiagnostics not shown: 77.\nChecked 490 files in 168ms. No fixes applied.\nFound 96 warnings.\nFound 1 info.",
+      "fingerprint": "sha256:be7035a189133c05a6748d4760be3979e0a26f7e438e752d7ec25bf7936e65fb"
+    },
+    {
+      "gate": "typecheck",
+      "target": ".",
+      "command": "bun run typecheck",
+      "commandSource": "detected",
+      "confirmed": true,
+      "exit": 0,
+      "status": "pass",
+      "durationMs": 766,
+      "at": "2026-11-12T13:14:51.512Z",
+      "log": "logs/typecheck-_-1794489291512.txt",
+      "tail": "$ tsc --noEmit",
+      "fingerprint": "sha256:be7035a189133c05a6748d4760be3979e0a26f7e438e752d7ec25bf7936e65fb"
+    }
+  ],
+  "verdict": "proven",
+  "unproven": [],
+  "verifications": [
+    {
+      "what": "knowledge",
+      "ref": "K-376",
+      "question": "Does the entry `entries.k1` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.76
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T13:03:55.536Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-375",
+      "question": "Does the entry `entries.k2` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.35
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T13:03:55.536Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-363",
+      "question": "Does the entry `entries.k3` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.06
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T13:03:55.536Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-319",
+      "question": "Does the entry `entries.k4` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.03
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T13:03:55.536Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-382",
+      "question": "Does the entry `entries.k5` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.04
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T13:03:55.536Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-381",
+      "question": "Does the entry `entries.k6` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.04
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T13:03:55.536Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-372",
+      "question": "Does the entry `entries.k7` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.05
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T13:03:55.536Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-371",
+      "question": "Does the entry `entries.k8` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.06
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T13:03:55.536Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-346",
+      "question": "Does the entry `entries.k9` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.04
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T13:03:55.536Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-343",
+      "question": "Does the entry `entries.k10` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.05
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T13:03:55.536Z"
+    }
+  ]
+}
