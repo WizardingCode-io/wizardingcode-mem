@@ -1,0 +1,274 @@
+{
+  "fingerprint": "sha256:7a406d01eeee6c08a8637a9ffd2f4ea43912ba6df3cb176e54494dd3bc1d6e14",
+  "tdd": [
+    {
+      "criterion": "AC-2",
+      "before": {
+        "command": "./node_modules/.bin/bun test tests/perf/semantic.test.ts tests/perf/budgets.test.ts -t 'rebuild|interactive'",
+        "exit": 0,
+        "at": "2026-11-12T12:12:14.121Z",
+        "durationMs": 18667,
+        "log": "logs/tdd-AC-2-before-1794485515453.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\ntests/perf/budgets.test.ts:\nrebuild write transaction, 2000 entries: 31.7 ms\n\ntests/perf/semantic.test.ts:\nsemantic global median: 16.4 ms\n\n 2 pass\n 16 filtered out\n 0 fail\n 18 expect() calls\nRan 2 tests across 2 files. [18.65s]",
+        "timedOut": false,
+        "passed": 2
+      },
+      "after": {
+        "command": "./node_modules/.bin/bun test tests/perf/semantic.test.ts tests/perf/budgets.test.ts -t 'rebuild|interactive'",
+        "exit": 0,
+        "at": "2026-11-12T12:13:06.637Z",
+        "durationMs": 18940,
+        "log": "logs/tdd-AC-2-after-1794485567696.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\ntests/perf/budgets.test.ts:\nrebuild write transaction, 2000 entries: median 31.8 ms over 5 (31.8, 32.7, 23.0, 34.4, 25.2)\n\ntests/perf/semantic.test.ts:\nsemantic global median: 16.5 ms\n\n 2 pass\n 16 filtered out\n 0 fail\n 18 expect() calls\nRan 2 tests across 2 files. [18.93s]",
+        "timedOut": false,
+        "passed": 2
+      }
+    },
+    {
+      "criterion": "AC-1",
+      "observed": {
+        "command": "sh /private/tmp/claude-501/-Users-andreagroferreira-AIProjects-ai-mem/918ec86e-c6ec-41e7-a49b-5a4605c9197f/scratchpad/observe-ci-slack.sh",
+        "exit": 0,
+        "at": "2026-11-12T12:22:05.540Z",
+        "durationMs": 36986,
+        "log": "logs/tdd-AC-1-observed-1794486088552.txt",
+        "tail": "== with CI=1\ntest: \"a rebuild&apos;s write transaction at 2000 entries takes under 125 ms (the median of 5)\"\ntest: \"a global search by meaning over 65000 memories stays interactive (median under 100 ms)\"\nrebuild write transaction, 2000 entries: median 28.5 ms over 5 (29.9, 28.5, 21.7, 31.8, 24.1)\nsemantic global median: 16.3 ms\n 2 pass\n 0 fail\n== without CI\ntest: \"a rebuild&apos;s write transaction at 2000 entries takes under 50 ms (the median of 5)\"\ntest: \"a global search by meaning over 65000 memories stays interactive (median under 40 ms)\"\nrebuild write transaction, 2000 entries: median 29.8 ms over 5 (29.8, 32.3, 22.5, 31.9, 24.9)\nsemantic global median: 16.5 ms\n 2 pass\n 0 fail",
+        "timedOut": false,
+        "passed": 2
+      },
+      "reason": "the slack is read from the test names the junit report of each run carries and from the measured lines, with CI=1 and without; no assertion of the suite can read its own names",
+      "observeds": [
+        {
+          "command": "sh /private/tmp/claude-501/-Users-andreagroferreira-AIProjects-ai-mem/918ec86e-c6ec-41e7-a49b-5a4605c9197f/scratchpad/observe-ci-slack.sh",
+          "exit": 0,
+          "at": "2026-11-12T12:13:57.487Z",
+          "durationMs": 39189,
+          "log": "logs/tdd-AC-1-observed-1794485598298.txt",
+          "tail": "== with CI=1\nrebuild write transaction, 2000 entries: median 29.6 ms over 5 (29.6, 31.1, 24.2, 32.5, 24.2)\nsemantic global median: 17.4 ms\n 2 pass\n 0 fail\n== without CI\nrebuild write transaction, 2000 entries: median 28.4 ms over 5 (28.6, 28.4, 21.9, 32.6, 25.0)\nsemantic global median: 17.0 ms\n 2 pass\n 0 fail",
+          "timedOut": false,
+          "passed": 2
+        },
+        {
+          "command": "sh /private/tmp/claude-501/-Users-andreagroferreira-AIProjects-ai-mem/918ec86e-c6ec-41e7-a49b-5a4605c9197f/scratchpad/observe-ci-slack.sh",
+          "exit": 0,
+          "at": "2026-11-12T12:19:35.920Z",
+          "durationMs": 41139,
+          "log": "logs/tdd-AC-1-observed-1794485934779.txt",
+          "tail": "== with CI=1\nrebuild write transaction, 2000 entries: median 29.7 ms over 5 (29.7, 32.7, 22.3, 34.0, 23.6)\nsemantic global median: 16.4 ms\n 2 pass\n 0 fail\n== without CI\nrebuild write transaction, 2000 entries: median 39.7 ms over 5 (39.7, 118.4, 30.3, 53.0, 30.9)\nsemantic global median: 16.3 ms\n 2 pass\n 0 fail",
+          "timedOut": false,
+          "passed": 2
+        }
+      ]
+    }
+  ],
+  "runs": [
+    {
+      "gate": "secrets",
+      "target": ".",
+      "command": "built-in secret scan",
+      "commandSource": null,
+      "confirmed": true,
+      "exit": 0,
+      "status": "pass",
+      "durationMs": 30,
+      "at": "2026-11-12T12:27:18.599Z",
+      "log": null,
+      "tail": "no secrets found in the change",
+      "fingerprint": "sha256:7a406d01eeee6c08a8637a9ffd2f4ea43912ba6df3cb176e54494dd3bc1d6e14"
+    },
+    {
+      "gate": "prose",
+      "target": ".",
+      "command": "built-in prose scan",
+      "commandSource": null,
+      "confirmed": true,
+      "exit": 0,
+      "status": "pass",
+      "durationMs": 32,
+      "at": "2026-11-12T12:27:18.629Z",
+      "log": null,
+      "tail": "no chatbot artefacts in the change",
+      "fingerprint": "sha256:7a406d01eeee6c08a8637a9ffd2f4ea43912ba6df3cb176e54494dd3bc1d6e14"
+    },
+    {
+      "gate": "build",
+      "target": ".",
+      "command": "bun run build",
+      "commandSource": "detected",
+      "confirmed": true,
+      "exit": 0,
+      "status": "pass",
+      "durationMs": 2916,
+      "at": "2026-11-12T12:27:18.661Z",
+      "log": "logs/build-_-1794486438661.txt",
+      "tail": "$ bun run ui:build && bun scripts/build.ts\n$ vite build --config ui/vite.config.ts\nvite v8.3.3 building client environment for production...\ntransforming...\n\n/assets/unbounded-variable.woff2 referenced in /assets/unbounded-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/instrument-sans-variable.woff2 referenced in /assets/instrument-sans-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/jetbrains-mono-variable.woff2 referenced in /assets/jetbrains-mono-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n✓ 851 modules transformed.\nrendering chunks...\n[plugin vite:singlefile] \n\n[plugin vite:singlefile] Inlining: index-BdJDDbwQ.js\n[plugin vite:singlefile] Inlining: style-CMyPmnXo.css\nsrc/ui/dist/index.html  1,228.95 kB\n\n✓ built in 726ms\n✓ wizardingcode-mem-darwin-arm64  67.9 MB\n✓ wizardingcode-mem-darwin-x64  74.7 MB\n✓ wizardingcode-mem-linux-x64  86.1 MB\n✓ wizardingcode-mem-linux-arm64  86.0 MB\n✓ wizardingcode-mem-windows-x64.exe  90.6 MB",
+      "fingerprint": "sha256:7a406d01eeee6c08a8637a9ffd2f4ea43912ba6df3cb176e54494dd3bc1d6e14"
+    },
+    {
+      "gate": "test",
+      "target": ".",
+      "command": "bun run test",
+      "commandSource": "detected",
+      "confirmed": true,
+      "exit": 0,
+      "status": "pass",
+      "durationMs": 217329,
+      "at": "2026-11-12T12:27:21.603Z",
+      "log": "logs/test-_-1794486441604.txt",
+      "tail": "heuristic precision 100%  recall 100%  kind 83%\ntypesafe  precision 85%  recall 94%  kind 88%  wrongly kept: en-none-obvious-from-code, en-none-general-knowledge, pt-none-your-turn  missed: en-change-json-flag\n\ntests/golden/search.test.ts:\ntop 5: 35/44 → 39/44; Portuguese of English: 1/8 → 4/8\nsemantic-only results for unrelated queries: 29/43\n\ntests/golden/retrieval.test.ts:\nrecall@5: 19/24 — missed: redact-first, pt-lingua, pt-cursor, ts-extension, hook-runs\nprecision: 19/21 notes given were the expected ones\nfalse injections: 0/23\n\ntests/perf/budgets.test.ts:\nrebuild write transaction, 2000 entries: median 31.3 ms over 5 (35.0, 31.4, 20.8, 31.3, 21.7)\nprompt: p50 64.5 ms, p95 68.6 ms\nsession-start: p50 19.9 ms, p95 21.1 ms\nturn-end: p50 14.6 ms, p95 15.4 ms\nfile-read: p50 17.0 ms, p95 18.1 ms\ntool-failed: p50 22.7 ms, p95 24.6 ms\nqwen prompt: p50 62.9 ms, p95 64.9 ms\nqwen session-start: p50 19.9 ms, p95 20.9 ms\ndroid prompt: p50 62.5 ms, p95 65.9 ms\ndroid session-start: p50 21.9 ms, p95 23.3 ms\ncopilot session-start: p50 22.4 ms, p95 23.5 ms\ncopilot prompt (capture only): p50 17.1 ms, p95 18.5 ms\nantigravity pre-invocation: p50 20.4 ms, p95 22.1 ms\nlinked prompt: p50 29.6 ms, p95 34.2 ms (30 of 30 with a note from outside)\nlinked session-start: p50 20.9 ms, p95 21.6 ms\n\ntests/perf/large-project.test.ts:\nlarge project prompt: p50 18.0 ms, p95 20.2 ms (40 of 40 given notes)\n\ntests/perf/semantic.test.ts:\nsemantic global median: 16.0 ms\n\n 3284 pass\n 4 skip\n 0 fail\n 26 snapshots, 39453 expect() calls\nRan 3288 tests across 210 files. [216.04s]",
+      "fingerprint": "sha256:7a406d01eeee6c08a8637a9ffd2f4ea43912ba6df3cb176e54494dd3bc1d6e14"
+    },
+    {
+      "gate": "lint",
+      "target": ".",
+      "command": "bun run lint",
+      "commandSource": "detected",
+      "confirmed": true,
+      "exit": 0,
+      "status": "pass",
+      "durationMs": 321,
+      "at": "2026-11-12T12:30:58.933Z",
+      "log": "logs/lint-_-1794486658933.txt",
+      "tail": "  \n\nscripts/embed/spike.ts:229:61 lint/style/noNonNullAssertion ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n  ! Forbidden non-null assertion.\n  \n    227 │       prompt: item.prompt,\n    228 │       expect: item.expect,\n  > 229 │       lexicalFound: item.expect.every((key) => got.includes(ids.get(key)!)),\n        │                                                             ^^^^^^^^^^^^^\n    230 │       hits: item.expect.map((key) => {\n    231 │         const index = order.findIndex((o) => o.key === key);\n  \n\nscripts/embed/spike.ts:232:72 lint/style/noNonNullAssertion  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n  ! Forbidden non-null assertion.\n  \n    230 │       hits: item.expect.map((key) => {\n    231 │         const index = order.findIndex((o) => o.key === key);\n  > 232 │         return { key, rank: index + 1, score: index < 0 ? Number.NaN : order[index]!.score };\n        │                                                                        ^^^^^^^^^^^^^\n    233 │       }),\n    234 │       top: order.slice(0, 3),\n  \n  i Unsafe fix: Replace with optional chain operator ?. This operator includes runtime checks, so it is safer than the compile-only non-null assertion operator\n  \n    230 230 │         hits: item.expect.map((key) => {\n    231 231 │           const index = order.findIndex((o) => o.key === key);\n    232     │ - ········return·{·key,·rank:·index·+·1,·score:·index·<·0·?·Number.NaN·:·order[index]!.score·};\n        232 │ + ········return·{·key,·rank:·index·+·1,·score:·index·<·0·?·Number.NaN·:·order[index]?.score·};\n    233 233 │         }),\n    234 234 │         top: order.slice(0, 3),\n  \n\nThe number of diagnostics exceeds the limit allowed. Use --max-diagnostics to increase it.\nDiagnostics not shown: 77.\nChecked 490 files in 185ms. No fixes applied.\nFound 96 warnings.\nFound 1 info.",
+      "fingerprint": "sha256:7a406d01eeee6c08a8637a9ffd2f4ea43912ba6df3cb176e54494dd3bc1d6e14"
+    },
+    {
+      "gate": "typecheck",
+      "target": ".",
+      "command": "bun run typecheck",
+      "commandSource": "detected",
+      "confirmed": true,
+      "exit": 0,
+      "status": "pass",
+      "durationMs": 364,
+      "at": "2026-11-12T12:30:59.254Z",
+      "log": "logs/typecheck-_-1794486659254.txt",
+      "tail": "$ tsc --noEmit",
+      "fingerprint": "sha256:7a406d01eeee6c08a8637a9ffd2f4ea43912ba6df3cb176e54494dd3bc1d6e14"
+    }
+  ],
+  "verdict": "proven",
+  "unproven": [],
+  "verifications": [
+    {
+      "what": "knowledge",
+      "ref": "K-381",
+      "question": "Does the entry `entries.k1` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.04
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T12:10:44.247Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-371",
+      "question": "Does the entry `entries.k2` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.04
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T12:10:44.247Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-363",
+      "question": "Does the entry `entries.k3` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.04
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T12:10:44.247Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-372",
+      "question": "Does the entry `entries.k4` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.04
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T12:10:44.247Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-346",
+      "question": "Does the entry `entries.k5` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.03
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T12:10:44.247Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-343",
+      "question": "Does the entry `entries.k6` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.04
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T12:10:44.247Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-375",
+      "question": "Does the entry `entries.k7` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.06
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T12:10:44.247Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-316",
+      "question": "Does the entry `entries.k8` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.04
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T12:10:44.247Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-311",
+      "question": "Does the entry `entries.k9` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.04
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T12:10:44.247Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-376",
+      "question": "Does the entry `entries.k10` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.03
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T12:10:44.247Z"
+    }
+  ]
+}
