@@ -1,0 +1,18 @@
+{
+  "objections": [
+    {
+      "id": "O-1",
+      "raisedBy": "gap-round",
+      "severity": "advisory",
+      "text": "The commit that crosses git's threshold waits for the repack inside the runner's timeout; a repack that exceeded it would report a failure for a commit that landed. Not measured at that size.",
+      "raisedAt": "2026-11-12T20:27:34.282Z"
+    },
+    {
+      "id": "O-2",
+      "raisedBy": "gap-round",
+      "severity": "advisory",
+      "text": "The end of the three failures cannot be shown on the author's machine: the evidence is the runner's probe and the suite's later runs there.",
+      "raisedAt": "2026-11-12T20:27:34.335Z"
+    }
+  ]
+}

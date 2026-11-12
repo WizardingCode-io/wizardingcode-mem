@@ -1,0 +1,299 @@
+{
+  "at": "2026-11-12T20:24:26.161Z",
+  "paths": [
+    {
+      "path": "src/modules/knowledge/repo.ts",
+      "commits": [
+        {
+          "sha": "6c26e1168824ce52a0f3636c04e1a3e8084fb35e",
+          "at": "2026-11-11T10:47:41Z",
+          "author": "André Agro Ferreira",
+          "lines": 17,
+          "items": [
+            "2026-11-09-001-knowledge-for-the-agent-mcp-tools-search",
+            "2026-11-09-002-sharing-policy-per-project-local-only-kn",
+            "2026-11-10-001-team-server-wizardingcode-mem-serve-one",
+            "2026-11-10-002-part-6-of-the-knowledge-and-team-journey"
+          ]
+        },
+        {
+          "sha": "d4265c0d709ab02c16a23178e0d55ccb08cbb1f6",
+          "at": "2026-11-10T17:26:24Z",
+          "author": "André Agro Ferreira",
+          "lines": 49,
+          "items": [
+            "2026-11-09-003-team-server-wizardingcode-mem-serve-one",
+            "2026-11-10-001-team-server-wizardingcode-mem-serve-one"
+          ]
+        },
+        {
+          "sha": "4200ff2b7b1bba53fa889e234a13c2279f4cfae7",
+          "at": "2026-11-10T10:44:45Z",
+          "author": "André Agro Ferreira",
+          "lines": 1377,
+          "items": [
+            "2026-11-08-003-knowledge-store-entries-as-markdown-with",
+            "2026-11-09-001-knowledge-for-the-agent-mcp-tools-search",
+            "2026-11-09-002-sharing-policy-per-project-local-only-kn"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "tests/helpers/stub-git.ts",
+      "commits": [
+        {
+          "sha": "d4265c0d709ab02c16a23178e0d55ccb08cbb1f6",
+          "at": "2026-11-10T17:26:24Z",
+          "author": "André Agro Ferreira",
+          "lines": 5,
+          "items": [
+            "2026-11-09-003-team-server-wizardingcode-mem-serve-one",
+            "2026-11-10-001-team-server-wizardingcode-mem-serve-one"
+          ]
+        },
+        {
+          "sha": "4200ff2b7b1bba53fa889e234a13c2279f4cfae7",
+          "at": "2026-11-10T10:44:45Z",
+          "author": "André Agro Ferreira",
+          "lines": 97,
+          "items": [
+            "2026-11-08-003-knowledge-store-entries-as-markdown-with",
+            "2026-11-09-001-knowledge-for-the-agent-mcp-tools-search",
+            "2026-11-09-002-sharing-policy-per-project-local-only-kn"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/team/mirror.ts",
+      "commits": [
+        {
+          "sha": "24e86b9ce7aa93545937869553fe721d51978abe",
+          "at": "2026-11-12T10:46:46Z",
+          "author": "André Agro Ferreira",
+          "lines": 6,
+          "items": [
+            "2026-11-11-002-release-070-version-070-in-packagejson-a",
+            "2026-11-11-003-homebrew-formula-070-with-the-releases-c",
+            "2026-11-11-005-share-a-project-without-a-git-remote-tod"
+          ]
+        },
+        {
+          "sha": "6c26e1168824ce52a0f3636c04e1a3e8084fb35e",
+          "at": "2026-11-11T10:47:41Z",
+          "author": "André Agro Ferreira",
+          "lines": 2,
+          "items": [
+            "2026-11-09-001-knowledge-for-the-agent-mcp-tools-search",
+            "2026-11-09-002-sharing-policy-per-project-local-only-kn",
+            "2026-11-10-001-team-server-wizardingcode-mem-serve-one",
+            "2026-11-10-002-part-6-of-the-knowledge-and-team-journey"
+          ]
+        },
+        {
+          "sha": "d4265c0d709ab02c16a23178e0d55ccb08cbb1f6",
+          "at": "2026-11-10T17:26:24Z",
+          "author": "André Agro Ferreira",
+          "lines": 776,
+          "items": [
+            "2026-11-09-003-team-server-wizardingcode-mem-serve-one",
+            "2026-11-10-001-team-server-wizardingcode-mem-serve-one"
+          ]
+        }
+      ]
+    }
+  ],
+  "items": [
+    {
+      "id": "2026-11-09-001-knowledge-for-the-agent-mcp-tools-search",
+      "title": "Knowledge for the agent: MCP tools (search, get, propose, update, taxonomy), the",
+      "kind": "feature",
+      "roles": [
+        "goldfish-comprehension",
+        "goldfish-zoom-out",
+        "goldfish-design",
+        "goldfish-structural",
+        "goldfish-readiness",
+        "goldfish-codebase",
+        "tech-lead",
+        "judge",
+        "goldfish-style",
+        "review-ui-ux",
+        "review-security",
+        "review-data",
+        "review-architecture",
+        "review-code-quality",
+        "review-risk",
+        "review-test-quality"
+      ],
+      "tasks": [],
+      "decisions": 50,
+      "mail": 1
+    },
+    {
+      "id": "2026-11-09-002-sharing-policy-per-project-local-only-kn",
+      "title": "Sharing policy: per project local only, knowledge only, or knowledge and memory;",
+      "kind": "feature",
+      "roles": [
+        "goldfish-comprehension",
+        "goldfish-structural",
+        "goldfish-zoom-out",
+        "goldfish-design",
+        "goldfish-readiness",
+        "goldfish-codebase",
+        "tech-lead",
+        "judge",
+        "goldfish-style",
+        "review-data",
+        "review-ui-ux",
+        "review-code-quality",
+        "review-risk",
+        "review-test-quality",
+        "review-security",
+        "review-architecture"
+      ],
+      "tasks": [],
+      "decisions": 33,
+      "mail": 1
+    },
+    {
+      "id": "2026-11-10-001-team-server-wizardingcode-mem-serve-one",
+      "title": "Team server: wizardingcode-mem serve, one Docker image with SQLite and the repos",
+      "kind": "feature",
+      "roles": [
+        "goldfish-zoom-out",
+        "goldfish-comprehension",
+        "goldfish-structural",
+        "goldfish-readiness",
+        "goldfish-design",
+        "goldfish-codebase",
+        "tech-lead",
+        "goldfish-style",
+        "review-infra",
+        "review-security",
+        "review-architecture",
+        "review-code-quality",
+        "review-risk",
+        "review-test-quality",
+        "review-data",
+        "judge"
+      ],
+      "tasks": [],
+      "decisions": 58,
+      "mail": 1
+    },
+    {
+      "id": "2026-11-10-002-part-6-of-the-knowledge-and-team-journey",
+      "title": "Part 6 of the knowledge and team journey, the sync client: wizardingcode-mem kee",
+      "kind": "feature",
+      "roles": [
+        "goldfish-readiness",
+        "goldfish-zoom-out",
+        "goldfish-comprehension",
+        "goldfish-codebase",
+        "goldfish-structural",
+        "goldfish-design",
+        "tech-lead",
+        "goldfish-style",
+        "review-code-quality",
+        "review-ui-ux",
+        "review-architecture",
+        "review-risk",
+        "review-test-quality",
+        "review-security",
+        "review-data",
+        "judge"
+      ],
+      "tasks": [],
+      "decisions": 254,
+      "mail": 1
+    },
+    {
+      "id": "2026-11-09-003-team-server-wizardingcode-mem-serve-one",
+      "title": "Team server: wizardingcode-mem serve, one Docker image with SQLite and the repos",
+      "kind": "feature",
+      "roles": [
+        "goldfish-comprehension",
+        "goldfish-zoom-out",
+        "goldfish-structural",
+        "goldfish-readiness",
+        "goldfish-design",
+        "goldfish-codebase"
+      ],
+      "tasks": [],
+      "decisions": 25,
+      "mail": 0
+    },
+    {
+      "id": "2026-11-08-003-knowledge-store-entries-as-markdown-with",
+      "title": "Knowledge store: entries as Markdown with frontmatter (kind knowledge, strategy,",
+      "kind": "feature",
+      "roles": [
+        "goldfish-comprehension",
+        "goldfish-zoom-out",
+        "goldfish-design",
+        "goldfish-structural",
+        "goldfish-readiness",
+        "goldfish-codebase",
+        "judge",
+        "tech-lead",
+        "goldfish-style",
+        "review-code-quality",
+        "review-risk",
+        "review-architecture",
+        "review-security",
+        "review-test-quality",
+        "review-data"
+      ],
+      "tasks": [],
+      "decisions": 59,
+      "mail": 1
+    },
+    {
+      "id": "2026-11-11-002-release-070-version-070-in-packagejson-a",
+      "title": "Release 0.7.0: version 0.7.0 in package.json and in every file that carries the ",
+      "kind": "feature",
+      "roles": [],
+      "tasks": [],
+      "decisions": 1,
+      "mail": 1
+    },
+    {
+      "id": "2026-11-11-003-homebrew-formula-070-with-the-releases-c",
+      "title": "Homebrew formula: 0.7.0 with the release's checksums. packaging/homebrew/wizardi",
+      "kind": "feature",
+      "roles": [],
+      "tasks": [],
+      "decisions": 1,
+      "mail": 1
+    },
+    {
+      "id": "2026-11-11-005-share-a-project-without-a-git-remote-tod",
+      "title": "Share a project without a git remote. Today a project can be set above Nothing o",
+      "kind": "feature",
+      "roles": [
+        "goldfish-comprehension",
+        "goldfish-structural",
+        "goldfish-zoom-out",
+        "goldfish-readiness",
+        "goldfish-design",
+        "goldfish-codebase",
+        "tech-lead",
+        "goldfish-style",
+        "review-security",
+        "review-data",
+        "review-risk",
+        "review-code-quality",
+        "review-test-quality",
+        "review-architecture",
+        "review-ui-ux",
+        "judge"
+      ],
+      "tasks": [],
+      "decisions": 46,
+      "mail": 1
+    }
+  ],
+  "knownRootCauses": []
+}

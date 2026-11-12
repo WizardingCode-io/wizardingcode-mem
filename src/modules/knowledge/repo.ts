@@ -430,6 +430,13 @@ function configArgs(repo: string | null): string[] {
     // to: other formats are written to `.git/config` as extensions, which are refused.
     "init.defaultObjectFormat=sha1",
     "init.defaultRefFormat=files",
+    // No git command starts maintenance by itself: a commit would start it detached, and it
+    // would still be writing under `.git/objects` after the call returned. `commitPaths`
+    // runs it instead, and the two settings under the first keep that run, and an older
+    // git's gc, in the foreground.
+    "maintenance.auto=false",
+    "maintenance.autoDetach=false",
+    "gc.autoDetach=false",
   ];
   // Hooks are looked for inside the repository's own configuration file. Nothing can be
   // inside a file, so git finds no hook. Run on macOS; not run on Windows (ADR 0024, known
@@ -940,6 +947,40 @@ export function commitPaths(
     identity,
     ...(committer === undefined ? {} : { committer }),
   });
+  maintain(host, repo.path, operation, identity, committer);
+}
+
+/**
+ * git's own housekeeping, run by the runner after a commit and to its end: git decides by
+ * its thresholds whether anything is due, and no process is left writing in the repository
+ * when this returns. Nothing it throws is the commit's, which landed, so nothing it throws
+ * changes what the caller does next:
+ * - a git that fails or passes the timeout is a `KnowledgeError` that `runGit` has logged;
+ * - a lease lost at the call's renewal is raised before git starts, so no git runs without
+ *   the lease. The store's is a `KnowledgeError` (`locked`), dropped here. The mirror's is an
+ *   error of its own class, logged here like any error of another kind. Either way the
+ *   caller meets the loss at its own next git call, where it already handles it.
+ */
+function maintain(
+  host: GitHost,
+  repoPath: string,
+  operation: string,
+  identity: Identity,
+  committer?: Identity,
+): void {
+  try {
+    // The commit's identity too, though maintenance writes no commit: the two calls then run
+    // in one environment, and what a test or a log sees of git's environment after a commit
+    // is still the commit's.
+    runGit(host, repoPath, ["maintenance", "run", "--auto", "--quiet"], {
+      operation,
+      identity,
+      ...(committer === undefined ? {} : { committer }),
+    });
+  } catch (error) {
+    if (error instanceof KnowledgeError) return;
+    logError(`${host.logScope ?? "knowledge"}.${operation}`, error, host.dataDir);
+  }
 }
 
 /**
