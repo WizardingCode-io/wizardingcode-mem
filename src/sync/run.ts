@@ -14,16 +14,26 @@ import {
   takeOverLease,
   writeFailedStart,
 } from "../store/meta.ts";
+import { CONTRACT } from "../team/contract.ts";
 import { probeUi, readUiState } from "../ui/state.ts";
 import { brandHome } from "../util/paths.ts";
+import { SyncClient } from "./client.ts";
 import { closeOrphanConflicts } from "./conflicts.ts";
 import { leaseOwnerOf, type SyncContext } from "./context.ts";
 import { pullOnce as inboundPull } from "./inbound.ts";
 import { logError } from "./log.ts";
 import { sweep as outboundSweep } from "./outbound.ts";
 import { deleteServerReceived, orphanServerIds, reindexReceived } from "./received.ts";
-import { confirmedServers, readTokens, type ServerRow, totalBacklog } from "./servers.ts";
-import { LeaseLost } from "./state.ts";
+import {
+  CONTRACT_READ_MS,
+  confirmedServers,
+  readTokens,
+  type ServerRow,
+  setContract,
+  spokenAfterMe,
+  totalBacklog,
+} from "./servers.ts";
+import { guarded, LeaseLost } from "./state.ts";
 
 /** The tick that reads `data_version`. */
 export const TICK_MS = 2_000;
@@ -60,15 +70,54 @@ export interface RunHooks {
   ): Promise<PullOutcome>;
 }
 
+/** How long one read of `/v1/me` may take when the contracts are refreshed. */
+
+/**
+ * The active read of the contract spoken (ADR 0028): `/v1/me` of every confirmed, unstopped
+ * server with a token (with `onlyBelow`, those whose row speaks below this binary's contract),
+ * in parallel, each under its own deadline; an answer sets the row to the lower of this binary's
+ * contract and the server's; a 409 with an acceptable value sets that; anything else keeps the
+ * stored value. Nothing here throws.
+ */
+export async function refreshContracts(
+  ctx: SyncContext,
+  options: { onlyBelow?: boolean } = {},
+): Promise<void> {
+  const tokens = readTokens(ctx.dataDir);
+  const rows = confirmedServers(ctx.db).filter(
+    (row) =>
+      row.stopped === null &&
+      row.serverId in tokens &&
+      (options.onlyBelow !== true || row.contract < CONTRACT),
+  );
+  await Promise.allSettled(
+    rows.map(async (row) => {
+      try {
+        const client = new SyncClient(ctx, {
+          url: row.url,
+          token: tokens[row.serverId] as string,
+          contract: row.contract,
+        });
+        const me = await client.me({ deadlineMs: CONTRACT_READ_MS });
+        const next = spokenAfterMe(me, row.contract);
+        if (next !== row.contract) guarded(ctx, () => setContract(ctx.db, row.serverId, next));
+      } catch (error) {
+        logError(ctx, row.serverId, "contract", error);
+      }
+    }),
+  );
+}
+
 /**
  * The start's steps, in order, before any sweep or pull: the received copies of a server id
  * with no row deleted (a crashed `remove`, a restore), the received folder re-indexed as the
- * truth, and the conflicts rows whose proposal is decided or gone closed.
+ * truth, the conflicts rows whose proposal is decided or gone closed, and the contracts read.
  */
 export async function startSteps(ctx: SyncContext): Promise<void> {
   for (const serverId of orphanServerIds(ctx)) deleteServerReceived(ctx, serverId);
   reindexReceived(ctx);
   closeOrphanConflicts(ctx);
+  await refreshContracts(ctx);
 }
 
 /** The hooks as the process runs them. */
@@ -167,7 +216,8 @@ export async function runSync(ctx: SyncContext, options: RunOptions): Promise<nu
   }
   clearFailedStart(ctx.db);
 
-  if (options.once) return leave(await runOnce(ctx, hooks, servers));
+  // The rows again: the start's steps may have moved a contract spoken.
+  if (options.once) return leave(await runOnce(ctx, hooks, confirmedServers(ctx.db)));
   return leave(await runLoop(ctx, hooks, options));
 }
 
@@ -288,6 +338,8 @@ async function runLoop(ctx: SyncContext, hooks: RunHooks, options: RunOptions): 
       lastMark = at;
       changed = false;
       ensureLoops();
+      // A server upgraded since the start: its row speaks up again within a minute (ADR 0028).
+      await refreshContracts(ctx, { onlyBelow: true });
       sweeping = sweepAll("full");
       await sweeping;
       if (stopping === null && (await idle())) stop("idle");

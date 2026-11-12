@@ -1,16 +1,20 @@
 // The store's writes that read a project's state: a level set, and the two reconciles.
 // Projects are made by `resolveProject` on plain folders (no git: a `path:` alias only),
 // and a `remote:` alias is given by hand where a case needs one.
+import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveProject } from "../../src/core/project.ts";
+import { KNOWLEDGE_MIGRATIONS, KNOWLEDGE_MODULE } from "../../src/modules/knowledge/migrations.ts";
 import { levelOf } from "../../src/sharing/levels.ts";
+import { SHARING_MIGRATIONS, SHARING_MODULE } from "../../src/sharing/migrations.ts";
 import { loadPolicy } from "../../src/sharing/policy.ts";
 import {
   applySettingsPatch,
   counterOf,
+  forgetName,
   levelRows,
   previewLevel,
   projectState,
@@ -22,7 +26,7 @@ import {
   settingsSeen,
 } from "../../src/sharing/store.ts";
 import type { Level } from "../../src/sharing/types.ts";
-import { type Db, openDb } from "../../src/store/db.ts";
+import { DB_FILE, type Db, openDb } from "../../src/store/db.ts";
 
 const ROOTS_KEY = "WIZARDINGCODE_MEM_SHARE_ROOTS";
 const AREAS_KEY = "WIZARDINGCODE_MEM_SHARE_AREAS";
@@ -61,6 +65,10 @@ const project = (name: string, ...remotes: string[]): number => {
 interface Over {
   confirm?: boolean;
   remoteAlias?: string | null;
+  as?: string | null;
+  nameId?: string | null;
+  dryRun?: boolean;
+  recreated?: boolean;
   source?: SetLevelInput["source"];
   now?: number;
   destination?: string;
@@ -86,6 +94,17 @@ const changes = () =>
 const writeEnv = (...lines: string[]) => writeFileSync(join(dir, "env"), `${lines.join("\n")}\n`);
 const disable = (projectId: number) =>
   db.run("UPDATE projects SET disabled = 1 WHERE id = ?", [projectId]);
+/** The project's aliases a team could know it by: everything but the folder's own. */
+const teamAliases = (projectId: number) =>
+  projectState(db, projectId).aliases.filter((alias) => !alias.startsWith("path:"));
+/** A confirmed server, so that the destinations are the servers (ADR 0027). */
+const server = (serverId: string) =>
+  db.run(
+    `INSERT INTO sharing_servers (server_id, url, name, device_id, device_alias, member_id,
+       member_name, role, contract, instance, confirmed_at, roots, areas, added_at)
+     VALUES (?, ?, ?, 'd', 'laptop', 'm', 'Ana', 'member', 1, 'i', ?, '', '', ?)`,
+    [serverId, `https://${serverId}.example.com`, serverId, NOW, NOW],
+  );
 
 describe("projectState", () => {
   test("is the project's disabled flag and its aliases, by name", () => {
@@ -142,14 +161,14 @@ describe("previewLevel", () => {
 });
 
 describe("setLevel: what it refuses", () => {
-  test("a project without a git remote cannot be set above local", () => {
+  test("a project without a git remote or a shared name cannot be set above local", () => {
     const plain = project("plain");
-    expect(set(plain, "knowledge")).toEqual({ ok: false, reason: "no-remote" });
-    expect(set(plain, "all")).toEqual({ ok: false, reason: "no-remote" });
+    expect(set(plain, "knowledge")).toEqual({ ok: false, reason: "no-name" });
+    expect(set(plain, "all")).toEqual({ ok: false, reason: "no-name" });
     // Nobody is asked to confirm what would then be refused: this comes first.
     expect(set(plain, "knowledge", { confirm: false })).toEqual({
       ok: false,
-      reason: "no-remote",
+      reason: "no-name",
     });
     expect(levelRows(db)).toEqual([]);
     expect(changes()).toEqual([]);
@@ -192,16 +211,16 @@ describe("setLevel: what it refuses", () => {
     expect(levelRows(db)).toEqual([]);
   });
 
-  test("the refusals come in one order: the level, the project, memory off, no remote, then the confirmation", () => {
+  test("the refusals come in one order: the level, the project, memory off, no name, then the confirmation", () => {
     const plain = project("plain");
     disable(plain);
     const unconfirmed = { confirm: false };
     expect(set(999, "wide" as Level, unconfirmed)).toEqual({ ok: false, reason: "invalid" });
     expect(set(999, "knowledge", unconfirmed)).toEqual({ ok: false, reason: "no-project" });
-    // Memory off and no remote: memory off is said first.
+    // Memory off and no name: memory off is said first.
     expect(set(plain, "knowledge", unconfirmed)).toEqual({ ok: false, reason: "disabled" });
     db.run("UPDATE projects SET disabled = 0 WHERE id = ?", [plain]);
-    expect(set(plain, "knowledge", unconfirmed)).toEqual({ ok: false, reason: "no-remote" });
+    expect(set(plain, "knowledge", unconfirmed)).toEqual({ ok: false, reason: "no-name" });
     addAlias(plain, remote("p/q"));
     expect(set(plain, "knowledge", unconfirmed)).toEqual({ ok: false, reason: "needs-confirm" });
     expect(set(plain, "knowledge")).toMatchObject({ ok: true, boundAlias: remote("p/q") });
@@ -225,6 +244,7 @@ describe("setLevel: what it writes", () => {
       widened: true,
       boundAlias: remote("x/y"),
       rebound: false,
+      named: false,
     });
     expect(levelRows(db)).toEqual([
       {
@@ -234,6 +254,7 @@ describe("setLevel: what it writes", () => {
         boundAlias: remote("x/y"),
         setAt: 77,
         source: "viewer",
+        nameId: null,
       },
     ]);
     expect(changes()).toEqual([
@@ -253,6 +274,7 @@ describe("setLevel: what it writes", () => {
       widened: true,
       boundAlias: remote("x/y"),
       rebound: false,
+      named: false,
     });
     expect(counterOf(db)).toBe(2);
     expect(set(widgets, "knowledge", { confirm: false, now: 2000 })).toEqual({
@@ -261,6 +283,7 @@ describe("setLevel: what it writes", () => {
       widened: false,
       boundAlias: remote("x/y"),
       rebound: false,
+      named: false,
     });
     expect(counterOf(db)).toBe(3);
     expect(levelRows(db).map((row) => [row.level, row.setAt])).toEqual([["knowledge", 2000]]);
@@ -280,6 +303,7 @@ describe("setLevel: what it writes", () => {
       widened: false,
       boundAlias: remote("x/y"),
       rebound: false,
+      named: false,
     });
     expect(changes()).toHaveLength(1);
     expect(counterOf(db)).toBe(1);
@@ -293,6 +317,7 @@ describe("setLevel: what it writes", () => {
       widened: false,
       boundAlias: "",
       rebound: false,
+      named: false,
     });
     expect(changes()).toHaveLength(1);
     expect(counterOf(db)).toBe(1);
@@ -307,6 +332,7 @@ describe("setLevel: what it writes", () => {
       widened: false,
       boundAlias: "",
       rebound: false,
+      named: false,
     });
     expect(levelRows(db)).toEqual([]);
     expect(changes().at(-1)).toEqual({
@@ -332,6 +358,7 @@ describe("setLevel: what it writes", () => {
       widened: false,
       boundAlias: "",
       rebound: false,
+      named: false,
     });
     expect(levelRows(db)).toEqual([]);
     expect(changes().at(-1)).toMatchObject({
@@ -358,6 +385,7 @@ describe("setLevel: what it writes", () => {
       widened: false,
       boundAlias: "",
       rebound: false,
+      named: false,
     });
     expect(changes()).toEqual([]);
     expect(counterOf(db)).toBe(0);
@@ -372,6 +400,7 @@ describe("setLevel: what it writes", () => {
       widened: true,
       boundAlias: remote("x/y"),
       rebound: false,
+      named: false,
     });
     expect(levelRows(db).map((row) => row.level)).toEqual(["knowledge"]);
     expect(changes().map((change) => [change.old, change.new])).toEqual([["local", "knowledge"]]);
@@ -415,7 +444,7 @@ describe("setLevel: the alias a level is bound to", () => {
     expect(path.startsWith("path:")).toBe(true);
     expect(set(plain, "knowledge", { remoteAlias: path })).toEqual({
       ok: false,
-      reason: "no-remote",
+      reason: "no-name",
     });
   });
 
@@ -430,7 +459,7 @@ describe("setLevel: the alias a level is bound to", () => {
     for (const given of [undefined, "remote:/users/someone/repo"]) {
       expect(set(local, "knowledge", { remoteAlias: given })).toEqual({
         ok: false,
-        reason: "no-remote",
+        reason: "no-name",
       });
     }
     expect(levelRows(db)).toEqual([]);
@@ -454,7 +483,11 @@ describe("setLevel: the alias a level is bound to", () => {
     set(widgets, "knowledge", { remoteAlias: X });
     expect(set(widgets, "all")).toMatchObject({ boundAlias: X, rebound: false });
     expect(levelRows(db)[0]?.boundAlias).toBe(X);
-    // Unless the caller names another alias of the project.
+    // Also when the caller names another alias of the project: the bound alias wins while
+    // the project carries it (ADR 0028); after Nothing, the alias named binds.
+    expect(set(widgets, "knowledge", { remoteAlias: A })).toMatchObject({ boundAlias: X });
+    expect(levelRows(db)[0]?.boundAlias).toBe(X);
+    set(widgets, "local");
     expect(set(widgets, "knowledge", { remoteAlias: A })).toMatchObject({ boundAlias: A });
     expect(levelRows(db)[0]?.boundAlias).toBe(A);
   });
@@ -527,6 +560,7 @@ describe("setLevel: a level whose alias is gone", () => {
       widened: true,
       boundAlias: NEW,
       rebound: true,
+      named: false,
     });
     expect(levelRows(db)).toEqual([
       {
@@ -536,6 +570,7 @@ describe("setLevel: a level whose alias is gone", () => {
         boundAlias: NEW,
         setAt: 2000,
         source: "cli",
+        nameId: null,
       },
     ]);
     expect(changes().at(-1)).toEqual({
@@ -560,6 +595,7 @@ describe("setLevel: a level whose alias is gone", () => {
       widened: true,
       boundAlias: NEW,
       rebound: true,
+      named: false,
     });
     expect(changes().at(-1)).toMatchObject({ old: "rebind", new: "all" });
   });
@@ -568,7 +604,7 @@ describe("setLevel: a level whose alias is gone", () => {
     const widgets = project("widgets", OLD);
     set(widgets, "knowledge");
     dropAlias(OLD);
-    expect(set(widgets, "knowledge")).toEqual({ ok: false, reason: "no-remote" });
+    expect(set(widgets, "knowledge")).toEqual({ ok: false, reason: "no-name" });
     expect(levelRows(db)[0]?.boundAlias).toBe(OLD);
   });
 });
@@ -735,5 +771,374 @@ describe("reconcileLevels", () => {
     expect(reconcileLevels(db, 2000)).toEqual({ removed: [] });
     expect(levelRows(db)).toHaveLength(1);
     expect(counterOf(db)).toBe(0);
+  });
+});
+
+describe("setLevel: a shared name (ADR 0028)", () => {
+  const NAME = "name:wizardingcode";
+  const ID = "0123456789abcdef";
+  const OTHER_ID = "fedcba9876543210";
+
+  test("as on a project with a path alias alone inserts the name and binds the level to it, with the id", () => {
+    const plain = project("plain");
+    expect(set(plain, "knowledge", { as: NAME, nameId: ID, now: 77 })).toEqual({
+      ok: true,
+      old: "local",
+      widened: true,
+      boundAlias: NAME,
+      rebound: false,
+      named: true,
+    });
+    expect(teamAliases(plain)).toEqual([NAME]);
+    expect(levelRows(db)).toEqual([
+      {
+        projectId: plain,
+        destination: "team",
+        level: "knowledge",
+        boundAlias: NAME,
+        setAt: 77,
+        source: "cli",
+        nameId: ID,
+      },
+    ]);
+    expect(changes()).toEqual([
+      { what: `project:${plain}`, old: "local", new: "knowledge", source: "cli", at: 77 },
+    ]);
+    expect(counterOf(db)).toBe(1);
+    expect(levelOf(policy(), plain, "team")).toEqual({ level: "knowledge", reason: "allowed" });
+
+    // The same call again writes nothing and names nothing.
+    expect(set(plain, "knowledge", { as: NAME, nameId: ID, confirm: false })).toEqual({
+      ok: true,
+      old: "knowledge",
+      widened: false,
+      boundAlias: NAME,
+      rebound: false,
+      named: false,
+    });
+    expect(changes()).toHaveLength(1);
+    expect(counterOf(db)).toBe(1);
+  });
+
+  test("on a server the log names the server", () => {
+    server("s1");
+    const plain = project("plain");
+    expect(set(plain, "receive", { destination: "s1", as: NAME, nameId: ID })).toMatchObject({
+      ok: true,
+      boundAlias: NAME,
+      named: true,
+    });
+    expect(changes()).toEqual([
+      { what: `project:${plain}@s1`, old: "local", new: "receive", source: "cli", at: NOW },
+    ]);
+  });
+
+  test("a level change without as keeps the name and its id, also after a remote is added", () => {
+    const plain = project("plain");
+    set(plain, "knowledge", { as: NAME, nameId: ID });
+    expect(set(plain, "all")).toMatchObject({
+      ok: true,
+      boundAlias: NAME,
+      rebound: false,
+      named: false,
+    });
+    expect(levelRows(db)[0]).toMatchObject({ boundAlias: NAME, nameId: ID, level: "all" });
+    addAlias(plain, remote("acme/x"));
+    expect(set(plain, "knowledge", { confirm: false })).toMatchObject({
+      ok: true,
+      boundAlias: NAME,
+      rebound: false,
+    });
+    expect(levelRows(db)[0]).toMatchObject({ boundAlias: NAME, nameId: ID, level: "knowledge" });
+    // The folder's remote named by the caller does not move the binding either.
+    expect(set(plain, "all", { remoteAlias: remote("acme/x") })).toMatchObject({
+      ok: true,
+      boundAlias: NAME,
+    });
+    expect(changes().map((change) => change.what)).toEqual(Array(4).fill(`project:${plain}`));
+  });
+
+  test("the refusals, in order: memory off, has-remote, renamed, name-taken, no-name, then the confirmation", () => {
+    const plain = project("plain");
+    disable(plain);
+    expect(set(plain, "knowledge", { as: NAME, confirm: false })).toEqual({
+      ok: false,
+      reason: "disabled",
+    });
+    db.run("UPDATE projects SET disabled = 0 WHERE id = ?", [plain]);
+    // A host-led remote and no name: the remote is the identity, a name is refused.
+    addAlias(plain, remote("acme/x"));
+    expect(set(plain, "knowledge", { as: NAME, confirm: false })).toEqual({
+      ok: false,
+      reason: "has-remote",
+    });
+    expect(set(plain, "knowledge", { as: NAME })).toEqual({ ok: false, reason: "has-remote" });
+    dropAlias(remote("acme/x"));
+    // Bound to a name above Nothing: another name is refused.
+    set(plain, "knowledge", { as: NAME, nameId: ID });
+    expect(set(plain, "knowledge", { as: "name:other", confirm: false })).toEqual({
+      ok: false,
+      reason: "renamed",
+    });
+    expect(set(plain, "all", { as: "name:other" })).toEqual({ ok: false, reason: "renamed" });
+    // Another project's name is refused, naming that project.
+    const gears = project("gears");
+    expect(set(gears, "knowledge", { as: NAME })).toEqual({
+      ok: false,
+      reason: "name-taken",
+      other: "plain",
+    });
+    // Nothing to bind to.
+    expect(set(gears, "knowledge")).toEqual({ ok: false, reason: "no-name" });
+    expect(set(gears, "knowledge", { confirm: false })).toEqual({ ok: false, reason: "no-name" });
+    // A name binding without confirm, at every level.
+    expect(set(gears, "receive", { as: "name:gears", confirm: false })).toEqual({
+      ok: false,
+      reason: "needs-confirm",
+    });
+    expect(set(gears, "knowledge", { as: "name:gears", confirm: false })).toEqual({
+      ok: false,
+      reason: "needs-confirm",
+    });
+    expect(teamAliases(gears)).toEqual([]);
+    expect(levelRows(db)).toHaveLength(1);
+    expect(teamAliases(plain)).toEqual([NAME]);
+  });
+
+  test("one-server comes before the confirmation, and renamed before one-server", () => {
+    server("s1");
+    server("s2");
+    const plain = project("plain");
+    set(plain, "knowledge", { destination: "s1", as: NAME, nameId: ID });
+    expect(set(plain, "knowledge", { destination: "s2", as: NAME, confirm: false })).toEqual({
+      ok: false,
+      reason: "one-server",
+      server: "s1",
+    });
+    expect(set(plain, "knowledge", { destination: "s2", as: "name:other" })).toEqual({
+      ok: false,
+      reason: "renamed",
+    });
+  });
+
+  test("needs-confirm for a name binding: no row bound to it, or the re-created flag; bound to it, a no-op", () => {
+    const plain = project("plain");
+    expect(set(plain, "receive", { as: NAME, confirm: false })).toEqual({
+      ok: false,
+      reason: "needs-confirm",
+    });
+    expect(set(plain, "receive", { as: NAME, nameId: ID })).toMatchObject({
+      ok: true,
+      named: true,
+    });
+    // Bound to it: the same as again is a no-op, confirm or not.
+    expect(set(plain, "receive", { as: NAME, confirm: false })).toEqual({
+      ok: true,
+      old: "receive",
+      widened: false,
+      boundAlias: NAME,
+      rebound: false,
+      named: false,
+    });
+    expect(changes()).toHaveLength(1);
+    // The name was re-created on the server: joining it again is confirmed again, and the
+    // write takes the new id.
+    expect(set(plain, "receive", { as: NAME, recreated: true, confirm: false })).toEqual({
+      ok: false,
+      reason: "needs-confirm",
+    });
+    expect(levelRows(db)[0]?.nameId).toBe(ID);
+    expect(
+      set(plain, "receive", { as: NAME, nameId: OTHER_ID, recreated: true, now: 2000 }),
+    ).toMatchObject({ ok: true, boundAlias: NAME, named: false });
+    expect(levelRows(db)[0]).toMatchObject({ nameId: OTHER_ID, setAt: 2000 });
+    expect(changes()).toHaveLength(2);
+    expect(counterOf(db)).toBe(2);
+  });
+
+  test("dryRun answers the same outcomes, writes nothing, and never takes the write lock", () => {
+    const plain = project("plain");
+    const dry = { dryRun: true } as const;
+    expect(set(plain, "knowledge", { as: NAME, confirm: false, ...dry })).toEqual({
+      ok: false,
+      reason: "needs-confirm",
+    });
+    expect(set(plain, "knowledge", { as: NAME, nameId: ID, ...dry })).toEqual({
+      ok: true,
+      old: "local",
+      widened: true,
+      boundAlias: NAME,
+      rebound: false,
+      named: true,
+    });
+    expect(set(plain, "knowledge", { ...dry })).toEqual({ ok: false, reason: "no-name" });
+    expect(teamAliases(plain)).toEqual([]);
+    expect(levelRows(db)).toEqual([]);
+    expect(changes()).toEqual([]);
+    expect(counterOf(db)).toBe(0);
+
+    // A second connection holds the write lock: a dry run is a read and still answers at once.
+    const other = new Database(join(dir, DB_FILE));
+    other.run("BEGIN IMMEDIATE");
+    const started = Date.now();
+    try {
+      expect(set(plain, "knowledge", { as: NAME, nameId: ID, ...dry })).toMatchObject({
+        ok: true,
+        named: true,
+      });
+      expect(set(plain, "local", { ...dry })).toMatchObject({ ok: true, old: "local" });
+    } finally {
+      other.run("ROLLBACK");
+      other.close();
+    }
+    expect(Date.now() - started).toBeLessThan(1500);
+
+    // The write after the dry run writes; a dry run of local then leaves the row.
+    expect(set(plain, "knowledge", { as: NAME, nameId: ID })).toMatchObject({
+      ok: true,
+      named: true,
+    });
+    expect(set(plain, "local", { ...dry })).toMatchObject({ ok: true, old: "knowledge" });
+    expect(levelRows(db)).toHaveLength(1);
+    expect(counterOf(db)).toBe(1);
+  });
+
+  test("local removes the level and keeps the name; set again, the carried name binds", () => {
+    const plain = project("plain");
+    set(plain, "knowledge", { as: NAME, nameId: ID });
+    expect(set(plain, "local", { confirm: false, now: 2000 })).toEqual({
+      ok: true,
+      old: "knowledge",
+      widened: false,
+      boundAlias: "",
+      rebound: false,
+      named: false,
+    });
+    expect(levelRows(db)).toEqual([]);
+    expect(teamAliases(plain)).toEqual([NAME]);
+    expect(set(plain, "knowledge", { confirm: false })).toEqual({
+      ok: false,
+      reason: "needs-confirm",
+    });
+    expect(set(plain, "knowledge", { nameId: ID })).toMatchObject({
+      ok: true,
+      boundAlias: NAME,
+      named: false,
+    });
+    expect(levelRows(db)[0]).toMatchObject({ boundAlias: NAME, nameId: ID });
+  });
+
+  test("as with another name at Nothing replaces the name, logged once as name:<id>", () => {
+    const plain = project("plain");
+    set(plain, "knowledge", { as: "name:a", nameId: ID });
+    set(plain, "local");
+    expect(set(plain, "knowledge", { as: "name:b", nameId: OTHER_ID, now: 3000 })).toMatchObject({
+      ok: true,
+      boundAlias: "name:b",
+      named: true,
+    });
+    expect(teamAliases(plain)).toEqual(["name:b"]);
+    expect(levelRows(db)).toEqual([
+      {
+        projectId: plain,
+        destination: "team",
+        level: "knowledge",
+        boundAlias: "name:b",
+        setAt: 3000,
+        source: "cli",
+        nameId: OTHER_ID,
+      },
+    ]);
+    expect(changes().slice(2)).toEqual([
+      { what: `name:${plain}`, old: "name:a", new: "name:b", source: "cli", at: 3000 },
+      { what: `project:${plain}`, old: "local", new: "knowledge", source: "cli", at: 3000 },
+    ]);
+    expect(counterOf(db)).toBe(3);
+  });
+
+  test("a malformed as is the caller's mistake", () => {
+    const plain = project("plain");
+    expect(() => set(plain, "knowledge", { as: "name:Bad" })).toThrow("name:Bad");
+    expect(() => set(plain, "knowledge", { as: "wizardingcode" })).toThrow("wizardingcode");
+    expect(levelRows(db)).toEqual([]);
+  });
+});
+
+describe("forgetName", () => {
+  const NAME = "name:wizardingcode";
+
+  test("refused while a level above Nothing is stored, on the team default and on a server", () => {
+    const plain = project("plain");
+    set(plain, "knowledge", { as: NAME, nameId: "0123456789abcdef" });
+    expect(forgetName(db, plain, NOW, "cli")).toEqual({ ok: false, reason: "name-bound" });
+    set(plain, "local");
+    server("s1");
+    set(plain, "receive", { destination: "s1", as: NAME });
+    expect(forgetName(db, plain, NOW, "cli")).toEqual({ ok: false, reason: "name-bound" });
+    expect(teamAliases(plain)).toEqual([NAME]);
+  });
+
+  test("a project with no name, and an id no project has", () => {
+    const plain = project("plain");
+    expect(forgetName(db, plain, NOW, "cli")).toEqual({ ok: false, reason: "no-name" });
+    expect(forgetName(db, 999, NOW, "cli")).toEqual({ ok: false, reason: "no-project" });
+    expect(changes()).toEqual([]);
+    expect(counterOf(db)).toBe(0);
+  });
+
+  test("otherwise deletes the row, logs name:<id> to nothing and counts once", () => {
+    const plain = project("plain");
+    set(plain, "knowledge", { as: NAME, nameId: "0123456789abcdef" });
+    set(plain, "local");
+    expect(forgetName(db, plain, 4000, "viewer")).toEqual({ ok: true, alias: NAME });
+    expect(teamAliases(plain)).toEqual([]);
+    expect(changes().at(-1)).toEqual({
+      what: `name:${plain}`,
+      old: NAME,
+      new: "",
+      source: "viewer",
+      at: 4000,
+    });
+    expect(counterOf(db)).toBe(3);
+    expect(forgetName(db, plain, 4001, "viewer")).toEqual({ ok: false, reason: "no-name" });
+    expect(counterOf(db)).toBe(3);
+  });
+});
+
+describe("levelRows on a store whose sharing namespace is older", () => {
+  test("answers nameId null where the column is not there, and throws nothing", () => {
+    const old = mkdtempSync(join(tmpdir(), "wizardingcode-mem-sharing-writes-old-"));
+    const older = openDb({
+      dataDir: old,
+      busyTimeoutMs: 2000,
+      moduleSchemas: [
+        { module: KNOWLEDGE_MODULE, migrations: KNOWLEDGE_MIGRATIONS },
+        { module: SHARING_MODULE, migrations: SHARING_MIGRATIONS.slice(0, 2) },
+      ],
+    });
+    try {
+      older.run("INSERT INTO projects (key, name, created_at) VALUES ('path:/p', 'p', 1)");
+      older.run(
+        "INSERT INTO project_aliases (alias, project_id) VALUES ('remote:github.com/a/b', 1)",
+      );
+      older.run(
+        `INSERT INTO sharing_levels (project_id, destination, level, bound_alias, set_at, source)
+         VALUES (1, 'team', 'knowledge', 'remote:github.com/a/b', 5, 'cli')`,
+      );
+      expect(levelRows(older)).toEqual([
+        {
+          projectId: 1,
+          destination: "team",
+          level: "knowledge",
+          boundAlias: "remote:github.com/a/b",
+          setAt: 5,
+          source: "cli",
+          nameId: null,
+        },
+      ]);
+    } finally {
+      older.close();
+      rmSync(old, { recursive: true, force: true });
+    }
   });
 });

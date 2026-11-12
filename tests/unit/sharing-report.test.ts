@@ -24,6 +24,7 @@ import {
   findEntry,
   findMemory,
   HASH_CHUNK,
+  importedStayCounts,
   LIST_CAP,
   ledgerRecords,
   memoryItems,
@@ -328,8 +329,8 @@ describe("with knowledge in the workspace, the shared repository and two project
       });
       expect(report.perRoot.shared).toEqual({ entries: 2, areaTotals: { marketing: 2 } });
       expect(report.perProject).toEqual([
-        { id: A, level: "knowledge", entries: 1, memories: 0 },
-        { id: B, level: "local", entries: 0, memories: 0 },
+        { id: A, level: "knowledge", entries: 1, memories: 0, imported: 0 },
+        { id: B, level: "local", entries: 0, memories: 0, imported: 0 },
       ]);
       expect(report.items).toBeUndefined();
       expect(areaTotals(fx.db)).toEqual({
@@ -389,6 +390,72 @@ describe("with knowledge in the workspace, the shared repository and two project
       fx.db.run("DELETE FROM project_aliases WHERE alias = ?", ["remote:/Users/x/gears"]);
     });
 
+    test("a project bound to a shared name is known by it: the uid names the name, the memories count (ADR 0028)", () => {
+      fx.db.run("DELETE FROM project_aliases WHERE project_id = ?", [B]);
+      const named = setLevel(fx.db, {
+        projectId: B,
+        destination: "team",
+        level: "all",
+        source: "cli",
+        now: NOW,
+        confirm: true,
+        as: "name:gears",
+        nameId: "0123456789abcdef",
+      });
+      expect(named).toMatchObject({ ok: true, boundAlias: "name:gears", named: true });
+      const [gears] = entryItems(fx.db, B);
+      expect(gears?.uid.startsWith("project:name:gears:")).toBe(true);
+      expect(gears).toMatchObject({ kind: "entry", scope: "project", projectId: B });
+      const sentId = memory(fx.db, B, "Gears deploy note");
+      const report = leaves({ list: true });
+      expect(of(report, B)).toEqual({ id: B, level: "all", entries: 1, memories: 1, imported: 0 });
+      expect(report.counts.entries).toBe(7);
+      expect(report.items?.memories.map((item) => item.id)).toContain(sentId);
+      expect(report.items?.entries.find((item) => item.projectId === B)?.slug).toBe("gears-sales");
+
+      // With no level, the name the project carries is the alias a level would be bound to;
+      // beside a remote the name still comes first.
+      share(fx.db, B, "local");
+      expect(entryItems(fx.db, B)[0]?.uid.startsWith("project:name:gears:")).toBe(true);
+      fx.db.run("INSERT INTO project_aliases (alias, project_id) VALUES (?, ?)", [B_REMOTE, B]);
+      expect(entryItems(fx.db, B)[0]?.uid.startsWith("project:name:gears:")).toBe(true);
+    });
+
+    test("perProject counts the imported memories that stay: active, imported, not received", () => {
+      share(fx.db, A, "all");
+      memory(fx.db, A, "Brought one", "imported");
+      memory(fx.db, A, "Brought two", "imported");
+      const received = memory(fx.db, A, "Brought by a teammate", "imported");
+      fx.db.run(
+        `INSERT INTO sharing_received_memories (memory_id, server_id, remote_uid, member_id,
+           member_name, revision, hash, remote_kind, remote_importance, remote_status)
+         VALUES (?, 's1', 'u1', 'm1', 'Ana', 1, 'h', 'decision', 3, 'active')`,
+        [received],
+      );
+      const archived = memory(fx.db, A, "Brought and archived", "imported");
+      fx.db.run("UPDATE memories SET status = 'archived' WHERE id = ?", [archived]);
+      memory(fx.db, B, "B brought", "imported");
+      const report = leaves();
+      expect(of(report, A)).toEqual({ id: A, level: "all", entries: 1, memories: 0, imported: 2 });
+      expect(of(report, B)).toEqual({
+        id: B,
+        level: "local",
+        entries: 0,
+        memories: 0,
+        imported: 1,
+      });
+      expect(importedStayCounts(fx.db)).toEqual(
+        new Map([
+          [A, 2],
+          [B, 1],
+        ]),
+      );
+      // For one project, that project's count alone.
+      expect(leaves({ projectId: A }).perProject).toEqual([
+        { id: A, level: "all", entries: 1, memories: 0, imported: 2 },
+      ]);
+    });
+
     test("a project at all sends the memories decide sends, and no other", () => {
       share(fx.db, A, "all");
       const { sent: sentId, all } = sixMemories(A);
@@ -396,7 +463,13 @@ describe("with knowledge in the workspace, the shared repository and two project
       const under = policy();
       const report = leaves({}, under);
       expect(report.counts).toEqual({ entries: 6, memories: 1 });
-      expect(of(report, A)).toEqual({ id: A, level: "all", entries: 1, memories: 1 });
+      expect(of(report, A)).toEqual({
+        id: A,
+        level: "all",
+        entries: 1,
+        memories: 1,
+        imported: 1,
+      });
       expect(of(report, B)?.memories).toBe(0);
 
       // Every memory of A, read by hand and passed to decide: the count restates no rule.
@@ -457,7 +530,9 @@ describe("with knowledge in the workspace, the shared repository and two project
       sixMemories(A);
       const report = leaves({ projectId: A });
       expect(report.counts).toEqual({ entries: 1, memories: 1 });
-      expect(report.perProject).toEqual([{ id: A, level: "all", entries: 1, memories: 1 }]);
+      expect(report.perProject).toEqual([
+        { id: A, level: "all", entries: 1, memories: 1, imported: 1 },
+      ]);
       expect(report.perRoot.workspace.entries).toBe(1);
       expect(report.perRoot.shared.entries).toBe(0);
       expect(leaves({ projectId: B }).counts).toEqual({ entries: 0, memories: 0 });
@@ -509,7 +584,13 @@ describe("with knowledge in the workspace, the shared repository and two project
         fx.dataDir,
       );
       const report = leaves({}, preview);
-      expect(of(report, B)).toEqual({ id: B, level: "knowledge", entries: 1, memories: 0 });
+      expect(of(report, B)).toEqual({
+        id: B,
+        level: "knowledge",
+        entries: 1,
+        memories: 0,
+        imported: 0,
+      });
       expect(report.counts.entries).toBe(7);
       expect(preview.epoch).not.toBe(stored.epoch);
 
@@ -520,10 +601,35 @@ describe("with knowledge in the workspace, the shared repository and two project
       expect(policy().epoch).toBe(stored.epoch);
     });
 
+    test("of a level on a project with no row and a carried name counts it under the name", () => {
+      fx.db.run("DELETE FROM project_aliases WHERE project_id = ?", [B]);
+      fx.db.run("INSERT INTO project_aliases (alias, project_id) VALUES ('name:gears', ?)", [B]);
+      const preview = withChange(
+        policy(),
+        { level: { projectId: B, level: "knowledge" } },
+        fx.dataDir,
+      );
+      const report = leaves({}, preview);
+      expect(of(report, B)).toEqual({
+        id: B,
+        level: "knowledge",
+        entries: 1,
+        memories: 0,
+        imported: 0,
+      });
+      expect(entryItems(fx.db, B)[0]?.uid.startsWith("project:name:gears:")).toBe(true);
+    });
+
     test("of a lower level counts less", () => {
       const preview = withChange(policy(), { level: { projectId: A, level: "local" } }, fx.dataDir);
       const report = leaves({}, preview);
-      expect(of(report, A)).toEqual({ id: A, level: "local", entries: 0, memories: 0 });
+      expect(of(report, A)).toEqual({
+        id: A,
+        level: "local",
+        entries: 0,
+        memories: 0,
+        imported: 0,
+      });
       expect(report.counts.entries).toBe(5);
     });
 
@@ -601,7 +707,7 @@ describe("with knowledge in the workspace, the shared repository and two project
       memory(fx.db, B, "B would send this one");
       const report = leaves({}, preview);
       expect(report.counts).toEqual({ entries: 4, memories: 1 });
-      expect(of(report, B)).toEqual({ id: B, level: "all", entries: 1, memories: 1 });
+      expect(of(report, B)).toEqual({ id: B, level: "all", entries: 1, memories: 1, imported: 0 });
     });
 
     test("of a policy that failed to load stays closed", () => {
@@ -882,7 +988,9 @@ describe("with a project that shares its memories", () => {
     );
     // 89,900 to send and 100 the server already has: 89,900 leave.
     expect(report.counts).toEqual({ entries: 0, memories: 89_900 });
-    expect(report.perProject).toEqual([{ id: A, level: "all", entries: 0, memories: 89_900 }]);
+    expect(report.perProject).toEqual([
+      { id: A, level: "all", entries: 0, memories: 89_900, imported: 0 },
+    ]);
     expect(elapsed).toBeLessThan(5_000);
   }, 30_000);
 });
@@ -921,7 +1029,7 @@ describe("a store without the tables", () => {
     expect(report).toEqual({
       ...NOTHING,
       counts: { entries: 0, memories: 1 },
-      perProject: [{ id: widgets, level: "all", entries: 0, memories: 1 }],
+      perProject: [{ id: widgets, level: "all", entries: 0, memories: 1, imported: 0 }],
       items: {
         entries: [],
         memories: [{ id, projectId: widgets, title: "Deploys need the staging flag" }],

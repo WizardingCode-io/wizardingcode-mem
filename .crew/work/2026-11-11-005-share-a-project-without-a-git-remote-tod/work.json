@@ -1,0 +1,1207 @@
+{
+  "id": "2026-11-11-005-share-a-project-without-a-git-remote-tod",
+  "title": "Share a project without a git remote. Today a project can be set above Nothing o",
+  "input": "Share a project without a git remote. Today a project can be set above Nothing only when it has a host-led git remote (ADR 0025, part 6's D-9): the team matches projects by that remote, so two machines land on the same one. The author's work in Claude Desktop (skills, strategies, brand systems, the wizardingcode project at ~/Projects/wizardingcode with 61 memories) has no remote and often no folder, and must be shared whole: in the author's words, 'não é preciso um remote host, tem que deixar partilhar mesmo sem remote host; tudo é partilhado'. A project is shared under a team name: when a person sets a level on a project with no host-led remote, the dock asks for the name the team will know it by (the project's name by default, a slug), the level binds the project to the server under the alias team:<slug>, and the server accepts that alias beside remote:<host>/<path>; another member binds their own project, with a folder or without, a remote or without, to a team project by picking it from the list the server knows, or by typing the same name; a project with a host-led remote keeps matching by it, and may also carry a team name. The viewer, the CLI (share project … --as <name>), the server's validation and feed, the sync's pull scopes, the received store's folders and the runbook follow. Nothing changes for what leaves: the levels, the roots and the areas stay the policy.",
+  "type": "feature",
+  "route": "full",
+  "routeReasons": [
+    "risk areas: personal-data, public-api",
+    "personal data in lines not read for risk (test or excluded): phone (tests/integration/sync-status.test.ts)"
+  ],
+  "riskAreas": [
+    "personal-data",
+    "public-api",
+    "auth",
+    "data-migration"
+  ],
+  "phase": "learn",
+  "awaiting": "role",
+  "criteria": [
+    {
+      "id": "AC-3",
+      "kind": "behavior",
+      "text": "`setLevel` with `as` on a project with a `path:` alias alone inserts the `name:` row and binds the level to it, logs `project:<id>@<server>` and counts once; a level set again without `as` keeps the name while the project carries it, and keeps it after a `remote:` alias is added to the project (no rebind); the refusals come in the stated order and with their sentences: `has-remote` (a host-led remote, no name), `renamed` (another name while bound), `name-taken` (another project's name, naming it), `no-name` (nothing to bind to); `no-remote` no longer exists; Nothing removes the level and keeps the name; `as` with another name at Nothing replaces it with one `name:<id>` change row; `forgetName` is refused `name-bound` while bound and otherwise deletes the row and logs; `effectiveLevel` reads a row bound to a carried name as in force, a row bound to a forgotten name as `unbound-alias`, and `reconcileLevels` removes such a row as the system's; `defaultTeamAlias` orders the name before the remotes."
+    },
+    {
+      "id": "AC-27",
+      "kind": "behavior",
+      "text": "`LATEST_VERSION` is 8 and migration 8 creates `project_aliases_one_name`: a second `name:` alias for one project fails the insert with a constraint error while a second `path:` alias does not; a store brought to 8 has its upgrade copy; a version 8 file opened with `latest` 7 throws `SchemaTooNewError`; the sharing namespace is at 3 with `sharing_levels.name_id` present and `tests/unit/module-migrations.test.ts`'s pins updated."
+    },
+    {
+      "id": "AC-28",
+      "kind": "behavior",
+      "text": "`wouldLeave` on a project bound to a name gives its entries the uid `project:name:<slug>:<uuid>` and counts its memories under the level; `perProject[]` carries `imported`, the project's active imported memories with no `sharing_received_memories` row (0 for the fixture's named project; 2 for a project with two claude-mem imports and one received copy); `decide` on an imported memory of a name-bound project at `all` answers `keep` with `imported`; `sharedNameOf(\"Estratégia de marca\")` is `name:estrategia-de-marca`, `sharedNameOf(\"!!!\")` and `sharedNameOf(\"CON\")` are `no-name` (the second naming the word) and `sharedNameOf(\"a--b\")`'s slug passes (`slugify` collapses the hyphens); the policy's problem for a lost name says \"git remote or shared name\"; `REASON_TEXT[\"unbound-alias\"]` says the same and every reason still has its sentence."
+    },
+    {
+      "id": "AC-38",
+      "kind": "behavior",
+      "text": "`src/core/identity.ts` imports nothing and exports `ALIAS_KINDS` (each kind with its one property, `team`), `aliasKind`, `NAME_PREFIX`, `REMOTE_PREFIX`, `SLUG`, `SLUG_MAX`, `RESERVED`, `SHARED_SLUG`, `hasLetterOrDigit`, `isHostLedAlias`, `isSharedName`, `isTeamAlias`, `TEAM_ALIAS_SQL`, `stripTeamPrefix`; `isHostLedAlias` answers the cases of `tests/unit/sharing-levels.test.ts` unchanged; `isSharedName` accepts `name:wizardingcode`, `name:estrategia-de-marca`, `name:a` and an 80-character slug, and refuses an upper-case letter, a leading, trailing or double hyphen, 81 characters, `name:con`, an empty slug and any other prefix; the slug part of every alias it accepts passes `isSlug` (`src/modules/knowledge/entry.ts`'s check of a knowledge slug), and `abc-` and `a--b` pass `isSlug` and fail `SHARED_SLUG` (the grammars differ, in that direction); `entry.ts` imports `SLUG`, `SLUG_MAX` and `RESERVED` from the leaf; `src/team/contract.ts`'s `slugOf` and `src/sharing/names.ts`'s `sharedNameOf` use `hasLetterOrDigit`; `src/sharing/levels.ts` re-exports `isHostLedAlias`, `src/team/contract.ts` imports the leaf and not `src/sharing/levels.ts`, and the two boundary tests are unchanged but for AC-44's quiet-list entry; the three prefilters (`src/ui/api.ts`, `src/sharing/report.ts`, `src/sync/inbound.ts`) name `TEAM_ALIAS_SQL` and no literal `'remote:%'` remains in `src/` outside `src/core/project.ts` and `src/links/suggest.ts`."
+    },
+    {
+      "id": "AC-39",
+      "kind": "behavior",
+      "text": "`TEAM_LATEST` is 2; migration 2 renames the four columns `project_alias` (the index `changes_scope` follows), creates `names` with its unique `id` and its `purged_at`, `entries_project` and `memories_project`; a schema 2 file opened with `latest` 1 throws `SchemaTooNewError` and `serve` exits 3 on a file above its `latest` (`user_version` 3); `openTeamForWrite` under a fresh lease still refuses to migrate; `POST /v1/names` answers 201 with the item (a 16-hex `id`), 409 `exists` with the item for a live name, 409 `purged` for a purged one, 400 `alias` for `name:Bad`, for a remote and for an `id` that is not 16 hex, 401 without a token, 429 on one member's eleventh create within an hour while the devices bucket still has room, writes the audit row `name created` and moves the feed's high-water mark; with `{ alias, id }` it creates the name with that id when the alias is unheld and the id unused; `GET /v1/names` pages the live names by alias with `limit` clamped to 1..200 and 50 by default, refuses a non-integer `limit` with 400 `limit` and a malformed or over-long `after` with 400 `after`, gives each item the counts of current entries and memories under the alias, the creator and the last change time, and lists neither an alias that is not a shared name nor a purged name; `GET /v1/names/<alias>` answers the item for a live name and the same 404 `unknown-name` for an unheld name, a purged name, `remote:github.com/acme/site` (URL-encoded) and a malformed alias, the handler's guard `parseNameParam` answering null for the last two (a unit case) so the store is never asked, while a parameter whose escapes do not decode (`%E0%A4%A`) answers the router's own 404 `not found` (a 404 too, never a 400 or a 500); `serve purge name <alias> --yes` marks the row purged, prints the counts of the items still under it, writes the audit row `name purged` and the high-water mark, answers exit 1 `no such name` for an alias never held and exit 0 `already purged` for one marked already, and leaves the name out of the list and the by-alias route while the `names` row, the `changes` rows of its items (their `uid` and `project_alias`) and the audit rows still carry the string (asserted as the documented limit); `serve status` prints the live registry's count; the store boundary test still finds SQL in `store.ts` alone and `store.ts` returns plain rows."
+    },
+    {
+      "id": "AC-40",
+      "kind": "behavior",
+      "text": "a push of an entry and of a memory under `name:wizardingcode` applies once the name is live, is keyed under that alias, is answered by a pull that names it (and not by a pull that names another alias) with `nameId` the registry's id on each `upsert`, `null` on an item under `remote:…`, on a `tombstone` and on a `purge`, and `null` on an `upsert` under a name the registry holds no live row for, reaches the mirror under `repos/projects/wizardingcode-<8 hex>`, and is refused `name` with its rule text while the registry never held the name and `name-purged` with its rule text once the name is marked purged, the check running inside the item's transaction after the pure checks and `purged` (`validate.ts` runs no SQL); a replay of an applied item under a name purged since is refused `name-purged`; a push under `project:name:Bad:<uuid>` is refused `shape`; a pull naming `name:unknown` answers nothing and is not refused; a re-send of a uuid from `remote:github.com/acme/site` to a live `name:site` is a move (the upsert under the name and a tombstone under the remote with `movedTo`), the same re-send to an unheld name is refused `name` and to a purged one `name-purged`, each writing no tombstone, and a move from a live name back to a remote needs nothing of the registry; `repoFolder(\"project\", \"name:wizardingcode\", null)` differs from `repoFolder(\"project\", \"remote:github.com/x/wizardingcode\", null)` and both pass `isComponent(\"project-folder\", …)`."
+    },
+    {
+      "id": "AC-41",
+      "kind": "behavior",
+      "text": "`CONTRACT` is 2, `ACCEPTED_CONTRACTS` is `[1, 2]`, `RESULT_SHAPES` holds `namesPage` and `nameItem` (with `id`) and `feedItem` holds `nameId`, `PUSH_REASONS` holds `name`, and `CONTRACT_FINGERPRINT` equals the computed fingerprint; a request with header 1 is accepted and one with header 3 is 409 with `accepted: [1, 2]`; `Context.contract` is the seam: a test server started with `{ current: 1, accepted: [1] }` answers 1 on the join and `/v1/me`, 409 `accepted: [1]` to header 2, and a bare 404 on the three names routes; against it, with a remote-bound and a name-bound project, the client's first pull and push answer 409, the row's `contract` becomes 1, the pull is repeated once with header 1 naming the remote alias alone, the push is repeated once without the named project's items, both succeed, no `stopped` and no `sharing_refusals` row is written; a server that answers 409 with `[1]` to header 1 is stopped `contract`; with the list `[]` the server is stopped `contract` as today; `startSteps` reads `/v1/me` once per confirmed, unstopped server in parallel with a 5 s deadline and stores the lower of `CONTRACT` and its answer, keeping the value on a failure and a timeout; a full sweep reads `/v1/me` again for a row below `CONTRACT` and not for a row at it, so a row at 1 against a server now at 2 reads 2 within one full sweep; the join stores the lower of `CONTRACT` and the join's `contract`."
+    },
+    {
+      "id": "AC-42",
+      "kind": "behavior",
+      "text": "in-process with a project bound to `name:wizardingcode` (its `name_id` stored), the main pull names the alias, a teammate's entry under it lands at `knowledge/received/<serverId>/projects/wizardingcode-<8 hex>/entries/<slug>--<8 hex>.md` with its rows, a teammate's memory under it becomes an `imported` row of the project with the judge `team:<serverId>`, and a snapshot without that memory forgets it; the sweep sends the project's entries with the name's uid and its memories with `remoteAlias` the name; Nothing withdraws them and writes the `sharing_unbound` row, and the reconcile removes the copies; with the row's `contract` at 1 the pull names no shared name, the sweep sends and withdraws nothing of the name-bound project and writes no refusal, `status` prints `names held (server at contract 1)` on the server line, `doctor sync` warns, and after the row reads 2 the next pull names the alias again; a push answered `name` writes no `sharing_refusals` row, leaves the row's `failures` and `retry_at` untouched, writes the flag `names.missing:<serverId>:<alias>`, skips the project's remaining items in that sweep and sends them at the next sweep once the name is created again (the flag cleared by the applied push); a push answered `name-purged` writes the flag `names.purged:<serverId>:<alias>` and the sweep sends nothing under the name again until Nothing clears it; a pulled `upsert` whose `nameId` is not null and differs from the stored `name_id` is skipped, the flag `names.recreated:<serverId>:<alias>` is written with the new id and creator, the next sweep sends nothing under the name, a snapshot drops none of its received rows, `status` and `doctor` say it, and a `commitBinding` join stores the new id, clears the flag and the next pull applies the items; a pulled `upsert` with `nameId` null, a `tombstone` and a `purge` under the name are applied as today; a forgotten name followed by a level bound by a new remote sends the entries as a move (the old row retired)."
+    },
+    {
+      "id": "AC-43",
+      "kind": "behavior",
+      "text": "`GET /api/projects` carries `sharedName`, `boundTo`, `imported` and `nameState` for each project (and `name` stays the project's own name); `POST /api/projects/<id>/sharing/preview` answers the dry run's outcome and writes nothing; `PUT /api/projects/<id>/sharing` with `as`, `create: true` and `confirm: true` creates the name on the in-process server and binds with its id, answering `boundAlias` and `sharedName`; every refusal of the sharing routes is `{ error: <sentence>, reason: <code>, …extra }`; with `as` and no `confirm` it is 400 `needs-confirm` at Receive only too, with no POST sent; with `create` absent against an unheld name it answers 404 `unknown-name` and writes nothing; `create: true` against a live name answers 409 `exists` with the name's item and writes nothing; against a purged name 409 `purged`; `as` on a remote project is 409 `has-remote`, another project's name 409 `name-taken` with `other`, another name while bound 409 `renamed`, a project with memory off 409 `disabled`, all decided before any request (the test server sees none); a text with no letter or digit is 400 `no-name`; a server row whose URL points at a closed loopback port is 502 `unreachable` with nothing written; a stored row at contract 1 reads `/v1/me` once and is 409 `contract`; a row at 2 against a test server at contract 1 (a bare 404 on the names routes) is 409 `contract`, the row set to 1, nothing written; `statusOf` maps a refusal with `named: true` to its status and keeps the flag (a unit case, no hook in the viewer); `DELETE /api/projects/<id>/name` forgets at Nothing (200 with `sharedName`), is 409 `name-bound` while bound, 404 `no-name` for a project with no name and 404 `no-project` for an unknown id; `GET /api/servers/<id>/names` answers the server's names reassembled from its pages (120 seeded on the server's database, 120 returned, `truncated: false`; 1,050 seeded, 1,000 returned, `truncated: true`), and in the servers routes' body shape 409 `contract` from a row at 1 (after one `/v1/me`) or a bare 404 (the row set to 1), 502 `unreachable` on a failure, 404 `unknown-server` for an id the list does not hold and 409 `pending` for a row not yet confirmed; `GET /api/servers` entries carry `contract`, `namesHeld` and `names` with each name's `state`; `POST /api/sharing/preview` carries `imported` per project; `formatChange` renders a `name:<project id>` row as `shared name of <project>: <old or none> → <new or none>` and both the Sharing page and `share status` use it; the dock's confirmation texts (the template, the three level phrases, the imported line), the sentences (missing, re-created, removed, held, the first 1,000 names) and the Servers page's lines are in the Vue sources word for word (`tests/unit/ui-sharing-copy.test.ts`); screens `/projects` states `unnamed, new, joins, taken, creating, joining, named, named-nothing, remote-too, held, missing, recreated, purged, imported-stay`, `/settings#servers` states `names, held`, viewports 360, 768, 1280, schemes light and dark, motion none, design none.",
+      "screens": [
+        {
+          "page": "projects",
+          "state": "unnamed"
+        },
+        {
+          "page": "projects",
+          "state": "new"
+        },
+        {
+          "page": "projects",
+          "state": "joins"
+        },
+        {
+          "page": "projects",
+          "state": "taken"
+        },
+        {
+          "page": "projects",
+          "state": "creating"
+        },
+        {
+          "page": "projects",
+          "state": "joining"
+        },
+        {
+          "page": "projects",
+          "state": "named"
+        },
+        {
+          "page": "projects",
+          "state": "named-nothing"
+        },
+        {
+          "page": "projects",
+          "state": "remote-too"
+        },
+        {
+          "page": "projects",
+          "state": "held"
+        },
+        {
+          "page": "projects",
+          "state": "missing"
+        },
+        {
+          "page": "projects",
+          "state": "recreated"
+        },
+        {
+          "page": "projects",
+          "state": "purged"
+        },
+        {
+          "page": "projects",
+          "state": "imported-stay"
+        },
+        {
+          "page": "settings",
+          "state": "names"
+        },
+        {
+          "page": "settings",
+          "state": "held"
+        }
+      ]
+    },
+    {
+      "id": "AC-44",
+      "kind": "behavior",
+      "text": "`prepareBinding` and `commitBinding` in-process: the dry run's refusals answered without a request; a row at 1 reads `/v1/me` once and, still 1, answers `contract` without a names request; `prepareBinding` answers `create` with no item for an unheld name and `join` with the item for a live one (one lookup each); `commitBinding` with `create` on a `create` creates (201) then binds with the id (`named: true`, `created: true`), and sends the id the creator's level row already holds when it re-creates a name the project was bound to, so a teammate's stored `name_id` still matches; `create` on a `join` answers `exists` with the item and writes nothing; no `create` on a `create` answers `unknown-name`; a create of a purged alias answers `purged`; on a `join` it binds with the item's id (`joined: true`); without `confirm` it answers `needs-confirm` at Receive only too and sends no POST; a bare 404 answers `contract` and sets the row to 1; a rejected fetch answers `unreachable`; `hooks.afterServer` that disables the project answers `disabled` with `named: true` and the name on the server; a join of a flagged (re-created) name stores the new id and clears the flag; `BIND_MESSAGES` holds the one created-name sentence; `tests/unit/sync-boundary.test.ts`'s quiet list holds `src/sync/binding.ts` and the test passes. The CLI, through the binary against the in-process server: `share project all --as \"Estratégia de marca\" --create --yes` in the folder of a project with no host-led remote asks the create question naming the slug and the server before any POST (the question is in the output, and without `--yes` and without a terminal the answer is no and the test server sees no POST), creates `name:estrategia-de-marca`, binds, and prints `sharing: <project> → Knowledge and memories, shared as estrategia-de-marca` and the imported count when above 0; `share project receive --as x --yes` asks the join question naming the creator and the counts for a live `x`; without `--create` against an unheld name it refuses naming `share names` and `--create` and writes nothing; `--create` against a live name refuses naming the creator and the counts; `--as` of a purged name refuses with `the operator removed <slug> from <server>; pick another name`; `--as` on a remote project refuses `has-remote` with no request; `--as \"CON\"` refuses `no-name` naming `con`; against a stored row at contract 1 it refuses with the contract sentence after one `/v1/me` read, and against a test server at contract 1 with the row at 2 it refuses the same and sets the row to 1; the created-name sentence is the constant's; `share names` lists every page (120 names seeded on the server's database) with their counts and marks the bound ones; `share name forget` refuses `name-bound` while bound, `no-name` without a name, and forgets at Nothing; `share status` prints `shared as <slug>` for a name-bound project, `(missing on the server)`, `(re-created on the server)` and `(removed by the operator)` by `nameStateOf`, and `names held` for a server at 1; the usage names `--as`, `--create`, `names` and `name forget`."
+    },
+    {
+      "id": "AC-45",
+      "kind": "behavior",
+      "text": "`status` prints under a server line one `name` line per bound shared name with the received entries, memories, members, the last time and `missing`, `re-created` or `removed` by `nameStateOf`, `contract 1` and `names held (server at contract 1)` when so, and `status --json` carries them; `doctor sync` warns once for `namesHeld`, once per missing name, once per re-created name and once per purged name, and is ok otherwise; `serve status` prints the live registry's count."
+    },
+    {
+      "id": "AC-46",
+      "kind": "observed",
+      "text": "`docs/adr/0028-shared-names.md` records D-1 to D-7 and the rules of this spec with the Known limits stated above (the minimisation sentence, the erasure and its limit, the `names` row kept, `knowledge_received.remote_alias`, the folder-moved limit of a `path:`-only project); ADR 0025 (D-16, \"Identity of a project\", the known limit), ADR 0026 (\"The alias\", the routes, the contract, the schema, the names bucket, the erasure of a name) and ADR 0027 (what a pull names, names held, the contract spoken, the three flags) are amended; README's two sentences are replaced and the folder-moved limit is stated; the runbook's Upgrade section states the order and the schema bump, its erasure section the order for a name (the name first, then the items) and the limit, the member's side gains the naming and joining steps, the three states and the folder-moved recovery, and `tests/unit/team-runbook.test.ts` passes; CLAUDE.md names the leaf, version 8, sharing namespace 3, the registry, the routes and the names bucket, the CLI and the purge of a name."
+    },
+    {
+      "id": "AC-47",
+      "kind": "preserve",
+      "text": "the existing suites keep passing but for the named cases this item changes, each named in its plan task: the `no-remote` cases of `tests/unit/sharing-store-writes.test.ts`, `tests/unit/sharing-store.test.ts` (lines 660-661 and the `LATEST_VERSION` pin), `tests/integration/sharing-cli.test.ts` and `tests/integration/ui-sharing.test.ts` (now `no-name`); the version pins of `tests/unit/sync-schema.test.ts` (lines 97, 99-102, 114-115, 218-225, 279) and `tests/unit/module-migrations.test.ts` (lines 88, 114, 123-129, 146-153, 212-224); `tests/unit/team-db.test.ts` (lines 174, 238-246, 298-317); `tests/integration/team-process.test.ts` (lines 304-313); the contract pins of `tests/unit/team-contract.test.ts`, `tests/integration/team-auth.test.ts` (lines 91, 171, 227-249), `tests/integration/sync-join.test.ts` (line 108) and `tests/integration/sync-client.test.ts` (line 222); the reason list of `tests/unit/sharing-contract.test.ts`; the `unbound-alias` sentences; the dock's \"no git remote\" sentence in `tests/unit/ui-sharing-copy.test.ts`; the feed item's keys in the team tests; the column names in `tests/helpers/team.ts` (`seedFeed`) and `tests/integration/team-push.test.ts`; and the quiet-list entry of `tests/unit/sync-boundary.test.ts`."
+    },
+    {
+      "id": "AC-48",
+      "kind": "observed",
+      "text": "A project bound by a host-led remote keeps that binding when a level is set again naming another host-led remote of the project: the bound alias wins while the project carries it (D-1, ADR 0028), and the alias named binds only after Nothing. The case is tests/unit/sharing-store-writes.test.ts, 'a change of level keeps the alias the level is bound to': the one existing assertion of that file this item changed beyond its no-remote cases, named here for AC-47."
+    }
+  ],
+  "approvals": [
+    {
+      "what": "spec",
+      "at": "2026-11-11T15:26:45.905Z",
+      "by": "validator",
+      "rule": "complete-gap-round"
+    }
+  ],
+  "skips": [],
+  "baseCommit": "d60176ebbea362225c124a9d1c31103688c176c5",
+  "createdAt": "2026-11-11T13:34:28.060Z",
+  "updatedAt": "2026-11-12T10:35:22.351Z",
+  "specReview": true,
+  "kind": "feature",
+  "kindFrom": "work_type feature",
+  "knowledge": {
+    "readAt": "2026-11-11T13:37:32.783Z",
+    "listed": [
+      "K-346",
+      "K-363",
+      "K-371",
+      "K-343",
+      "K-335",
+      "K-319",
+      "K-316",
+      "K-372",
+      "K-376",
+      "K-375"
+    ]
+  },
+  "priority": "blocker",
+  "seats": [
+    {
+      "role": "researcher",
+      "team": "researchers",
+      "kind": "debate",
+      "reason": "full route"
+    },
+    {
+      "role": "review-code-quality",
+      "team": "backend",
+      "kind": "gate",
+      "gate": "code-quality",
+      "reason": "full route"
+    },
+    {
+      "role": "review-test-quality",
+      "team": "qa",
+      "kind": "gate",
+      "gate": "test-quality",
+      "reason": "full route"
+    },
+    {
+      "role": "review-security",
+      "team": "security",
+      "kind": "gate",
+      "gate": "security",
+      "reason": "full route"
+    },
+    {
+      "role": "review-ui-ux",
+      "team": "frontend",
+      "kind": "gate",
+      "gate": "ui-ux",
+      "reason": "interface files: ui/src/components/ProjectsView.vue, ui/src/components/settings/Servers.vue, ui/src/components/settings/Sharing.vue"
+    },
+    {
+      "role": "review-risk",
+      "team": "architects",
+      "kind": "gate",
+      "gate": "risk",
+      "reason": "full route"
+    },
+    {
+      "role": "review-architecture",
+      "team": "architects",
+      "kind": "gate",
+      "gate": "architecture",
+      "reason": "full route"
+    },
+    {
+      "role": "review-data",
+      "team": "etl",
+      "kind": "gate",
+      "gate": "data",
+      "reason": "risk area data-migration"
+    },
+    {
+      "role": "lead-qa",
+      "team": "qa",
+      "kind": "lead",
+      "reason": "full route"
+    },
+    {
+      "role": "lead-security",
+      "team": "security",
+      "kind": "lead",
+      "reason": "full route"
+    },
+    {
+      "role": "lead-architects",
+      "team": "architects",
+      "kind": "lead",
+      "reason": "full route"
+    },
+    {
+      "role": "lead-etl",
+      "team": "etl",
+      "kind": "lead",
+      "reason": "risk area data-migration"
+    },
+    {
+      "role": "lead-frontend",
+      "team": "frontend",
+      "kind": "lead",
+      "reason": "interface files: ui/src/components/ProjectsView.vue, ui/src/components/settings/Servers.vue, ui/src/components/settings/Sharing.vue"
+    },
+    {
+      "role": "judge",
+      "team": null,
+      "kind": "debate",
+      "reason": "a gate is planned"
+    }
+  ],
+  "primaryTeam": "frontend",
+  "runtimes": [
+    "claude"
+  ],
+  "phaseAt": {
+    "understand": "2026-11-11T13:36:45.114Z",
+    "specify": "2026-11-11T15:02:34.733Z",
+    "conclave": "2026-11-11T15:52:23.532Z",
+    "plan": "2026-11-11T15:52:27.469Z",
+    "spec-review": "2026-11-11T15:52:33.448Z",
+    "build": "2026-11-11T16:45:38.407Z",
+    "gate": "2026-11-11T19:19:21.205Z",
+    "deliver": "2026-11-12T10:35:04.118Z",
+    "learn": "2026-11-12T10:35:15.336Z"
+  },
+  "decisions": [
+    {
+      "id": "D-1",
+      "question": "The identity of a project for a team: ADR 0025 D-16 says a level above Nothing needs the project's git remote alias and is bound to it. Does a shared name the person gives (the alias name:<slug>, beside the remotes) become a second identity a level can bind to, so a project with no host-led remote can be set above Nothing?",
+      "default": "Yes: a shared name is a second identity; a project with a host-led remote and no bound name still binds by the remote; the bound alias wins while the project carries it.",
+      "answer": "Yes: a shared name (the alias name:<slug>) is a second identity a level can bind to; a project with a host-led remote and no bound name still binds by the remote; the bound alias wins while the project carries it. ADR 0025 D-16 is amended. (the person, 2026-11-11: 'sim força', the default accepted)",
+      "at": "2026-11-11T15:01:57.377Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-2",
+      "question": "Two members whose unrelated projects have the same name (docs, website) would merge silently on the server, and each would read the other's knowledge as their own project's. Does the server hold a registry of names, created once by one member and joined by the others from the list, with a push under an unknown name refused; or do names emerge from the slugs, with the list and its counts as the only warning?",
+      "default": "The registry: create or join, explicit in the dock and the CLI; a push under a name the server does not hold is refused.",
+      "answer": "The registry: a name is created once by one member and joined by the others from the list, explicit in the dock and the CLI; a push under a name the server does not hold is refused. (the person, 2026-11-11: 'sim força', the default accepted)",
+      "at": "2026-11-11T15:01:57.435Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-3",
+      "question": "The list of names is a new answer the client reads, which moves the contract to 2 (the server accepting 1 and 2, ADR 0026 D-18). A client against a server still at contract 1 would get a 400 that stops its whole pull. Does the client hold names out of its pulls and pushes while /v1/me answers contract 1, with one line in status and the Servers page, and is the server upgraded before members give names (the runbook)?",
+      "default": "Yes: contract 2 with 1 accepted, names held until the server answers 2, server first in the runbook.",
+      "answer": "Yes: contract 2 with 1 accepted; the client holds names out of its pulls and pushes until /v1/me answers 2, with one line in status and the Servers page; the server is upgraded first in the runbook. (the person, 2026-11-11: 'sim força', the default accepted)",
+      "at": "2026-11-11T15:01:57.492Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-4",
+      "question": "The server's four remote_alias columns will hold shared names too. Rename them project_alias in team schema 2 (one statement per table; a 0.7.0 image then refuses the database and the runbook's rollback applies, instead of running on with frozen items and a mirror that writes wrong folders), or keep the names and document them?",
+      "default": "Rename them in team schema 2; the wire key remoteAlias keeps its name for 0.7.0 clients.",
+      "answer": "Rename the four columns project_alias in team schema 2; a 0.7.0 image refuses the database and the runbook's rollback applies; the wire key remoteAlias keeps its name. (the person, 2026-11-11: 'sim força', the default accepted)",
+      "at": "2026-11-11T15:01:57.549Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-5",
+      "question": "A 0.7.0 binary that opens a store with a level bound to a shared name reads it as unbound, deletes the level as the system's and withdraws everything the project sent, with no word to the person; a Homebrew CLI left beside the staged binary makes this plausible. Does the store move to version 8 (migration 8: the one-name-per-project index), so an older binary refuses the store as 0.5.0 binaries refuse v7, or is the loss documented and accepted?",
+      "default": "Version 8: an older binary refuses the store; the new ADR and the release notes say so.",
+      "answer": "Version 8: migration 8 with the one-name-per-project index, so an older binary refuses the store instead of deleting levels and withdrawing; the new ADR and the release notes say so. (the person, 2026-11-11: 'sim força', the default accepted)",
+      "at": "2026-11-11T15:01:57.606Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-6",
+      "question": "ADR 0025 D-19 keeps imported memories on the machine whatever the level. On this machine 67,295 of 71,935 active memories are imported, and most of the 149 projects without a remote are imported projects that would send almost nothing under Knowledge and memories; the wizardingcode project is not affected (0 imported of 61, 60 would leave). Keep D-19 and have the dock and the preview show the count that stays, with a later item for a per-project opt-in; or change D-19 in this item?",
+      "default": "Keep D-19; the dock and the preview show how many imported memories stay; a per-project opt-in is a later item.",
+      "answer": "Keep D-19: imported memories stay; the dock and the preview show how many stay; a per-project opt-in is a later item. (the person, 2026-11-11: 'sim força', the default accepted)",
+      "at": "2026-11-11T15:01:57.662Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-7",
+      "question": "A teammate who only wants to receive a shared project needs a known project of theirs to bind (any folder, a session started there once), and Claude Desktop's chat saves into existing projects by name. Is a project with no folder, created from the viewer by giving it a shared name, part of this item, or out?",
+      "default": "Out of this item: a teammate binds an existing project; the README says so.",
+      "answer": "Out of this item: a teammate binds an existing project of theirs; the README says so; a project with no folder created from the viewer is a later item. (the person, 2026-11-11: 'sim força', the default accepted)",
+      "at": "2026-11-11T15:01:57.718Z",
+      "by": "user",
+      "relayed": true
+    }
+  ],
+  "checklists": [
+    {
+      "kind": "endpoint",
+      "paths": [
+        "/Users/andreagroferreira/.local/share/wizardingcode-developer-crew/skills/crew/checklists/endpoint.md"
+      ],
+      "at": "2026-11-11T15:25:23.404Z"
+    },
+    {
+      "kind": "migration-or-restore",
+      "paths": [
+        "/Users/andreagroferreira/.local/share/wizardingcode-developer-crew/skills/crew/checklists/migration-or-restore.md"
+      ],
+      "at": "2026-11-11T15:25:27.053Z"
+    },
+    {
+      "kind": "sync",
+      "paths": [
+        "/Users/andreagroferreira/.local/share/wizardingcode-developer-crew/skills/crew/checklists/sync.md"
+      ],
+      "at": "2026-11-11T15:25:31.095Z"
+    },
+    {
+      "kind": "screen",
+      "paths": [
+        "/Users/andreagroferreira/.local/share/wizardingcode-developer-crew/skills/crew/checklists/screen.md"
+      ],
+      "at": "2026-11-11T15:25:34.629Z"
+    },
+    {
+      "kind": "deletion",
+      "paths": [
+        "/Users/andreagroferreira/.local/share/wizardingcode-developer-crew/skills/crew/checklists/deletion.md"
+      ],
+      "at": "2026-11-11T15:25:38.378Z"
+    }
+  ],
+  "knowledgeFiles": [],
+  "knowledgeLabels": [],
+  "validations": [
+    {
+      "what": "spec",
+      "by": "lead-qa",
+      "verdict": "returned",
+      "returns": 2,
+      "round": 1,
+      "file": "conclave/lead-qa.round2.md",
+      "hash": "sha256:e72c775079ce20ff603c133ff10eb6c1ea9d9582f1fd1049325281cc35fbb382",
+      "fileHash": "sha256:b09979ff166473ac069650f5b4c5c78b94b6f8a2400576118ebda186cf86607e",
+      "at": "2026-11-11T15:27:50.139Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-security",
+      "verdict": "returned",
+      "returns": 3,
+      "round": 1,
+      "file": "conclave/lead-security.round2.md",
+      "hash": "sha256:e72c775079ce20ff603c133ff10eb6c1ea9d9582f1fd1049325281cc35fbb382",
+      "fileHash": "sha256:b1184bc7f884824a78a4faddb13038fb0c076e363e5580966b2a7f08eee0298e",
+      "at": "2026-11-11T15:28:30.044Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-architects",
+      "verdict": "returned",
+      "returns": 2,
+      "round": 1,
+      "file": "conclave/lead-architects.round2.md",
+      "hash": "sha256:e72c775079ce20ff603c133ff10eb6c1ea9d9582f1fd1049325281cc35fbb382",
+      "fileHash": "sha256:cf55fc7c31afbd29efc1dcc85d2113bfc28d33b9f1bc00ae453acda9c18416ce",
+      "at": "2026-11-11T15:29:53.758Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-qa",
+      "verdict": "returned",
+      "returns": 1,
+      "round": 2,
+      "file": "conclave/lead-qa.round3.md",
+      "hash": "sha256:15e28cf2aa62a1144ddfc694fb4c05cd187da0aa3bfe990af6b09d4215be6248",
+      "fileHash": "sha256:9464d8a97a2921d7a3f16ae112982e8e495711fc494dc4c8eec0c26f9782a551",
+      "at": "2026-11-11T15:36:37.993Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-security",
+      "verdict": "returned",
+      "returns": 1,
+      "round": 2,
+      "file": "conclave/lead-security.round3.md",
+      "hash": "sha256:15e28cf2aa62a1144ddfc694fb4c05cd187da0aa3bfe990af6b09d4215be6248",
+      "fileHash": "sha256:69c6878019b3a8b566f44f3c873b2507661174e189b6a2f0b70b1cd1506f858c",
+      "at": "2026-11-11T15:36:52.324Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-architects",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 2,
+      "file": "conclave/lead-architects.round3.md",
+      "hash": "sha256:15e28cf2aa62a1144ddfc694fb4c05cd187da0aa3bfe990af6b09d4215be6248",
+      "fileHash": "sha256:d78adc01148a5aae28c59aca364166d438a8e073b1c20cc43410c302dea7bc2e",
+      "at": "2026-11-11T15:36:57.701Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-qa",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 3,
+      "file": "conclave/lead-qa.round4.md",
+      "hash": "sha256:056642a381ab7989dc456b49897ac4f88ea8080c019a31eb796a7ac00c9adb5d",
+      "fileHash": "sha256:2d317394f0f029a5fc22b5818de067d3aabc2fac3acfc39d1303554c8fefe936",
+      "at": "2026-11-11T15:45:24.657Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-security",
+      "verdict": "returned",
+      "returns": 1,
+      "round": 3,
+      "file": "conclave/lead-security.round4.md",
+      "hash": "sha256:2a3b250a01c508d7b92798d4d0dedead88270f61d33419d18ed65ae4df2c0986",
+      "fileHash": "sha256:7f92188acdddcc7179e0b86c8bc8a2776900de8b87efb152a6c7111686380318",
+      "at": "2026-11-11T15:46:49.176Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-architects",
+      "verdict": "returned",
+      "returns": 1,
+      "round": 3,
+      "file": "conclave/lead-architects.round4.md",
+      "hash": "sha256:2a3b250a01c508d7b92798d4d0dedead88270f61d33419d18ed65ae4df2c0986",
+      "fileHash": "sha256:537ae69bc427be4438409f2788493e5caf30c0984c7462a045ddd247ca6eec46",
+      "at": "2026-11-11T15:46:54.030Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-security",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 3,
+      "file": "conclave/lead-security.md",
+      "hash": "sha256:2a3b250a01c508d7b92798d4d0dedead88270f61d33419d18ed65ae4df2c0986",
+      "fileHash": "sha256:8d9423184c251e77bec6603acfa05743166d2ba7459db6b4875cd4539127e75a",
+      "at": "2026-11-11T15:48:03.093Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-architects",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 3,
+      "file": "conclave/lead-architects.md",
+      "hash": "sha256:2a3b250a01c508d7b92798d4d0dedead88270f61d33419d18ed65ae4df2c0986",
+      "fileHash": "sha256:7d4e0630d5f02afe7fce71d2d625575a988d33e956c48e22aad717a2486b340e",
+      "at": "2026-11-11T15:52:07.921Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-qa",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 4,
+      "file": "conclave/lead-qa.md",
+      "hash": "sha256:2a3b250a01c508d7b92798d4d0dedead88270f61d33419d18ed65ae4df2c0986",
+      "fileHash": "sha256:224239711d7d61a9370cd046d4d615599c5d5f52c8404ac78c566b1825f9b271",
+      "at": "2026-11-11T15:52:07.982Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-qa",
+      "verdict": "returned",
+      "returns": 2,
+      "round": 1,
+      "file": "conclave/lead-qa.delivery.md",
+      "hash": "sha256:758e5313ac06703d9121cc67a8be494d5ae4ccd7f1a23369587fa69d25e35f24",
+      "fileHash": "sha256:00d071479bc330e5463658470325195a5c29e4bc54a4734f1e4910a3a44f9597",
+      "at": "2026-11-11T20:21:40.645Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-security",
+      "verdict": "returned",
+      "returns": 2,
+      "round": 1,
+      "file": "conclave/lead-security.delivery.md",
+      "hash": "sha256:758e5313ac06703d9121cc67a8be494d5ae4ccd7f1a23369587fa69d25e35f24",
+      "fileHash": "sha256:d9bfe08ab3828401858e005b88566f7daa9e514d168eb09998e894e77e007dd2",
+      "at": "2026-11-11T20:21:40.709Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-architects",
+      "verdict": "returned",
+      "returns": 1,
+      "round": 1,
+      "file": "conclave/lead-architects.delivery.md",
+      "hash": "sha256:758e5313ac06703d9121cc67a8be494d5ae4ccd7f1a23369587fa69d25e35f24",
+      "fileHash": "sha256:683d3d8a81e3c8f0972e761f68c706e24d410aecfe5cd425e5ca5ef3f01698bb",
+      "at": "2026-11-11T20:22:49.411Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-architects",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 2,
+      "file": "conclave/lead-architects.delivery-reply.md",
+      "hash": "sha256:e057cb219b7b5350132ae1862f2c0adf57661e105bce155b4eef63a4469522f3",
+      "fileHash": "sha256:d47ccbb179f40e6af0a4ee533de16ef362b55ccf607e35f0ee4869a4b6066159",
+      "at": "2026-11-12T10:33:31.333Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-qa",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 2,
+      "file": "conclave/lead-qa.delivery-reply.md",
+      "hash": "sha256:e057cb219b7b5350132ae1862f2c0adf57661e105bce155b4eef63a4469522f3",
+      "fileHash": "sha256:c3e194aaba0b17e8e97f0b8ac9cba73a4803abfeff77122ed6a2c7b0253e24be",
+      "at": "2026-11-12T10:33:39.733Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-security",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 2,
+      "file": "conclave/lead-security.delivery-reply.md",
+      "hash": "sha256:e057cb219b7b5350132ae1862f2c0adf57661e105bce155b4eef63a4469522f3",
+      "fileHash": "sha256:bf58b1713abb100fac161ceb442305c3e2cb985f9c46e50d32c1c59ab853034c",
+      "at": "2026-11-12T10:33:40.149Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-etl",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 2,
+      "file": "conclave/lead-etl.delivery.md",
+      "hash": "sha256:e057cb219b7b5350132ae1862f2c0adf57661e105bce155b4eef63a4469522f3",
+      "fileHash": "sha256:a4eced3005cc25b8baf390fffc7e767de12d4cc4e0fb324625eff4289f5c9c53",
+      "at": "2026-11-12T10:34:56.859Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-frontend",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 2,
+      "file": "conclave/lead-frontend.delivery.md",
+      "hash": "sha256:e057cb219b7b5350132ae1862f2c0adf57661e105bce155b4eef63a4469522f3",
+      "fileHash": "sha256:08e9fe3c2a11b2241abb7abc8f38037882b9e7fc38ff92bb5d17a943cec6e611",
+      "at": "2026-11-12T10:35:03.441Z"
+    }
+  ],
+  "rounds": {
+    "judgement": 4,
+    "validation": 4,
+    "judgementCode": "sha256:e057cb219b7b5350132ae1862f2c0adf57661e105bce155b4eef63a4469522f3"
+  },
+  "removedCriteria": [
+    {
+      "id": "AC-1",
+      "kind": "behavior",
+      "text": "`src/core/identity.ts` imports nothing and exports `ALIAS_KINDS`, `aliasKind`, `isHostLedAlias`, `isSharedName`, `isTeamAlias`, `TEAM_ALIAS_SQL`, `stripTeamPrefix`; `isHostLedAlias` answers the cases of `tests/unit/sharing-levels.test.ts` unchanged; `isSharedName` accepts `name:wizardingcode` and `name:estrategia-de-marca` and refuses an upper-case letter, a leading or trailing hyphen, 81 characters, `name:con`, an empty slug and any other prefix; the strings it accepts pass `isSlug` and the ones it refuses fail it; `src/sharing/levels.ts` re-exports `isHostLedAlias`, `src/team/contract.ts` imports the leaf and not `src/sharing/levels.ts`, and the boundary tests allow the leaf; the three prefilters (`src/ui/api.ts`, `src/sharing/report.ts`, `src/sync/inbound.ts`) name `TEAM_ALIAS_SQL` and no literal `'remote:%'` remains in `src/` outside `src/core/project.ts` and `src/links/suggest.ts`.",
+      "at": "2026-11-11T15:35:12.507Z"
+    },
+    {
+      "id": "AC-5",
+      "kind": "behavior",
+      "text": "`TEAM_LATEST` is 2; migration 2 renames the four columns `project_alias` (the index `changes_scope` follows), creates `names`, `entries_project` and `memories_project`; a 0.7.0 open (`openTeamExisting` with `latest` 1) throws `SchemaTooNewError` and `serve` exits 3 on it; `openTeamForWrite` under a fresh lease still refuses to migrate; `POST /v1/names` answers 201 with the item, 409 `exists` with the item for a held name, 400 `alias` for `name:Bad` and for a remote, 401 without a token, 429 past the devices bucket, and writes the audit row `name created`; `GET /v1/names` pages by alias with `limit` clamped to 1..200 and 50 by default, each item with the counts of current entries and memories under the alias, the creator and the last change time, and never lists an alias that is not a shared name; `GET /v1/names/<alias>` answers the item or 404 `unknown-name`; the store boundary test still finds SQL in `store.ts` alone.",
+      "at": "2026-11-11T15:35:12.570Z"
+    },
+    {
+      "id": "AC-6",
+      "kind": "behavior",
+      "text": "a push of an entry and of a memory under `name:wizardingcode` applies once the name is held, is keyed under that alias, is answered by a pull that names it (and not by a pull that names another alias), reaches the mirror under `repos/projects/wizardingcode-<8 hex>`, and is refused `name` with its rule text while the registry does not hold the name; a push under `project:name:Bad:<uuid>` is refused `shape`; a pull naming `name:unknown` answers nothing and is not refused; a re-send of a uuid from `remote:github.com/acme/site` to `name:site` is a move: the upsert under the name and a tombstone under the remote with `movedTo`; `repoFolder(\"project\", \"name:wizardingcode\", null)` differs from `repoFolder(\"project\", \"remote:github.com/x/wizardingcode\", null)` and both pass `PROJECT_FOLDER`.",
+      "at": "2026-11-11T15:35:12.633Z"
+    },
+    {
+      "id": "AC-7",
+      "kind": "behavior",
+      "text": "`CONTRACT` is 2, `ACCEPTED_CONTRACTS` is `[1, 2]`, `RESULT_SHAPES` holds `namesPage` and `nameItem`, `PUSH_REASONS` holds `name`, and `CONTRACT_FINGERPRINT` equals the computed fingerprint; a request with header 1 is accepted and one with header 3 is 409 with `accepted: [1, 2]`; in-process with the test server's accepted list set to `[1]`, the client's first pull and push answer 409, the row's `contract` becomes 1, the request is repeated once with header 1 and succeeds, no `stopped` is written; with the list `[]` the server is stopped `contract` as today; `startSteps` reads `/v1/me` once per confirmed server and stores the lower of `CONTRACT` and its answer, keeping the value on a failure; the join stores the lower of `CONTRACT` and the join's `contract`.",
+      "at": "2026-11-11T15:35:12.695Z"
+    },
+    {
+      "id": "AC-9",
+      "kind": "behavior",
+      "text": "`GET /api/projects` carries `name`, `boundTo` and `imported` for each project; `PUT /api/projects/<id>/sharing` with `as` and `create: true` creates the name on the in-process server and binds, answering `boundAlias` and `name`; with `create` absent against an unheld name answers 404 `unknown-name` and writes nothing; `create: true` against a held name answers 409 `exists` with the name's item and writes nothing; `as` on a remote project is 409 `has-remote`, another project's name 409 `name-taken`, another name while bound 409 `renamed`, a text with no letter or digit 400 `no-name`, a server that cannot be reached 502 `server` with nothing written, and a server at contract 1 (the create route 404) 409 `contract`; `DELETE /api/projects/<id>/name` forgets at Nothing and is 409 `name-bound` while bound; `GET /api/servers/<id>/names` answers the server's names (every page), 502 on a failure and 409 `contract` against a server at 1; `GET /api/servers` entries carry `contract`, `namesHeld` and `names`; `POST /api/sharing/preview` carries `imported` per project; the dock's and the Servers page's sentences are in the Vue sources word for word (`tests/unit/ui-sharing-copy.test.ts`); screens `/projects` states `unnamed, new, joins, taken, named, named-nothing, remote-too, held, imported-stay`, `/settings#servers` states `names, held`, viewports 360, 768, 1280, schemes light and dark, motion none, design none.",
+      "screens": [
+        {
+          "page": "projects",
+          "state": "unnamed"
+        },
+        {
+          "page": "projects",
+          "state": "new"
+        },
+        {
+          "page": "projects",
+          "state": "joins"
+        },
+        {
+          "page": "projects",
+          "state": "taken"
+        },
+        {
+          "page": "projects",
+          "state": "named"
+        },
+        {
+          "page": "projects",
+          "state": "named-nothing"
+        },
+        {
+          "page": "projects",
+          "state": "remote-too"
+        },
+        {
+          "page": "projects",
+          "state": "held"
+        },
+        {
+          "page": "projects",
+          "state": "imported-stay"
+        },
+        {
+          "page": "settings",
+          "state": "names"
+        },
+        {
+          "page": "settings",
+          "state": "held"
+        }
+      ],
+      "at": "2026-11-11T15:35:12.759Z"
+    },
+    {
+      "id": "AC-10",
+      "kind": "behavior",
+      "text": "`share project all --as \"Estratégia de marca\" --create` in the folder of a project with no host-led remote creates `name:estrategia-de-marca` on the in-process server, asks the widening naming the slug (`--yes` answers), binds, and prints `sharing: <project> → Knowledge and memories, shared as estrategia-de-marca` and the imported count when above 0; without `--create` against an unheld name it refuses naming `share names` and `--create` and writes nothing; `--create` against a held name refuses naming the creator and the counts; `--as` on a remote project refuses `has-remote`; against a server at contract 1 it refuses with the contract sentence; `share names` lists the names with their counts and marks the bound ones; `share name forget` refuses `name-bound` while bound and forgets at Nothing; `share status` prints `shared as <slug>` for a name-bound project and `names held` for a server at 1; the usage names the three.",
+      "at": "2026-11-11T15:35:12.822Z"
+    },
+    {
+      "id": "AC-12",
+      "kind": "observed",
+      "text": "`docs/adr/0028-shared-names.md` records D-1 to D-7 and the rules of this spec; ADR 0025 (D-16, \"Identity of a project\", the known limit), ADR 0026 (\"The alias\", the routes, the contract, the schema) and ADR 0027 (what a pull names, names held, the contract spoken) are amended; README's two sentences are replaced; the runbook's Upgrade section states the order and the schema bump, the member's side gains the naming and joining steps, and `tests/unit/team-runbook.test.ts` passes; CLAUDE.md names the leaf, version 8, the registry, the routes and the CLI.",
+      "at": "2026-11-11T15:35:12.883Z"
+    },
+    {
+      "id": "AC-15",
+      "kind": "behavior",
+      "text": "`TEAM_LATEST` is 2; migration 2 renames the four columns `project_alias` (the index `changes_scope` follows), creates `names`, `entries_project` and `memories_project`; a 0.7.0 open (`openTeamExisting` with `latest` 1) throws `SchemaTooNewError` and `serve` exits 3 on it; `openTeamForWrite` under a fresh lease still refuses to migrate; `POST /v1/names` answers 201 with the item, 409 `exists` with the item for a held name, 400 `alias` for `name:Bad` and for a remote, 401 without a token, 429 past the devices bucket, and writes the audit row `name created`; `GET /v1/names` pages by alias with `limit` clamped to 1..200 and 50 by default, refuses a malformed `after` with 400 `after`, gives each item the counts of current entries and memories under the alias, the creator and the last change time, and never lists an alias that is not a shared name; `GET /v1/names/<alias>` answers the item for a held name and the same 404 `unknown-name` for an unheld name, for `remote:github.com/acme/site` (URL-encoded) and for a malformed alias, with no SQL run for the last two; `serve purge name <alias> --yes` is refused with exit 1 and the counts while current items are under the alias, and otherwise deletes the row and writes the audit row `name purged`; the store boundary test still finds SQL in `store.ts` alone.",
+      "at": "2026-11-11T15:39:24.665Z"
+    },
+    {
+      "id": "AC-18",
+      "kind": "behavior",
+      "text": "`GET /api/projects` carries `name`, `boundTo` and `imported` for each project; `POST /api/projects/<id>/sharing/preview` answers the dry run's outcome and writes nothing; `PUT /api/projects/<id>/sharing` with `as`, `create: true` and `confirm: true` creates the name on the in-process server and binds, answering `boundAlias` and `name`; with `as` and no `confirm` it is 400 `needs-confirm` at Receive only too, with no request sent; with `create` absent against an unheld name it answers 404 `unknown-name` and writes nothing; `create: true` against a held name answers 409 `exists` with the name's item and writes nothing; `as` on a remote project is 409 `has-remote`, another project's name 409 `name-taken`, another name while bound 409 `renamed`, a project with memory off 409 `disabled`, all decided before any request (the test server sees none); a text with no letter or digit is 400 `no-name`; a server that cannot be reached is 502 `server` with nothing written; a stored row at contract 1 is 409 `contract` with no request; a row at 2 against a test server at contract 1 (a bare 404 on the names routes) is 409 `contract`, the row set to 1, nothing written; a project disabled between the dry run and the write (the test flips it through a hook the route takes) answers 409 `disabled` with `named: true` and the name exists on the server; `DELETE /api/projects/<id>/name` forgets at Nothing and is 409 `name-bound` while bound; `GET /api/servers/<id>/names` answers the server's names (every page), 409 `contract` from a row at 1 or a bare 404, and 502 on a failure; `GET /api/servers` entries carry `contract`, `namesHeld` and `names`; `POST /api/sharing/preview` carries `imported` per project; the dock's confirmation texts (create, join, the imported line), the sentences and the Servers page's lines are in the Vue sources word for word (`tests/unit/ui-sharing-copy.test.ts`); screens `/projects` states `unnamed, new, joins, taken, creating, joining, named, named-nothing, remote-too, held, imported-stay`, `/settings#servers` states `names, held`, viewports 360, 768, 1280, schemes light and dark, motion none, design none.",
+      "screens": [
+        {
+          "page": "projects",
+          "state": "unnamed"
+        },
+        {
+          "page": "projects",
+          "state": "new"
+        },
+        {
+          "page": "projects",
+          "state": "joins"
+        },
+        {
+          "page": "projects",
+          "state": "taken"
+        },
+        {
+          "page": "projects",
+          "state": "creating"
+        },
+        {
+          "page": "projects",
+          "state": "joining"
+        },
+        {
+          "page": "projects",
+          "state": "named"
+        },
+        {
+          "page": "projects",
+          "state": "named-nothing"
+        },
+        {
+          "page": "projects",
+          "state": "remote-too"
+        },
+        {
+          "page": "projects",
+          "state": "held"
+        },
+        {
+          "page": "projects",
+          "state": "imported-stay"
+        },
+        {
+          "page": "settings",
+          "state": "names"
+        },
+        {
+          "page": "settings",
+          "state": "held"
+        }
+      ],
+      "at": "2026-11-11T15:39:24.729Z"
+    },
+    {
+      "id": "AC-19",
+      "kind": "behavior",
+      "text": "`share project all --as \"Estratégia de marca\" --create --yes` in the folder of a project with no host-led remote decides the local refusals first, asks the create question naming the slug and the server before any request (the question is in the output, and without `--yes` and without a terminal the answer is no and the test server sees no request), creates `name:estrategia-de-marca`, binds, and prints `sharing: <project> → Knowledge and memories, shared as estrategia-de-marca` and the imported count when above 0; `share project receive --as x` asks the join or create question too; without `--create` against an unheld name it refuses naming `share names` and `--create` and writes nothing; `--create` against a held name refuses naming the creator and the counts; `--as` on a remote project refuses `has-remote` with no request; against a stored row at contract 1 it refuses with the contract sentence and no request, and against a test server at contract 1 with the row at 2 it refuses the same and sets the row to 1; a write refused after the create prints the created-name sentence; `share names` lists the names with their counts and marks the bound ones; `share name forget` refuses `name-bound` while bound and forgets at Nothing; `share status` prints `shared as <slug>` for a name-bound project and `names held` for a server at 1; the usage names the three.",
+      "at": "2026-11-11T15:39:24.794Z"
+    },
+    {
+      "id": "AC-20",
+      "kind": "observed",
+      "text": "`docs/adr/0028-shared-names.md` records D-1 to D-7 and the rules of this spec, the minimisation sentence, the erasure sentence and the two vocabularies of `remote_alias`; ADR 0025 (D-16, \"Identity of a project\", the known limit), ADR 0026 (\"The alias\", the routes, the contract, the schema, the erasure of a name) and ADR 0027 (what a pull names, names held, the contract spoken) are amended; README's two sentences are replaced; the runbook's Upgrade section states the order and the schema bump, its erasure section the order for a name, the member's side gains the naming and joining steps, and `tests/unit/team-runbook.test.ts` passes; CLAUDE.md names the leaf, version 8, the registry, the routes, the CLI and the purge of a name.",
+      "at": "2026-11-11T15:39:24.859Z"
+    },
+    {
+      "id": "AC-21",
+      "kind": "behavior",
+      "text": "`TEAM_LATEST` is 2; migration 2 renames the four columns `project_alias` (the index `changes_scope` follows), creates `names`, `entries_project` and `memories_project`; a 0.7.0 open (`openTeamExisting` with `latest` 1) throws `SchemaTooNewError` and `serve` exits 3 on it; `openTeamForWrite` under a fresh lease still refuses to migrate; `POST /v1/names` answers 201 with the item, 409 `exists` with the item for a held name, 400 `alias` for `name:Bad` and for a remote, 401 without a token, 429 past the devices bucket, and writes the audit row `name created`; `GET /v1/names` pages by alias with `limit` clamped to 1..200 and 50 by default, refuses a malformed `after` with 400 `after`, gives each item the counts of current entries and memories under the alias, the creator and the last change time, and never lists an alias that is not a shared name; `GET /v1/names/<alias>` answers the item for a held name and the same 404 `unknown-name` for an unheld name, for `remote:github.com/acme/site` (URL-encoded), for a malformed alias and for a parameter whose escapes do not decode (`%E0%A4%A`), with no SQL run for the last three and never a 400 or a 500; `serve purge name <alias> --yes` is refused with exit 1 and the counts while current items are under the alias, and otherwise deletes the row, writes the audit row `name purged`, and leaves the name absent from the registry and the list while the `purged` keys of its purged items, their `changes` rows and the two audit rows still carry the string (asserted as the documented limit); the store boundary test still finds SQL in `store.ts` alone.",
+      "at": "2026-11-11T15:47:17.180Z"
+    },
+    {
+      "id": "AC-2",
+      "kind": "behavior",
+      "text": "`LATEST_VERSION` is 8 and migration 8 creates `project_aliases_one_name`: a second `name:` alias for one project fails the insert with a constraint error while a second `path:` alias does not; a store brought to 8 has its upgrade copy; a version 8 file opened with `latest` 7 throws `SchemaTooNewError`, and the 0.7.0 binary at `~/.wizardingcode/mem/bin/wizardingcode-mem`, run with `doctor` against a copy of a test store at version 8, fails its database check and exits non-zero (observed in the test through the installed binary when present; the `openExistingFile` case runs always).",
+      "at": "2026-11-11T16:20:40.532Z"
+    },
+    {
+      "id": "AC-4",
+      "kind": "behavior",
+      "text": "`wouldLeave` on a project bound to a name gives its entries the uid `project:name:<slug>:<uuid>` and counts its memories under the level; `perProject[]` carries `imported` (the active imported memories of the project, 0 for the fixture's named project and the real count for a project with imported rows); `decide` on an imported memory of a name-bound project at `all` answers `keep` with `imported`; the policy's problem for a lost name says \"git remote or shared name\"; `REASON_TEXT[\"unbound-alias\"]` says the same and every reason still has its sentence.",
+      "at": "2026-11-11T16:20:40.597Z"
+    },
+    {
+      "id": "AC-8",
+      "kind": "behavior",
+      "text": "in-process with a project bound to `name:wizardingcode`, the main pull names the alias, a teammate's entry under it lands at `knowledge/received/<serverId>/projects/wizardingcode-<8 hex>/entries/<slug>--<8 hex>.md` with its rows, a teammate's memory under it becomes an `imported` row of the project with the judge `team:<serverId>`, and a snapshot without that memory forgets it; the sweep sends the project's entries with the name's uid and its memories with `remoteAlias` the name; Nothing withdraws them and writes the `sharing_unbound` row, and the reconcile removes the copies; with the row's `contract` at 1 the pull names no shared name, the sweep sends and withdraws nothing of the name-bound project and writes no refusal, `status` prints `names held (server at contract 1)` on the server line, `doctor sync` warns, and after the row reads 2 the next pull names the alias again; a forgotten name followed by a level bound by a new remote sends the entries as a move (the old row retired).",
+      "at": "2026-11-11T16:20:40.662Z"
+    },
+    {
+      "id": "AC-11",
+      "kind": "behavior",
+      "text": "`status` prints under a server line one `name` line per bound shared name with the received entries, memories, members and the last time, `contract 1` and `names held (server at contract 1)` when so, and `status --json` carries them; `doctor sync` warns `names held` for such a server and is ok otherwise; `serve status` prints the registry's count.",
+      "at": "2026-11-11T16:20:40.726Z"
+    },
+    {
+      "id": "AC-13",
+      "kind": "preserve",
+      "text": "the existing suites keep passing unchanged but for the named cases this item changes: the `no-remote` cases of `tests/unit/sharing-store-writes.test.ts`, `tests/integration/sharing-cli.test.ts` and `tests/integration/ui-sharing.test.ts` (now `no-name`), the `LATEST_VERSION` pin of `tests/unit/sharing-store.test.ts` (8), the fingerprint pin of `tests/unit/team-contract.test.ts`, the reason list of `tests/unit/sharing-contract.test.ts`, the `unbound-alias` sentences, the dock's \"no git remote\" sentence in `tests/unit/ui-sharing-copy.test.ts`, and the column names in the team tests' raw SQL.",
+      "at": "2026-11-11T16:20:40.791Z"
+    },
+    {
+      "id": "AC-14",
+      "kind": "behavior",
+      "text": "`src/core/identity.ts` imports nothing and exports `ALIAS_KINDS`, `aliasKind`, `isHostLedAlias`, `isSharedName`, `isTeamAlias`, `TEAM_ALIAS_SQL`, `stripTeamPrefix`; `isHostLedAlias` answers the cases of `tests/unit/sharing-levels.test.ts` unchanged; `isSharedName` accepts `name:wizardingcode` and `name:estrategia-de-marca` and refuses an upper-case letter, a leading or trailing hyphen, 81 characters, `name:con`, an empty slug and any other prefix; the strings it accepts pass `isSlug` and the ones it refuses fail it; `src/sharing/levels.ts` re-exports `isHostLedAlias`, `src/team/contract.ts` imports the leaf and not `src/sharing/levels.ts`, and the two boundary tests pass unchanged; the three prefilters (`src/ui/api.ts`, `src/sharing/report.ts`, `src/sync/inbound.ts`) name `TEAM_ALIAS_SQL` and no literal `'remote:%'` remains in `src/` outside `src/core/project.ts` and `src/links/suggest.ts`.",
+      "at": "2026-11-11T16:20:40.856Z"
+    },
+    {
+      "id": "AC-16",
+      "kind": "behavior",
+      "text": "a push of an entry and of a memory under `name:wizardingcode` applies once the name is held, is keyed under that alias, is answered by a pull that names it (and not by a pull that names another alias), reaches the mirror under `repos/projects/wizardingcode-<8 hex>`, and is refused `name` with its rule text while the registry does not hold the name, the check running inside the item's transaction after the pure checks (`validate.ts` runs no SQL); a push under `project:name:Bad:<uuid>` is refused `shape`; a pull naming `name:unknown` answers nothing and is not refused; a re-send of a uuid from `remote:github.com/acme/site` to a held `name:site` is a move (the upsert under the name and a tombstone under the remote with `movedTo`), the same re-send to an unheld name is refused `name` and writes no tombstone, and a move from a held name back to a remote needs nothing of the registry; `repoFolder(\"project\", \"name:wizardingcode\", null)` differs from `repoFolder(\"project\", \"remote:github.com/x/wizardingcode\", null)` and both pass `PROJECT_FOLDER`.",
+      "at": "2026-11-11T16:20:40.922Z"
+    },
+    {
+      "id": "AC-17",
+      "kind": "behavior",
+      "text": "`CONTRACT` is 2, `ACCEPTED_CONTRACTS` is `[1, 2]`, `RESULT_SHAPES` holds `namesPage` and `nameItem`, `PUSH_REASONS` holds `name`, and `CONTRACT_FINGERPRINT` equals the computed fingerprint; a request with header 1 is accepted and one with header 3 is 409 with `accepted: [1, 2]`; `Context.contract` is the seam: a test server started with `{ current: 1, accepted: [1] }` answers 1 on the join and `/v1/me`, 409 `accepted: [1]` to header 2, and a bare 404 on the three names routes; against it the client's first pull and push answer 409, the row's `contract` becomes 1, the request is repeated once with header 1 and succeeds, no `stopped` is written; with the list `[]` the server is stopped `contract` as today; `startSteps` reads `/v1/me` once per confirmed server and stores the lower of `CONTRACT` and its answer, keeping the value on a failure; the join stores the lower of `CONTRACT` and the join's `contract`.",
+      "at": "2026-11-11T16:20:40.987Z"
+    },
+    {
+      "id": "AC-22",
+      "kind": "behavior",
+      "text": "`GET /api/projects` carries `name`, `boundTo` and `imported` for each project; `POST /api/projects/<id>/sharing/preview` answers the dry run's outcome and writes nothing; `PUT /api/projects/<id>/sharing` with `as`, `create: true` and `confirm: true` creates the name on the in-process server and binds, answering `boundAlias` and `name`; with `as` and no `confirm` it is 400 `needs-confirm` at Receive only too, with no request sent; with `create` absent against an unheld name it answers 404 `unknown-name` and writes nothing; `create: true` against a held name answers 409 `exists` with the name's item and writes nothing; `as` on a remote project is 409 `has-remote`, another project's name 409 `name-taken`, another name while bound 409 `renamed`, a project with memory off 409 `disabled`, all decided before any request (the test server sees none); a text with no letter or digit is 400 `no-name`; a server that cannot be reached is 502 `server` with nothing written; a stored row at contract 1 is 409 `contract` with no request; a row at 2 against a test server at contract 1 (a bare 404 on the names routes) is 409 `contract`, the row set to 1, nothing written; a project disabled between the dry run and the write (the test flips it through `bindName`'s `hooks.afterServer`, a dependency the route passes through and production leaves unset) answers 409 `disabled` with `named: true` and the name exists on the server; `DELETE /api/projects/<id>/name` forgets at Nothing and is 409 `name-bound` while bound; `GET /api/servers/<id>/names` answers the server's names (every page), 409 `contract` from a row at 1 or a bare 404, and 502 on a failure; `GET /api/servers` entries carry `contract`, `namesHeld` and `names`; `POST /api/sharing/preview` carries `imported` per project; the dock's confirmation texts (create, join, the imported line), the sentences and the Servers page's lines are in the Vue sources word for word (`tests/unit/ui-sharing-copy.test.ts`); screens `/projects` states `unnamed, new, joins, taken, creating, joining, named, named-nothing, remote-too, held, imported-stay`, `/settings#servers` states `names, held`, viewports 360, 768, 1280, schemes light and dark, motion none, design none.",
+      "screens": [
+        {
+          "page": "projects",
+          "state": "unnamed"
+        },
+        {
+          "page": "projects",
+          "state": "new"
+        },
+        {
+          "page": "projects",
+          "state": "joins"
+        },
+        {
+          "page": "projects",
+          "state": "taken"
+        },
+        {
+          "page": "projects",
+          "state": "creating"
+        },
+        {
+          "page": "projects",
+          "state": "joining"
+        },
+        {
+          "page": "projects",
+          "state": "named"
+        },
+        {
+          "page": "projects",
+          "state": "named-nothing"
+        },
+        {
+          "page": "projects",
+          "state": "remote-too"
+        },
+        {
+          "page": "projects",
+          "state": "held"
+        },
+        {
+          "page": "projects",
+          "state": "imported-stay"
+        },
+        {
+          "page": "settings",
+          "state": "names"
+        },
+        {
+          "page": "settings",
+          "state": "held"
+        }
+      ],
+      "at": "2026-11-11T16:20:41.052Z"
+    },
+    {
+      "id": "AC-23",
+      "kind": "behavior",
+      "text": "`share project all --as \"Estratégia de marca\" --create --yes` in the folder of a project with no host-led remote decides the local refusals first, asks the create question naming the slug and the server before any request (the question is in the output, and without `--yes` and without a terminal the answer is no and the test server sees no request), creates `name:estrategia-de-marca`, binds, and prints `sharing: <project> → Knowledge and memories, shared as estrategia-de-marca` and the imported count when above 0; `share project receive --as x` asks the join or create question too; without `--create` against an unheld name it refuses naming `share names` and `--create` and writes nothing; `--create` against a held name refuses naming the creator and the counts; `--as` on a remote project refuses `has-remote` with no request; against a stored row at contract 1 it refuses with the contract sentence and no request, and against a test server at contract 1 with the row at 2 it refuses the same and sets the row to 1; a write refused after the create prints the created-name sentence (the case is driven in-process on `bindName` through `hooks.afterServer`, the CLI's sentence pinned on the outcome's message constant, since the CLI tests run the binary); `share names` lists the names with their counts and marks the bound ones; `share name forget` refuses `name-bound` while bound and forgets at Nothing; `share status` prints `shared as <slug>` for a name-bound project and `names held` for a server at 1; the usage names the three.",
+      "at": "2026-11-11T16:20:41.116Z"
+    },
+    {
+      "id": "AC-24",
+      "kind": "observed",
+      "text": "`docs/adr/0028-shared-names.md` records D-1 to D-7 and the rules of this spec, the minimisation sentence, the erasure sentence with its limit (the registry and the list, not the purge keys, the withdrawn rows and the audit log) and the two vocabularies of `remote_alias`; ADR 0025 (D-16, \"Identity of a project\", the known limit), ADR 0026 (\"The alias\", the routes, the contract, the schema, the erasure of a name) and ADR 0027 (what a pull names, names held, the contract spoken) are amended; README's two sentences are replaced; the runbook's Upgrade section states the order and the schema bump, its erasure section the order for a name and the same limit, the member's side gains the naming and joining steps, and `tests/unit/team-runbook.test.ts` passes; CLAUDE.md names the leaf, version 8, the registry, the routes, the CLI and the purge of a name.",
+      "at": "2026-11-11T16:20:41.181Z"
+    },
+    {
+      "id": "AC-25",
+      "kind": "behavior",
+      "text": "`TEAM_LATEST` is 2; migration 2 renames the four columns `project_alias` (the index `changes_scope` follows), creates `names`, `entries_project` and `memories_project`; a 0.7.0 open (`openTeamExisting` with `latest` 1) throws `SchemaTooNewError` and `serve` exits 3 on it; `openTeamForWrite` under a fresh lease still refuses to migrate; `POST /v1/names` answers 201 with the item, 409 `exists` with the item for a held name, 400 `alias` for `name:Bad` and for a remote, 401 without a token, 429 past the devices bucket, and writes the audit row `name created`; `GET /v1/names` pages by alias with `limit` clamped to 1..200 and 50 by default, refuses a malformed `after` with 400 `after`, gives each item the counts of current entries and memories under the alias, the creator and the last change time, and never lists an alias that is not a shared name; `GET /v1/names/<alias>` answers the item for a held name and the same 404 `unknown-name` for an unheld name, for `remote:github.com/acme/site` (URL-encoded) and for a malformed alias, with no SQL run for the last two, while a parameter whose escapes do not decode (`%E0%A4%A`) answers the router's own 404 `not found` (a 404 too, never a 400 or a 500); `serve purge name <alias> --yes` is refused with exit 1 and the counts while current items are under the alias, and otherwise deletes the row, writes the audit row `name purged`, and leaves the name absent from the registry and the list while the `purged` keys of its purged items, their `changes` rows and the two audit rows still carry the string (asserted as the documented limit); the store boundary test still finds SQL in `store.ts` alone.",
+      "at": "2026-11-11T16:20:41.244Z"
+    },
+    {
+      "id": "AC-26",
+      "kind": "behavior",
+      "text": "`src/core/identity.ts` imports nothing and exports `ALIAS_KINDS` (with `team` alone), `aliasKind`, `SLUG`, `SLUG_MAX`, `RESERVED`, `SHARED_SLUG`, `hasLetterOrDigit`, `isHostLedAlias`, `isSharedName`, `isTeamAlias`, `TEAM_ALIAS_SQL`, `stripTeamPrefix`; `isHostLedAlias` answers the cases of `tests/unit/sharing-levels.test.ts` unchanged; `isSharedName` accepts `name:wizardingcode`, `name:estrategia-de-marca`, `name:a` and an 80-character slug, and refuses an upper-case letter, a leading, trailing or double hyphen, 81 characters, `name:con`, an empty slug and any other prefix; every string it accepts passes `isSlug`, and `abc-` and `a--b` pass `isSlug` and fail `SHARED_SLUG` (the grammars differ, in that direction); `src/modules/knowledge/entry.ts` imports `SLUG`, `SLUG_MAX` and `RESERVED` from the leaf and `src/team/contract.ts`'s `slugOf` and `sharedNameOf` use `hasLetterOrDigit`; `src/sharing/levels.ts` re-exports `isHostLedAlias`, `src/team/contract.ts` imports the leaf and not `src/sharing/levels.ts`, and the two boundary tests pass unchanged; the three prefilters (`src/ui/api.ts`, `src/sharing/report.ts`, `src/sync/inbound.ts`) name `TEAM_ALIAS_SQL` and no literal `'remote:%'` remains in `src/` outside `src/core/project.ts` and `src/links/suggest.ts`.",
+      "at": "2026-11-11T16:45:30.635Z"
+    },
+    {
+      "id": "AC-29",
+      "kind": "behavior",
+      "text": "`TEAM_LATEST` is 2; migration 2 renames the four columns `project_alias` (the index `changes_scope` follows), creates `names` with its unique `id`, `entries_project` and `memories_project`; a 0.7.0 open (`openTeamExisting` with `latest` 1) throws `SchemaTooNewError` and `serve` exits 3 on it; `openTeamForWrite` under a fresh lease still refuses to migrate; `POST /v1/names` answers 201 with the item (a 16-hex `id`), 409 `exists` with the item for a held name, 400 `alias` for `name:Bad` and for a remote, 401 without a token, 429 past the devices bucket, and writes the audit row `name created`; `GET /v1/names` pages by alias with `limit` clamped to 1..200 and 50 by default, refuses a non-integer `limit` with 400 `limit` and a malformed `after` with 400 `after`, gives each item the counts of current entries and memories under the alias, the creator and the last change time, and never lists an alias that is not a shared name; `GET /v1/names/<alias>` answers the item for a held name and the same 404 `unknown-name` for an unheld name, for `remote:github.com/acme/site` (URL-encoded) and for a malformed alias, with no SQL run for the last two, while a parameter whose escapes do not decode (`%E0%A4%A`) answers the router's own 404 `not found` (a 404 too, never a 400 or a 500); `serve purge name <alias> --yes` is refused with exit 1 and the counts while current items are under the alias, with exit 1 `no such name` for an unheld alias, and otherwise deletes the row, writes the audit row `name purged`, and leaves the name absent from the registry and the list while the `purged` keys of its purged entries, their `changes` rows and the two audit rows still carry the string (asserted as the documented limit); `serve status` prints the registry's count; the store boundary test still finds SQL in `store.ts` alone.",
+      "at": "2026-11-11T16:45:30.699Z"
+    },
+    {
+      "id": "AC-30",
+      "kind": "behavior",
+      "text": "a push of an entry and of a memory under `name:wizardingcode` applies once the name is held, is keyed under that alias, is answered by a pull that names it (and not by a pull that names another alias) with `nameId` the registry's id on each item and `null` on a remote's item, reaches the mirror under `repos/projects/wizardingcode-<8 hex>`, and is refused `name` with its rule text while the registry does not hold the name, the check running inside the item's transaction after the pure checks and `purged` (`validate.ts` runs no SQL); a replay of an applied item under a name purged since is refused `name`; a push under `project:name:Bad:<uuid>` is refused `shape`; a pull naming `name:unknown` answers nothing and is not refused; a re-send of a uuid from `remote:github.com/acme/site` to a held `name:site` is a move (the upsert under the name and a tombstone under the remote with `movedTo`), the same re-send to an unheld name is refused `name` and writes no tombstone, and a move from a held name back to a remote needs nothing of the registry; `repoFolder(\"project\", \"name:wizardingcode\", null)` differs from `repoFolder(\"project\", \"remote:github.com/x/wizardingcode\", null)` and both pass `PROJECT_FOLDER`.",
+      "at": "2026-11-11T16:45:30.762Z"
+    },
+    {
+      "id": "AC-31",
+      "kind": "behavior",
+      "text": "`CONTRACT` is 2, `ACCEPTED_CONTRACTS` is `[1, 2]`, `RESULT_SHAPES` holds `namesPage` and `nameItem` (with `id`) and `feedItem` holds `nameId`, `PUSH_REASONS` holds `name`, and `CONTRACT_FINGERPRINT` equals the computed fingerprint; a request with header 1 is accepted and one with header 3 is 409 with `accepted: [1, 2]`; `Context.contract` is the seam: a test server started with `{ current: 1, accepted: [1] }` answers 1 on the join and `/v1/me`, 409 `accepted: [1]` to header 2, and a bare 404 on the three names routes; against it, with a remote-bound and a name-bound project, the client's first pull and push answer 409, the row's `contract` becomes 1, the pull is repeated once with header 1 naming the remote alias alone, the push is repeated once without the named project's items, both succeed, no `stopped` and no `sharing_refusals` row is written; a server that answers 409 with `[1]` to header 1 is stopped `contract`; with the list `[]` the server is stopped `contract` as today; `startSteps` reads `/v1/me` once per confirmed server in parallel with a 5 s deadline and stores the lower of `CONTRACT` and its answer, keeping the value on a failure and a timeout; a full sweep reads `/v1/me` again for a row below `CONTRACT` and not for a row at it, so a row at 1 against a server now at 2 reads 2 within one full sweep; the join stores the lower of `CONTRACT` and the join's `contract`.",
+      "at": "2026-11-11T16:45:30.825Z"
+    },
+    {
+      "id": "AC-32",
+      "kind": "behavior",
+      "text": "in-process with a project bound to `name:wizardingcode` (its `name_id` stored), the main pull names the alias, a teammate's entry under it lands at `knowledge/received/<serverId>/projects/wizardingcode-<8 hex>/entries/<slug>--<8 hex>.md` with its rows, a teammate's memory under it becomes an `imported` row of the project with the judge `team:<serverId>`, and a snapshot without that memory forgets it; the sweep sends the project's entries with the name's uid and its memories with `remoteAlias` the name; Nothing withdraws them and writes the `sharing_unbound` row, and the reconcile removes the copies; with the row's `contract` at 1 the pull names no shared name, the sweep sends and withdraws nothing of the name-bound project and writes no refusal, `status` prints `names held (server at contract 1)` on the server line, `doctor sync` warns, and after the row reads 2 the next pull names the alias again; a push answered `name` writes no `sharing_refusals` row, sets the row's `lastError` to the stated text, skips the project's remaining items in that sweep and sends them at the next sweep once the name is created again; a pulled item whose `nameId` differs from the stored `name_id` is skipped, the flag `names.recreated:<serverId>:<alias>` is written with the new id and creator, the next sweep sends nothing under the name, `status` and `doctor` say it, and a `bindName` join stores the new id, clears the flag and the next pull applies the items; a forgotten name followed by a level bound by a new remote sends the entries as a move (the old row retired).",
+      "at": "2026-11-11T16:45:30.888Z"
+    },
+    {
+      "id": "AC-33",
+      "kind": "behavior",
+      "text": "`GET /api/projects` carries `name`, `boundTo`, `imported` and `nameState` for each project; `POST /api/projects/<id>/sharing/preview` answers the dry run's outcome and writes nothing; `PUT /api/projects/<id>/sharing` with `as`, `create: true` and `confirm: true` creates the name on the in-process server and binds with its id, answering `boundAlias` and `name`; with `as` and no `confirm` it is 400 `needs-confirm` at Receive only too, with no POST sent; with `create` absent against an unheld name it answers 404 `unknown-name` and writes nothing; `create: true` against a held name answers 409 `exists` with the name's item and writes nothing; `as` on a remote project is 409 `has-remote`, another project's name 409 `name-taken`, another name while bound 409 `renamed`, a project with memory off 409 `disabled`, all decided before any request (the test server sees none); a text with no letter or digit is 400 `no-name`; a server that cannot be reached is 502 `server` with nothing written; a stored row at contract 1 reads `/v1/me` once and is 409 `contract`; a row at 2 against a test server at contract 1 (a bare 404 on the names routes) is 409 `contract`, the row set to 1, nothing written; `statusOf` maps a refusal with `named: true` to its status and keeps the flag (a unit test, no hook in the viewer); `DELETE /api/projects/<id>/name` forgets at Nothing, is 409 `name-bound` while bound and 404 `no-name` for a project with no name; `GET /api/servers/<id>/names` answers the server's names reassembled from its pages (120 seeded, 120 returned, `truncated: false`; 1,050 seeded, 1,000 returned, `truncated: true`), 409 `contract` from a row at 1 or a bare 404, 502 on a failure and 404 `no such server`; `GET /api/servers` entries carry `contract`, `namesHeld` and `names` with each name's `state`; `POST /api/sharing/preview` carries `imported` per project; the dock's confirmation texts (the template, the three level phrases, the imported line), the sentences and the Servers page's lines are in the Vue sources word for word (`tests/unit/ui-sharing-copy.test.ts`); screens `/projects` states `unnamed, new, joins, taken, creating, joining, named, named-nothing, remote-too, held, missing, recreated, imported-stay`, `/settings#servers` states `names, held`, viewports 360, 768, 1280, schemes light and dark, motion none, design none.",
+      "screens": [
+        {
+          "page": "projects",
+          "state": "unnamed"
+        },
+        {
+          "page": "projects",
+          "state": "new"
+        },
+        {
+          "page": "projects",
+          "state": "joins"
+        },
+        {
+          "page": "projects",
+          "state": "taken"
+        },
+        {
+          "page": "projects",
+          "state": "creating"
+        },
+        {
+          "page": "projects",
+          "state": "joining"
+        },
+        {
+          "page": "projects",
+          "state": "named"
+        },
+        {
+          "page": "projects",
+          "state": "named-nothing"
+        },
+        {
+          "page": "projects",
+          "state": "remote-too"
+        },
+        {
+          "page": "projects",
+          "state": "held"
+        },
+        {
+          "page": "projects",
+          "state": "missing"
+        },
+        {
+          "page": "projects",
+          "state": "recreated"
+        },
+        {
+          "page": "projects",
+          "state": "imported-stay"
+        },
+        {
+          "page": "settings",
+          "state": "names"
+        },
+        {
+          "page": "settings",
+          "state": "held"
+        }
+      ],
+      "at": "2026-11-11T16:45:30.951Z"
+    },
+    {
+      "id": "AC-34",
+      "kind": "behavior",
+      "text": "`prepareBinding` and `commitBinding` in-process: the dry run's refusals answered without a request; a row at 1 reads `/v1/me` once and, still 1, answers `contract` without a names request; `prepareBinding` answers `create` with no item for an unheld name and `join` with the item for a held one (one lookup each); `commitBinding` with `create` on a `create` creates (201) then binds with the id (`named: true`, `created: true`); `create` on a `join` answers `exists` with the item and writes nothing; no `create` on a `create` answers `unknown-name`; on a `join` it binds with the item's id (`joined: true`); without `confirm` it answers `needs-confirm` at Receive only too and sends no POST; a bare 404 answers `contract` and sets the row to 1; a rejected fetch answers `server`; `hooks.afterServer` that disables the project answers `disabled` with `named: true` and the name on the server; a join of a flagged (re-created) name stores the new id and clears the flag; `BIND_MESSAGES` holds the one created-name sentence; `tests/unit/sync-boundary.test.ts`'s quiet list holds `src/sync/binding.ts` and the test passes. The CLI, through the binary against the in-process server: `share project all --as \"Estratégia de marca\" --create --yes` in the folder of a project with no host-led remote asks the create question naming the slug and the server before any POST (the question is in the output, and without `--yes` and without a terminal the answer is no and the test server sees no POST), creates `name:estrategia-de-marca`, binds, and prints `sharing: <project> → Knowledge and memories, shared as estrategia-de-marca` and the imported count when above 0; `share project receive --as x --yes` asks the join or create question too; without `--create` against an unheld name it refuses naming `share names` and `--create` and writes nothing; `--create` against a held name refuses naming the creator and the counts; `--as` on a remote project refuses `has-remote` with no request; `--as \"CON\"` refuses `no-name` naming the word; against a stored row at contract 1 it refuses with the contract sentence after one `/v1/me` read, and against a test server at contract 1 with the row at 2 it refuses the same and sets the row to 1; the created-name sentence is the constant's; `share names` lists every page (120 names) with their counts and marks the bound ones; `share name forget` refuses `name-bound` while bound and forgets at Nothing; `share status` prints `shared as <slug>` for a name-bound project, `(missing on the server)` and `(re-created on the server)` when so, and `names held` for a server at 1; the usage names `--as`, `--create`, `names` and `name forget`.",
+      "at": "2026-11-11T16:45:31.015Z"
+    },
+    {
+      "id": "AC-35",
+      "kind": "behavior",
+      "text": "`status` prints under a server line one `name` line per bound shared name with the received entries, memories, members, the last time and `missing` or `re-created` when so, `contract 1` and `names held (server at contract 1)` when so, and `status --json` carries them; `doctor sync` warns once for `namesHeld`, once per missing name and once per re-created name, and is ok otherwise; `serve status` prints the registry's count.",
+      "at": "2026-11-11T16:45:31.078Z"
+    },
+    {
+      "id": "AC-36",
+      "kind": "observed",
+      "text": "`docs/adr/0028-shared-names.md` records D-1 to D-7 and the rules of this spec with the Known limits stated above (the minimisation sentence, the erasure and its limit, `knowledge_received.remote_alias`); ADR 0025 (D-16, \"Identity of a project\", the known limit), ADR 0026 (\"The alias\", the routes, the contract, the schema, the erasure of a name) and ADR 0027 (what a pull names, names held, the contract spoken, the re-created flag) are amended; README's two sentences are replaced; the runbook's Upgrade section states the order and the schema bump, its erasure section the order for a name and the limit, the member's side gains the naming and joining steps and the two states, and `tests/unit/team-runbook.test.ts` passes; CLAUDE.md names the leaf, version 8, sharing namespace 3, the registry, the routes, the CLI and the purge of a name.",
+      "at": "2026-11-11T16:45:31.141Z"
+    },
+    {
+      "id": "AC-37",
+      "kind": "preserve",
+      "text": "the existing suites keep passing unchanged but for the named cases this item changes: the `no-remote` cases of `tests/unit/sharing-store-writes.test.ts`, `tests/integration/sharing-cli.test.ts` and `tests/integration/ui-sharing.test.ts` (now `no-name`), the `LATEST_VERSION` pin of `tests/unit/sharing-store.test.ts` (8) and the migration names pinned by `tests/unit/module-migrations.test.ts` (sharing 3), the fingerprint pin of `tests/unit/team-contract.test.ts`, the reason list of `tests/unit/sharing-contract.test.ts`, the `unbound-alias` sentences, the dock's \"no git remote\" sentence in `tests/unit/ui-sharing-copy.test.ts`, the feed item's keys in the team tests, and the column names in the team tests' raw SQL.",
+      "at": "2026-11-11T16:45:31.203Z"
+    }
+  ],
+  "continued": [
+    {
+      "what": "validation",
+      "by": {
+        "by": "user",
+        "relayed": true
+      },
+      "at": "2026-11-11T15:44:50.481Z"
+    },
+    {
+      "what": "validation",
+      "by": {
+        "by": "user",
+        "relayed": true
+      },
+      "at": "2026-11-11T15:47:22.632Z"
+    },
+    {
+      "what": "judgement",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-11T20:18:44.853Z",
+      "standing": true
+    },
+    {
+      "what": "judgement",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-11T21:00:44.897Z",
+      "standing": true
+    }
+  ],
+  "pauses": [
+    {
+      "at": "2026-11-11T19:21:17.723Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T19:23:19.905Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T19:23:50.643Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T19:24:23.897Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T19:24:36.990Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T19:24:52.318Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T19:25:19.964Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T19:26:38.265Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T19:59:20.416Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T20:00:19.378Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T20:00:50.134Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T20:01:04.885Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T20:01:16.277Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T20:02:56.496Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T20:16:27.313Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T20:16:45.860Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T20:17:03.474Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T20:17:50.776Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T20:50:32.780Z",
+      "reason": "code changed since the last gate run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-11T20:53:36.359Z",
+      "reason": "code changed since the last gate run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-12T10:25:56.137Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-12T10:26:18.421Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-12T10:26:51.238Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    }
+  ],
+  "learned": {
+    "at": "2026-11-12T10:35:22.351Z",
+    "entries": [
+      "K-381"
+    ],
+    "confirmed": []
+  }
+}

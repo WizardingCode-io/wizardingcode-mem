@@ -46,7 +46,17 @@ docker compose exec server wizardingcode-mem serve status
 docker compose exec server wizardingcode-mem serve audit --limit 50
 ```
 
-An invitation's code is printed once, on the subcommand's standard output, and is used once; `--expires <hours>` bounds it. `invite --for <member id>` is how a member gets a second machine: the code joins a new device of the same member. `revoke <device id>` ends one device (its next request answers 401 and its sync stops with the remedy `share server rejoin`); `disable <member id>` ends every device of a member, and `--withdraw` takes back what they sent. `status` and `audit` are the operator's view of the data directory; `status --json` for a script.
+An invitation's code is printed once, on the subcommand's standard output, and is used once; `--expires <hours>` bounds it. `invite --for <member id>` is how a member gets a second machine: the code joins a new device of the same member. `revoke <device id>` ends one device (its next request answers 401 and its sync stops with the remedy `share server rejoin`); `disable <member id>` ends every device of a member, and `--withdraw` takes back what they sent. `status` and `audit` are the operator's view of the data directory; `status --json` for a script. `status` prints `names: <n>`, the shared names the registry holds ([ADR 0028](../adr/0028-shared-names.md)).
+
+### Erasing a shared name
+
+A shared name a member created (a typo, a person's name, a project that should not be on the server) is erased in three steps, the name first:
+
+```sh
+docker compose exec server wizardingcode-mem serve purge name <alias> --yes
+```
+
+The alias is the full one, `name:<slug>`. From that moment the name is out of every member's list, a push under it is refused (`name-purged`), a create of the same name is refused, and the members bound to it read `removed by the operator` in their dock and in `wizardingcode-mem status`; nothing of theirs is withdrawn by itself, they set the project to Nothing when they are ready. The command prints how many entries and memories are still under the name: purge them one by one at leisure, with `wizardingcode-mem serve purge entry <uuid> --yes` and `wizardingcode-mem serve purge memory <key> --yes`, in any order. Until you run the first step a name stays readable by every member, with its creator and its counts. The third step is the mirror: `docker compose exec server wizardingcode-mem serve mirror --rebuild`, once the items are purged, because the export under `repos/` keeps the name's repository (`repos/projects/<slug>-<8 hex>`, its `knowledge.json` naming the alias and its init commit) after its items are gone, and a restore of `team.db` does not touch `repos/`. The limit: the string stays in the marked registry row, in the feed's `changes` rows, in the withdrawn rows and in the audit rows until `team.db` is restored or rebuilt, and in the mirror until that rebuild. A member creates at most 10 names an hour.
 
 ### Upgrade
 
@@ -57,18 +67,18 @@ docker compose pull server
 docker compose up -d server
 ```
 
-Across a schema bump the new binary copies `team.db` first, to `/data/backups/team-<ms>-v<n>-<pid>.db`, and migrates in place. A member whose client is older than the server's contract sees the server `stopped (contract)` in `wizardingcode-mem status`, with the remedy `upgrade wizardingcode-mem`; nothing of theirs is lost, the sync resumes after the upgrade.
+Across a schema bump the new binary copies `team.db` first, to `/data/backups/team-<ms>-v<n>-<pid>.db`, and migrates in place; 0.8.0 is such a bump (team schema 2: the registry of shared names and the renamed alias columns). Upgrade the server before members name projects: a 0.8.0 client against a 0.7.0 server holds its shared names (`wizardingcode-mem status` ends the server line `names held (server at contract 1)`, `doctor` warns, the Servers page says it) and refuses to create or join one until the server speaks contract 2; the hold ends within a minute of the upgrade while the sync runs, or at the member's next dock or CLI action. A member whose client is older than the server's contract sees the server `stopped (contract)` in `wizardingcode-mem status`, with the remedy `upgrade wizardingcode-mem`; nothing of theirs is lost, the sync resumes after the upgrade.
 
 ### Rollback
 
-A previous image exits 3 against a newer `team.db`, and `restart: unless-stopped` would loop on it, so a rollback restores the copy the upgrade made:
+A previous image exits 3 against a newer `team.db`, and `restart: unless-stopped` would loop on it, so a rollback restores the copy the upgrade made. Across the 0.8.0 bump, first, while the server still answers, ask a member for `wizardingcode-mem share names` and keep its output: it lists every shared name the server holds (the slug, who created it, its counts, its last change), and the names in it that the copy (dated by the `<ms>` in its file name) predates are the ones the rollback loses; the same command after the re-upgrade shows which are gone. Then:
 
 ```sh
 docker compose stop server
-docker compose run --rm --entrypoint sh server -c 'cp /data/backups/team-<ms>-v<n>-<pid>.db /data/team.db && rm -f /data/team.db-wal /data/team.db-shm'
+docker compose run --rm --entrypoint sh server -c 'cp /data/team.db /data/backups/team-before-rollback.db && cp /data/backups/team-<ms>-v<n>-<pid>.db /data/team.db && rm -f /data/team.db-wal /data/team.db-shm'
 ```
 
-then set `WIZARDINGCODE_MEM_VERSION` back to the previous tag and `docker compose up -d server`. The `-wal` and `-shm` files go with the replaced file: a stale write-ahead log would replay frames of the newer schema over the older copy. `feed.seq` stays ahead of the copy, so the server detects the restore at start (`event: "restore-detected"`), renews its instance, and every client pulls from zero and sends again what the copy lacks.
+then set `WIZARDINGCODE_MEM_VERSION` back to the previous tag and `docker compose up -d server`. The first `cp` keeps the newer file aside, as `team-before-rollback.db`: it is the only copy of what the members sent since the upgrade's copy, and the rolled-back server runs without it, so nothing would show its loss. A rollback across the 0.8.0 bump loses the shared names created since the copy. While the 0.7.0 image runs, every member's client speaks contract 1 and holds its shared names (`names held (server at contract 1)` in `wizardingcode-mem status`); once the server is upgraded again, a project bound to a lost name reads `missing` as soon as it has something to send, nothing of it is sent until its person sets the level again, which re-creates the name with the id their machine holds; tell those creators which names to re-create, so each acts once. The `-wal` and `-shm` files go with the replaced file: a stale write-ahead log would replay frames of the newer schema over the older copy. `feed.seq` stays ahead of the copy, so the server detects the restore at start (`event: "restore-detected"`), renews its instance, and every client pulls from zero and sends again what the copy lacks.
 
 ### A restore of the volume
 
@@ -119,7 +129,7 @@ A thrown error answers the client `internal error` with the request id, which is
    ```
 
    Without `--code` the code is asked on the terminal with no echo, which keeps it out of the shell's history. The command prints `joined <host>: <name> (<role>)` and what would leave now (knowledge entries and memories, per project), then asks `Share with <host> as listed above?`; `--yes` answers for you. The device token goes to `~/.wizardingcode/mem/servers.json` (mode 0600) and the server's row stays `pending` until the yes; nothing leaves before it. The viewer does the same under Settings → Servers.
-4. Choose what leaves. In each project's folder, `wizardingcode-mem share project knowledge` (or `all` for memories too, or `receive` to take the team's items without sending); `wizardingcode-mem share roots workspace,shared` and `wizardingcode-mem share areas workspace:sales,…` for the knowledge roots and areas; `wizardingcode-mem share status` to see what would leave. Nothing leaves until a level is set.
+4. Choose what leaves. In each project's folder, `wizardingcode-mem share project knowledge` (or `all` for memories too, or `receive` to take the team's items without sending); a project with no git remote on a host takes a shared name first (Naming a project, below); `wizardingcode-mem share roots workspace,shared` and `wizardingcode-mem share areas workspace:sales,…` for the knowledge roots and areas; `wizardingcode-mem share status` to see what would leave. Nothing leaves until a level is set.
 
 ### The first run, and status
 
@@ -130,7 +140,30 @@ wizardingcode-mem status
 wizardingcode-mem share server list
 ```
 
-`status` has a `sync` line (`running (pid), idle since …`, `not running …`, `stopped by …`, `start failed: …; next try …`) and one `server` line per server: name, host, member and role, the state with its remedy, cursor, last push and pull, backlog, dirty paths, pending rows, open conflicts and a held withdrawal. The state is `ok`, `pending` (join not confirmed: `share server add` again), `token missing` (`share server rejoin`) or `stopped` with one of four remedies: `contract` (upgrade wizardingcode-mem), `unauthorized` (this device was revoked), `rejoin` (the server was rebuilt), `disabled` (the member was disabled; ask an admin). What arrives lives under `knowledge/received/<server>/`, read-only; `wizardingcode-mem knowledge take <server>:<slug>--<8 hex> --scope shared` copies an entry into your own repository.
+`status` has a `sync` line (`running (pid), idle since …`, `not running …`, `stopped by …`, `start failed: …; next try …`) and one `server` line per server: name, host, member and role, the state with its remedy, cursor, last push and pull, backlog, dirty paths, pending rows, open conflicts and a held withdrawal; under it one `name` line per shared name bound to the server (what was received under it, and `missing`, `re-created` or `removed` when so), and `names held (server at contract 1)` on the server line while the server speaks the old contract. The state is `ok`, `pending` (join not confirmed: `share server add` again), `token missing` (`share server rejoin`) or `stopped` with one of four remedies: `contract` (upgrade wizardingcode-mem), `unauthorized` (this device was revoked), `rejoin` (the server was rebuilt), `disabled` (the member was disabled; ask an admin). What arrives lives under `knowledge/received/<server>/`, read-only; `wizardingcode-mem knowledge take <server>:<slug>--<8 hex> --scope shared` copies an entry into your own repository.
+
+### Naming a project
+
+A project that is not a git repository on a host (a folder of notes, a Claude Desktop project, a tool with no remote) is matched by a shared name instead of a remote ([ADR 0028](../adr/0028-shared-names.md)). In the viewer, the project's dock shows a Shared name field prefilled with the project's slug and, under it, whether the name is new (`New: you create …`) or one a teammate created (`Joins … · created by …`); choosing a level asks `Create … on <server>, visible to every member, …?` or `Join …, created by …?` with what would leave, and the action creates or joins and sets the level in one step. From a shell, in the project's folder:
+
+```sh
+wizardingcode-mem share project all --as "Brand strategy" --create
+wizardingcode-mem share names
+```
+
+`--as` is slugged (`brand-strategy`); `--create` creates the name, without it the name must already be on the server; the question is asked before anything reaches the server, and `--yes` answers it. `share names` lists every name the server holds, the ones this machine is bound under marked `*`. Once bound the dock reads `` Shared as `brand-strategy` ``; `wizardingcode-mem share status` adds `shared as brand-strategy`. A project with a git remote on a host keeps matching by the remote, and is refused a name while it has no name yet (`has-remote`); a project that took a name and later gained a remote keeps the name until you leave it. Setting Nothing leaves the name: what the project sent is withdrawn, the project keeps the name, and `wizardingcode-mem share name forget` in its folder removes it. The imported memories (claude-mem's) never leave; the dock and `share project` say how many stay. A project known by its folder alone becomes a new project when its folder is moved or renamed, and the name stays on the old one: set the old one to Nothing, forget its name, then share the new one under the same name.
+
+### Joining a shared name
+
+A teammate joins a name with a project of theirs that has no git remote on a host: the dock's field lists the server's names with their creator and counts; picking one and choosing a level (Receive only, to take the team's items without sending) asks `Join …, created by …, and receive it into <project>?` and binds on the yes. From a shell, `wizardingcode-mem share project receive --as brand-strategy` in the folder. A name another project on this machine already carries is refused (`name-taken`); a project already shared under one name must be set to Nothing before it takes another (`renamed`). Two members who type the same name for two unrelated projects are told apart by the registry: the second sees `Joins`, not `New`, and the join question names the creator.
+
+### A name missing, re-created or removed
+
+Three states a bound name can read, in the dock, in `wizardingcode-mem status` and in `doctor`:
+
+- `missing`: the server no longer holds the name (a restore to a copy older than it); nothing of the project is sent until you set its level again, which re-creates the name with the id your machine holds, so your teammates stay bound.
+- `re-created`: the name was removed and created again for something else; the items under it are skipped and nothing of yours is sent until you decide: set the level again to join the new name (confirmed again, the new creator named), or set Nothing to leave it.
+- `removed`: the operator purged the name; nothing is sent under it again; set Nothing to leave it and, if you wish, forget it.
 
 ### The token file and your backups
 

@@ -57,6 +57,7 @@ import {
   rejoinRoute,
   removeRoute,
   resumeRoute,
+  serverNamesView,
   serversUnavailable,
   serversView,
   setServerListsRoute,
@@ -84,6 +85,8 @@ import {
   recentTurns,
   searchAll,
   setMemoryStatus,
+  forgetProjectName,
+  previewProjectSharing,
   setProjectSharing,
   sharingPreview,
   sharingView,
@@ -509,16 +512,34 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
     if (projectSharing !== null && request.method === "PUT") {
       const body = await jsonObject(request);
       if (body instanceof Response) return body;
-      const answer = setProjectSharing(
+      // With `as`, the bind under a shared name asks the server (ADR 0028): the sync's context.
+      const answer = await setProjectSharing(
+        syncContext(),
+        Number(projectSharing[1]),
+        body,
+        now(),
+      );
+      return json(answer.body, answer.status);
+    }
+    const sharingPreviewOf = /^\/api\/projects\/(\d+)\/sharing\/preview$/.exec(path);
+    if (sharingPreviewOf !== null && request.method === "POST") {
+      const body = await jsonObject(request);
+      if (body instanceof Response) return body;
+      const answer = previewProjectSharing(
         db,
         options.dataDir,
         env,
-        Number(projectSharing[1]),
+        Number(sharingPreviewOf[1]),
         body.level,
-        body.confirm === true,
-        now(),
+        body.as,
         body.server,
+        now(),
       );
+      return json(answer.body, answer.status);
+    }
+    const projectName = /^\/api\/projects\/(\d+)\/name$/.exec(path);
+    if (projectName !== null && request.method === "DELETE") {
+      const answer = forgetProjectName(db, Number(projectName[1]), now());
       return json(answer.body, answer.status);
     }
     // The team servers (ADR 0027): the list, the add, the rejoin, the removal, mute and resume;
@@ -547,17 +568,23 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
       });
       return json(answer.body, answer.status);
     }
-    const serverRoute = /^\/api\/servers\/([^/]+)(?:\/(rejoin|mute|unmute|resume))?$/.exec(path);
+    const serverRoute = /^\/api\/servers\/([^/]+)(?:\/(rejoin|mute|unmute|resume|names))?$/.exec(
+      path,
+    );
     if (serverRoute !== null) {
       const serverId = serverRoute[1] as string;
       const action = serverRoute[2];
+      if (action === "names" && request.method === "GET") {
+        const answer = await serverNamesView(syncContext(), serverId);
+        return json(answer.body, answer.status);
+      }
       if (action === undefined && request.method === "DELETE") {
         const body = await jsonObject(request);
         if (body instanceof Response) return body;
         const answer = await removeRoute(syncContext(), serverId, body);
         return json(answer.body, answer.status);
       }
-      if (action !== undefined && request.method === "POST") {
+      if (action !== undefined && action !== "names" && request.method === "POST") {
         const body = await jsonObject(request);
         if (body instanceof Response) return body;
         const ctx = syncContext();

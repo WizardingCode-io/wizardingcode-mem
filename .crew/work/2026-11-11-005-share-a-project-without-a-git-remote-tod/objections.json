@@ -1,0 +1,28 @@
+{
+  "objections": [
+    {
+      "id": "O-1",
+      "raisedBy": "gap-round",
+      "severity": "advisory",
+      "text": "The viewer's GET /api/servers/<id>/names follows every page of the server's list in one answer: a list with no limit at the proxy. The spec caps it at 1,000 names; the server's pages stay bounded.",
+      "raisedAt": "2026-11-11T15:26:45.159Z",
+      "criterion": "AC-43"
+    },
+    {
+      "id": "O-2",
+      "raisedBy": "gap-round",
+      "severity": "advisory",
+      "text": "Forget name is a hard delete of an alias row behind a button: the row is the only thing deleted, it is refused while a level is bound to the name, and it is logged.",
+      "raisedAt": "2026-11-11T15:26:45.287Z",
+      "criterion": "AC-3"
+    },
+    {
+      "id": "O-3",
+      "raisedBy": "gap-round",
+      "severity": "advisory",
+      "text": "Any member can create names with no cap on the registry's size: the devices bucket bounds the rate; an admin's deletion of a name is a later item.",
+      "raisedAt": "2026-11-11T15:26:45.413Z",
+      "criterion": "AC-39"
+    }
+  ]
+}

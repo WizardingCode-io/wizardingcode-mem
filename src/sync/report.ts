@@ -3,7 +3,7 @@
 // those readers runs SQL of its own over the sharing tables.
 import type { Db } from "../store/db.ts";
 import { dirtyKey, getMeta } from "../store/meta.ts";
-import { openConflictCount, pendingRowCount } from "./ledger.ts";
+import { openConflictCount, pendingRowCount, receivedNameCounts } from "./ledger.ts";
 import { hasServerTables } from "./servers.ts";
 import { type ServerStatus, type SyncState, statusReport, syncState } from "./state.ts";
 
@@ -18,10 +18,18 @@ export interface SyncReport {
  */
 export function syncReport(db: Db, dataDir: string, now: number): SyncReport | null {
   if (!hasServerTables(db)) return null;
-  const servers = statusReport(db, dataDir, (conn, serverId) => ({
-    dirtyPaths: Number(getMeta(conn, dirtyKey(serverId)) ?? 0),
-    pendingRows: pendingRowCount(conn, serverId),
-    openConflicts: openConflictCount(conn, serverId),
-  }));
+  const servers = statusReport(
+    db,
+    dataDir,
+    (conn, serverId) => ({
+      dirtyPaths: Number(getMeta(conn, dirtyKey(serverId)) ?? 0),
+      pendingRows: pendingRowCount(conn, serverId),
+      openConflicts: openConflictCount(conn, serverId),
+    }),
+    receivedNameCounts,
+  );
   return { state: syncState(db, now), servers };
 }
+
+// The one flag a shared name carries, for the readers that list projects (the viewer's overview).
+export { nameStateOf } from "./state.ts";

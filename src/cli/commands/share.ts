@@ -1,8 +1,17 @@
 import pkg from "../../../package.json" with { type: "json" };
+import { isSharedName, NAME_PREFIX } from "../../core/identity.ts";
 import { findProject, remoteAliasOf } from "../../core/project.ts";
 import { type SharingKey, validatePatch } from "../../settings/settings.ts";
+import { formatChange } from "../../sharing/format.ts";
 import { policyInForce, sharingRefusal } from "../../sharing/in-force.ts";
-import { confirmedServerRefs, destinationOf, levelKey, levelOf } from "../../sharing/levels.ts";
+import {
+  boundAliasesOf,
+  confirmedServerRefs,
+  destinationOf,
+  levelKey,
+  levelOf,
+} from "../../sharing/levels.ts";
+import { nameOf, noNameMessage, sharedNameOf } from "../../sharing/names.ts";
 import { decide, INERT_PROBLEM } from "../../sharing/policy.ts";
 import {
   findEntry,
@@ -14,10 +23,11 @@ import {
 import {
   applySettingsPatch,
   type ChangeRow,
+  forgetName,
   generationOf,
   lastChange,
   previewSettingsPatch,
-  setLevel,
+  projectState,
   setLevelMessage,
   setServerLists,
 } from "../../sharing/store.ts";
@@ -32,7 +42,16 @@ import {
   shareListText,
   TEAM_DESTINATION,
 } from "../../sharing/types.ts";
+import { ago } from "../../status/report.ts";
 import { type Db, openDb } from "../../store/db.ts";
+import {
+  type BindOutcome,
+  bindMessage,
+  commitBinding,
+  listServerNames,
+  nameCounts,
+  prepareBinding,
+} from "../../sync/binding.ts";
 import type { SyncContext } from "../../sync/context.ts";
 import {
   confirmJoin,
@@ -44,9 +63,9 @@ import {
   resumeServer,
 } from "../../sync/join.ts";
 import { ledgerHistory } from "../../sync/ledger.ts";
-import { findServer } from "../../sync/servers.ts";
+import { findServer, heldByContract } from "../../sync/servers.ts";
 import { startSync } from "../../sync/spawn.ts";
-import { type ServerStatus, statusReport } from "../../sync/state.ts";
+import { nameStateOf, type ServerStatus, statusReport } from "../../sync/state.ts";
 import { realClock, realTimers } from "../../util/clock.ts";
 import { logError } from "../../util/log.ts";
 import { resolvePaths } from "../../util/paths.ts";
@@ -57,7 +76,11 @@ import { askSecret, askYesNo, type PromptIo, terminalIo } from "../prompt.ts";
 export const USAGE = `Usage: wizardingcode-mem share <command>
 
 Commands:
-  project <level> [--yes] [--server <s>]   What the project of the current folder shares
+  project <level> [--as <name>] [--create] [--yes] [--server <s>]
+      What the project of the current folder shares; --as binds it under a shared name
+      a team can match it by when it has no git remote (--create makes the name)
+  names [--server <s>]                     The shared names on the server, yours marked *
+  name forget [--server <s>]               Leave the project's shared name, at Nothing
   roots <list|none> [--yes] [--server <s>] The repositories whose knowledge may leave: workspace, shared
   areas <list|none> [--yes] [--server <s>] The areas that may leave, such as workspace:sales
   status [--list] [--server <s>]           What is shared and what would leave; --list names each item
@@ -184,47 +207,155 @@ const chosenDestination = (serverId: string | null): string => serverId ?? TEAM_
 
 // --- project ------------------------------------------------------------------------------
 
+/** The level phrase of the shared name's question, per level (the viewer's words). */
+function levelPhrase(level: Level, project: string): string {
+  switch (level) {
+    case "receive":
+      return `and receive it into ${project}`;
+    case "knowledge":
+      return `and share knowledge of ${project} as it`;
+    case "all":
+      return `and share knowledge and memories of ${project} as it`;
+    case "local":
+      return `and share nothing of ${project}`;
+  }
+}
+
 /**
- * `share project <level> [--yes]`: what the project of the current folder shares. The folder
- * must be a project already: the command makes none. The level is bound to the folder's
- * git remote. What can never be set (no remote, memory off) is refused by `setLevel` before
- * the person is asked anything; a widening is then asked for, and set with the yes.
+ * `share project <level> [--as <name>] [--create] [--yes]`: what the project of the current
+ * folder shares. The folder must be a project already: the command makes none. The level is
+ * bound to the folder's git remote, or to the shared name given (ADR 0028): the dry run decides
+ * every local refusal first, the server is looked at once, the question is asked before any
+ * POST, then the name is created (`--create`) or joined, and the level written with its id.
  */
 const project: Subcommand = (argv) => {
-  const { values, rest } = parseWith(argv, ["--yes"], ["--server"]);
+  const { options, values, rest } = parseWith(argv, ["--yes", "--create"], ["--server", "--as"]);
   const [level, ...more] = rest;
   if (!isLevel(level) || more.length > 0) throw new UsageError(setLevelMessage("invalid"));
-  return ({ db, now, policyFor }) => {
+  return async ({ db, policyFor, sync }) => {
     const serverId = serverFor(db, values.get("--server"));
     requireLoaded(policyFor(serverId));
     const here = findProject(db, process.cwd());
     if (here === null) throw new Refusal(setLevelMessage("no-project"));
     const destination = chosenDestination(serverId);
-    const set = (confirm: boolean) =>
-      setLevel(db, {
-        projectId: here.id,
-        destination,
-        level,
-        source: "cli",
-        now,
-        confirm,
-        remoteAlias: remoteAliasOf(process.cwd()),
+    const serverName =
+      serverId === null ? "the team" : (findServer(db, serverId)?.name ?? serverId);
+    let as: string | null = null;
+    if (values.has("--as")) {
+      const typed = values.get("--as") as string;
+      const named = sharedNameOf(typed);
+      if (!named.ok) throw new Refusal(noNameMessage(typed, named));
+      as = named.alias;
+    }
+    const current = nameOf(projectState(db, here.id).aliases);
+    const context = {
+      slug: as === null ? null : as.slice(NAME_PREFIX.length),
+      server: serverName,
+      current: current === null ? null : current.slice(NAME_PREFIX.length),
+    };
+    const ctx = sync();
+    const input = {
+      projectId: here.id,
+      destination,
+      level,
+      as,
+      remoteAlias: remoteAliasOf(process.cwd()),
+      source: "cli" as const,
+    };
+    const prepared = await prepareBinding(ctx, input);
+    if (!prepared.ok) throw new Refusal(bindMessage(prepared, context));
+
+    let outcome: BindOutcome;
+    if (prepared.action === "none") {
+      outcome = await commitBinding(ctx, prepared, {
+        confirm: argv.includes("--yes"),
+        create: false,
       });
-    let outcome = set(argv.includes("--yes"));
-    if (!outcome.ok && outcome.reason === "needs-confirm") {
-      const what = LEVEL_LABELS[level].toLowerCase();
-      requireYes(`Share ${what} of ${here.name} with ${serverId ?? "the team"}?`, argv);
-      outcome = set(true);
+      if (!outcome.ok && outcome.reason === "needs-confirm") {
+        const what = LEVEL_LABELS[level].toLowerCase();
+        requireYes(`Share ${what} of ${here.name} with ${serverName}?`, argv);
+        outcome = await commitBinding(ctx, prepared, { confirm: true, create: false });
+      }
+    } else {
+      const slug = prepared.slug as string;
+      const question =
+        prepared.action === "create"
+          ? `Create \`${slug}\` on ${serverName}, visible to every member, ${levelPhrase(level, here.name)}?`
+          : `Join \`${slug}\`, created by ${prepared.name?.createdBy.name ?? "a teammate"} (${nameCounts(prepared.name ?? { entries: 0, memories: 0 })}), ${levelPhrase(level, here.name)}?`;
+      // The question is in the output, --yes or not: it says what the server is asked for.
+      out(question);
+      out(
+        `would leave: ${plural(prepared.counts.entries, "entry", "entries")} · ${plural(prepared.counts.memories, "memory", "memories")}${prepared.counts.imported > 0 ? ` · ${plural(prepared.counts.imported, "imported memory stays", "imported memories stay")}` : ""}`,
+      );
+      requireYes("Go ahead?", argv);
+      outcome = await commitBinding(ctx, prepared, {
+        confirm: true,
+        create: options.has("--create"),
+      });
     }
     if (!outcome.ok) {
-      if (outcome.reason === "one-server" && outcome.server !== undefined)
-        throw new Refusal(
-          `this project is bound to ${outcome.server}; set it to Nothing there first`,
-        );
-      throw new Refusal(setLevelMessage(outcome.reason));
+      const message = bindMessage(outcome, { ...context, slug: prepared.slug ?? context.slug });
+      throw new Refusal(outcome.named === true ? `${message}; ${outcome.message}` : message);
     }
-    const unchanged = outcome.old === level && !outcome.rebound;
-    out(`sharing: ${here.name} → ${LEVEL_LABELS[level]}${unchanged ? " (unchanged)" : ""}`);
+    const unchanged = outcome.old === level && !outcome.rebound && !outcome.named;
+    const shared = isSharedName(outcome.boundAlias)
+      ? `, shared as ${outcome.boundAlias.slice(NAME_PREFIX.length)}`
+      : "";
+    out(
+      `sharing: ${here.name} → ${LEVEL_LABELS[level]}${unchanged ? " (unchanged)" : ""}${shared}`,
+    );
+    if (level === "all" && prepared.counts.imported > 0)
+      out(plural(prepared.counts.imported, "imported memory stays", "imported memories stay"));
+  };
+};
+
+// --- names, name forget -------------------------------------------------------------------
+
+/**
+ * `share names [--server <s>]`: every page of the server's live names, one line each, the
+ * ones this machine's projects are bound under marked `*`; `none yet` for an empty registry.
+ */
+const names: Subcommand = (argv) => {
+  const { values, rest } = parseWith(argv, [], ["--server"]);
+  if (rest.length > 0) throw new UsageError(`unexpected argument ${rest[0]}`);
+  return async ({ db, now, sync }) => {
+    const serverId = serverFor(db, values.get("--server"));
+    if (serverId === null) throw new Refusal("no server; share server add <url> --code <code>");
+    const row = findServer(db, serverId);
+    if (row === null) throw new Refusal(`\`${serverId}\` names no server`);
+    // The one read the dock's field makes too: the contract first, then every page.
+    const listed = await listServerNames(sync(), row);
+    if (!listed.ok) throw new Refusal(listed.message ?? listed.reason);
+    if (listed.names.length === 0) {
+      out("none yet");
+      return;
+    }
+    const bound = new Set(boundAliasesOf(db, serverId).filter(isSharedName));
+    for (const name of listed.names) {
+      out(
+        `${bound.has(name.alias) ? "* " : "  "}${name.alias.slice(NAME_PREFIX.length)}  created by ${name.createdBy.name}  ${nameCounts(name)}  last ${ago(now, name.lastChangeAt)}`,
+      );
+    }
+    if (listed.truncated) out("  … more on the server");
+  };
+};
+
+/** `share name forget`: the current folder's project leaves its shared name, at Nothing. */
+const nameForget: Subcommand = (argv) => {
+  const [verb, ...rest] = argv;
+  if (verb !== "forget") throw new UsageError("name takes forget");
+  const { rest: more } = parseWith(rest, [], ["--server"]);
+  if (more.length > 0) throw new UsageError(`unexpected argument ${more[0]}`);
+  return ({ db, now }) => {
+    const here = findProject(db, process.cwd());
+    if (here === null) throw new Refusal(setLevelMessage("no-project"));
+    const outcome = forgetName(db, here.id, now, "cli");
+    if (!outcome.ok) {
+      if (outcome.reason === "name-bound") throw new Refusal(setLevelMessage("name-bound"));
+      if (outcome.reason === "no-name") throw new Refusal(`${here.name} has no shared name`);
+      throw new Refusal(setLevelMessage("no-project"));
+    }
+    out(`forgot the shared name ${outcome.alias.slice(NAME_PREFIX.length)} of ${here.name}`);
   };
 };
 
@@ -302,13 +433,22 @@ const COUNTED: readonly Level[] = ["knowledge", "all", "local"];
 export function formatShareStatus(
   policy: SharingPolicy,
   report: Report,
-  project: { name: string; level: Level; boundAlias: string } | null,
+  project: {
+    name: string;
+    level: Level;
+    boundAlias: string;
+    /** The one flag the bound name carries, when it is a shared name (ADR 0028). */
+    nameState?: "missing" | "recreated" | "purged" | null;
+    /** The server speaks 1 while a shared name is bound to it. */
+    namesHeld?: boolean;
+  } | null,
   change: ChangeRow | null,
+  projectName: (id: number) => string | null = () => null,
 ): string[] {
   const last =
     change === null
       ? "no change yet"
-      : `last change: ${change.what} ${change.old} → ${change.new}, ${new Date(change.at).toISOString()}, from the ${change.source}`;
+      : `last change: ${formatChange(change, projectName)}, ${new Date(change.at).toISOString()}, from the ${change.source}`;
   const inert =
     policy.inert.length === 0 ? "" : ` (${policy.inert.join(", ")} not in the taxonomy; ignored)`;
   const projects = COUNTED.map((level) => {
@@ -317,6 +457,16 @@ export function formatShareStatus(
   });
   const bound =
     project === null || project.boundAlias === "" ? "" : ` (bound to ${project.boundAlias})`;
+  const NAME_STATE_TEXT = {
+    missing: " (missing on the server)",
+    recreated: " (re-created on the server)",
+    purged: " (removed by the operator)",
+  } as const;
+  const shared =
+    project === null || !isSharedName(project.boundAlias)
+      ? ""
+      : ` shared as ${project.boundAlias.slice(NAME_PREFIX.length)}${project.nameState === undefined || project.nameState === null ? "" : NAME_STATE_TEXT[project.nameState]}`;
+  const heldNames = project?.namesHeld === true ? " · names held" : "";
   const lines = [
     `sharing   epoch ${policy.epoch} · ${last}`,
     `roots     ${shareListText([...policy.roots])}`,
@@ -325,7 +475,7 @@ export function formatShareStatus(
       .filter((problem) => !problem.startsWith(INERT_PROBLEM))
       .map((problem) => `problem   ${problem}`),
     `projects  ${projects.join(" · ")}`,
-    `this      ${project === null ? "not a known project" : `${project.name}: ${LEVEL_LABELS[project.level]}${bound}`}`,
+    `this      ${project === null ? "not a known project" : `${project.name}: ${LEVEL_LABELS[project.level]}${bound}${shared}${heldNames}`}`,
     `leaves    ${plural(report.counts.entries, "entry", "entries")} · ${plural(report.counts.memories, "memory", "memories")}`,
   ];
   if (report.items === undefined) return lines;
@@ -361,8 +511,22 @@ const status: Subcommand = (argv) => {
     const level = here === null ? "local" : levelOf(policy, here.id, ofProject).level;
     const row = here === null ? undefined : policy.levels.get(levelKey(here.id, ofProject));
     const boundAlias = level === "local" ? "" : (row?.boundAlias ?? "");
-    const current = here === null ? null : { name: here.name, level, boundAlias };
-    for (const line of formatShareStatus(policy, report, current, lastChange(db))) out(line);
+    const nameState =
+      here !== null && serverId !== null && isSharedName(boundAlias)
+        ? nameStateOf(db, serverId, boundAlias)
+        : null;
+    const server = serverId === null ? null : findServer(db, serverId);
+    const namesHeld =
+      server !== null &&
+      boundAliasesOf(db, server.serverId).some((alias) => heldByContract(server, alias));
+    const current =
+      here === null ? null : { name: here.name, level, boundAlias, nameState, namesHeld };
+    const projectName = (id: number) =>
+      db.query<{ name: string }, [number]>("SELECT name FROM projects WHERE id = ?").get(id)
+        ?.name ?? null;
+    for (const line of formatShareStatus(policy, report, current, lastChange(db), projectName)) {
+      out(line);
+    }
   };
 };
 
@@ -596,6 +760,8 @@ const server: Subcommand = (argv) => {
 
 const SUBCOMMANDS = new Map<string, Subcommand>([
   ["project", project],
+  ["names", names],
+  ["name", nameForget],
   ["roots", list("roots")],
   ["areas", list("areas")],
   ["status", status],

@@ -5,8 +5,10 @@
 // selected project opens in the app's 320px dock: its suggestions with their reasons and
 // Link / Reject, its confirmed links with Unlink, a way to link one by hand, and what it
 // shares with the team's server.
-import { computed, onMounted, reactive, ref } from "vue";
-import { api, LEVEL_LABELS, LEVELS, type Level, type LinkKind, type Project, type ServerEntry, widens } from "../api";
+import { computed, onMounted, reactive, ref, watch } from "vue";
+import { NAME_PREFIX } from "../../../src/core/identity.ts";
+import { sharedNameOf } from "../../../src/sharing/names.ts";
+import { api, LEVEL_LABELS, LEVELS, type Level, type LinkKind, type NameItem, type Project, RouteError, type ServerEntry, widens } from "../api";
 import { compact, day, hue } from "../format";
 import { projectGroups, projectLinks, projectPlace, signalParts, visibleFrom } from "../links";
 import { loadLinks, loadOverview, openCross, reload, state } from "../viewer";
@@ -130,13 +132,140 @@ const serverFor = (p: Project) => p.server?.id ?? (servers.value.length > 1 ? ch
 const serverNameFor = (p: Project) => p.server?.name ?? (servers.value.length > 1 ? servers.value.find((s) => s.id === chosenServer.value)?.name : servers.value[0]?.name) ?? null;
 const sharingBusy = ref(false);
 const widening = ref<{ id: number; name: string; level: Level; description: string } | null>(null);
-const sharingLocked = computed(() => !selected.value || !selected.value.remote || selected.value.disabled || (servers.value.length > 1 && !selected.value.server && chosenServer.value === undefined));
 const LEVEL_ITEMS = LEVELS.map((level) => ({ label: LEVEL_LABELS[level], value: level }));
+const count = (n: number, one: string, many: string) => `${n.toLocaleString("en-GB")} ${n === 1 ? one : many}`;
 /** Whatever failed, the person reads one plain sentence: no message, no path. */
 const notChanged = () => toast.add({ title: "Not changed", description: "The level could not be saved.", color: "error" });
+
+// The shared name (ADR 0028): a project with no host-led remote, or one that carries a name, has
+// the field; its server's names are read once per server when the section opens; the sentence
+// under the field comes from the preview route when the field settles, never per keystroke; a
+// level chosen under a name the project is not yet bound by asks to create or join it first.
+type NameSentence = { kind: "new" | "joins" | "taken" | "refused" | "created" | "purged"; slug: string; text: string; item: NameItem | null };
+const namesByServer = reactive(new Map<string, { names: NameItem[]; truncated: boolean }>());
+const typedName = ref("");
+/** What the field holds while the person types; taken as the name when the field is left without a pick. */
+const searchTerm = ref("");
+const nameSentence = ref<NameSentence | null>(null);
+/** The create or join confirmation: the question is the body's first sentence, the would-leave line its second. */
+const binding = ref<{ id: number; name: string; level: Level; action: "create" | "join"; slug: string; question: string; leaves: string } | null>(null);
+/** The field shows for a project with no host-led remote, and for one that carries a name. */
+const hasField = (p: Project) => !p.remote || p.sharedName !== null;
+/** The server the dock's names come from: the bound one, the chosen one, else the only one. */
+const serverEntry = computed(() => {
+  const p = selected.value;
+  if (!p) return undefined;
+  const id = serverFor(p) ?? servers.value[0]?.id;
+  return servers.value.find((s) => s.id === id);
+});
+/** The server speaks contract 1: shared names are held until it is upgraded. */
+const namesHeld = computed(() => (serverEntry.value?.contract ?? 2) < 2);
+const serverNames = computed(() => (serverEntry.value ? namesByServer.get(serverEntry.value.id) : undefined));
+const slugOfAlias = (alias: string) => alias.slice(NAME_PREFIX.length);
+const nameItems = computed(() => (serverNames.value?.names ?? []).map((name) => slugOfAlias(name.alias)));
+/** The server holds more names than the list carries (the first 1,000). */
+const moreNames = computed(() => serverNames.value?.truncated === true);
+const listedName = (slug: string) => serverNames.value?.names.find((name) => name.alias === `${NAME_PREFIX}${slug}`) ?? null;
+const recreatedBy = computed(() => serverEntry.value?.names.find((name) => name.slug === selected.value?.sharedName)?.recreatedBy ?? "a teammate");
+const prefill = (p: Project) => {
+  const named = sharedNameOf(p.name);
+  return named.ok ? slugOfAlias(named.alias) : "";
+};
+function levelPhrase(level: Level, project: string): string {
+  if (level === "receive") return `and receive it into ${project}`;
+  if (level === "knowledge") return `and share knowledge of ${project} as it`;
+  if (level === "all") return `and share knowledge and memories of ${project} as it`;
+  return `and share nothing of ${project}`;
+}
+/** The name's creator as the person reads it: "you" for this machine's own member. */
+const creatorOf = (item: NameItem) => (item.createdBy.name === serverEntry.value?.member ? "you" : item.createdBy.name);
+const joinText = (slug: string, item: NameItem) => `Joins \`${slug}\` · created by ${creatorOf(item)} · ${count(item.entries, "entry", "entries")}, ${count(item.memories, "memory", "memories")}`;
+const joinTitle = (slug: string, item: NameItem, level: Level, project: string) =>
+  `Join \`${slug}\`, created by ${creatorOf(item)} (${count(item.entries, "entry", "entries")}, ${count(item.memories, "memory", "memories")}), ${levelPhrase(level, project)}?`;
+
+async function loadNames(serverId: string) {
+  if (namesByServer.has(serverId)) return;
+  try {
+    namesByServer.set(serverId, await api.serverNames(serverId));
+  } catch {
+    // Held, pending or unreachable: the field still takes a name; the preview says the rest.
+    namesByServer.set(serverId, { names: [], truncated: false });
+  }
+}
+/** The sentence under the field, from the preview route. */
+async function settleName() {
+  const p = selected.value;
+  const typed = typedName.value.trim();
+  if (!p || !hasField(p) || p.boundTo === "name" || !typed) {
+    nameSentence.value = null;
+    return;
+  }
+  // What this machine knows without a request: a text that makes no name, a name another project here carries.
+  const made = sharedNameOf(typed);
+  if (!made.ok) {
+    nameSentence.value = { kind: "refused", slug: typed, item: null, text: made.word === undefined ? "No shared name can be made of that: use letters or digits." : `No shared name can be made of that: \`${made.word}\` is a reserved file name.` };
+    return;
+  }
+  const owner = state.projects.find((other) => other.id !== p.id && other.sharedName === slugOfAlias(made.alias));
+  if (owner !== undefined) {
+    nameSentence.value = { kind: "taken", slug: slugOfAlias(made.alias), item: null, text: `This name is \`${owner.name}\`'s on this machine.` };
+    return;
+  }
+  try {
+    const answer = await api.previewProjectSharing(p.id, p.sharing === "local" ? "receive" : p.sharing, typed, serverFor(p));
+    const slug = slugOfAlias(answer.boundAlias);
+    const item = listedName(slug);
+    nameSentence.value = item
+      ? { kind: "joins", slug, item, text: joinText(slug, item) }
+      : { kind: "new", slug, item: null, text: `New: you create \`${slug}\` on ${serverNameFor(p) ?? "your team's server"}` };
+  } catch (error) {
+    const body = error instanceof RouteError ? error.body : {};
+    nameSentence.value =
+      body.reason === "name-taken"
+        ? { kind: "taken", slug: typed, item: null, text: `This name is \`${String(body.other ?? "another project")}\`'s on this machine.` }
+        : { kind: "refused", slug: typed, item: null, text: typeof body.error === "string" ? body.error : "No shared name can be made of that." };
+  }
+}
+watch(
+  () => [selected.value?.id, serverEntry.value?.id] as const,
+  async () => {
+    const p = selected.value;
+    nameSentence.value = null;
+    if (!p || !hasField(p)) {
+      typedName.value = "";
+      return;
+    }
+    typedName.value = p.sharedName ?? prefill(p);
+    const entry = serverEntry.value;
+    if (entry !== undefined && !namesHeld.value) await loadNames(entry.id);
+    await settleName();
+  },
+  { immediate: true },
+);
+/** The field left with a typed text and no pick: the text is the name. */
+function leaveField() {
+  const term = searchTerm.value.trim();
+  if (term !== "" && term !== typedName.value) {
+    typedName.value = term;
+    void settleName();
+  }
+}
+/** The levels are offered once a team alias is available: the git remote, the name carried, or the one typed. */
+const sharingLocked = computed(() => {
+  const p = selected.value;
+  if (!p || p.disabled) return true;
+  if (servers.value.length > 1 && !p.server && chosenServer.value === undefined) return true;
+  const aliasAvailable = p.remote || p.sharedName !== null || typedName.value.trim() !== "";
+  return !aliasAvailable || (hasField(p) && namesHeld.value && p.boundTo !== "name");
+});
 async function chooseLevel(level: Level) {
   const p = selected.value;
   if (!p || level === p.sharing) return;
+  // A name the project is not yet bound by: the create or join confirmation, whatever the level.
+  if (hasField(p) && level !== "local" && !(p.boundTo === "name" && p.sharedName === typedName.value.trim())) {
+    await openBinding(p, level);
+    return;
+  }
   if (!widens(p.sharing, level)) {
     await setLevel(p.id, level, false);
     return;
@@ -146,16 +275,104 @@ async function chooseLevel(level: Level) {
     const server = serverFor(p);
     const { report } = await api.sharingPreview({ level: { projectId: p.id, level, ...(server ? { server } : {}) } });
     const own = report.perProject.find((row) => row.id === p.id) ?? report.counts;
-    const count = (n: number, one: string, many: string) => `${n.toLocaleString("en-GB")} ${n === 1 ? one : many}`;
     const serverName = serverNameFor(p);
     widening.value = {
       id: p.id,
       name: p.name,
       level,
-      description: `${count(own.entries, "knowledge entry", "knowledge entries")} and ${count(own.memories, "memory", "memories")} of ${p.name} ${serverName === null ? "would leave for your team's server once one is listed. Nothing is sent now." : `would leave for ${serverName}.`}`,
+      description: `${count(own.entries, "knowledge entry", "knowledge entries")} and ${count(own.memories, "memory", "memories")} of ${p.name} ${serverName === null ? "would leave for your team's server once one is listed. Nothing is sent now." : `would leave for ${serverName}.`}${importedLine(p)}`,
     };
   } catch {
     notChanged();
+  } finally {
+    sharingBusy.value = false;
+  }
+}
+/** The imported memories stay on this machine whatever the level (D-6); said when there are any. */
+const importedText = (k: number) => (k === 1 ? "1 imported memory stays on this machine." : `${k.toLocaleString("en-GB")} imported memories stay on this machine.`);
+const importedLine = (p: Project) => (p.imported > 0 ? ` ${importedText(p.imported)}` : "");
+/** The create or join confirmation: the title from the sentence's state, the counts from the preview. */
+async function openBinding(p: Project, level: Level) {
+  sharingBusy.value = true;
+  try {
+    if (nameSentence.value === null) await settleName();
+    const sentence = nameSentence.value;
+    if (sentence === null || sentence.kind === "taken" || sentence.kind === "refused" || sentence.kind === "purged") {
+      toast.add({ title: "Not changed", description: sentence?.text ?? "Type a shared name first.", color: "error" });
+      return;
+    }
+    const server = serverFor(p);
+    const { report } = await api.sharingPreview({ level: { projectId: p.id, level, ...(server ? { server } : {}) } });
+    const own = report.perProject.find((row) => row.id === p.id) ?? report.counts;
+    const serverName = serverNameFor(p) ?? "your team's server";
+    const action = sentence.item === null ? "create" : "join";
+    const question =
+      sentence.item === null
+        ? `Create \`${sentence.slug}\` on ${serverName}, visible to every member, ${levelPhrase(level, p.name)}?`
+        : joinTitle(sentence.slug, sentence.item, level, p.name);
+    const leaves = `${level === "receive" ? `Nothing of ${p.name} leaves.` : `${count(own.entries, "knowledge entry", "knowledge entries")} and ${count(own.memories, "memory", "memories")} would leave.`}${importedLine(p)}`;
+    binding.value = { id: p.id, name: p.name, level, action, slug: sentence.slug, question, leaves };
+  } catch {
+    notChanged();
+  } finally {
+    sharingBusy.value = false;
+  }
+}
+async function confirmBinding() {
+  const b = binding.value;
+  const p = selected.value;
+  if (!b || !p) return;
+  sharingBusy.value = true;
+  try {
+    const changed = await api.setProjectSharing(b.id, b.level, true, serverFor(p), typedName.value.trim(), b.action === "create");
+    binding.value = null;
+    nameSentence.value = null;
+    const entry = serverEntry.value;
+    if (entry !== undefined) namesByServer.delete(entry.id);
+    await loadOverview();
+    if (entry !== undefined) await loadNames(entry.id);
+    toast.add({ title: "Sharing changed", description: `${LEVEL_LABELS[changed.old]} → ${LEVEL_LABELS[changed.level]}, shared as ${changed.sharedName ?? b.slug}`, color: "success" });
+  } catch (error) {
+    const body = error instanceof RouteError ? error.body : {};
+    const sentence = typeof body.error === "string" ? body.error : "The level could not be saved.";
+    if (body.reason === "exists" && body.name !== null && typeof body.name === "object") {
+      // The name was created between the list and the yes: the join state, confirmed again.
+      const item = body.name as NameItem;
+      nameSentence.value = { kind: "joins", slug: b.slug, item, text: joinText(b.slug, item) };
+      binding.value = { ...b, action: "join", question: joinTitle(b.slug, item, b.level, b.name) };
+      return;
+    }
+    binding.value = null;
+    if (body.reason === "purged") {
+      nameSentence.value = { kind: "purged", slug: b.slug, item: null, text: `Removed: the operator removed \`${b.slug}\` from ${serverNameFor(p) ?? "the server"}; pick another name.` };
+      return;
+    }
+    if (body.named === true) {
+      // The name is on the server, the level is not: the sentence says so, and the list has it.
+      // The route's two sentences, as one the dock shows: a capital first letter and a full stop.
+      nameSentence.value = { kind: "created", slug: b.slug, item: null, text: `${sentence.charAt(0).toUpperCase()}${sentence.slice(1)}.` };
+      const entry = serverEntry.value;
+      if (entry !== undefined) {
+        namesByServer.delete(entry.id);
+        await loadNames(entry.id);
+      }
+      return;
+    }
+    toast.add({ title: "Not changed", description: sentence, color: "error" });
+  } finally {
+    sharingBusy.value = false;
+  }
+}
+async function forgetName(p: Project) {
+  sharingBusy.value = true;
+  try {
+    await api.forgetProjectName(p.id);
+    await loadOverview();
+    typedName.value = prefill(p);
+    nameSentence.value = null;
+    toast.add({ title: "Name forgotten", description: `${p.name} no longer carries a shared name.`, color: "success" });
+  } catch {
+    toast.add({ title: "Not changed", description: "The name could not be forgotten.", color: "error" });
   } finally {
     sharingBusy.value = false;
   }
@@ -313,6 +530,25 @@ const RELATION_TONE = {
             <USelectMenu :model-value="chosenServer" :items="serverItems" value-key="value" :search-input="false" placeholder="Choose a server" size="sm" class="w-full" @update:model-value="(id) => (chosenServer = id as string)" />
           </UFormField>
           <p v-else-if="servers.length === 1" class="m-0 text-xs leading-4 text-(--ink-muted)">A level set here binds this project to {{ servers[0]?.name }}.</p>
+          <!-- The shared name (ADR 0028): a project with no host-led remote, or one that carries a name. -->
+          <template v-if="!selected.remote || selected.sharedName">
+            <div v-if="selected.boundTo === 'name'" class="flex flex-col gap-1">
+              <p class="m-0 text-xs leading-4 text-(--ink)">Shared as <code class="wz-mono">{{ selected.sharedName }}</code>.<template v-if="selected.remote"> This project now has a git remote; to match by the remote instead, set Nothing, forget the name, then set the level again.</template></p>
+              <p v-if="selected.nameState === 'missing'" class="m-0 text-xs leading-4 text-(--warn)">Missing: the server does not hold <code class="wz-mono">{{ selected.sharedName }}</code>; set the level again to create or join it.</p>
+              <p v-else-if="selected.nameState === 'recreated'" class="m-0 text-xs leading-4 text-(--warn)">The shared name <code class="wz-mono">{{ selected.sharedName }}</code> was re-created on the server by {{ recreatedBy }}; join it again, or set Nothing to leave it.</p>
+              <p v-else-if="selected.nameState === 'purged'" class="m-0 text-xs leading-4 text-(--warn)">Removed: the operator removed <code class="wz-mono">{{ selected.sharedName }}</code> from the server; set Nothing to leave it.</p>
+              <p v-else-if="!selected.remote" class="m-0 text-xs leading-4 text-(--ink-muted)">Set Nothing to leave this name.</p>
+            </div>
+            <UFormField v-else label="Shared name" :help="namesHeld ? undefined : 'A name the team matches this project by: a new one, or one a teammate created.'" class="w-full">
+              <UInputMenu v-model="typedName" :items="nameItems" create-item :disabled="namesHeld || sharingBusy" placeholder="shared name" size="sm" class="w-full" @update:model-value="settleName" @update:search-term="(term: string) => (searchTerm = term)" @create="(term: string) => { typedName = term; settleName(); }" @blur="leaveField" />
+              <p v-if="namesHeld" class="m-0 pt-1 text-xs leading-4 text-(--warn)">The server speaks contract 1; shared names need its upgrade.</p>
+              <p v-else-if="nameSentence" class="m-0 pt-1 text-xs leading-4" :class="nameSentence.kind === 'new' || nameSentence.kind === 'joins' ? 'text-(--ink-muted)' : 'text-(--warn)'">{{ nameSentence.text }}</p>
+              <p v-if="moreNames" class="m-0 pt-1 text-xs leading-4 text-(--ink-muted)">The list shows the first 1,000 names.</p>
+            </UFormField>
+            <div v-if="selected.sharedName && selected.boundTo !== 'name'" class="flex items-center">
+              <UButton size="xs" color="neutral" variant="outline" label="Forget name" :loading="sharingBusy" @click="forgetName(selected)" />
+            </div>
+          </template>
           <URadioGroup
             :model-value="selected.sharing"
             :items="LEVEL_ITEMS"
@@ -324,8 +560,8 @@ const RELATION_TONE = {
             :ui="{ legend: 'sr-only', fieldset: 'gap-0', item: 'h-8 items-center' }"
             @update:model-value="(level) => chooseLevel(level as Level)"
           />
-          <p v-if="!selected.remote" class="m-0 text-xs leading-4 text-(--ink)">This project has no git remote. A team can only match projects by their remote.</p>
           <p v-if="selected.disabled" class="m-0 text-xs leading-4 text-(--ink)">Memory is off for this project.</p>
+          <p v-if="selected.sharing === 'all' && selected.imported > 0" class="m-0 text-xs leading-4 text-(--ink-muted)">{{ importedText(selected.imported) }}</p>
           <p class="m-0 text-xs leading-4 text-(--ink-muted)">Memories have no area: Knowledge and memories sends every active memory of this project that is not stale, branch-bound, imported or one of your rules.</p>
         </section>
 
@@ -353,6 +589,17 @@ const RELATION_TONE = {
       :busy="sharingBusy"
       @update:open="(o) => { if (!o) widening = null; }"
       @confirm="widening && setLevel(widening.id, widening.level, true)"
+    />
+    <Confirm
+      :open="binding !== null"
+      tone="warn"
+      icon="i-lucide-share-2"
+      :title="binding?.action === 'create' ? 'Create a shared name?' : 'Join a shared name?'"
+      :description="binding ? `${binding.question} ${binding.leaves}` : ''"
+      :action="binding?.action === 'create' ? 'Create and share' : 'Join and share'"
+      :busy="sharingBusy"
+      @update:open="(o) => { if (!o) binding = null; }"
+      @confirm="confirmBinding"
     />
   </div>
 </template>

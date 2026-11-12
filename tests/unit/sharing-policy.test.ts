@@ -119,7 +119,7 @@ describe("loadPolicy: the store", () => {
     const widgets = addProject(db, "widgets", WIDGETS);
     addLevel(db, widgets, "all", WIDGETS);
     db.run(
-      "INSERT INTO module_migrations (module, version, name, applied_at) VALUES ('sharing', 3, 'x', 0)",
+      "INSERT INTO module_migrations (module, version, name, applied_at) VALUES ('sharing', 4, 'x', 0)",
     );
     const policy = load(db);
     expect(policy.closed).toBe(true);
@@ -193,6 +193,7 @@ describe("loadPolicy: the levels", () => {
       destination: "team",
       level: "knowledge",
       boundAlias: WIDGETS,
+      nameId: null,
       reason: "allowed",
     });
     expect(levelOf(policy, widgets, "team")).toEqual({ level: "knowledge", reason: "allowed" });
@@ -215,6 +216,7 @@ describe("loadPolicy: the levels", () => {
       destination: "team",
       level: "local",
       boundAlias: WIDGETS,
+      nameId: null,
       reason: "disabled",
     });
     expect(levelOf(policy, widgets, "team")).toEqual({ level: "local", reason: "disabled" });
@@ -233,7 +235,7 @@ describe("loadPolicy: the levels", () => {
     expect(levelOf(policy, widgets, "team")).toEqual({ level: "local", reason: "unbound-alias" });
     expect(policy.levels.get(levelKey(widgets, "team"))?.boundAlias).toBe(WIDGETS);
     expect(policy.problems).toEqual([
-      "widgets lost the git remote its level was bound to; its level is Nothing until you set it again",
+      "widgets lost the git remote or the shared name its level was bound to; its level is Nothing until you set it again",
     ]);
     db.close();
   });
@@ -489,6 +491,7 @@ describe("isDefault", () => {
       destination: "team",
       level,
       boundAlias: WIDGETS,
+      nameId: null,
       reason,
     });
     const withLevel = (level: Level, reason: Reason) =>
@@ -542,7 +545,7 @@ const levelRow = (
   reason: Reason = "allowed",
 ): [string, LevelRow] => [
   levelKey(projectId, "team"),
-  { projectId, destination: "team", level, boundAlias: "remote:x", reason },
+  { projectId, destination: "team", level, boundAlias: "remote:x", nameId: null, reason },
 ];
 
 /** A policy over the known projects P, Q and DOWN, for the team destination. */
@@ -734,6 +737,26 @@ describe("decide: memories", () => {
     expect(decide(policy(), "team", memory({ status: "archived" }), [])).toEqual(
       keep("level-local"),
     );
+  });
+
+  test("an imported memory of a project bound to a shared name stays too (ADR 0028)", () => {
+    const named = policy({
+      levels: new Map([
+        [
+          levelKey(P, "team"),
+          {
+            projectId: P,
+            destination: "team",
+            level: "all",
+            boundAlias: "name:wizardingcode",
+            nameId: "0123456789abcdef",
+            reason: "allowed",
+          },
+        ],
+      ]),
+    });
+    expect(decide(named, "team", memory({ origin: "imported" }), [])).toEqual(keep("imported"));
+    expect(decide(named, "team", memory(), [])).toEqual(send);
   });
 });
 

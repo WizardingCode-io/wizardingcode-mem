@@ -178,6 +178,7 @@ describe("the sharing tables", () => {
       "src/ui/server.ts",
       "src/ui/api.ts",
       "src/sync/join.ts",
+      "src/sync/binding.ts",
       "src/modules/knowledge/tools.ts",
     ];
     for (const file of quiet) {

@@ -4,6 +4,7 @@
 // of unbound aliases runs before a pull's first page; every row kind of the feed is applied
 // row by row under the lease, idempotently, the cursor saved after the page.
 import { createHash } from "node:crypto";
+import { isTeamAlias, TEAM_ALIAS_SQL } from "../core/identity.ts";
 import { type Redacted, redact } from "../core/redact.ts";
 import { MEMORY_KINDS, type MemoryKind } from "../core/types.ts";
 import { parseEntry, slugify } from "../modules/knowledge/entry.ts";
@@ -12,7 +13,8 @@ import { receivedRow } from "../modules/knowledge/index-store.ts";
 import { openStore } from "../modules/knowledge/store-open.ts";
 import type { KnowledgeStore } from "../modules/knowledge/types.ts";
 import { aliasBoundTo, boundAliasesOf } from "../sharing/levels.ts";
-import type { OutgoingMemory } from "../sharing/types.ts";
+import { loadPolicy } from "../sharing/policy.ts";
+import type { OutgoingMemory, SharingPolicy } from "../sharing/types.ts";
 import {
   deleteReceivedMemory,
   insertReceivedMemory,
@@ -40,11 +42,23 @@ import {
 import { logError } from "./log.ts";
 import { deleteReceived, projectIdOf, reconcileReceived, writeReceived } from "./received.ts";
 import type { PullOutcome } from "./run.ts";
-import { readTokens, type ServerRow, type Stopped, setInstance, setStopped } from "./servers.ts";
+import {
+  acceptableContract,
+  heldByContract,
+  readTokens,
+  type ServerRow,
+  type Stopped,
+  setContract,
+  setInstance,
+  setStopped,
+} from "./servers.ts";
 import {
   type CursorRef,
+  clearName,
   cursorsOf,
   failureAnswer,
+  flaggedNames,
+  flagName,
   guarded,
   recordAnswer,
   setCursor,
@@ -71,9 +85,12 @@ export interface PullResult extends PullOutcome {
 
 // --- The aliases the pull names -----------------------------------------------------------------
 
-/** The host-led aliases of the enabled projects bound to the server above Nothing, by bytes. */
-export function boundAliases(ctx: SyncContext, serverId: string): string[] {
-  return boundAliasesOf(ctx.db, serverId);
+/**
+ * The aliases the pull names: the team aliases of the enabled projects bound to the server above
+ * Nothing, by bytes, less the shared names while the server speaks 1 (ADR 0028: names held).
+ */
+export function boundAliases(ctx: SyncContext, server: ServerRow): string[] {
+  return boundAliasesOf(ctx.db, server.serverId).filter((alias) => !heldByContract(server, alias));
 }
 
 /**
@@ -99,6 +116,19 @@ export function planAliases(
   }
   const extra = rest.filter((alias) => !inMain.has(alias));
   return { main, extra, joined };
+}
+
+/**
+ * The person joined a re-created name again (ADR 0028): its flag goes, and the alias leaves the
+ * main set and its extra cursor, so the next pull reads it from the start as a newly bound alias
+ * and applies the items the flag had skipped.
+ */
+export function rejoinName(ctx: SyncContext, serverId: string, alias: string): void {
+  clearName(ctx, serverId, alias, "recreated");
+  updateCursors(ctx, serverId, (cursors) => {
+    const { [alias]: _dropped, ...extra } = cursors.extra;
+    return { ...cursors, mainAliases: cursors.mainAliases.filter((each) => each !== alias), extra };
+  });
 }
 
 // --- The page's rows --------------------------------------------------------------------------------
@@ -131,6 +161,28 @@ interface Page {
   client: SyncClient;
   knowledge: KnowledgeStore;
   dedupe: Map<number, Map<string, number>>;
+  /** The policy as loaded for this pull: the level rows' name ids, for the re-created check. */
+  policy: SharingPolicy;
+}
+
+/**
+ * The name re-created on the server (ADR 0028): an `upsert` under a shared name whose `nameId`
+ * is not null and differs from the id the level row bound to that name holds. The item is
+ * skipped and the name flagged, with the new id and the item's member; the person joins again.
+ * A level row with no id (a binding written before the registry held one) has nothing to
+ * compare and is never flagged.
+ */
+function recreatedName(ctx: SyncContext, page: Page, item: FeedItemShape): boolean {
+  if (item.nameId === null || item.remoteAlias === null) return false;
+  const row = [...page.policy.levels.values()].find(
+    (level) => level.destination === page.server.serverId && level.boundAlias === item.remoteAlias,
+  );
+  if (row === undefined || row.nameId === null || row.nameId === item.nameId) return false;
+  flagName(ctx, page.server.serverId, item.remoteAlias, "recreated", {
+    id: item.nameId,
+    member: item.member,
+  });
+  return true;
 }
 
 /** One feed row applied; `retry` when its target is dirty or locked (the cursor stops at it). */
@@ -163,6 +215,7 @@ function applyRow(ctx: SyncContext, page: Page, item: FeedItemShape): Outcome {
       const existing = receivedRow(ctx.db, serverId, item.uid);
       if (existing !== null && existing.hash === item.hash) return "skipped";
       if (item.payload === undefined || !("frontmatter" in item.payload)) return "skipped";
+      if (recreatedName(ctx, page, item)) return "skipped";
       const parsed = parseEntryUid(item.uid);
       if (parsed === null) return "skipped";
       const text = item.payload.frontmatter + item.payload.body;
@@ -217,6 +270,7 @@ function applyRow(ctx: SyncContext, page: Page, item: FeedItemShape): Outcome {
     if (projectId === 0) return "skipped";
     const known = receivedMemoryRow(ctx.db, serverId, item.uid);
     if (known !== null && known.hash === item.hash) return "skipped";
+    if (recreatedName(ctx, page, item)) return "skipped";
     const dedupe = page.dedupe.get(projectId) ?? dedupeKeys(ctx, projectId);
     page.dedupe.set(projectId, dedupe);
     const key = dedupeKey(payload.title, payload.body);
@@ -456,14 +510,20 @@ export async function pullOnce(
   const none: PullResult = { ok: true, held: false, applied: 0, skipped: 0, stoppedAt: null };
   const token = readTokens(ctx.dataDir)[serverId];
   if (token === undefined) return { ...none, ok: false };
-  const client = new SyncClient(ctx, { url: server.url, token });
+  const client = new SyncClient(ctx, { url: server.url, token, contract: server.contract });
   const knowledge = openStore({
     db: ctx.db,
     dataDir: ctx.dataDir,
     env: ctx.env,
     now: () => ctx.clock.now,
   });
-  const page: Page = { server, client, knowledge, dedupe: new Map() };
+  const page: Page = {
+    server,
+    client,
+    knowledge,
+    dedupe: new Map(),
+    policy: loadPolicy(ctx.db, ctx.dataDir, ctx.env, serverId),
+  };
   const tries = retries.get(serverId) ?? new Map<string, number>();
   retries.set(serverId, tries);
 
@@ -498,28 +558,63 @@ export async function pullOnce(
     }
   }
 
-  const cursors = cursorsOf(ctx.db, serverId);
-  const plan = planAliases(cursors, boundAliases(ctx, serverId));
-  // The plan written back: the main set as named now, the extras' cursors kept.
-  updateCursors(ctx, serverId, (current) => ({
-    main: current.main,
-    mainAliases: plan.main,
-    extra: Object.fromEntries(plan.extra.map((alias) => [alias, current.extra[alias] ?? 0])),
-  }));
+  const writePlan = (named: string[]) => {
+    const planned = planAliases(cursorsOf(ctx.db, serverId), named);
+    // The plan written back: the main set as named now, the extras' cursors kept.
+    updateCursors(ctx, serverId, (current) => ({
+      main: current.main,
+      mainAliases: planned.main,
+      extra: Object.fromEntries(planned.extra.map((alias) => [alias, current.extra[alias] ?? 0])),
+    }));
+    return planned;
+  };
+  let plan = writePlan(boundAliases(ctx, server));
   const result: PullResult = { ...none };
+  // The live path down (ADR 0028): one 409 with an accepted value below the contract spoken
+  // sets the row, re-plans without the shared names and repeats the request once; a second
+  // 409 stops the server as `contract`.
+  let downgraded = false;
   const fetchPage = async (input: {
     since: number;
     scope: "all" | "project";
     projects: string[];
     wait: number;
   }) => {
-    const answer = await client.pull(
+    const requestOptions = {
+      deadlineMs: PULL_DEADLINE_MS,
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+    };
+    let answer = await client.pull(
       { since: input.since, scope: input.scope, projects: input.projects, wait: input.wait },
-      {
-        deadlineMs: PULL_DEADLINE_MS,
-        ...(options.signal === undefined ? {} : { signal: options.signal }),
-      },
+      requestOptions,
     );
+    if (!answer.ok && answer.kind === "contract" && !downgraded) {
+      const next = acceptableContract(answer.accepted, server.contract);
+      if (next !== null) {
+        downgraded = true;
+        guarded(ctx, () => setContract(ctx.db, serverId, next));
+        client.speak(next);
+        server = { ...server, contract: next };
+        page.server = server;
+        plan = writePlan(boundAliases(ctx, server));
+        const projects = input.projects.filter((alias) => !heldByContract(server, alias));
+        if (input.scope === "project" && projects.length === 0) {
+          // The one alias asked for is held now: nothing to read under it.
+          return {
+            serverId,
+            instance: server.instance,
+            next: input.since,
+            more: false,
+            snapshot: false,
+            items: [],
+          } satisfies PullPageShape;
+        }
+        answer = await client.pull(
+          { since: input.since, scope: input.scope, projects, wait: input.wait },
+          requestOptions,
+        );
+      }
+    }
     const at = ctx.clock.now;
     if (!answer.ok) {
       failed(ctx, server, answer, at);
@@ -570,6 +665,7 @@ export async function pullOnce(
     const targets: CursorRef[] = ["main", ...plan.extra.map((alias) => ({ extra: alias }))];
     for (const which of targets) {
       if (done().has(cursorKey(which))) continue;
+      if (which !== "main" && heldByContract(server, which.extra)) continue;
       const seen = new Set<string>();
       const tombstoned = new Set<string>();
       let since = 0;
@@ -599,6 +695,7 @@ export async function pullOnce(
 
   // A newly bound alias: its one-alias snapshot, after it joined the main set.
   for (const alias of plan.joined) {
+    if (heldByContract(server, alias)) continue;
     let since = 0;
     for (;;) {
       const body = await fetchPage({ since, scope: "project", projects: [alias], wait: 0 });
@@ -656,14 +753,15 @@ export async function pullOnce(
   return result;
 }
 
-/** The host-led aliases of every project, by project id: what names a received memory's project. */
+/** The team aliases of every project, by project id: what names a received memory's project. */
 function projectAliases(ctx: SyncContext): Map<number, string[]> {
   const byProject = new Map<number, string[]>();
   for (const row of ctx.db
     .query<{ project_id: number; alias: string }, []>(
-      "SELECT project_id, alias FROM project_aliases WHERE alias LIKE 'remote:%'",
+      `SELECT project_id, alias FROM project_aliases WHERE ${TEAM_ALIAS_SQL}`,
     )
     .all()) {
+    if (!isTeamAlias(row.alias)) continue;
     const aliases = byProject.get(row.project_id) ?? [];
     aliases.push(row.alias);
     byProject.set(row.project_id, aliases);
@@ -686,7 +784,12 @@ function compareSnapshot(
   seen: ReadonlySet<string>,
   tombstoned: ReadonlySet<string>,
 ): void {
-  const aliases = which === "main" ? plan.main : [which.extra];
+  // A name flagged re-created is out of the comparison: its rows are neither counted as seen
+  // nor dropped while the flag stands (ADR 0028).
+  const flagged = flaggedNames(ctx.db, serverId);
+  const aliases = (which === "main" ? plan.main : [which.extra]).filter(
+    (alias) => flagged.get(alias) !== "recreated",
+  );
   const inScope = (uid: string) => {
     const parsed = parseEntryUid(uid);
     if (parsed === null) return false;

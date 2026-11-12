@@ -16,6 +16,8 @@ import {
   openTeamDb,
   openTeamExisting,
   openTeamForWrite,
+  requireTeamSchema,
+  TEAM_DB_FILE,
   TEAM_LATEST,
   TEAM_MIGRATIONS,
   teamBackups,
@@ -171,7 +173,7 @@ describe("openFile: the core runner with a file name, a backups folder and a mig
     openDb({ dataDir: dir, busyTimeoutMs: 1000, moduleSchemas: schemaV2 }).close();
     const copies = readdirSync(join(dir, "backups"));
     expect(copies).toHaveLength(1);
-    expect(copies[0]).toMatch(/^wizardingcode-mem-\d+-v7-\d+\.db$/);
+    expect(copies[0]).toMatch(/^wizardingcode-mem-\d+-v8-\d+\.db$/);
     expect(readdirSync(dir).filter((name) => name.endsWith(".db"))).toEqual([
       "wizardingcode-mem.db",
     ]);
@@ -191,6 +193,7 @@ const TEAM_TABLES = [
   "members",
   "memories",
   "meta",
+  "names",
   "purged",
 ];
 const insertChange = (db: Db) =>
@@ -211,7 +214,7 @@ describe("the team database", () => {
     db.close();
   });
 
-  test("openTeamDb creates team.db at team schema 1 with its tables and ids, and a second open changes nothing", () => {
+  test("openTeamDb creates team.db at the latest team schema with its tables and ids, and a second open changes nothing", () => {
     const dir = tempDir();
     const db = openTeamDb(dir);
     expect(userVersion(db)).toBe(TEAM_LATEST);
@@ -238,7 +241,7 @@ describe("the team database", () => {
   test("a newer team.db is refused as too new; a stranger's file as not a team database, before any migration", () => {
     const dir = tempDir();
     const newer = new Database(join(dir, "team.db"), { create: true });
-    newer.run("PRAGMA user_version = 2");
+    newer.run("PRAGMA user_version = 3");
     newer.run("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
     newer.run("INSERT INTO meta VALUES ('team.schema', 'team')");
     newer.close();
@@ -275,9 +278,95 @@ describe("the team database", () => {
     const open = openTeamForWrite(dir, 2_000);
     expect(userVersion(open)).toBe(TEAM_LATEST);
     open.close();
-    // The lease expired: the writer may migrate (here the list is still version 1, so nothing changes).
+    // The lease expired: the writer may migrate (here the list is at the latest, so nothing changes).
     const stale = openTeamForWrite(dir, 60_000, { latest: TEAM_LATEST + 1 });
     expect(userVersion(stale)).toBe(TEAM_LATEST);
+    stale.close();
+  });
+
+  test("migration 2: a version 1 database gains names, the two indexes and project_alias on four tables, behind a copy named after 1", () => {
+    const dir = tempDir();
+    const one = openTeamForWrite(dir, 1_000, {
+      migrations: TEAM_MIGRATIONS.slice(0, 1),
+      latest: 1,
+    });
+    expect(userVersion(one)).toBe(1);
+    one.close();
+    expect(() =>
+      openExistingFile(dir, TEAM_DB_FILE, { before: requireTeamSchema, latest: 1 }),
+    ).not.toThrow();
+
+    const db = openTeamForWrite(dir, 1_000);
+    expect(TEAM_LATEST).toBe(2);
+    expect(userVersion(db)).toBe(2);
+    expect(tables(db)).toContain("names");
+    const columns = (table: string) =>
+      db
+        .query<{ name: string }, []>(`PRAGMA table_info(${table})`)
+        .all()
+        .map((column) => column.name);
+    expect(columns("names")).toEqual([
+      "alias",
+      "id",
+      "created_by_member",
+      "created_by_device",
+      "created_at",
+      "purged_at",
+    ]);
+    for (const table of ["entries", "entry_revisions", "memories", "changes"]) {
+      expect(columns(table)).toContain("project_alias");
+      expect(columns(table)).not.toContain("remote_alias");
+    }
+    const indexes = db
+      .query<{ name: string }, []>("SELECT name FROM sqlite_master WHERE type = 'index'")
+      .all()
+      .map((row) => row.name);
+    expect(indexes).toEqual(
+      expect.arrayContaining(["entries_project", "memories_project", "changes_scope"]),
+    );
+    const indexInfo = (index: string) =>
+      db
+        .query<{ name: string }, []>(`PRAGMA index_info(${index})`)
+        .all()
+        .map((column) => column.name);
+    expect(indexInfo("changes_scope")).toEqual(["scope", "project_alias", "current", "seq"]);
+    expect(indexInfo("entries_project")).toEqual(["project_alias", "updated_at"]);
+    expect(indexInfo("memories_project")).toEqual(["project_alias", "updated_at"]);
+    // The id is unique across names; purged_at is nullable.
+    db.run("INSERT INTO members (id, name, role, created_at) VALUES ('m', 'M', 'member', 1)");
+    db.run(
+      "INSERT INTO devices (id, alias, member_id, token_hash, label, created_at) VALUES ('d', 'aaaaaaaa', 'm', 'h', 'l', 1)",
+    );
+    const name = (alias: string, id: string) =>
+      db.run(
+        "INSERT INTO names (alias, id, created_by_member, created_by_device, created_at) VALUES (?, ?, 'm', 'd', 1)",
+        [alias, id],
+      );
+    name("name:a", "0123456789abcdef");
+    expect(() => name("name:b", "0123456789abcdef")).toThrow(/UNIQUE/);
+    expect(() => name("name:a", "fedcba9876543210")).toThrow(/UNIQUE/);
+    db.close();
+
+    const copies = readdirSync(join(dir, "backups"));
+    expect(copies).toHaveLength(1);
+    expect(copies[0]).toMatch(/^team-\d+-v1-\d+\.db$/);
+    // A binary that knows 1 refuses the file.
+    expect(() =>
+      openExistingFile(dir, TEAM_DB_FILE, { before: requireTeamSchema, latest: 1 }),
+    ).toThrow(SchemaTooNewError);
+  });
+
+  test("a writer refuses to migrate a version 1 file while a fresh serve lease is held", () => {
+    const dir = tempDir();
+    const one = openTeamForWrite(dir, 1_000, {
+      migrations: TEAM_MIGRATIONS.slice(0, 1),
+      latest: 1,
+    });
+    expect(claimLease(one, "serve.lease", "serve-abc", 1_000, 30_000)).toBe(true);
+    one.close();
+    expect(() => openTeamForWrite(dir, 2_000)).toThrow(SchemaBehindError);
+    const stale = openTeamForWrite(dir, 60_000);
+    expect(userVersion(stale)).toBe(2);
     stale.close();
   });
 
@@ -298,7 +387,7 @@ describe("the team database", () => {
   test("the way back across a bump: the copy, the refusal, the restore and the renewed instance", () => {
     const dir = tempDir();
     const backups = teamBackups(dir);
-    const two = [...TEAM_MIGRATIONS, { version: 2, name: "later", sql: "CREATE TABLE later (x)" }];
+    const two = [...TEAM_MIGRATIONS, { version: 3, name: "later", sql: "CREATE TABLE later (x)" }];
     const first = openTeamDb(dir);
     const instance = getMeta(first, "server.instance");
     first.close();
@@ -309,11 +398,11 @@ describe("the team database", () => {
       migrations: two,
       busyTimeoutMs: 1000,
     });
-    expect(userVersion(bumped)).toBe(2);
+    expect(userVersion(bumped)).toBe(3);
     bumped.close();
     const copies = readdirSync(join(dir, "backups"));
     expect(copies).toHaveLength(1);
-    expect(copies[0]).toMatch(/^team-\d+-v1-\d+\.db$/);
+    expect(copies[0]).toMatch(/^team-\d+-v2-\d+\.db$/);
     expect(() => openTeamDb(dir)).toThrow(SchemaTooNewError);
 
     writeFileSync(join(dir, "team.db"), readFileSync(join(dir, "backups", copies[0] as string)));
@@ -321,7 +410,7 @@ describe("the team database", () => {
     rmSync(join(dir, "team.db-shm"), { force: true });
     writeHighWater(teamPaths(dir).feedFile, { changes: 40, audit: 9 });
     const restored = openTeamDb(dir);
-    expect(userVersion(restored)).toBe(1);
+    expect(userVersion(restored)).toBe(2);
     const outcome = checkRestore(restored, teamPaths(dir).feedFile, 123_456);
     expect(outcome.renewed).toBe(true);
     expect(getMeta(restored, "server.instance")).not.toBe(instance);

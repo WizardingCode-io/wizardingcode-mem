@@ -8,6 +8,7 @@
 // Every read is empty on a store without the sharing v2 schema, which `status` and `doctor`
 // may open without migrating.
 import { hasTable } from "../sharing/store.ts";
+import { NAME_STATES, nameFlagKey } from "../sharing/types.ts";
 import type { Db } from "../store/db.ts";
 import { getMeta, restoreHoldKey, setMeta } from "../store/meta.ts";
 import type { SyncContext } from "./context.ts";
@@ -606,6 +607,66 @@ export function receivedMemoryLedger(
     .all(serverId);
 }
 
+/** What was received under a shared name: the counts `status` prints beside it (ADR 0028). */
+export interface ReceivedNameCounts {
+  entries: number;
+  memories: number;
+  /** The distinct members the entries and memories came from. */
+  members: number;
+  lastAt: number | null;
+}
+
+const NO_RECEIVED: ReceivedNameCounts = { entries: 0, memories: 0, members: 0, lastAt: null };
+
+/**
+ * The received entries of a server under an alias (`knowledge_received`), the received
+ * memories of the project the alias names (`sharing_received_memories` joined to the memory
+ * and the alias), the distinct members among them and the latest time either arrived.
+ */
+export function receivedNameCounts(db: Db, serverId: string, alias: string): ReceivedNameCounts {
+  if (!hasLedgerTables(db) || !hasTable(db, "knowledge_received")) return NO_RECEIVED;
+  const entries = db
+    .query<{ n: number; last: number | null }, [string, string]>(
+      `SELECT count(*) AS n, max(received_at) AS last FROM knowledge_received
+        WHERE server_id = ? AND remote_alias = ?`,
+    )
+    .get(serverId, alias);
+  const entryMembers = db
+    .query<{ member_id: string }, [string, string]>(
+      "SELECT DISTINCT member_id FROM knowledge_received WHERE server_id = ? AND remote_alias = ?",
+    )
+    .all(serverId, alias)
+    .map((row) => row.member_id);
+  const memories = db
+    .query<{ n: number; last: number | null }, [string, string]>(
+      `SELECT count(*) AS n, max(l.at) AS last FROM sharing_received_memories r
+         JOIN memories m ON m.id = r.memory_id
+         JOIN project_aliases a ON a.project_id = m.project_id
+         LEFT JOIN sharing_ledger l ON l.destination = r.server_id AND l.item_uid = r.remote_uid
+          AND l.item_kind = 'memory' AND l.direction = 'received'
+        WHERE r.server_id = ? AND a.alias = ?`,
+    )
+    .get(serverId, alias);
+  const memoryMembers = db
+    .query<{ member_id: string }, [string, string]>(
+      `SELECT DISTINCT r.member_id FROM sharing_received_memories r
+         JOIN memories m ON m.id = r.memory_id
+         JOIN project_aliases a ON a.project_id = m.project_id
+        WHERE r.server_id = ? AND a.alias = ?`,
+    )
+    .all(serverId, alias)
+    .map((row) => row.member_id);
+  const lasts = [entries?.last ?? null, memories?.last ?? null].filter(
+    (value): value is number => value !== null,
+  );
+  return {
+    entries: entries?.n ?? 0,
+    memories: memories?.n ?? 0,
+    members: new Set([...entryMembers, ...memoryMembers]).size,
+    lastAt: lasts.length === 0 ? null : Math.max(...lasts),
+  };
+}
+
 /** The server ids with a received memory's provenance row. */
 export function receivedMemoryServerIds(db: Db): string[] {
   if (!hasLedgerTables(db)) return [];
@@ -777,5 +838,10 @@ export function clearServerLedger(db: Db, serverId: string): { rows: number } {
     restoreHoldKey(serverId),
     resumeAuthorisedKey(serverId),
   ]);
+  // The three flags of each shared name bound to the server (ADR 0028).
+  for (const state of NAME_STATES) {
+    const prefix = nameFlagKey(state, serverId, "");
+    db.run("DELETE FROM meta WHERE substr(key, 1, ?) = ?", [prefix.length, prefix]);
+  }
   return { rows };
 }

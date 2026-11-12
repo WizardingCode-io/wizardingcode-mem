@@ -184,8 +184,8 @@ function placeOf(db: Db, revision: RevisionRow, creator: string): Placed {
   }
   if (revision.scope === "project") {
     return {
-      relative: repoFolder("project", revision.remote_alias, null),
-      meta: { scope: "project", remoteAlias: revision.remote_alias ?? "" },
+      relative: repoFolder("project", revision.project_alias, null),
+      meta: { scope: "project", remoteAlias: revision.project_alias ?? "" },
     };
   }
   return { relative: "shared", meta: { scope: "shared" } };
@@ -194,7 +194,7 @@ function placeOf(db: Db, revision: RevisionRow, creator: string): Placed {
 const uidOf = (revision: RevisionRow) =>
   entryUid(
     revision.scope as "workspace" | "shared" | "project",
-    revision.remote_alias,
+    revision.project_alias,
     revision.uuid,
   );
 
@@ -574,11 +574,11 @@ function eraseEntry(db: Db, uuid: string, touched: Map<string, RepoMeta>, now: n
   const feedRows = markPurged(db, row.uuid);
   insertChange(db, {
     kind: "entry",
-    uid: entryUid(row.scope as "workspace" | "shared" | "project", row.remote_alias, row.uuid),
+    uid: entryUid(row.scope as "workspace" | "shared" | "project", row.project_alias, row.uuid),
     key: row.uuid,
     op: "purge",
     scope: row.scope,
-    remoteAlias: row.remote_alias,
+    projectAlias: row.project_alias,
     revision: row.revision,
     hash: "",
     movedTo: null,
@@ -604,7 +604,7 @@ function eraseMemory(db: Db, key: string, now: number): Erased {
     key,
     op: "purge",
     scope: "project",
-    remoteAlias: row.remote_alias,
+    projectAlias: row.project_alias,
     revision: row.revision,
     hash: "",
     movedTo: null,

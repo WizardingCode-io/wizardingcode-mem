@@ -2,6 +2,7 @@
 // Nothing here says what may leave: every item is put to `decide`, and what leaves is what
 // it answers `send` for. The SQL only narrows what `decide` is asked. Nothing is sent, and
 // nothing runs on a hook.
+import { isTeamAlias, TEAM_ALIAS_SQL } from "../core/identity.ts";
 import { KnowledgeError } from "../modules/knowledge/errors.ts";
 import { ensureFresh } from "../modules/knowledge/index-store.ts";
 import { KNOWLEDGE_MODULE, KNOWLEDGE_SCHEMA_VERSION } from "../modules/knowledge/migrations.ts";
@@ -13,7 +14,7 @@ import { type Db, moduleSchemaState } from "../store/db.ts";
 import { logError } from "../util/log.ts";
 import { redactForSend } from "./edge.ts";
 import { memoryHash } from "./hash.ts";
-import { counterOfEpoch, epochOf, isHostLedAlias, levelKey, levelOf } from "./levels.ts";
+import { counterOfEpoch, defaultTeamAlias, epochOf, levelKey, levelOf } from "./levels.ts";
 import { areasInForce, decide, knownAreas } from "./policy.ts";
 import { generationOf, hasLevelsTable, hasTable } from "./store.ts";
 import {
@@ -46,7 +47,8 @@ export const HASH_CHUNK = 500;
 export interface Report {
   counts: { entries: number; memories: number };
   perRoot: Record<Root, { entries: number; areaTotals: Record<string, number> }>;
-  perProject: { id: number; level: Level; entries: number; memories: number }[];
+  /** Per known project: its level, what leaves, and the imported memories that stay (ADR 0028). */
+  perProject: { id: number; level: Level; entries: number; memories: number; imported: number }[];
   items?: {
     entries: { scope: string; projectId: number; slug: string; title: string; area: string }[];
     memories: { id: number; projectId: number; title: string }[];
@@ -110,12 +112,13 @@ function withLevel(
   const key = levelKey(projectId, destination);
   if (level === "local") next.delete(key);
   else {
-    const boundAlias = levels.get(key)?.boundAlias ?? "";
+    const bound = levels.get(key);
     next.set(key, {
       projectId,
       destination,
       level,
-      boundAlias,
+      boundAlias: bound?.boundAlias ?? "",
+      nameId: bound?.nameId ?? null,
       reason: "allowed",
     });
   }
@@ -167,24 +170,31 @@ export function withChange(
 const rootOf = (scope: EntryItem["scope"]): Root => (scope === "shared" ? "shared" : "workspace");
 
 /**
- * The remote alias each project's entries are named by. A project with a level: the alias
- * the level is bound to, as stored, also when the project no longer carries it, so that what
- * was sent under that name is still found and can be withdrawn. A project with none: its
- * first remote alias by name, the one a level would be bound to.
+ * The alias each project's entries are named by. A project with a level: the alias the
+ * level is bound to, as stored, also when the project no longer carries it, so that what
+ * was sent under that name is still found and can be withdrawn. A project with none: the
+ * alias a level would be bound to (`defaultTeamAlias`: its shared name, else its first
+ * host-led remote by bytes).
  */
 function entryAliases(db: Db, destination: string): Map<number, string> {
   type Named = { projectId: number; alias: string };
-  // Only a host-led alias names a project to a team (ADR 0025): a path alias never does, not
-  // as the first by name and not as the alias a row was bound to before the rule.
-  const first = new Map<number, string>();
-  const remotes = db
+  // Only a team alias names a project to a team (ADR 0025, ADR 0028): a path alias never
+  // does, not as the default and not as the alias a row was bound to before the rule.
+  const byProject = new Map<number, string[]>();
+  const teamAliases = db
     .query<Named, []>(
       `SELECT project_id AS projectId, alias FROM project_aliases
-        WHERE alias LIKE 'remote:%' ORDER BY alias`,
+        WHERE ${TEAM_ALIAS_SQL} ORDER BY alias`,
     )
     .all();
-  for (const { projectId, alias } of remotes) {
-    if (!first.has(projectId) && isHostLedAlias(alias)) first.set(projectId, alias);
+  for (const { projectId, alias } of teamAliases) {
+    if (!isTeamAlias(alias)) continue;
+    byProject.set(projectId, [...(byProject.get(projectId) ?? []), alias]);
+  }
+  const first = new Map<number, string>();
+  for (const [projectId, aliases] of byProject) {
+    const alias = defaultTeamAlias(aliases, null);
+    if (alias !== undefined) first.set(projectId, alias);
   }
   const bound = hasLevelsTable(db)
     ? db
@@ -193,7 +203,7 @@ function entryAliases(db: Db, destination: string): Map<number, string> {
             WHERE destination = ?`,
         )
         .all(destination)
-        .filter(({ alias }) => isHostLedAlias(alias))
+        .filter(({ alias }) => isTeamAlias(alias))
     : [];
   // Listed last, the alias a level is bound to replaces the project's first.
   return new Map([
@@ -663,6 +673,26 @@ function listOf({ entries, memories, titles }: Leaving): NonNullable<Report["ite
 }
 
 /**
+ * Per project, the imported memories that stay whatever the level (ADR 0025 D-19): active,
+ * `origin = 'imported'`, and not a teammate's copy the sync wrote (one with a
+ * `sharing_received_memories` row; every imported memory where the sync's table is not
+ * there). The viewer and the CLI say the count beside a level; nothing reads it to decide.
+ */
+export function importedStayCounts(db: Db): Map<number, number> {
+  const received = hasTable(db, "sharing_received_memories")
+    ? "AND NOT EXISTS (SELECT 1 FROM sharing_received_memories r WHERE r.memory_id = m.id)"
+    : "";
+  const rows = db
+    .query<{ projectId: number; n: number }, []>(
+      `SELECT m.project_id AS projectId, count(*) AS n FROM memories m
+        WHERE m.status = 'active' AND m.origin = 'imported' ${received}
+        GROUP BY m.project_id`,
+    )
+    .all();
+  return new Map(rows.map((row) => [row.projectId, row.n]));
+}
+
+/**
  * What would leave for the team's server under the policy given, which may be a preview:
  * what `decide` sends (`readLeaving`), counted in all, per root and per project, and named
  * when a list is asked for. With `fresh`, the repositories that can release entries are
@@ -686,6 +716,7 @@ export function wouldLeave(
     entries.filter((entry) => entry.scope === "project").map((entry) => entry.projectId),
   );
   const projectMemories = tally(memories.map((item) => item.projectId));
+  const imported = db === null ? new Map<number, number>() : importedStayCounts(db);
   return {
     counts: { entries: entries.length, memories: memories.length },
     perRoot: {
@@ -697,6 +728,7 @@ export function wouldLeave(
       level: levelOf(policy, id, destination).level,
       entries: projectEntries.get(id) ?? 0,
       memories: projectMemories.get(id) ?? 0,
+      imported: imported.get(id) ?? 0,
     })),
     ...(options.list === true ? { items: listOf(found) } : {}),
   };

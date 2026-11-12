@@ -2,6 +2,7 @@
 // the sync API; one lease, one change signal, one set of buckets, injected clock and timers.
 import { ENTRY_MAX_BYTES } from "../modules/knowledge/entry.ts";
 import { selfCommand } from "../util/self.ts";
+import { ACCEPTED_CONTRACTS, CONTRACT } from "./contract.ts";
 import { type Db, openTeamForWrite, teamPaths } from "./db.ts";
 import { freeBytes as diskFreeBytes } from "./disk.ts";
 import { SchemaBehindError } from "./errors.ts";
@@ -32,6 +33,7 @@ export const LIMITS: Limits = {
   authFailuresPerMinute: 60,
   heldPullsPerDevice: 8,
   aliasesPerPull: 100,
+  namesPerHour: 10,
   minFreeBytes: 209_715_200,
   minFreeBytesHealth: 104_857_600,
 };
@@ -62,6 +64,8 @@ export interface ServerOptions {
   mirrorCommand?: (dataDir: string) => string[];
   /** What runs the export instead of a child process: a test's function. `signal` ends it early. */
   mirrorChild?: (dataDir: string, signal: AbortSignal) => Promise<void>;
+  /** The contract spoken and the ones accepted; this binary's by default. A test's seam (ADR 0028). */
+  contract?: { current: number; accepted: readonly number[] };
 }
 
 export interface TeamServer {
@@ -152,6 +156,7 @@ export async function startTeamServer(options: ServerOptions): Promise<TeamServe
     trustProxy: options.trustProxy,
     limits: LIMITS,
     buckets,
+    contract: options.contract ?? { current: CONTRACT, accepted: ACCEPTED_CONTRACTS },
     signal,
     held: new Map(),
     freeBytes: options.freeBytes ?? diskFreeBytes,
@@ -215,6 +220,7 @@ export async function startTeamServer(options: ServerOptions): Promise<TeamServe
     buckets.joins.sweep();
     buckets.bytes.sweep();
     buckets.auth.sweep();
+    buckets.names.sweep();
     // The log is cut while no export child reads it, so a purge's `busy` checkpoint is finished
     // here; the wait for an outside reader is short, so the tick never holds the requests for
     // long; a log still held is said, and a failure of this housekeeping never ends the process.

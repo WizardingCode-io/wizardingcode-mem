@@ -2,7 +2,7 @@
 // level, and the two sharing lists saved through the settings. Each case runs the real
 // server over its own data directory, with a project whose folder has a git remote. The
 // knowledge entries are written by the knowledge store into real repositories.
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   existsSync,
   mkdirSync,
@@ -15,6 +15,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveProject } from "../../src/core/project.ts";
+import type { Redacted } from "../../src/core/redact.ts";
 import { personAuthor } from "../../src/modules/knowledge/author.ts";
 import { DEFAULT_AREAS } from "../../src/modules/knowledge/entry.ts";
 import { resetGitCaches } from "../../src/modules/knowledge/repo.ts";
@@ -23,11 +24,24 @@ import { openStore } from "../../src/modules/knowledge/store-open.ts";
 import type { ScopeRef } from "../../src/modules/knowledge/types.ts";
 import { epochOf } from "../../src/sharing/levels.ts";
 import { loadPolicy } from "../../src/sharing/policy.ts";
-import { applySettingsPatch, counterOf, setLevel } from "../../src/sharing/store.ts";
+import { applySettingsPatch, counterOf, levelRows, setLevel } from "../../src/sharing/store.ts";
 import type { Level } from "../../src/sharing/types.ts";
 import { type Db, openDb } from "../../src/store/db.ts";
+import { insertMemory } from "../../src/store/memories.ts";
+import { insertPending, setContract, writeToken } from "../../src/sync/servers.ts";
+import { flagName } from "../../src/sync/state.ts";
+import { nameByAlias, purgeName } from "../../src/team/store.ts";
+import { statusOf } from "../../src/ui/api.ts";
 import { startUi, type UiServer } from "../../src/ui/server.ts";
 import { realGit } from "../helpers/stub-git.ts";
+import {
+  cleanSyncDirs,
+  openSyncStore,
+  type SyncTestStore,
+  serverFixture,
+} from "../helpers/sync.ts";
+import { cleanWorlds, closeWorlds, NAME, type World, world } from "../helpers/sync-world.ts";
+import { eventsOf, api as teamApi } from "../helpers/team.ts";
 
 const NOW = Date.UTC(2026, 10, 9, 8);
 const ROOTS_KEY = "WIZARDINGCODE_MEM_SHARE_ROOTS";
@@ -102,7 +116,13 @@ const send = (s: UiServer, method: "PUT" | "POST", path: string, body: unknown) 
 interface Report {
   counts: { entries: number; memories: number };
   perRoot: Record<"workspace" | "shared", { entries: number; areaTotals: Record<string, number> }>;
-  perProject: { id: number; level: Level; entries: number; memories: number }[];
+  perProject: {
+    id: number;
+    level: Level;
+    entries: number;
+    memories: number;
+    imported: number;
+  }[];
   items?: {
     entries: { scope: string; projectId: number; slug: string; title: string; area: string }[];
     memories: unknown[];
@@ -354,7 +374,7 @@ describe("wizardingcode-mem ui: GET /api/sharing", () => {
       });
       expect(view.report.counts).toEqual({ entries: 0, memories: 0 });
       expect(view.report.perProject).toEqual([
-        { id: projectId, level: "local", entries: 0, memories: 0 },
+        { id: projectId, level: "local", entries: 0, memories: 0, imported: 0 },
       ]);
       expect(view.report.items).toBeUndefined();
 
@@ -447,7 +467,7 @@ describe("wizardingcode-mem ui: POST /api/sharing/preview", () => {
       const s = await start();
       const report = await previewed(s, { level: { projectId, level: "knowledge" } });
       expect(report.perProject).toEqual([
-        { id: projectId, level: "knowledge", entries: 1, memories: 0 },
+        { id: projectId, level: "knowledge", entries: 1, memories: 0, imported: 0 },
       ]);
       expect(report.counts).toEqual({ entries: 1, memories: 0 });
       expect(report.items).toBeUndefined();
@@ -491,7 +511,9 @@ describe("wizardingcode-mem ui: POST /api/sharing/preview", () => {
     ]) {
       const response = await preview(s, change);
       expect([JSON.stringify(change), response.status]).toEqual([JSON.stringify(change), 400]);
-      expect(typeof (await errorOf(response))).toBe("string");
+      const refusal = (await response.json()) as { error: string; reason: string };
+      expect(typeof refusal.error).toBe("string");
+      expect(["body", "invalid", "no-project", "roots", "areas"]).toContain(refusal.reason);
     }
     expect((await api(s, "/api/sharing/preview", { method: "POST", body: "nope" })).status).toBe(
       400,
@@ -506,7 +528,9 @@ describe("wizardingcode-mem ui: PUT /api/projects/<id>/sharing", () => {
     const s = await start();
     const unconfirmed = await setSharing(s, projectId, { level: "knowledge" });
     expect(unconfirmed.status).toBe(400);
-    expect(await errorOf(unconfirmed)).toContain("confirm: true");
+    const unconfirmedBody = (await unconfirmed.json()) as { error: string; reason: string };
+    expect(unconfirmedBody.error).toContain("confirm: true");
+    expect(unconfirmedBody.reason).toBe("needs-confirm");
     // Anything but true is not a confirmation.
     expect((await setSharing(s, projectId, { level: "knowledge", confirm: "yes" })).status).toBe(
       400,
@@ -520,6 +544,7 @@ describe("wizardingcode-mem ui: PUT /api/projects/<id>/sharing", () => {
       level: "knowledge",
       old: "local",
       boundAlias: REMOTE,
+      sharedName: null,
     });
     expect(levels()).toEqual([
       { projectId, level: "knowledge", boundAlias: REMOTE, source: "viewer" },
@@ -531,7 +556,12 @@ describe("wizardingcode-mem ui: PUT /api/projects/<id>/sharing", () => {
 
     const lowered = await setSharing(s, projectId, { level: "local" });
     expect(lowered.status).toBe(200);
-    expect(await lowered.json()).toEqual({ level: "local", old: "knowledge", boundAlias: "" });
+    expect(await lowered.json()).toEqual({
+      level: "local",
+      old: "knowledge",
+      boundAlias: "",
+      sharedName: null,
+    });
     expect(levels()).toEqual([]);
     expect((await listed(s))[0]).toMatchObject({ sharing: "local", sharingReason: "level-local" });
   });
@@ -539,21 +569,29 @@ describe("wizardingcode-mem ui: PUT /api/projects/<id>/sharing", () => {
   test("what can never be set is refused before any confirmation is asked for", async () => {
     const plain = plainProject();
     const s = await start();
-    expect((await setSharing(s, projectId, { level: "wide" })).status).toBe(400);
+    const reasonOf = async (response: Response) =>
+      ((await response.json()) as { reason: string }).reason;
+    const invalid = await setSharing(s, projectId, { level: "wide" });
+    expect([invalid.status, await reasonOf(invalid)]).toEqual([400, "invalid"]);
     expect((await setSharing(s, projectId, {})).status).toBe(400);
-    expect((await setSharing(s, 999, { level: "knowledge" })).status).toBe(404);
+    const unknown = await setSharing(s, 999, { level: "knowledge" });
+    expect([unknown.status, await reasonOf(unknown)]).toEqual([404, "no-project"]);
 
-    const noRemote = await setSharing(s, plain, { level: "knowledge" });
-    expect(noRemote.status).toBe(409);
-    expect(await errorOf(noRemote)).toContain("no git remote");
-    expect((await setSharing(s, plain, { level: "knowledge", confirm: true })).status).toBe(409);
+    const noName = await setSharing(s, plain, { level: "knowledge" });
+    expect(noName.status).toBe(400);
+    const noNameBody = (await noName.json()) as { error: string; reason: string };
+    expect(noNameBody.error).toContain("give it a shared name");
+    expect(noNameBody.reason).toBe("no-name");
+    expect((await setSharing(s, plain, { level: "knowledge", confirm: true })).status).toBe(400);
     // Nothing is what it shares already.
     expect((await setSharing(s, plain, { level: "local" })).status).toBe(200);
 
     withDb((db) => db.run("UPDATE projects SET disabled = 1 WHERE id = ?", [projectId]));
     const off = await setSharing(s, projectId, { level: "knowledge" });
     expect(off.status).toBe(409);
-    expect(await errorOf(off)).toContain("memory is off for this project");
+    const offBody = (await off.json()) as { error: string; reason: string };
+    expect(offBody.error).toContain("memory is off for this project");
+    expect(offBody.reason).toBe("disabled");
     expect(levels()).toEqual([]);
     expect(changes()).toEqual([]);
   });
@@ -643,7 +681,7 @@ describe("wizardingcode-mem ui: a sharing policy that cannot be loaded", () => {
       db.run("UPDATE projects SET disabled = 1 WHERE id = ?", [projectId]);
       // A sharing schema newer than this binary, as a later version leaves it.
       db.run(
-        "INSERT INTO module_migrations (module, version, name, applied_at) VALUES ('sharing', 3, 'x', 0)",
+        "INSERT INTO module_migrations (module, version, name, applied_at) VALUES ('sharing', 4, 'x', 0)",
       );
     });
     const view = await sharing(s);
@@ -657,7 +695,9 @@ describe("wizardingcode-mem ui: a sharing policy that cannot be loaded", () => {
 
     const set = await setSharing(s, projectId, { level: "local" });
     expect(set.status).toBe(409);
-    expect(await errorOf(set)).toContain("newer");
+    const setBody = (await set.json()) as { error: string; reason: string };
+    expect(setBody.error).toContain("newer");
+    expect(setBody.reason).toBe("closed");
     const saved = await saveSettings(s, { [ROOTS_KEY]: "workspace", confirm: true });
     expect(saved.status).toBe(409);
     expect(await errorOf(saved)).toContain("newer");
@@ -667,4 +707,442 @@ describe("wizardingcode-mem ui: a sharing policy that cannot be loaded", () => {
     // The other settings are saved as ever.
     expect((await saveSettings(s, { WIZARDINGCODE_MEM_RETENTION_DAYS: "30" })).status).toBe(200);
   });
+});
+
+// --- Shared names (ADR 0028) ---------------------------------------------------------------------
+
+describe("wizardingcode-mem ui: shared names (ADR 0028)", () => {
+  const stores: SyncTestStore[] = [];
+  afterEach(async () => {
+    for (const store of stores.splice(0)) store.close();
+    await closeWorlds();
+  });
+  afterAll(() => {
+    cleanWorlds();
+    cleanSyncDirs();
+  });
+
+  /** The viewer over a store, on its clock; the file's afterEach stops it. */
+  async function viewerOver(store: SyncTestStore): Promise<UiServer> {
+    server = await startUi({
+      dataDir: store.dataDir,
+      homeDir: join(store.dataDir, "brand"),
+      port: 0,
+      open: false,
+      now: () => store.clock.now,
+      env: store.ctx.env,
+      clock: store.clock,
+      timers: store.timers,
+      spawn: () => undefined,
+    });
+    return server;
+  }
+  /** A project on a plain folder, known by its path alone. */
+  function pathProject(store: SyncTestStore, id: number, name: string): number {
+    store.db.run("INSERT INTO projects (id, key, name, created_at) VALUES (?, ?, ?, 1)", [
+      id,
+      `path:/work/${name}`,
+      name,
+    ]);
+    store.db.run("INSERT INTO project_aliases (alias, project_id) VALUES (?, ?)", [
+      `path:/work/${name}`,
+      id,
+    ]);
+    return id;
+  }
+  /** How many requests the team server logged for routes whose name holds `route`. */
+  const requests = (w: World, route: string) =>
+    eventsOf(w.t, "request").filter((event) => String(event.route).includes(route)).length;
+  const bodyOf = async (response: Response) => ({
+    status: response.status,
+    body: (await response.json()) as Record<string, unknown>,
+  });
+  const previewName = (s: UiServer, id: number, body: unknown) =>
+    send(s, "POST", `/api/projects/${id}/sharing/preview`, body);
+  const forget = (s: UiServer, id: number) =>
+    api(s, `/api/projects/${id}/name`, { method: "DELETE" });
+  const aliasRows = (w: World) =>
+    w.store.db
+      .query<{ alias: string; projectId: number }, []>(
+        "SELECT alias, project_id AS projectId FROM project_aliases ORDER BY alias",
+      )
+      .all();
+  const changeRows = (w: World) =>
+    w.store.db.query<{ what: string }, []>("SELECT what FROM sharing_changes ORDER BY id").all();
+  const rowOf = (w: World, projectId: number) =>
+    levelRows(w.store.db).find((row) => row.projectId === projectId);
+  const projectsOf = async (s: UiServer) =>
+    ((await (await api(s, "/api/overview")).json()) as { projects: Record<string, unknown>[] })
+      .projects;
+  const one = (projects: Record<string, unknown>[], id: number) =>
+    projects.find((project) => project.id === id);
+
+  test(
+    "the overview carries each project's shared name, what its level is bound by, its imported memories and the name's state",
+    async () => {
+      const w = await world("knowledge", { named: true });
+      pathProject(w.store, 3, "docs");
+      insertMemory(w.store.db, {
+        projectId: 2,
+        kind: "decision",
+        title: "An import",
+        body: "Imported from claude-mem." as Redacted,
+        terms: "",
+        importance: 3,
+        branch: null,
+        commit: null,
+        origin: "imported",
+        judge: "claude-mem",
+        judgeVersion: "1",
+        sourceTurnId: null,
+        files: [],
+        now: w.store.clock.now,
+      });
+      const s = await viewerOver(w.store);
+      const projects = await projectsOf(s);
+      expect(one(projects, 1)).toMatchObject({
+        name: "site",
+        remote: true,
+        sharedName: null,
+        boundTo: "remote",
+        imported: 0,
+        nameState: null,
+      });
+      expect(one(projects, 2)).toMatchObject({
+        name: "brand",
+        remote: false,
+        sharedName: "wizardingcode",
+        boundTo: "name",
+        imported: 1,
+        nameState: "ok",
+      });
+      expect(one(projects, 3)).toMatchObject({
+        name: "docs",
+        remote: false,
+        sharedName: null,
+        boundTo: null,
+        imported: 0,
+        nameState: null,
+      });
+      flagName(w.store.ctx, w.serverId, NAME, "missing");
+      expect(one(await projectsOf(s), 2)).toMatchObject({ nameState: "missing" });
+      // At Nothing the project keeps its name, bound by nothing.
+      expect((await setSharing(s, 2, { level: "local" })).status).toBe(200);
+      expect(one(await projectsOf(s), 2)).toMatchObject({
+        sharing: "local",
+        sharedName: "wizardingcode",
+        boundTo: null,
+        nameState: null,
+      });
+    },
+    LONG,
+  );
+
+  test(
+    "the preview answers the dry run, names each refusal, and writes nothing",
+    async () => {
+      const w = await world("knowledge", { named: true });
+      pathProject(w.store, 3, "docs");
+      const s = await viewerOver(w.store);
+      const aliases = aliasRows(w);
+      const changes = changeRows(w);
+      const seen = requests(w, "/v1/");
+      expect(await bodyOf(await previewName(s, 3, { level: "knowledge", as: "Docs!" }))).toEqual({
+        status: 200,
+        body: { ok: true, boundAlias: "name:docs", named: true },
+      });
+      expect(await bodyOf(await previewName(s, 2, { level: "all", as: "wizardingcode" }))).toEqual({
+        status: 200,
+        body: { ok: true, boundAlias: NAME, named: false },
+      });
+      expect(
+        await bodyOf(await previewName(s, 1, { level: "knowledge", as: "site" })),
+      ).toMatchObject({ status: 409, body: { error: expect.any(String), reason: "has-remote" } });
+      expect(
+        await bodyOf(await previewName(s, 3, { level: "knowledge", as: "wizardingcode" })),
+      ).toMatchObject({ status: 409, body: { reason: "name-taken", other: "brand" } });
+      expect(
+        await bodyOf(await previewName(s, 3, { level: "knowledge", as: "!!!" })),
+      ).toMatchObject({ status: 400, body: { reason: "no-name" } });
+      expect(await bodyOf(await previewName(s, 3, { level: "knowledge" }))).toMatchObject({
+        status: 400,
+        body: { reason: "no-name" },
+      });
+      expect(
+        await bodyOf(await previewName(s, 999, { level: "knowledge", as: "x" })),
+      ).toMatchObject({ status: 404, body: { reason: "no-project" } });
+      expect(await bodyOf(await previewName(s, 3, { level: "wide", as: "x" }))).toMatchObject({
+        status: 400,
+        body: { reason: "invalid" },
+      });
+      expect(aliasRows(w)).toEqual(aliases);
+      expect(changeRows(w)).toEqual(changes);
+      expect(requests(w, "/v1/")).toBe(seen);
+    },
+    LONG,
+  );
+
+  test(
+    "PUT with as creates or joins the name on the server; needs-confirm, unknown-name, exists and purged write nothing",
+    async () => {
+      const w = await world("knowledge");
+      pathProject(w.store, 3, "docs");
+      pathProject(w.store, 4, "other");
+      pathProject(w.store, 5, "five");
+      const s = await viewerOver(w.store);
+      const posts = () => requests(w, "POST /v1/names");
+      // No confirm, at Receive only too: refused before any request.
+      expect(await bodyOf(await setSharing(s, 3, { level: "receive", as: "docs" }))).toMatchObject({
+        status: 400,
+        body: { reason: "needs-confirm" },
+      });
+      expect(posts()).toBe(0);
+      // Without create, a name the server does not hold.
+      expect(
+        await bodyOf(await setSharing(s, 3, { level: "receive", as: "docs", confirm: true })),
+      ).toMatchObject({ status: 404, body: { reason: "unknown-name" } });
+      expect(rowOf(w, 3)).toBeUndefined();
+      expect(nameByAlias(w.t.server.db, "name:docs")).toBeNull();
+      // The create: the registry holds it, the audit row, the level bound with its id.
+      const created = await bodyOf(
+        await setSharing(s, 3, { level: "receive", as: "docs", confirm: true, create: true }),
+      );
+      expect(created).toEqual({
+        status: 200,
+        body: {
+          level: "receive",
+          old: "local",
+          boundAlias: "name:docs",
+          sharedName: "docs",
+          named: true,
+          created: true,
+          joined: false,
+        },
+      });
+      const onServer = nameByAlias(w.t.server.db, "name:docs");
+      expect(onServer?.id).toMatch(/^[0-9a-f]{16}$/);
+      expect(rowOf(w, 3)).toMatchObject({
+        level: "receive",
+        boundAlias: "name:docs",
+        nameId: onServer?.id as string,
+      });
+      expect(
+        w.t.server.db
+          .query<{ n: number }, []>(
+            "SELECT count(*) AS n FROM audit WHERE action = 'name created' AND target = 'name:docs'",
+          )
+          .get()?.n,
+      ).toBe(1);
+      expect(one(await projectsOf(s), 3)).toMatchObject({
+        sharedName: "docs",
+        boundTo: "name",
+        nameState: "ok",
+      });
+      // A teammate's name: create against it is exists with the item; without create it is joined.
+      const made = await teamApi(w.t.server, w.token, "POST", "/v1/names", {
+        alias: "name:shared",
+      });
+      expect(made.status).toBe(201);
+      const sharedId = (made.body as { id: string }).id;
+      expect(
+        await bodyOf(
+          await setSharing(s, 4, { level: "receive", as: "shared", confirm: true, create: true }),
+        ),
+      ).toMatchObject({
+        status: 409,
+        body: { reason: "exists", name: { alias: "name:shared", id: sharedId } },
+      });
+      expect(rowOf(w, 4)).toBeUndefined();
+      expect(
+        await bodyOf(await setSharing(s, 4, { level: "receive", as: "shared", confirm: true })),
+      ).toMatchObject({
+        status: 200,
+        body: { boundAlias: "name:shared", sharedName: "shared", created: false, joined: true },
+      });
+      expect(rowOf(w, 4)).toMatchObject({ nameId: sharedId });
+      // A name the operator removed.
+      const gone = await teamApi(w.t.server, w.token, "POST", "/v1/names", { alias: "name:gone" });
+      expect(gone.status).toBe(201);
+      expect(purgeName(w.t.server.db, "name:gone", w.t.clock.now)).toBe("purged");
+      expect(
+        await bodyOf(
+          await setSharing(s, 5, { level: "receive", as: "gone", confirm: true, create: true }),
+        ),
+      ).toMatchObject({ status: 409, body: { reason: "purged" } });
+      expect(rowOf(w, 5)).toBeUndefined();
+    },
+    LONG,
+  );
+
+  test(
+    "every local refusal is decided before the server is asked",
+    async () => {
+      const w = await world("knowledge", { named: true });
+      pathProject(w.store, 3, "docs");
+      const s = await viewerOver(w.store);
+      const seen = requests(w, "/v1/");
+      const put = async (id: number, body: Record<string, unknown>) =>
+        bodyOf(await setSharing(s, id, { confirm: true, create: true, ...body }));
+      expect(await put(1, { level: "knowledge", as: "site" })).toMatchObject({
+        status: 409,
+        body: { reason: "has-remote" },
+      });
+      expect(await put(3, { level: "knowledge", as: "wizardingcode" })).toMatchObject({
+        status: 409,
+        body: { reason: "name-taken", other: "brand" },
+      });
+      expect(await put(2, { level: "all", as: "other" })).toMatchObject({
+        status: 409,
+        body: { reason: "renamed" },
+      });
+      w.store.db.run("UPDATE projects SET disabled = 1 WHERE id = 3");
+      expect(await put(3, { level: "knowledge", as: "docs" })).toMatchObject({
+        status: 409,
+        body: { reason: "disabled" },
+      });
+      w.store.db.run("UPDATE projects SET disabled = 0 WHERE id = 3");
+      expect(await put(3, { level: "knowledge", as: "!!!" })).toMatchObject({
+        status: 400,
+        body: { reason: "no-name" },
+      });
+      expect(await put(3, { level: "knowledge", as: "con" })).toMatchObject({
+        status: 400,
+        body: { error: expect.stringContaining("reserved"), reason: "no-name" },
+      });
+      expect(requests(w, "/v1/")).toBe(seen);
+      expect(rowOf(w, 3)).toBeUndefined();
+    },
+    LONG,
+  );
+
+  test(
+    "a server that cannot be reached is 502 unreachable; a row at 1 reads /v1/me once and is 409 contract; a bare 404 is 409 contract and sets the row to 1",
+    async () => {
+      const store = openSyncStore({ fetch: (input, init) => fetch(input, init) });
+      stores.push(store);
+      insertPending(store.db, serverFixture("s1", { url: "http://127.0.0.1:1", contract: 2 }));
+      store.db.run("UPDATE sharing_servers SET confirmed_at = ? WHERE server_id = 's1'", [
+        store.clock.now,
+      ]);
+      writeToken(store.ctx, "s1", `wcm1_${"t".repeat(43)}`);
+      pathProject(store, 3, "docs");
+      const s = await viewerOver(store);
+      expect(
+        await bodyOf(
+          await setSharing(s, 3, { level: "knowledge", as: "docs", confirm: true, create: true }),
+        ),
+      ).toMatchObject({ status: 502, body: { reason: "unreachable" } });
+      expect(levelRows(store.db)).toEqual([]);
+      await s.stop();
+      server = undefined;
+
+      const at1 = await world("knowledge", { server: { contract: { current: 1, accepted: [1] } } });
+      pathProject(at1.store, 3, "docs");
+      const v = await viewerOver(at1.store);
+      expect(at1.server().contract).toBe(1);
+      const mes = () => requests(at1, "/v1/me");
+      const before = mes();
+      expect(
+        await bodyOf(
+          await setSharing(v, 3, { level: "knowledge", as: "docs", confirm: true, create: true }),
+        ),
+      ).toMatchObject({ status: 409, body: { reason: "contract" } });
+      expect(mes()).toBe(before + 1);
+      expect(requests(at1, "/v1/names")).toBe(0);
+      setContract(at1.store.db, at1.serverId, 2);
+      expect(
+        await bodyOf(
+          await setSharing(v, 3, { level: "knowledge", as: "docs", confirm: true, create: true }),
+        ),
+      ).toMatchObject({ status: 409, body: { reason: "contract" } });
+      expect(at1.server().contract).toBe(1);
+      expect(mes()).toBe(before + 1);
+      expect(rowOf(at1, 3)).toBeUndefined();
+    },
+    LONG,
+  );
+
+  test(
+    "a level set without as on a project at Nothing that carries a name goes through the bind: needs-confirm with no request, then the join with the registry's id",
+    async () => {
+      const w = await world("knowledge", { named: true });
+      const s = await viewerOver(w.store);
+      expect((await setSharing(s, 2, { level: "local" })).status).toBe(200);
+      expect(rowOf(w, 2)).toBeUndefined();
+      const posts = () => requests(w, "POST /v1/names");
+      const before = posts();
+      // Receive only is no widening, but the name is a binding: confirmed by name, at every level.
+      expect(await bodyOf(await setSharing(s, 2, { level: "receive" }))).toMatchObject({
+        status: 400,
+        body: { reason: "needs-confirm" },
+      });
+      expect(posts()).toBe(before);
+      expect(rowOf(w, 2)).toBeUndefined();
+      expect(
+        await bodyOf(await setSharing(s, 2, { level: "receive", confirm: true })),
+      ).toMatchObject({
+        status: 200,
+        body: { boundAlias: NAME, sharedName: "wizardingcode", joined: true, created: false },
+      });
+      expect(rowOf(w, 2)).toMatchObject({ level: "receive", boundAlias: NAME, nameId: w.nameId });
+      expect(posts()).toBe(before);
+    },
+    LONG,
+  );
+
+  test("statusOf maps a refusal to its status and keeps named", () => {
+    expect(statusOf({ ok: false, reason: "disabled", named: true })).toEqual({
+      status: 409,
+      body: { error: expect.any(String), reason: "disabled", named: true },
+    });
+    expect(statusOf({ ok: false, reason: "exists", name: null })).toMatchObject({
+      status: 409,
+      body: { reason: "exists", name: null },
+    });
+    expect(statusOf({ ok: false, reason: "unknown-name" })).toMatchObject({ status: 404 });
+    expect(statusOf({ ok: false, reason: "unreachable", message: "x" })).toMatchObject({
+      status: 502,
+      body: { reason: "unreachable" },
+    });
+    expect(statusOf({ ok: false, reason: "name-taken", other: "brand" })).toMatchObject({
+      status: 409,
+      body: { reason: "name-taken", other: "brand" },
+    });
+  });
+
+  test(
+    "DELETE /api/projects/<id>/name forgets a name at Nothing; refused while bound, without a name, or for an unknown project",
+    async () => {
+      const w = await world("knowledge", { named: true });
+      pathProject(w.store, 3, "docs");
+      const s = await viewerOver(w.store);
+      expect(await bodyOf(await forget(s, 2))).toMatchObject({
+        status: 409,
+        body: { reason: "name-bound" },
+      });
+      expect(await bodyOf(await forget(s, 3))).toMatchObject({
+        status: 404,
+        body: { reason: "no-name" },
+      });
+      expect(await bodyOf(await forget(s, 999))).toMatchObject({
+        status: 404,
+        body: { reason: "no-project" },
+      });
+      expect((await setSharing(s, 2, { level: "local" })).status).toBe(200);
+      expect(await bodyOf(await forget(s, 2))).toEqual({
+        status: 200,
+        body: { forgotten: true, sharedName: "wizardingcode" },
+      });
+      expect(aliasRows(w).filter((row) => row.projectId === 2)).toEqual([
+        { alias: "path:/work/brand", projectId: 2 },
+      ]);
+      expect(changeRows(w).at(-1)).toEqual({ what: "name:2" });
+      expect(one(await projectsOf(s), 2)).toMatchObject({ sharedName: null });
+      expect(await bodyOf(await forget(s, 2))).toMatchObject({
+        status: 404,
+        body: { reason: "no-name" },
+      });
+    },
+    LONG,
+  );
 });

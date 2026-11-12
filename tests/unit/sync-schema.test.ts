@@ -94,11 +94,12 @@ const level = (db: Database, projectId: number, destination: string, level: stri
 
 describe("sharing v2 and knowledge v8", () => {
   test("the versions, the names and the one list the engine reads", () => {
-    expect(SHARING_SCHEMA_VERSION).toBe(2);
+    expect(SHARING_SCHEMA_VERSION).toBe(3);
     expect(KNOWLEDGE_SCHEMA_VERSION).toBe(8);
     expect(SHARING_MIGRATIONS.map((m) => [m.version, m.name])).toEqual([
       [1, "sharing_policy"],
       [2, "sharing_servers"],
+      [3, "sharing_names"],
     ]);
     expect(KNOWLEDGE_MIGRATIONS.map((m) => [m.version, m.name])).toEqual([
       [6, "knowledge_store"],
@@ -111,8 +112,8 @@ describe("sharing v2 and knowledge v8", () => {
   test("a fresh store has the tables, the columns and the versions, and user_version stays", () => {
     const db = open();
     expect(userVersion(db)).toBe(LATEST_VERSION);
-    expect(userVersion(db)).toBe(7);
-    expect(moduleVersion(db, "sharing")).toBe(2);
+    expect(userVersion(db)).toBe(8);
+    expect(moduleVersion(db, "sharing")).toBe(3);
     expect(moduleVersion(db, "knowledge")).toBe(8);
     expect(columnsOf(db, "sharing_servers")).toEqual([
       "server_id",
@@ -222,6 +223,7 @@ describe("sharing v2 and knowledge v8", () => {
       "bound_alias",
       "set_at",
       "source",
+      "name_id",
     ]);
     expect(columnsOf(db, "knowledge_received")).toEqual([
       "server_id",
@@ -276,7 +278,7 @@ describe("sharing v2 and knowledge v8", () => {
       without.close();
       const db = open();
       expect(coreSchema(db)).toEqual(core);
-      expect(userVersion(db)).toBe(7);
+      expect(userVersion(db)).toBe(8);
       db.close();
     } finally {
       rmSync(bare, { recursive: true, force: true });
@@ -309,7 +311,7 @@ describe("sharing v2 and knowledge v8", () => {
     old.close();
 
     const db = open();
-    expect(moduleVersion(db, "sharing")).toBe(2);
+    expect(moduleVersion(db, "sharing")).toBe(3);
     expect(moduleVersion(db, "knowledge")).toBe(8);
     const rows = db
       .query<{ project_id: number; destination: string; level: string }, []>(
@@ -345,7 +347,7 @@ describe("sharing v2 and knowledge v8", () => {
     stuck.close();
     delete process.env.WIZARDINGCODE_MEM_TEST_FAIL_MIGRATION;
     const db = open();
-    expect(moduleVersion(db, "sharing")).toBe(2);
+    expect(moduleVersion(db, "sharing")).toBe(3);
     expect(moduleVersion(db, "knowledge")).toBe(8);
     db.close();
   });

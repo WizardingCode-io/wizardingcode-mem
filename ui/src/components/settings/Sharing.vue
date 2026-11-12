@@ -5,6 +5,7 @@
 import { computed, onMounted, reactive, ref } from "vue";
 import { api, buildSharingPatch, LEVEL_LABELS, type Level, type Root, type ServerEntry, type SettingKey, type SettingsPatch, type SharingView } from "../../api";
 import { ago } from "../../format";
+import { formatChange, projectOfChange } from "../../../../src/sharing/format.ts";
 import { fromEnvironment, saveSettings, setting } from "../../settings";
 import { serverChange } from "../../sharing-text";
 import { openCross, state } from "../../viewer";
@@ -89,7 +90,12 @@ const totalOf = (root: Root, area: string) => view.value?.report.perRoot[root].a
 const levelCount = (level: Level) => view.value?.levels[level] ?? 0;
 const openProjects = () => openCross("projects", null);
 
-/** The log's line for the last change: a project by its name, a level by its label, a server by its name (`serverChange`). */
+const projectName = (id: number) => state.projects.find((p) => p.id === id)?.name ?? null;
+/**
+ * The log's line for the last change: a project's level by its name and the labels, a server by
+ * its name (`serverChange`), and every other row (a shared name among them) through the one
+ * formatter `share status` renders with (`formatChange`, ADR 0028).
+ */
 const lastChange = computed(() => {
   const change = view.value?.lastChange;
   if (!change) return null;
@@ -99,16 +105,10 @@ const lastChange = computed(() => {
     const name = listed ?? (/^mute/.test(change.old) || change.old === "" ? "a server" : change.old);
     return { ...change, what: serverChange(name, change.old, change.new), old: "", new: "" };
   }
-  const project = /^project:(\d+)$/.exec(change.what);
-  if (project === null) return change;
-  const id = Number(project[1]);
+  const id = projectOfChange(change.what);
+  if (id === null) return { ...change, what: formatChange(change, projectName), old: "", new: "" };
   const label = (value: string) => (value in LEVEL_LABELS ? LEVEL_LABELS[value as Level] : value);
-  return {
-    ...change,
-    what: state.projects.find((p) => p.id === id)?.name ?? `project ${id}`,
-    old: label(change.old),
-    new: label(change.new),
-  };
+  return { ...change, what: projectName(id) ?? `project ${id}`, old: label(change.old), new: label(change.new) };
 });
 
 // Saving: the patch through the shared rules, one preview when it would let more leave,

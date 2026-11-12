@@ -42,6 +42,7 @@ import {
   ALIAS_A,
   ALIAS_B,
   adminOf,
+  api,
   cleanTestDirs,
   entryPayload,
   eventsOf,
@@ -251,6 +252,27 @@ describe("the export", () => {
     expect(JSON.parse(readFileSync(join(folderB, "knowledge.json"), "utf8"))).toMatchObject({
       scope: "project",
       remoteAlias: ALIAS_B,
+      mirror: true,
+    });
+  });
+
+  test("an entry under a shared name lands in the name's own folder, apart from any remote's (ADR 0028)", async () => {
+    const { t, ana } = await team({ contract: { current: 2, accepted: [1, 2] } });
+    const NAME = "name:wizardingcode";
+    expect((await api(t.server, ana.token, "POST", "/v1/names", { alias: NAME })).status).toBe(201);
+    const p = entryPayload({ scope: "project", remoteAlias: NAME, slug: "brand-voice" });
+    expect(await pushOne(t.server, ana.token, sendOf(p))).toMatchObject({ result: "applied" });
+    expect(runMirror(mirrorCtx(t), { rebuild: false }).commits).toBe(1);
+    const folder = repoFolder("project", NAME, null);
+    expect(folder).toBe(`projects/wizardingcode-${projectFolderName(NAME).slice(0, 8)}`);
+    expect(folder).not.toBe(repoFolder("project", "remote:github.com/acme/wizardingcode", null));
+    const file = join(repos(t), folder, fileNameFor(uuidOf(p.uid), "brand-voice"));
+    expect(readFileSync(file, "utf8")).toBe(p.frontmatter + p.body);
+    expect(
+      JSON.parse(readFileSync(join(repos(t), folder, "knowledge.json"), "utf8")),
+    ).toMatchObject({
+      scope: "project",
+      remoteAlias: NAME,
       mirror: true,
     });
   });

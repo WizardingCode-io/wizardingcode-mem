@@ -62,6 +62,23 @@ export function shareListText(list: readonly string[]): string {
   return list.length === 0 ? NONE : list.join(",");
 }
 
+// --- The flags of a shared name (ADR 0028) --------------------------------------------
+
+/**
+ * What the sync may know of a name beyond the registry: `missing` (a push was answered `name`),
+ * `recreated` (a pulled item carried another id) and `purged` (a push was answered
+ * `name-purged`). Each is a `meta` key written by the sync and cleared by a bind, by Nothing,
+ * by the server's removal and by a restore.
+ */
+export type NameState = "missing" | "recreated" | "purged";
+
+export const NAME_STATES: readonly NameState[] = ["missing", "recreated", "purged"];
+
+/** The `meta` key of one flag: `names.<state>:<server id>:<alias>`. */
+export function nameFlagKey(state: NameState, serverId: string, alias: string): string {
+  return `names.${state}:${serverId}:${alias}`;
+}
+
 // --- Reasons ------------------------------------------------------------------------
 
 /** Why an item leaves or stays: the fixed codes a ruling carries. */
@@ -106,7 +123,8 @@ export const REASON_TEXT: Record<Reason, string> = {
   "level-receive": "The project receives from this server and sends nothing.",
   "level-knowledge": "This project shares knowledge only; memories stay.",
   disabled: "Memory is off for this project.",
-  "unbound-alias": "The level was set under a git remote this project no longer has.",
+  "unbound-alias":
+    "The level was set under a git remote or shared name this project no longer has.",
   "no-project": "No project owns it.",
   "area-private": "Its area is not allowed.",
   "area-inert": "Its area is listed but not in the taxonomy.",
@@ -303,6 +321,8 @@ export interface LevelRow {
   destination: string;
   level: Level;
   boundAlias: string;
+  /** The registry id of the shared name the row is bound to; null for a remote (ADR 0028). */
+  nameId: string | null;
   reason: Reason;
 }
 

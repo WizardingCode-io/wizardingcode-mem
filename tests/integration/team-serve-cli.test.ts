@@ -290,7 +290,8 @@ describe("status, audit, health, instance renew", () => {
       lines.find((line) => line.startsWith(`${key}: `))?.slice(key.length + 2);
     expect(value("serverId")).toBe(t.server.serverId);
     expect(value("instance")).toBe(t.server.instance());
-    expect(value("schema")).toBe("1");
+    expect(value("schema")).toBe("2");
+    expect(value("names")).toBe("0");
     expect(value("members.active")).toBe("2");
     expect(value("devices.active")).toBe("2");
     expect(value("pendingBootstrap")).toBe("false");

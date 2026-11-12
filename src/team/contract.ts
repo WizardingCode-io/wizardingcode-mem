@@ -2,9 +2,9 @@
 // shapes it answers with, and one fingerprint that pins them, so a change to part 4's key
 // lists or to a shape without a contract bump fails a test.
 import { createHash } from "node:crypto";
+import { hasLetterOrDigit, isTeamAlias, stripTeamPrefix } from "../core/identity.ts";
 import { slugify, UUID } from "../modules/knowledge/entry.ts";
 import { projectFolderName } from "../modules/knowledge/repo.ts";
-import { isHostLedAlias } from "../sharing/levels.ts";
 import {
   OUTGOING_ENTRY_KEYS,
   OUTGOING_MEMORY_KEYS,
@@ -22,9 +22,9 @@ export type { Limits };
 /** Part 1's `UUID` without its anchors, to build the uid grammar. */
 const UUID_BODY = UUID.source.slice(1, -1);
 
-/** `workspace:<uuid>`, `shared:<uuid>` or `project:<alias>:<uuid>`; the alias is checked apart. */
+/** `workspace:<uuid>`, `shared:<uuid>` or `project:<alias>:<uuid>` (a remote or a shared name); the alias is checked apart. */
 const ENTRY_UID = new RegExp(
-  `^(workspace|shared):(${UUID_BODY})$|^project:(remote:[^,\\s]{1,200}):(${UUID_BODY})$`,
+  `^(workspace|shared):(${UUID_BODY})$|^project:((?:remote|name):[^,\\s]{1,200}):(${UUID_BODY})$`,
 );
 
 /** The parts of an entry's uid: a project's always has its alias, the other scopes never do. */
@@ -32,7 +32,7 @@ export type EntryUid =
   | { scope: "workspace" | "shared"; remoteAlias: null; uuid: string }
   | { scope: "project"; remoteAlias: string; uuid: string };
 
-/** The parts of an entry's uid; null when it is not one, or its alias is not host-led. */
+/** The parts of an entry's uid; null when it is not one, or its alias names no project to a team. */
 export function parseEntryUid(uid: string): EntryUid | null {
   const match = ENTRY_UID.exec(uid);
   if (match === null) return null;
@@ -44,15 +44,15 @@ export function parseEntryUid(uid: string): EntryUid | null {
     };
   }
   const alias = match[3] as string;
-  if (!isHostLedAlias(alias)) return null;
+  if (!isTeamAlias(alias)) return null;
   return { scope: "project", remoteAlias: alias, uuid: match[4] as string };
 }
 
-/** The contract this binary speaks. */
-export const CONTRACT = 1;
+/** The contract this binary speaks: 2 since the shared names (ADR 0028). */
+export const CONTRACT = 2;
 
-/** The contracts this server accepts: from the first bump on, the current one and the one before it. */
-export const ACCEPTED_CONTRACTS: readonly number[] = [1];
+/** The contracts this server accepts: the current one and the one before it. */
+export const ACCEPTED_CONTRACTS: readonly number[] = [1, 2];
 
 /** Why a pushed item was refused: a fixed list, part of the contract. */
 export const PUSH_REASONS = [
@@ -65,6 +65,8 @@ export const PUSH_REASONS = [
   "not-owner",
   "withdrawn-by-admin",
   "unknown",
+  "name",
+  "name-purged",
   "rate",
   "storage",
 ] as const;
@@ -80,6 +82,7 @@ export const RESULT_SHAPES: Readonly<Record<string, readonly string[]>> = {
     "kind",
     "member",
     "movedTo",
+    "nameId",
     "op",
     "payload",
     "remoteAlias",
@@ -102,6 +105,12 @@ export const RESULT_SHAPES: Readonly<Record<string, readonly string[]>> = {
   ],
   me: ["contract", "device", "instance", "limits", "member", "now", "serverId"],
   refusal: ["error", "instance", "serverId"],
+  /** A 409 on the contract header: the list the server accepts (ADR 0028 pins it; it was sent since 1). */
+  contractRefusal: ["accepted", "error", "instance", "serverId"],
+  /** A 409 `exists` on a name's create: the live name's item (ADR 0028). */
+  nameConflict: ["error", "instance", "name", "serverId"],
+  nameItem: ["alias", "createdAt", "createdBy", "entries", "id", "lastChangeAt", "memories"],
+  namesPage: ["items", "more", "next"],
 };
 
 export interface ContractParts {
@@ -138,7 +147,7 @@ export function contractFingerprint(): string {
 
 /** The pinned value: when `contractFingerprint()` differs, bump `CONTRACT` and repin. */
 export const CONTRACT_FINGERPRINT =
-  "7a5bb7c74b149f93f7a3aac1bb32b54e501ec9765d6724b6e5ee791433f69f1d";
+  "ac340c80764de18d6810837742f07786d4bd7cbe43bd205905ac278d0277e911";
 
 // --- The wire: headers, grammars and bytes both sides agree on -----------------------------
 
@@ -163,12 +172,7 @@ export function entryBytes(payload: OutgoingEntry): Uint8Array {
 
 /** A slug of the text, or `fallback` when no letter or digit survives. */
 function slugOf(text: string, fallback: string): string {
-  const letters = text
-    .normalize("NFKD")
-    .replace(/\p{M}+/gu, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "");
-  return letters === "" ? fallback : slugify(text);
+  return hasLetterOrDigit(text) ? slugify(text) : fallback;
 }
 
 /**
@@ -185,7 +189,7 @@ export function repoFolder(
   if (scope === "shared") return "shared";
   if (scope === "project") {
     const alias = remoteAlias ?? "";
-    const slug = slugOf(alias.replace(/^remote:/, ""), "project");
+    const slug = slugOf(stripTeamPrefix(alias), "project");
     return `projects/${slug}-${projectFolderName(alias).slice(0, 8)}`;
   }
   const who = member ?? { id: "unknown", name: "" };
@@ -251,6 +255,8 @@ export interface FeedItemShape {
   revision: number;
   hash: string;
   movedTo?: string;
+  /** On an `upsert` under a shared name, the registry's id for it at the time of the page; null otherwise (ADR 0028). */
+  nameId: string | null;
   payload?: { frontmatter: string; body: string } | OutgoingMemory;
   member: { id: string; name: string };
   device?: string;
@@ -266,11 +272,33 @@ export interface PullPageShape {
   items: FeedItemShape[];
 }
 
-/** The body of a refusal: the error, and the ids when the server has them. */
+/** A shared name as the registry answers it (ADR 0028). */
+export interface NameItemShape {
+  alias: string;
+  id: string;
+  createdAt: number;
+  createdBy: { id: string; name: string };
+  entries: number;
+  memories: number;
+  lastChangeAt: number | null;
+}
+
+/** One page of the live names, by alias. */
+export interface NamesPageShape {
+  items: NameItemShape[];
+  more: boolean;
+  next: string | null;
+}
+
+/**
+ * The body of a refusal: the error, and the ids when the server has them; on a contract
+ * refusal the accepted list; on a name's `exists` the live name's item. A 429's retry delay
+ * travels in the `Retry-After` header, never in the body.
+ */
 export interface RefusalShape {
   error: string;
   serverId?: string;
   instance?: string;
   accepted?: number[];
-  retryAfterSec?: number;
+  name?: NameItemShape;
 }

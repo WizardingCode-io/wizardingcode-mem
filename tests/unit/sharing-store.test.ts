@@ -94,7 +94,7 @@ describe("the sharing namespace's tables", () => {
     expect(db.query<{ user_version: number }, []>("PRAGMA user_version").get()?.user_version).toBe(
       LATEST_VERSION,
     );
-    expect(LATEST_VERSION).toBe(7);
+    expect(LATEST_VERSION).toBe(8);
     expect(columnsOf(db, "sharing_levels")).toEqual([
       "project_id",
       "destination",
@@ -102,6 +102,7 @@ describe("the sharing namespace's tables", () => {
       "bound_alias",
       "set_at",
       "source",
+      "name_id",
     ]);
     expect(columnsOf(db, "sharing_ledger")).toEqual([
       "destination",
@@ -156,12 +157,12 @@ describe("the sharing namespace's tables", () => {
 
   test("the schema is current, also for a reader that migrates nothing", () => {
     const db = open();
-    expect(moduleSchemaState(db, "sharing", 2)).toBe("current");
+    expect(moduleSchemaState(db, "sharing", 3)).toBe("current");
     const generation = generationOf(db);
     db.close();
     const reader = openExisting(dir);
     expect(reader).not.toBeNull();
-    expect(moduleSchemaState(reader as Database, "sharing", 2)).toBe("current");
+    expect(moduleSchemaState(reader as Database, "sharing", 3)).toBe("current");
     expect(generationOf(reader as Database)).toBe(generation);
     reader?.close();
   });
@@ -579,6 +580,7 @@ describe("resetLevels", () => {
         boundAlias: "remote:example.com/p1",
         setAt: 5,
         source: "cli",
+        nameId: null,
       },
       {
         projectId: 2,
@@ -587,6 +589,7 @@ describe("resetLevels", () => {
         boundAlias: "remote:example.com/p2",
         setAt: 5,
         source: "cli",
+        nameId: null,
       },
     ]);
     const generation = generationOf(db);
@@ -657,9 +660,22 @@ describe("setLevelMessage", () => {
     expect(setLevelMessage("no-project")).toBe(
       "this folder is not a known project; start a session here first",
     );
-    expect(setLevelMessage("no-remote")).toBe(
-      "this project has no git remote; a team can only match projects by their remote",
+    expect(setLevelMessage("no-name")).toBe(
+      "this project has no git remote; give it a shared name",
     );
+    expect(setLevelMessage("has-remote")).toBe(
+      "this project is matched by its git remote; a teammate adds the same remote to join it",
+    );
+    expect(setLevelMessage("renamed", { name: "wizardingcode" })).toBe(
+      "this project is shared as `wizardingcode`; set it to Nothing first to leave that name",
+    );
+    expect(setLevelMessage("name-taken", { name: "wizardingcode", other: "Site" })).toBe(
+      "`wizardingcode` is the shared name of `Site`; that project forgets its name at Nothing",
+    );
+    expect(setLevelMessage("name-bound")).toBe(
+      "this project is shared under its name; set it to Nothing first to forget it",
+    );
+    expect(() => setLevelMessage("no-remote" as never)).toThrow("no-remote");
     expect(setLevelMessage("disabled")).toBe("memory is off for this project");
     expect(setLevelMessage("invalid")).toBe("the level is one of local, receive, knowledge, all");
     expect(setLevelMessage("needs-confirm")).toBe("confirm: true is required to widen sharing");

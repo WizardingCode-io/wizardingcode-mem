@@ -5,6 +5,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { askSecret } from "../../src/cli/prompt.ts";
 import { counterOf, levelRows, recentChanges } from "../../src/sharing/store.ts";
+import { nameFlagKey } from "../../src/sharing/types.ts";
 import { getMeta, liveLease, SYNC_LEASE, SYNC_STOP } from "../../src/store/meta.ts";
 import type { Fetch } from "../../src/sync/context.ts";
 import {
@@ -24,7 +25,7 @@ import {
   tokensPath,
 } from "../../src/sync/servers.ts";
 import { startSync } from "../../src/sync/spawn.ts";
-import { statusReport } from "../../src/sync/state.ts";
+import { flagName, statusReport } from "../../src/sync/state.ts";
 import { runCliWith } from "../helpers/cli.ts";
 import {
   cleanSyncDirs,
@@ -105,7 +106,7 @@ describe("joinServer and confirmJoin", () => {
       url: t.server.origin,
       memberName: "Ana",
       role: "admin",
-      contract: 1,
+      contract: 2,
       instance: t.server.instance(),
       confirmedAt: null,
       stopped: null,
@@ -113,7 +114,7 @@ describe("joinServer and confirmJoin", () => {
     expect(serversConfigured(store.db)).toBe(false);
     expect(statusReport(store.db, store.dataDir)[0]?.state).toBe("pending");
     expect(joined.wouldLeave.perProject).toEqual([
-      { id: 1, level: "knowledge", entries: 0, memories: 0 },
+      { id: 1, level: "knowledge", entries: 0, memories: 0, imported: 0 },
     ]);
     // The token is in no table.
     const bytes = readFileSync(join(store.dataDir, "wizardingcode-mem.db"), "latin1");
@@ -140,6 +141,24 @@ describe("joinServer and confirmJoin", () => {
     if (again.ok) throw new Error("unreachable");
     expect(again.reason).toBe("already-joined");
     expect(again.message).toContain("share server rejoin");
+  });
+
+  test("against a server at contract 1 the row stores 1, and me is read with that header (ADR 0028)", async () => {
+    const clock = fakeClock();
+    const timers = fakeTimers(clock);
+    const t = await startTestServer({ contract: { current: 1, accepted: [1] } }, { clock, timers });
+    servers.push(t);
+    const store = openSyncStore({ clock, timers, fetch: realFetch });
+    stores.push(store);
+    const joined = await joinServer(store.ctx, {
+      url: t.server.origin,
+      code: t.code,
+      label: "laptop",
+      name: "Ana",
+    });
+    if (!joined.ok) throw new Error(`join failed: ${JSON.stringify(joined)}`);
+    expect(joined.limits?.pullItems).toBe(500);
+    expect(serverById(store.db, t.server.serverId)?.contract).toBe(1);
   });
 
   test("a join whose answer is lost leaves no token and no row; a new code joins", async () => {
@@ -328,6 +347,8 @@ describe("rejoin, remove, mute", () => {
     });
     await settle();
     expect(liveLease(store.db, SYNC_LEASE, clock.now)?.owner).toBe(`sync-${process.pid}-0.8.0`);
+    // A shared name's flag (ADR 0028) goes with the server.
+    flagName(store.ctx, serverId, "name:brand", "missing");
     const removing = removeServer(store.ctx, serverId, { withdraw: false, yes: true });
     await settle();
     // The flag is set; the sync leaves within five seconds; the removal then does its work.
@@ -343,6 +364,7 @@ describe("rejoin, remove, mute", () => {
     expect(levelRows(store.db)).toEqual([]);
     expect(readTokens(store.dataDir)[serverId]).toBeUndefined();
     expect(getMeta(store.db, SYNC_STOP)).toBeNull();
+    expect(getMeta(store.db, nameFlagKey("missing", serverId, "name:brand"))).toBeNull();
     const changes = recentChanges(store.db, 2).reverse();
     expect(changes.map((c) => [c.what, c.old, c.new])).toEqual([
       [`project:1@${serverId}`, "knowledge", "local"],

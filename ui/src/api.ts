@@ -29,12 +29,41 @@ export interface Project {
   sharing: Level;
   /** `allowed` for a level in force, else what makes it share nothing. */
   sharingReason: Reason;
-  /** It has a git remote, the one name a team can match it by. */
+  /** It has a host-led git remote, one name a team can match it by. */
   remote: boolean;
+  /** The slug of its shared name (ADR 0028), the other name a team can match it by; null without one. */
+  sharedName: string | null;
+  /** What the level in force is bound by; null at Nothing. */
+  boundTo: "remote" | "name" | null;
+  /** Its imported memories, which stay on this machine whatever the level. */
+  imported: number;
+  /** The bound shared name's state; null when the level is not bound by a name. */
+  nameState: "ok" | "missing" | "recreated" | "purged" | null;
   /** Memory is off for it. */
   disabled: boolean;
   /** The server its level binds it to; null when none. */
   server: { id: string; name: string } | null;
+}
+/** One shared name on a server, as its registry lists it (ADR 0028). */
+export interface NameItem {
+  alias: string;
+  id: string;
+  createdAt: number;
+  createdBy: { id: string; name: string };
+  entries: number;
+  memories: number;
+  lastChangeAt: number | null;
+}
+/** One shared name bound to a server from this machine, with what was received under it. */
+export interface NameStatus {
+  alias: string;
+  slug: string;
+  entries: number;
+  memories: number;
+  members: number;
+  lastAt: number | null;
+  state: "ok" | "missing" | "recreated" | "purged";
+  recreatedBy: string | null;
 }
 export type Kind = "decision" | "fix" | "gotcha" | "convention" | "change" | "discovery";
 export const KINDS: Kind[] = ["decision", "fix", "gotcha", "convention", "change", "discovery"];
@@ -247,6 +276,12 @@ export interface ServerEntry {
   pending: number;
   conflicts: number;
   hold: { reason: "restore" | "bulk"; count: number } | null;
+  /** The contract spoken to the server; shared names need 2 (ADR 0028). */
+  contract: number;
+  /** The row speaks 1 while a shared name is bound: nothing of those projects moves. */
+  namesHeld: boolean;
+  /** The shared names bound to the server from this machine. */
+  names: NameStatus[];
   lastSyncAt: number | null;
   muted: boolean;
 }
@@ -365,12 +400,29 @@ export const api = {
   /** What would leave once a change is made. Writes nothing. */
   sharingPreview: (change: PolicyChange) =>
     call<{ report: SharingReport }>("/api/sharing/preview", { method: "POST", body: JSON.stringify(change) }),
-  /** Sets what one project shares; a wider level needs `confirm`; with several servers, `server` names the one. */
-  setProjectSharing: (id: number, level: Level, confirm: boolean, server?: string) =>
-    call<{ level: Level; old: Level; boundAlias: string }>(`/api/projects/${id}/sharing`, {
+  /** Sets what one project shares; a wider level needs `confirm`; with several servers, `server` names the one; `as` binds it under a shared name, created with `create` (ADR 0028). */
+  setProjectSharing: (id: number, level: Level, confirm: boolean, server?: string, as?: string, create?: boolean) =>
+    call<{ level: Level; old: Level; boundAlias: string; sharedName: string | null }>(`/api/projects/${id}/sharing`, {
       method: "PUT",
-      body: JSON.stringify({ level, ...(confirm ? { confirm: true } : {}), ...(server ? { server } : {}) }),
+      body: JSON.stringify({
+        level,
+        ...(confirm ? { confirm: true } : {}),
+        ...(server ? { server } : {}),
+        ...(as ? { as } : {}),
+        ...(create ? { create: true } : {}),
+      }),
     }),
+  /** What setting a level under a shared name would do: the alias it would bind to, and whether the name is new to the project. Writes nothing. */
+  previewProjectSharing: (id: number, level: Level, as?: string, server?: string) =>
+    call<{ ok: true; boundAlias: string; named: boolean }>(`/api/projects/${id}/sharing/preview`, {
+      method: "POST",
+      body: JSON.stringify({ level, ...(as ? { as } : {}), ...(server ? { server } : {}) }),
+    }),
+  /** The project leaves its shared name, at Nothing. */
+  forgetProjectName: (id: number) =>
+    call<{ forgotten: true; sharedName: string }>(`/api/projects/${id}/name`, { method: "DELETE" }),
+  /** The shared names a server holds, up to the first 1,000. */
+  serverNames: (id: string) => call<{ names: NameItem[]; truncated: boolean }>(`/api/servers/${id}/names`),
   /** The team servers and the sync (ADR 0027); no token in any answer. */
   servers: () =>
     call<ServersView>("/api/servers").then((view) => {

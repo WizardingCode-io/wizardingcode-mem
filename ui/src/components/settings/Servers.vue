@@ -62,6 +62,9 @@ const holdLine = (s: ServerEntry) => {
     ? `${n(s.hold.count, "withdrawal", "withdrawals")} held since ${since}; nothing is taken back until you resume.`
     : `A hold since ${since}: the next sync withdraws nothing until you resume.`;
 };
+/** A bound shared name's state after its counts, when it carries one (ADR 0028). */
+const nameStateLabel = (name: ServerEntry["names"][number]) =>
+  name.state === "missing" ? "missing on the server" : name.state === "recreated" ? `re-created by ${name.recreatedBy ?? "a teammate"}` : name.state === "purged" ? "removed by the operator" : "";
 /** The remedy in the page's words: the CLI's command is this row's Rejoin… button. */
 const stoppedLine = (s: ServerEntry) => {
   const text = (s.remedy ?? "").replace(/`/g, "");
@@ -274,6 +277,15 @@ async function runNow() {
           <p v-if="s.state === 'stopped' && s.remedy" class="m-0 text-xs leading-4 text-(--danger)">{{ stoppedLine(s) }}</p>
           <p v-else-if="s.state === 'token missing'" class="m-0 text-xs leading-4 text-(--warn)">The token is missing: ask an admin for a code, then Rejoin… with it.</p>
           <p v-else-if="s.hold" class="m-0 text-xs leading-4 text-(--ink-muted)">{{ holdLine(s) }}</p>
+          <!-- The shared names bound to the server from this machine (ADR 0028): held while it speaks contract 1. -->
+          <p v-if="s.namesHeld" class="m-0 text-xs leading-4 text-(--warn)">Shared names are held: the server speaks contract 1. Upgrade it first.</p>
+          <ul v-if="s.names.length" aria-label="Shared names" class="m-0 flex list-none flex-col gap-0.5 p-0 text-xs leading-4 text-(--ink-muted)">
+            <li v-for="name in s.names" :key="name.alias" class="flex min-w-0 flex-wrap items-baseline gap-x-1.5">
+              <span class="wz-mono text-(--ink)">{{ name.slug }}</span>
+              <span>· {{ n(name.entries, "entry", "entries") }}, {{ n(name.memories, "memory", "memories") }} received · {{ n(name.members, "member", "members") }} · last {{ name.lastAt === null ? "never" : ago(name.lastAt) }}</span>
+              <span v-if="name.state !== 'ok'" class="text-(--warn)">· {{ nameStateLabel(name) }}</span>
+            </li>
+          </ul>
         </li>
       </ul>
 

@@ -53,6 +53,7 @@ describe("the token bucket", () => {
         joinsPerMinute: 10,
         payloadBytesPerHour: 64 * MIB,
         authFailuresPerMinute: 60,
+        namesPerHour: 10,
       },
       () => now,
     );

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   counterOfEpoch,
+  defaultTeamAlias,
   effectiveLevel,
   epochOf,
   isHostLedAlias,
@@ -143,6 +144,28 @@ describe("effectiveLevel", () => {
     });
   });
 
+  test("a row bound to a shared name the project carries is in force; one it lost reads local", () => {
+    const named = { known: true, disabled: false, aliases: ["path:/x", "name:wizardingcode"] };
+    const nameRow = { level: "knowledge", boundAlias: "name:wizardingcode" };
+    expect(effectiveLevel(nameRow, named, "team", TEAM)).toEqual({
+      level: "knowledge",
+      reason: "allowed",
+    });
+    expect(effectiveLevel(nameRow, { ...named, aliases: ["path:/x"] }, "team", TEAM)).toEqual({
+      level: "local",
+      reason: "unbound-alias",
+    });
+    // A name that is no shared name binds nothing, as a path alias does not.
+    expect(
+      effectiveLevel(
+        { level: "all", boundAlias: "name:Bad" },
+        { ...named, aliases: ["name:Bad"] },
+        "team",
+        TEAM,
+      ),
+    ).toEqual({ level: "local", reason: "unbound-alias" });
+  });
+
   test("a disabled project's row reads local", () => {
     expect(effectiveLevel(row, { ...known, disabled: true }, "team", TEAM)).toEqual({
       level: "local",
@@ -172,6 +195,26 @@ describe("effectiveLevel", () => {
         reason: "level-local",
       });
     }
+  });
+});
+
+describe("defaultTeamAlias", () => {
+  const ALIASES = ["path:/x", "remote:github.com/b/b", "remote:github.com/a/a", "name:a"];
+
+  test("the name first, then the folder's remote, then the first host-led remote by bytes", () => {
+    expect(defaultTeamAlias(ALIASES, null)).toBe("name:a");
+    expect(defaultTeamAlias(ALIASES, "remote:github.com/b/b")).toBe("name:a");
+    const unnamed = ALIASES.filter((alias) => alias !== "name:a");
+    expect(defaultTeamAlias(unnamed, "remote:github.com/b/b")).toBe("remote:github.com/b/b");
+    expect(defaultTeamAlias(unnamed, null)).toBe("remote:github.com/a/a");
+    expect(defaultTeamAlias(unnamed, undefined)).toBe("remote:github.com/a/a");
+    // A remote that is not the project's, or not host-led, names nothing.
+    expect(defaultTeamAlias(unnamed, "remote:github.com/zz/zz")).toBe("remote:github.com/a/a");
+    expect(defaultTeamAlias(unnamed, "remote:/local/path")).toBe("remote:github.com/a/a");
+    expect(
+      defaultTeamAlias(["path:/x", "remote:/local/path"], "remote:/local/path"),
+    ).toBeUndefined();
+    expect(defaultTeamAlias([], null)).toBeUndefined();
   });
 });
 
@@ -212,6 +255,7 @@ describe("levelOf", () => {
       destination: "team",
       level: "knowledge",
       boundAlias: "remote:x.example/x",
+      nameId: null,
       reason: "allowed",
       ...over,
     },

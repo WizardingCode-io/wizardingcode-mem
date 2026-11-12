@@ -4,11 +4,12 @@ import type { Database } from "bun:sqlite";
 import type { Migration } from "../store/migration.ts";
 import sharingPolicy from "./migrations/0001_sharing_policy.sql" with { type: "text" };
 import sharingServers from "./migrations/0002_sharing_servers.sql" with { type: "text" };
+import sharingNames from "./migrations/0003_sharing_names.sql" with { type: "text" };
 
 /** The namespace of these tables' versions in `module_migrations`. It is not an engine module. */
 export const SHARING_MODULE = "sharing";
 
-export const SHARING_SCHEMA_VERSION = 2;
+export const SHARING_SCHEMA_VERSION = 3;
 
 /**
  * The `meta` key of the store's generation, which scopes a memory's identity on this
@@ -80,4 +81,5 @@ function oneServerPerProject(db: Database): void {
 export const SHARING_MIGRATIONS: readonly Migration[] = [
   { version: 1, name: "sharing_policy", sql: sharingPolicy, run: mintGeneration },
   { version: 2, name: "sharing_servers", sql: sharingServers, run: oneServerPerProject },
+  { version: 3, name: "sharing_names", sql: sharingNames },
 ];

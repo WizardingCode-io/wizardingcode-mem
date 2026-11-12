@@ -23,7 +23,8 @@
       "subject": "Lane release/0.7.0 (2026-11-11-002-release-070-version-070-in-packagejson-a, ...",
       "body": "Lane release/0.7.0 (2026-11-11-002-release-070-version-070-in-packagejson-a, proven) is proven: commit it, then merge it from the main checkout.",
       "replyTo": null,
-      "status": "sent"
+      "status": "done",
+      "readAt": "2026-11-11T20:40:29.380Z"
     }
   ]
 }

@@ -1,10 +1,16 @@
 // The route table and the one handler: the request id, the proxy rule, the body cap, the
 // contract, the authentication, the problem shape, the log line.
 import type { Server } from "bun";
+import { isSharedName } from "../core/identity.ts";
 import { json, problem } from "../http/respond.ts";
 import { readAudit } from "./audit.ts";
 import { authenticate, type Caller, checkContract, requireAdmin } from "./auth.ts";
-import { CONTRACT, REQUEST_ID_HEADER, REQUEST_ID_RE } from "./contract.ts";
+import {
+  type NameItemShape,
+  type NamesPageShape,
+  REQUEST_ID_HEADER,
+  REQUEST_ID_RE,
+} from "./contract.ts";
 import { HttpError, unknownItem } from "./errors.ts";
 import { parsePullQuery, pullWithWait } from "./feed.ts";
 import { newHexId } from "./ids.ts";
@@ -31,10 +37,54 @@ import {
   summarizePush,
   withdrawByAdmin,
 } from "./push.ts";
-import { insertAudit } from "./store.ts";
+import {
+  insertAudit,
+  insertName,
+  listLiveNames,
+  liveNameByAlias,
+  memberById,
+  type NameRow,
+  nameByAlias,
+  nameCountsOf,
+  nameIdInUse,
+  readTransaction,
+  transaction,
+} from "./store.ts";
 import type { Context, Meta } from "./types.ts";
 
 const IDS_ON = new Set([401, 403, 409, 410]);
+
+/** A shared name's registry id: 16 lower-case hex characters (`newHexId`). */
+const NAME_ID = /^[0-9a-f]{16}$/;
+const NAMES_PAGE_DEFAULT = 50;
+const NAMES_PAGE_MAX = 200;
+
+/** The `:alias` of the by-name route: a shared name, or null for anything else (a remote included). A pure guard, before any SQL. */
+export function parseNameParam(raw: string): string | null {
+  return isSharedName(raw) ? raw : null;
+}
+
+/** The names routes are contract 2's: below it the route table's own 404, as a 0.7.0 server answers. */
+function requireNames(ctx: Context): void {
+  if (ctx.contract.current < 2) throw new HttpError(404, { error: "not found" });
+}
+
+/** A registry row as the client reads it: the counts under the alias and the creator's name. */
+function nameItemOf(db: Context["db"], row: NameRow): NameItemShape {
+  const counts = nameCountsOf(db, row.alias);
+  return {
+    alias: row.alias,
+    id: row.id,
+    createdAt: row.created_at,
+    createdBy: {
+      id: row.created_by_member,
+      name: memberById(db, row.created_by_member)?.name ?? row.created_by_member,
+    },
+    entries: counts.entries,
+    memories: counts.memories,
+    lastChangeAt: counts.lastChangeAt,
+  };
+}
 
 /** The client's address: the last `X-Forwarded-For` hop behind a trusted proxy, else the socket's. */
 export function clientAddress(
@@ -171,7 +221,7 @@ async function withCaller(
   address: string,
   meta: Meta,
 ): Promise<Caller> {
-  checkContract(request);
+  checkContract(request, ctx.contract.accepted);
   let caller: Caller;
   try {
     caller = authenticate(ctx.db, request, ctx.now());
@@ -237,7 +287,7 @@ const ROUTES: Route[] = [
         memberId: joined.member.id,
         name: joined.member.name,
         role: joined.member.role,
-        contract: CONTRACT,
+        contract: ctx.contract.current,
         ...ids(ctx),
       });
     } catch (error) {
@@ -262,7 +312,7 @@ const ROUTES: Route[] = [
       member: { id: caller.member.id, name: caller.member.name, role: caller.member.role },
       device: { id: caller.device.id, alias: caller.device.alias, label: caller.device.label },
       ...ids(ctx),
-      contract: CONTRACT,
+      contract: ctx.contract.current,
       now: ctx.now(),
       limits: ctx.limits,
     });
@@ -477,6 +527,76 @@ const ROUTES: Route[] = [
     });
     ctx.onWrite({ feed: false });
     return json({ uid });
+  }),
+
+  route("POST", "/v1/names", async (ctx, request, _params, address, meta) => {
+    requireNames(ctx);
+    const caller = await withCaller(ctx, request, false, address, meta);
+    const body = await readBody(ctx, request);
+    const alias = typeof body.alias === "string" && isSharedName(body.alias) ? body.alias : null;
+    const given = body.id === undefined ? null : body.id;
+    if (alias === null || (given !== null && !(typeof given === "string" && NAME_ID.test(given)))) {
+      throw new HttpError(400, { error: "alias" });
+    }
+    const now = ctx.now();
+    const made = transaction(ctx.db, (): NameItemShape => {
+      const held = nameByAlias(ctx.db, alias);
+      if (held !== null) {
+        if (held.purged_at !== null) throw new HttpError(409, { error: "purged" });
+        throw new HttpError(409, { error: "exists", name: nameItemOf(ctx.db, held) });
+      }
+      const taken = ctx.buckets.names.take(caller.member.id);
+      if (!taken.ok) throw rateLimited(taken.retryAfterSec);
+      const id = given !== null && !nameIdInUse(ctx.db, given) ? given : newHexId();
+      insertName(ctx.db, {
+        alias,
+        id,
+        memberId: caller.member.id,
+        deviceId: caller.device.id,
+        at: now,
+      });
+      insertAudit(ctx.db, {
+        at: now,
+        source: "api",
+        deviceId: caller.device.id,
+        address,
+        action: "name created",
+        target: alias,
+      });
+      return nameItemOf(ctx.db, nameByAlias(ctx.db, alias) as NameRow);
+    });
+    ctx.onWrite({ feed: false });
+    return json(made, 201);
+  }),
+
+  route("GET", "/v1/names", async (ctx, request, _params, address, meta) => {
+    requireNames(ctx);
+    await withCaller(ctx, request, false, address, meta);
+    const params = new URL(request.url).searchParams;
+    const rawAfter = params.get("after");
+    if (rawAfter !== null && !isSharedName(rawAfter)) throw new HttpError(400, { error: "after" });
+    const rawLimit = params.get("limit");
+    let limit = NAMES_PAGE_DEFAULT;
+    if (rawLimit !== null && rawLimit !== "") {
+      const value = Number(rawLimit);
+      if (!Number.isInteger(value)) throw new HttpError(400, { error: "limit" });
+      limit = Math.min(NAMES_PAGE_MAX, Math.max(1, value));
+    }
+    const page = readTransaction(ctx.db, (): NamesPageShape => {
+      const { rows, more } = listLiveNames(ctx.db, rawAfter, limit);
+      const items = rows.map((row) => nameItemOf(ctx.db, row));
+      return { items, more, next: more ? (items[items.length - 1]?.alias ?? null) : null };
+    });
+    return json(page);
+  }),
+
+  route("GET", "/v1/names/:alias", async (ctx, request, params, address, meta) => {
+    requireNames(ctx);
+    await withCaller(ctx, request, false, address, meta);
+    const alias = parseNameParam(params.alias as string);
+    const row = alias === null ? null : liveNameByAlias(ctx.db, alias);
+    if (row === null) throw new HttpError(404, { error: "unknown-name" });
+    return json(nameItemOf(ctx.db, row));
   }),
 
   route("GET", "/v1/audit", async (ctx, request, _params, address, meta) => {

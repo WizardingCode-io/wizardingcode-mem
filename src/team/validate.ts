@@ -1,6 +1,7 @@
 // What a pushed payload must be before the server reads its database: the shape, the uid
 // grammar, the slug, the size, the hash recomputed over the bytes received, the entry read
 // by part 1's parser, and the secret check. Pure: no database, no clock.
+import { isTeamAlias } from "../core/identity.ts";
 import { findSecrets } from "../core/redact.ts";
 import {
   AREA_ID,
@@ -12,7 +13,6 @@ import {
 import { hashOf } from "../modules/knowledge/repo.ts";
 import type { KnowledgeEntry } from "../modules/knowledge/types.ts";
 import { memoryHash } from "../sharing/hash.ts";
-import { isHostLedAlias } from "../sharing/levels.ts";
 import {
   OUTGOING_ENTRY_KEYS,
   OUTGOING_MEMORY_KEYS,
@@ -35,6 +35,11 @@ const refuse = (reason: PushReason, rule?: string): Refusal =>
   rule === undefined ? { result: "refused", reason } : { result: "refused", reason, rule };
 
 export { entryBytes, parseEntryUid };
+
+/** The rule a send under a shared name the registry never held is refused with (`name`, ADR 0028). */
+export const NAME_RULE = "the name is not on this server; create it or pick one from the list";
+/** The rule a send under a name the operator purged is refused with (`name-purged`). */
+export const NAME_PURGED_RULE = "the operator removed the name from this server";
 
 /** A plain object whose sorted keys are exactly `keys`. */
 export function hasExactKeys(
@@ -152,7 +157,7 @@ export function checkMemoryPayload(item: {
   if (
     payload.uid !== item.uid ||
     !MEMORY_UID.test(payload.uid) ||
-    !isHostLedAlias(payload.remoteAlias)
+    !isTeamAlias(payload.remoteAlias)
   )
     return refuse("shape");
   const size = Buffer.byteLength(JSON.stringify(payload), "utf8");

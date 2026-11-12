@@ -1018,6 +1018,27 @@ function sync(context: DoctorContext, db: Db | null): Check {
         `${server.name}: ${plural(server.hold.count, "withdrawal")} held (${server.hold.reason}); share server resume`,
       );
     }
+    // The shared names (ADR 0028): held by the contract, or flagged by the sync.
+    if (server.namesHeld) {
+      problems.push(
+        `names held: the server ${server.name} speaks contract 1; upgrade it (the runbook)`,
+      );
+    }
+    for (const name of server.names) {
+      if (name.state === "missing") {
+        problems.push(
+          `${server.name}: the server does not hold \`${name.slug}\`; set the level again to create or join it`,
+        );
+      } else if (name.state === "recreated") {
+        problems.push(
+          `${server.name}: \`${name.slug}\` re-created on the server by ${name.recreatedBy ?? "a teammate"}; join it again or set Nothing`,
+        );
+      } else if (name.state === "purged") {
+        problems.push(
+          `${server.name}: the operator removed \`${name.slug}\` from the server; set Nothing to leave it`,
+        );
+      }
+    }
   }
   const { state } = report;
   if (state.kind === "dead-holder") {

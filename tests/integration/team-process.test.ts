@@ -303,7 +303,7 @@ describe("the serve process", () => {
 
     const dir = tempDir();
     const newer = new Database(join(dir, "team.db"), { create: true });
-    newer.run("PRAGMA user_version = 2");
+    newer.run("PRAGMA user_version = 3");
     newer.run("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
     newer.run("INSERT INTO meta VALUES ('team.schema', 'team')");
     newer.close();
