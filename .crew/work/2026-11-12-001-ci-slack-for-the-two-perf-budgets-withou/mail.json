@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "messages": [
+    {
+      "at": "2026-11-12T12:31:08.581Z",
+      "from": {
+        "workspace": "_alone",
+        "project": "ai-mem",
+        "item": "2026-11-12-001-ci-slack-for-the-two-perf-budgets-withou",
+        "agent": "session"
+      },
+      "hops": 0,
+      "opened": null,
+      "id": "M-2026-11-12-002-ai-mem",
+      "to": {
+        "workspace": "_alone",
+        "project": "ai-mem",
+        "item": null,
+        "agent": null
+      },
+      "type": "notice",
+      "priority": "normal",
+      "subject": "Lane fix/ci-perf-slack (2026-11-12-001-ci-slack-for-the-two-perf-budgets-with...",
+      "body": "Lane fix/ci-perf-slack (2026-11-12-001-ci-slack-for-the-two-perf-budgets-withou, proven) is proven: commit it, then merge it from the main checkout.",
+      "replyTo": null,
+      "status": "sent"
+    }
+  ]
+}
