@@ -219,7 +219,7 @@ describe("the client against the team server", () => {
     const contract = await future.me();
     expect(contract.ok).toBe(false);
     if (contract.ok) throw new Error("unreachable");
-    expect(contract).toMatchObject({ kind: "contract", accepted: [1] });
+    expect(contract).toMatchObject({ kind: "contract", accepted: [1, 2] });
 
     const adminClient = new SyncClient(store.ctx, {
       url: t.server.origin,
@@ -273,6 +273,52 @@ describe("the client against the team server", () => {
 describe("the answers the test server cannot give, from a stub", () => {
   const client = (store: SyncTestStore) =>
     new SyncClient(store.ctx, { url: "https://team.acme.test", token: `wcm1_${"z".repeat(43)}` });
+
+  test("a 409 without an accepted list is a conflict with its body; a bare 404 on a names route is an old server; unknown-name is refused with the body (ADR 0028)", async () => {
+    const store = stubbed((input) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url.endsWith("/v1/names"))
+        return json(409, { error: "exists", name: { alias: "name:x", id: "0123456789abcdef" } });
+      if (url.endsWith("/v1/names/name%3Aold")) return json(404, { error: "not found" });
+      if (url.endsWith("/v1/names/name%3Agone")) return json(404, { error: "unknown-name" });
+      return json(404, { error: "not found" });
+    });
+    const c = client(store);
+    const conflict = await c.createName("name:x");
+    expect(conflict.ok).toBe(false);
+    if (conflict.ok) throw new Error("unreachable");
+    expect(conflict).toMatchObject({
+      kind: "conflict",
+      status: 409,
+      body: { error: "exists", name: { alias: "name:x" } },
+    });
+    const old = await c.nameByAlias("name:old");
+    expect(old.ok).toBe(false);
+    if (old.ok) throw new Error("unreachable");
+    expect(old.kind).toBe("oldServer");
+    const gone = await c.nameByAlias("name:gone");
+    expect(gone.ok).toBe(false);
+    if (gone.ok) throw new Error("unreachable");
+    expect(gone).toMatchObject({ kind: "refused", status: 404, body: { error: "unknown-name" } });
+    // On every other route a 404 stays a refusal, never an old server.
+    const me = await c.me();
+    expect(me.ok).toBe(false);
+    if (me.ok) throw new Error("unreachable");
+    expect(me.kind).toBe("refused");
+    // The contract spoken can change: the header follows it.
+    const seen: string[] = [];
+    const speaking = stubbed((_input, init) => {
+      seen.push(new Headers(init?.headers).get("x-wcm-contract") ?? "");
+      return json(200, { items: [], more: false, next: null });
+    });
+    const s = client(speaking);
+    expect(s.contract).toBe(CONTRACT);
+    await s.listNames(null, 10);
+    s.speak(1);
+    expect(s.contract).toBe(1);
+    await s.listNames(null, 10);
+    expect(seen).toEqual([String(CONTRACT), "1"]);
+  });
 
   test("429 with Retry-After, 410, 5xx, a network failure, a body that is not JSON", async () => {
     const seen: { url: string; headers: Record<string, string> }[] = [];

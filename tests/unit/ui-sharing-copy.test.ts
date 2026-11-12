@@ -166,9 +166,8 @@ describe("Across projects", () => {
     expect(projects).toContain(
       "Memories have no area: Knowledge and memories sends every active memory of this project that is not stale, branch-bound, imported or one of your rules.",
     );
-    expect(projects).toContain(
-      "This project has no git remote. A team can only match projects by their remote.",
-    );
+    // The sentence of before: a project with no remote is named instead (ADR 0028).
+    expect(projects).not.toContain("This project has no git remote. A team can only match");
     expect(projects).toContain("Memory is off for this project.");
     expect(projects).toContain("LEVELS");
   });
@@ -238,6 +237,84 @@ describe("the Servers card", () => {
   });
 });
 
+describe("the dock's shared name (ADR 0028)", () => {
+  const servers = source("ui/src/components/settings/Servers.vue");
+
+  test("the field, its sentences and the confirmation's words are in the dock, word for word", () => {
+    for (const text of [
+      "Shared name",
+      "New: you create",
+      "Joins",
+      "created by",
+      "This name is",
+      "'s on this machine",
+      "the first 1,000 names",
+      "Shared as",
+      "Set Nothing to leave this name.",
+      "This project now has a git remote; to match by the remote instead, set Nothing, forget the name, then set the level again.",
+      "Forget name",
+      "imported memories stay on this machine.",
+      "The server speaks contract 1; shared names need its upgrade.",
+      "the server does not hold",
+      "set the level again to create or join it",
+      "was re-created on the server by",
+      "join it again, or set Nothing to leave it.",
+      "the operator removed",
+      "from the server; set Nothing to leave it.",
+      ", visible to every member, ",
+      "and receive it into",
+      "and share knowledge of",
+      "and share knowledge and memories of",
+      "Create and share",
+      "Join and share",
+      "would leave.",
+      "leaves.",
+    ]) {
+      expect([text, projects.includes(text)]).toEqual([text, true]);
+    }
+    expect(projects).toContain("UInputMenu");
+    expect(projects).toContain("create-item");
+    // The field shows for a project with no host-led remote, and for one that carries a name.
+    expect(projects).toContain('v-if="!selected.remote || selected.sharedName"');
+    expect(projects).toContain("api.serverNames(");
+    expect(projects).toContain("api.previewProjectSharing(");
+    expect(projects).toContain("api.forgetProjectName(");
+    // The sentence is asked for when the field settles, never per keystroke.
+    expect(projects).not.toMatch(/@update:search-term="[^"]*preview/);
+  });
+
+  test("the Servers page says the held names and each bound name's state", () => {
+    expect(servers).toContain(
+      "Shared names are held: the server speaks contract 1. Upgrade it first.",
+    );
+    for (const text of ["received", "missing", "re-created", "removed", "members"]) {
+      expect([text, servers.includes(text)]).toEqual([text, true]);
+    }
+    expect(servers).toContain("s.names");
+  });
+
+  test("the Sharing page renders the last change through the one formatter", () => {
+    expect(sharing).toMatch(
+      /import \{[^}]*\bformatChange\b[^}]*\} from "\.\.\/\.\.\/\.\.\/\.\.\/src\/sharing\/format\.ts"/,
+    );
+    expect(sharing).toContain("formatChange(");
+    expect(sharing).not.toContain("^project:(\\d+)$");
+  });
+
+  test("the client has the three calls and setProjectSharing takes the name and the create", () => {
+    for (const call of ["previewProjectSharing:", "forgetProjectName:", "serverNames:"]) {
+      expect(client).toContain(call);
+    }
+    expect(client).toMatch(
+      /setProjectSharing: \(id: number, level: Level, confirm: boolean, server\?: string, as\?: string, create\?: boolean\)/,
+    );
+    expect(client).toContain("sharedName: string | null;");
+    expect(client).toContain('boundTo: "remote" | "name" | null;');
+    expect(client).toContain("imported: number;");
+    expect(client).toContain("namesHeld: boolean;");
+  });
+});
+
 describe("the viewer's client", () => {
   test("knows the two sharing keys, and the four it lacked", () => {
     const union = /export type SettingKey =([\s\S]*?);/.exec(client)?.[1] ?? "";
@@ -289,7 +366,8 @@ describe("the built page", () => {
       "Workspace knowledge",
       "Memories have no area",
       "for sharing it can only narrow",
-      "This project has no git remote",
+      "Shared name",
+      "Set Nothing to leave this name.",
     ]) {
       expect(holds(text)).toEqual([text, true]);
     }

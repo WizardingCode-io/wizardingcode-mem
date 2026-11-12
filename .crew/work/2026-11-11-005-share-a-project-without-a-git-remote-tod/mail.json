@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "messages": [
+    {
+      "at": "2026-11-12T10:35:22.369Z",
+      "from": {
+        "workspace": "_alone",
+        "project": "ai-mem",
+        "item": "2026-11-11-005-share-a-project-without-a-git-remote-tod",
+        "agent": "session"
+      },
+      "hops": 0,
+      "opened": null,
+      "id": "M-2026-11-12-001-ai-mem",
+      "to": {
+        "workspace": "_alone",
+        "project": "ai-mem",
+        "item": null,
+        "agent": null
+      },
+      "type": "notice",
+      "priority": "normal",
+      "subject": "Lane feature/updated-everywhere (2026-11-11-005-share-a-project-without-a-git...",
+      "body": "Lane feature/updated-everywhere (2026-11-11-005-share-a-project-without-a-git-remote-tod, proven) is proven: commit it, then merge it from the main checkout.",
+      "replyTo": null,
+      "status": "sent"
+    }
+  ]
+}

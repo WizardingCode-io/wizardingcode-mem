@@ -11,6 +11,7 @@ import history from "./migrations/0004_history.sql" with { type: "text" };
 import moments from "./migrations/0005_moments.sql" with { type: "text" };
 import vectors from "./migrations/0006_vectors.sql" with { type: "text" };
 import links from "./migrations/0007_links.sql" with { type: "text" };
+import sharedNames from "./migrations/0008_shared_names.sql" with { type: "text" };
 
 export type Db = Database;
 
@@ -25,6 +26,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 5, name: "moments", sql: moments },
   { version: 6, name: "vectors", sql: vectors },
   { version: 7, name: "links", sql: links },
+  { version: 8, name: "shared_names", sql: sharedNames },
 ];
 export const LATEST_VERSION = MIGRATIONS.length;
 

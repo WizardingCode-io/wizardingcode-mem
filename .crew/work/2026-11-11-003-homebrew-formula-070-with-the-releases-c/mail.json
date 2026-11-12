@@ -23,7 +23,8 @@
       "subject": "Lane homebrew/0.7.0 (2026-11-11-003-homebrew-formula-070-with-the-releases-c,...",
       "body": "Lane homebrew/0.7.0 (2026-11-11-003-homebrew-formula-070-with-the-releases-c, proven) is proven: commit it, then merge it from the main checkout.",
       "replyTo": null,
-      "status": "sent"
+      "status": "done",
+      "readAt": "2026-11-11T20:40:29.298Z"
     }
   ]
 }

@@ -373,6 +373,22 @@ describe("reconcileLevels and the server's lists", () => {
     ]);
   });
 
+  test("a row bound to a forgotten shared name is removed as the system's (ADR 0028)", () => {
+    project(4, "name:docs");
+    server("s1", "Alpha");
+    rawLevel(4, "s1", "knowledge", "name:docs");
+    expect(reconcileLevels(db, NOW)).toEqual({ removed: [] });
+    db.run("DELETE FROM project_aliases WHERE alias = 'name:docs'");
+    expect(reconcileLevels(db, NOW + 1)).toEqual({ removed: [4] });
+    expect(levelRows(db)).toEqual([]);
+    expect(recentChanges(db, 1)[0]).toMatchObject({
+      source: "system",
+      what: "project:4",
+      old: "knowledge",
+      new: "local",
+    });
+  });
+
   test("setServerLists validates, writes the server's lists, logs roots@<id> and areas@<id>, counts once", () => {
     server("s1", "Alpha");
     const before = counterOf(db);

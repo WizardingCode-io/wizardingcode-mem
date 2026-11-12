@@ -1,0 +1,26 @@
+# ui-ux findings for 2026-11-11-005-share-a-project-without-a-git-remote-tod
+reviewer: review-ui-ux
+read: 96 images, 12 files (plus the 112 console files, read by grep), contract: none, audit: not captured
+
+## Findings
+- F-1 · defect · ui/src/components/ProjectsView.vue:541 · On /projects, the diff adds dock branches a user can reach that are not among the 14 declared states and have no capture. They are: the `refused` sentence ("No shared name can be made of that…", line 203); the purged-at-confirm sentence ("the operator removed `<slug>` from <server>; pick another name", line 344, which also starts lowercase); the created-name sentence after a refusal with `named: true`; "The list shows the first 1,000 names." (line 542); and the "Not changed" toast when a level is chosen under a taken or refused name. Each one is a gap in the spec's state list. (manifest.json, `pages.projects.declared`)
+- F-2 · defect · ui/src/components/settings/Servers.vue:286 · On /settings#servers, each name line can end with "· missing on the server", "· re-created by <member>" or "· removed by the operator" (`nameStateLabel`, line 66). The spec's own Servers sentence includes this suffix, but the page declares only `names` and `held`, and every captured name line is in the ok state. So this reachable branch is undeclared and has no capture. (manifest.json; settings-names@1280-dark.png)
+- F-3 · advisory · ui/src/components/ProjectsView.vue:179 · Raw Markdown backticks reach the user. The New, Joins and taken sentences (lines 179, 208, 217, 222) and both confirmations (line 308 and `joinTitle`) show the slug as literal backticks, e.g. "This name is `brand`'s on this machine". Yet the bound sentences at lines 532 to 535 show the same slug in `<code class="wz-mono">`, and the next page over strips backticks from what it shows (Servers.vue `stoppedLine`). The same name therefore appears two ways in one dock. (projects-unnamed@1280-dark.png, projects-taken@1280-dark.png, projects-creating@1280-dark.png against projects-named@1280-dark.png)
+- F-4 · advisory · ui/src/components/ProjectsView.vue:179 · In the named-nothing state, the sentence under the field reads "Joins `brand` · created by Ana · 0 entries, 0 memories". On the Servers page, Ana (admin) is this machine's own member. The person is told they would join a name they created themselves, with no "you". (projects-named-nothing@1280-dark.png, settings-names@1280-dark.png)
+- F-5 · advisory · ui/src/components/ProjectsView.vue:539 · In the held state, the disabled "Shared name" field looks the same as the enabled one in the dark scheme. The light scheme greys it out. Only the warn sentence and the dimmed levels show that the field is disabled. (projects-held@1280-dark.png against projects-unnamed@1280-dark.png and projects-held@1280-light.png)
+- F-6 · advisory · ui/src/components/ProjectsView.vue:531 · The spec says that once bound the dock shows "Shared as `<slug>`" with "the field read-only". The build removes the field and shows only the sentence. It reads clearly, but spec and build disagree. (projects-named@1280-dark.png; spec.md, "The viewer")
+- F-7 · advisory · ui/src/components/settings/Servers.vue:285 · At 360px each name line wraps badly: the slug sits alone, the next line starts with a "·", and "0" is split from "members". It is still readable but crowded. (settings-names@360-dark.png, settings-held@360-light.png)
+
+## Outside the change
+- ui/src/components/ProjectsView.vue:41 · At 768px with the dock open, the list's "Project · where" column collapses to nothing. The Links pills sit on top of the avatars and no project name is visible. This is in all 32 projects-*@768-*.png captures, in list code the diff did not touch.
+- ui/src/components/settings/Servers.vue:57 · The server's pill stays a green "Ok" while the new line under it says shared names are held at contract 1. The two contradict each other at a glance. (settings-held@1280-dark.png)
+
+## Not answerable
+- 1. The criterion in the capture (state `new`) · all six projects-new captures show the open list's 'Create "docs-mobile"' item covering the sentence. The manifest's note says the sentence reads 'New: you create `docs-mobile` on <server>', but no capture shows it.
+- 3. Keyboard and focus · no accessibility snapshot (`.aria.yml`) for /projects or /settings#servers, and no focus-visible capture. The only focus seen is the ring on the dialog's close button in the joining captures.
+- 4. Measured accessibility · no axe files. The contrast of the new `--warn` sentences on the light background (projects-taken@1280-light.png, projects-missing@1280-light.png, settings-held@1280-light.png) is not measured.
+- 6. The design contract · no DESIGN.md. The diff uses the app.css tokens (`--ink`, `--ink-muted`, `--warn`, `wz-mono`), and the design lint lists no hits.
+- 7. Responsive (320) · the dock has a form field, and the standard asks for 320px on a page with a form. Only 360, 768 and 1280 were declared and captured.
+- 8. Motion against the standard · motion none: no motion samples and no reduced-motion pass. The design lint's inventory is empty and the diff adds no animation.
+- 10. Console and vitals · no vitals (CLS) recorded. The console half can be answered: all 96 per-capture files and all 16 merged files hold no messages.
+- audit · no audit/

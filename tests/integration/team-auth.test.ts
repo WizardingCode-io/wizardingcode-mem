@@ -88,7 +88,7 @@ describe("join", () => {
     expect(admin.deviceAlias).toMatch(/^[a-z2-7]{8}$/);
     expect(admin.serverId).toBe(t.server.serverId);
     expect(admin.instance).toBe(t.server.instance());
-    expect(admin.contract).toBe(1);
+    expect(admin.contract).toBe(2);
     const again = await api(t.server, null, "POST", "/v1/join", { code: t.code, label: "x" });
     expect(again.status).toBe(410);
     expect(again.body.error).toBe("invitation used");
@@ -168,7 +168,7 @@ describe("authentication, me, rotation, the contract", () => {
       device: { id: admin.deviceId, alias: admin.deviceAlias, label: "admin laptop" },
       serverId: t.server.serverId,
       instance: t.server.instance(),
-      contract: 1,
+      contract: 2,
       limits: {
         bodyBytes: LIMITS.bodyBytes,
         pullWaitSeconds: 25,
@@ -224,20 +224,27 @@ describe("authentication, me, rotation, the contract", () => {
     expect(me.body.device).toMatchObject({ id: admin.deviceId, alias: admin.deviceAlias });
   });
 
-  test("another contract is 409 with the accepted list on me, and ignored on join and health", async () => {
+  test("another contract is 409 with the accepted list on me, and ignored on join and health; 1 and 2 are accepted", async () => {
     const t = await start();
     const admin = await adminOf(t);
     const refused = await api(t.server, admin.token, "GET", "/v1/me", undefined, {
-      "x-wcm-contract": "2",
+      "x-wcm-contract": "3",
     });
     expect(refused.status).toBe(409);
     expect(refused.body).toMatchObject({
       error: "contract",
-      accepted: [1],
+      accepted: [1, 2],
       serverId: t.server.serverId,
     });
+    for (const header of ["1", "2"]) {
+      const accepted = await api(t.server, admin.token, "GET", "/v1/me", undefined, {
+        "x-wcm-contract": header,
+      });
+      expect(accepted.status).toBe(200);
+      expect(accepted.body.contract).toBe(2);
+    }
     expect(
-      (await api(t.server, null, "GET", "/v1/health", undefined, { "x-wcm-contract": "2" })).status,
+      (await api(t.server, null, "GET", "/v1/health", undefined, { "x-wcm-contract": "3" })).status,
     ).toBe(200);
     const code = await invite(t, admin.token, { role: "member", name: "Ana" });
     const joined = await api(
@@ -246,9 +253,39 @@ describe("authentication, me, rotation, the contract", () => {
       "POST",
       "/v1/join",
       { code, label: "x" },
-      { "x-wcm-contract": "2" },
+      { "x-wcm-contract": "3" },
     );
     expect(joined.status).toBe(200);
+  });
+
+  test("a server at contract 1 (the seam): the join and me answer 1, header 2 is 409 accepted [1], the names routes are not found", async () => {
+    const t = await start({ contract: { current: 1, accepted: [1] } });
+    const admin = await adminOf(t);
+    expect(admin.contract).toBe(1);
+    const me = await api(t.server, admin.token, "GET", "/v1/me", undefined, {
+      "x-wcm-contract": "1",
+    });
+    expect(me.status).toBe(200);
+    expect(me.body.contract).toBe(1);
+    const refused = await api(t.server, admin.token, "GET", "/v1/me", undefined, {
+      "x-wcm-contract": "2",
+    });
+    expect(refused.status).toBe(409);
+    expect(refused.body).toMatchObject({ error: "contract", accepted: [1] });
+    expect(Object.keys(refused.body).sort()).toEqual([
+      ...(RESULT_SHAPES.contractRefusal as readonly string[]),
+    ]);
+    for (const [method, path, body] of [
+      ["GET", "/v1/names", undefined],
+      ["POST", "/v1/names", { alias: "name:x" }],
+      ["GET", "/v1/names/name:x", undefined],
+    ] as const) {
+      const answer = await api(t.server, admin.token, method, path, body, {
+        "x-wcm-contract": "1",
+      });
+      expect(answer.status).toBe(404);
+      expect(answer.body).toEqual({ error: "not found" });
+    }
   });
 });
 

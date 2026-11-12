@@ -167,8 +167,8 @@ describe("confirmServer", () => {
     expect(policy.levels.get("2@s1")?.level).toBe("all");
     const report = wouldLeave(db, dir, {}, policy, { now: NOW, destination: "s1" });
     expect(report.perProject).toEqual([
-      { id: 1, level: "knowledge", entries: 0, memories: 0 },
-      { id: 2, level: "all", entries: 0, memories: 0 },
+      { id: 1, level: "knowledge", entries: 0, memories: 0, imported: 0 },
+      { id: 2, level: "all", entries: 0, memories: 0, imported: 0 },
     ]);
   });
 

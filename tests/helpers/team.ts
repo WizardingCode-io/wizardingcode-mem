@@ -415,7 +415,7 @@ export async function pullAll(
  */
 export function seedFeed(db: Db, rows: number, alias: string, aliasRows: number): void {
   const insert = db.prepare(
-    `INSERT INTO changes (kind, uid, key, op, scope, remote_alias, revision, hash, moved_to, member_id, device_id, client_epoch, at, current)
+    `INSERT INTO changes (kind, uid, key, op, scope, project_alias, revision, hash, moved_to, member_id, device_id, client_epoch, at, current)
      VALUES ('entry', ?, ?, 'tombstone', 'project', ?, 1, 'h', NULL, 'm', 'd', NULL, 1, 1)`,
   );
   db.transaction(() => {

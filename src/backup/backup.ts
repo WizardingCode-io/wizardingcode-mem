@@ -235,7 +235,7 @@ function carryIntoCopy(
     const sharingReset = resetLevels(copy, now, counterFloor, fileLists);
     copy.run(
       `DELETE FROM meta WHERE key LIKE 'sharing.restore_hold:%' OR key LIKE 'sharing.resume_authorised:%'
-          OR key LIKE 'sync.%'`,
+          OR key LIKE 'sync.%' OR key LIKE 'names.%'`,
     );
     for (const serverId of live.serverIds) {
       setMeta(copy, restoreHoldKey(serverId), JSON.stringify({ reason: "restore", at: now }));

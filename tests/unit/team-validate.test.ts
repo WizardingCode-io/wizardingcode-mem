@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { hashOf } from "../../src/modules/knowledge/repo.ts";
 import {
   checkEntryPayload,
@@ -34,6 +35,14 @@ describe("parseEntryUid", () => {
     expect(parseEntryUid(`shared:${uuid.toUpperCase()}`)).toBeNull();
     expect(parseEntryUid(`shared:${uuid.slice(1)}`)).toBeNull();
     expect(parseEntryUid(`project:remote:/Users/me/site:${uuid}`)).toBeNull();
+    // A shared name is the other identity a team knows a project by (ADR 0028).
+    expect(parseEntryUid(`project:name:x:${uuid}`)).toEqual({
+      scope: "project",
+      remoteAlias: "name:x",
+      uuid,
+    });
+    expect(parseEntryUid(`project:name:Bad:${uuid}`)).toBeNull();
+    expect(parseEntryUid(`project:path:/x:${uuid}`)).toBeNull();
     expect(parseEntryUid(`project:${uuid}`)).toBeNull();
     expect(parseEntryUid(`project::${uuid}`)).toBeNull();
     expect(parseEntryUid(`other:${uuid}`)).toBeNull();
@@ -204,6 +213,19 @@ describe("checkMemoryPayload, in the spec's order", () => {
     }
     const rowId = memoryPayload({ uid: "0123abcd:987654321" });
     expect("size" in checkMemoryPayload({ uid: rowId.uid, payload: rowId })).toBe(true);
+    // A memory under a shared name passes the pure check; the registry is the push's to ask.
+    const named = memoryPayload({ remoteAlias: "name:x" });
+    expect("size" in checkMemoryPayload({ uid: named.uid, payload: named })).toBe(true);
+    const badName = memoryPayload({ remoteAlias: "name:Bad" });
+    expect(refused(checkMemoryPayload({ uid: badName.uid, payload: badName })).reason).toBe(
+      "shape",
+    );
+  });
+
+  test("validate.ts stays pure: no statement runs against a database", () => {
+    const source = readFileSync(new URL("../../src/team/validate.ts", import.meta.url), "utf8");
+    expect(source.includes(".query(")).toBe(false);
+    expect(source.includes(".run(")).toBe(false);
   });
 
   test("the size, the hash, the secret", () => {

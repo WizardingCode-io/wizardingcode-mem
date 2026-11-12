@@ -119,10 +119,10 @@ describe("formatShareStatus", () => {
       shared: { entries: 0, areaTotals: {} },
     },
     perProject: [
-      { id: 1, level: "knowledge", entries: 0, memories: 0 },
-      { id: 2, level: "all", entries: 0, memories: 0 },
-      { id: 3, level: "local", entries: 0, memories: 0 },
-      { id: 4, level: "local", entries: 0, memories: 0 },
+      { id: 1, level: "knowledge", entries: 0, memories: 0, imported: 0 },
+      { id: 2, level: "all", entries: 0, memories: 0, imported: 0 },
+      { id: 3, level: "local", entries: 0, memories: 0, imported: 0 },
+      { id: 4, level: "local", entries: 0, memories: 0, imported: 0 },
     ],
   });
   const change: ChangeRow = {

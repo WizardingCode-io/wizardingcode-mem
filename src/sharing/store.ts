@@ -2,12 +2,13 @@
 // sharing lists to the env file. Nothing here loads a policy: a write reads what it needs
 // under its own write lock, so what a caller saw earlier never decides what is written.
 import { join } from "node:path";
+import { isHostLedAlias, isSharedName, isTeamAlias } from "../core/identity.ts";
 import { ENV_FILE, readEnvFile, writeEnvFile } from "../settings/env-file.ts";
 import { parseShareList, type SettingKey, type SharingKey } from "../settings/settings.ts";
 import { type Db, withWrite } from "../store/db.ts";
 import { getMeta, setMeta } from "../store/meta.ts";
 import { plural } from "../util/text.ts";
-import { DESTINATIONS, destinationsOf, effectiveLevel, isHostLedAlias, levelOf } from "./levels.ts";
+import { DESTINATIONS, destinationsOf, effectiveLevel, levelOf } from "./levels.ts";
 import { GENERATION_KEY, newGeneration } from "./migrations.ts";
 import {
   isLevel,
@@ -15,6 +16,8 @@ import {
   LEVEL_LABELS,
   LEVELS,
   type Level,
+  NAME_STATES,
+  nameFlagKey,
   type Root,
   type SharingPolicy,
   shareListText,
@@ -147,6 +150,8 @@ export interface StoredLevel {
   boundAlias: string;
   setAt: number;
   source: ChangeSource;
+  /** The registry id of the shared name the level is bound to; null for a remote, and before the column. */
+  nameId: string | null;
 }
 
 /** Whether the store holds a table (or a view) of this name, asked of `sqlite_master`. */
@@ -173,27 +178,62 @@ export function levelRows(db: Db): StoredLevel[] {
   return db
     .query<StoredLevel, []>(
       `SELECT project_id AS projectId, destination, level, bound_alias AS boundAlias,
-              set_at AS setAt, source
+              set_at AS setAt, source, ${nameIdColumn(db)} AS nameId
          FROM sharing_levels ORDER BY project_id, destination`,
     )
     .all();
 }
 
+/** Whether `sharing_levels` has the column `name_id` (sharing 3), asked of the table once per open. */
+const nameIdKnown = new WeakMap<Db, boolean>();
+function hasNameIdColumn(db: Db): boolean {
+  let known = nameIdKnown.get(db);
+  if (known === undefined) {
+    known = db
+      .query<{ name: string }, []>("PRAGMA table_info(sharing_levels)")
+      .all()
+      .some((column) => column.name === "name_id");
+    nameIdKnown.set(db, known);
+  }
+  return known;
+}
+
+/** The column to read the name's id from: `NULL` on a store whose sharing namespace is older. */
+function nameIdColumn(db: Db): string {
+  return hasNameIdColumn(db) ? "name_id" : "NULL";
+}
+
+/** What a refusal's sentence may name: the shared name (its slug) and the other project. */
+export interface RefusalDetail {
+  name?: string;
+  other?: string;
+}
+
 const SET_LEVEL_MESSAGES = {
   "no-project": "this folder is not a known project; start a session here first",
-  "no-remote": "this project has no git remote; a team can only match projects by their remote",
+  "no-name": "this project has no git remote; give it a shared name",
+  "has-remote":
+    "this project is matched by its git remote; a teammate adds the same remote to join it",
+  renamed: (detail: RefusalDetail) =>
+    `this project is shared as \`${detail.name ?? "another name"}\`; set it to Nothing first to leave that name`,
+  "name-taken": (detail: RefusalDetail) =>
+    `\`${detail.name ?? "that name"}\` is the shared name of \`${detail.other ?? "another project"}\`; that project forgets its name at Nothing`,
+  "name-bound": "this project is shared under its name; set it to Nothing first to forget it",
   disabled: "memory is off for this project",
   invalid: `the level is one of ${LEVELS.join(", ")}`,
   "one-server": "this project is bound to another server; set it to Nothing there first",
   "needs-confirm": "confirm: true is required to widen sharing",
 } as const;
 
-/** Why a level was not set. */
+/** Why a level was not set, or a name not forgotten. */
 export type SetLevelRefusal = keyof typeof SET_LEVEL_MESSAGES;
 
-/** A refusal to set a level, as a sentence a person can act on. */
-export function setLevelMessage(reason: SetLevelRefusal): string {
-  return SET_LEVEL_MESSAGES[reason];
+/** A refusal, as a sentence a person can act on; the detail fills the names a sentence holds. */
+export function setLevelMessage(reason: SetLevelRefusal, detail: RefusalDetail = {}): string {
+  const entry: string | ((detail: RefusalDetail) => string) | undefined =
+    SET_LEVEL_MESSAGES[reason];
+  if (entry === undefined) throw new Error(`no sentence for the refusal ${reason}`);
+  return typeof entry === "function" ? entry(detail) : entry;
 }
 
 // --- Setting a project's level ----------------------------------------------------------
@@ -252,26 +292,63 @@ export interface SetLevelInput {
   confirm: boolean;
   /** The remote alias of the folder the person is in: bound to, when it is the project's. */
   remoteAlias?: string | null;
+  /** A shared name (`name:<slug>`, through `sharedNameOf`) to bind to, created or joined (ADR 0028). */
+  as?: string | null;
+  /** The registry id of the name created or joined, stored with the row. */
+  nameId?: string | null;
+  /** Answer what the write would do, and write nothing: a read, never the write lock. */
+  dryRun?: boolean;
+  /** The caller read the re-created flag for the bound name: joining it again is confirmed again. */
+  recreated?: boolean;
 }
 
 /**
- * What a level set did. `old` is the level that was in force; `boundAlias` the remote alias
- * the level is bound to, empty for `local`; `rebound` says that a level whose alias was gone
- * is bound to another one now.
+ * What a level set did. `old` is the level that was in force; `boundAlias` the alias the
+ * level is bound to, empty for `local`; `rebound` says that a level whose alias was gone is
+ * bound to another one now; `named` that this call gave the project its shared name. A
+ * refusal names the other server (`one-server`) or the other project (`name-taken`).
  */
 export type SetLevelOutcome =
-  | { ok: true; old: Level; widened: boolean; boundAlias: string; rebound: boolean }
-  | { ok: false; reason: SetLevelRefusal; server?: string };
+  | {
+      ok: true;
+      old: Level;
+      widened: boolean;
+      boundAlias: string;
+      rebound: boolean;
+      named: boolean;
+    }
+  | { ok: false; reason: SetLevelRefusal; server?: string; other?: string };
 
-type Bound = { level: string; boundAlias: string };
+type Bound = { level: string; boundAlias: string; nameId: string | null };
 
 function storedLevel(db: Db, projectId: number, destination: string): Bound | null {
   return db
     .query<Bound, [number, string]>(
-      `SELECT level, bound_alias AS boundAlias FROM sharing_levels
+      `SELECT level, bound_alias AS boundAlias, ${nameIdColumn(db)} AS nameId FROM sharing_levels
         WHERE project_id = ? AND destination = ?`,
     )
     .get(projectId, destination);
+}
+
+/** Whether a level above Nothing is stored for the project, on any destination. */
+function boundAboveNothing(db: Db, projectId: number): boolean {
+  return (
+    db
+      .query<unknown, [number]>(
+        "SELECT 1 FROM sharing_levels WHERE project_id = ? AND level != 'local' LIMIT 1",
+      )
+      .get(projectId) !== null
+  );
+}
+
+/** The project an alias names, with its name; null for an alias no project carries. */
+function ownerOfAlias(db: Db, alias: string): { projectId: number; name: string } | null {
+  return db
+    .query<{ projectId: number; name: string }, [string]>(
+      `SELECT a.project_id AS projectId, p.name FROM project_aliases a
+         JOIN projects p ON p.id = a.project_id WHERE a.alias = ?`,
+    )
+    .get(alias);
 }
 
 function removeLevel(db: Db, projectId: number, destination: string): void {
@@ -331,19 +408,27 @@ function clearUnbound(db: Db, serverId: string, alias: string): void {
 }
 
 /**
- * The remote alias a level is bound to as it is written: the one the caller names, when it
- * is the project's; else the one the level is bound to already, while the project still
- * has it, so that a change of level alone never moves the name a team knows the project
- * by; else the project's first by name. Undefined for a project without a remote.
+ * The alias a level is bound to as it is written (ADR 0028): the one a stored level above
+ * Nothing is bound to already, while the project still carries it and a team can know the
+ * project by it, so that a change of level alone never moves the name a team knows the
+ * project by; else the first of the candidates, in the caller's order (`as`, the name the
+ * project carries, the folder's host-led remote, the first host-led remote by bytes).
+ * Undefined with no candidate: a project with nothing a team can match.
  */
 function aliasToBind(
-  remotes: string[],
-  given: string | null | undefined,
-  bound: string | null,
+  candidates: readonly (string | null)[],
+  stored: Bound | null,
+  carried: readonly string[],
 ): string | undefined {
-  if (typeof given === "string" && remotes.includes(given)) return given;
-  if (bound !== null && remotes.includes(bound)) return bound;
-  return remotes[0];
+  if (
+    stored !== null &&
+    stored.level !== "local" &&
+    carried.includes(stored.boundAlias) &&
+    isTeamAlias(stored.boundAlias)
+  ) {
+    return stored.boundAlias;
+  }
+  return candidates.find((candidate): candidate is string => candidate !== null);
 }
 
 /**
@@ -351,38 +436,61 @@ function aliasToBind(
  * transaction, never taken from a policy the caller loaded: another process may have moved
  * the row or the project since. What can never be done is refused before a confirmation is
  * asked for, so nobody confirms a widening that is then refused, and every caller gets the
- * refusals in one order from here:
+ * refusals in one order from here (ADR 0025, ADR 0028):
  *
  * 1. The level must be one of the levels (`invalid`) and the project exist (`no-project`).
  * 2. `local` removes the stored row, also one that only reads `local` (a disabled project,
  *    a lost alias): the person chose Nothing, and nothing may bring the level back. It is
- *    refused for nothing else: a project with memory off or no remote can share nothing.
- * 3. Above `local` the project must have memory on (`disabled`) and a host-led remote
- *    alias (`isHostLedAlias`; `no-remote` otherwise), which the level is bound to
- *    (`aliasToBind`).
- * 4. The level in force is what `effectiveLevel` makes of the stored row and the project
- *    now. A later level than that one is a widening, refused without `confirm`
- *    (`needs-confirm`).
- * 5. The level already in force writes nothing and logs nothing. Any other is written,
- *    logged as `project:<id>` from the level in force to the new one, and counted once. A
- *    stored level whose alias was gone is thereby bound to an alias the project has now:
- *    the log says `rebind` for what it was, and the outcome says `rebound`.
+ *    refused for nothing else, and the project's shared name is kept.
+ * 3. Above `local` the project must have memory on (`disabled`). With `as`, a shared name
+ *    the project does not carry: a project with a host-led remote and no name is matched by
+ *    its remote (`has-remote`); one shared above Nothing under another name keeps that name
+ *    (`renamed`); another project's name is not this one's (`name-taken`, with that project's
+ *    name).
+ * 4. The level is bound to one alias (`aliasToBind`): the one it is bound to already while
+ *    the project carries it, else `as`, else the name the project carries, else the folder's
+ *    host-led remote, else the project's first host-led remote by bytes; with none,
+ *    `no-name`. One server per project (`one-server`).
+ * 5. A later level than the one in force is a widening, and a binding that creates or joins
+ *    a shared name (`as`, with no stored row bound to it, or the name re-created on the
+ *    server) is a step a person takes: either without `confirm` is `needs-confirm`.
+ * 6. The level already in force, under the same binding, writes nothing and logs nothing.
+ *    Any other is written: a new name's alias row first (an older name of the project
+ *    replaced, logged as `name:<id>` from the old to the new), then the level row with the
+ *    name's id, logged as `project:<id>` (`project:<id>@<server>` once a server is confirmed)
+ *    from the level in force to the new one, and counted once. A stored level whose alias was
+ *    gone is thereby bound to an alias the project has now: the log says `rebind` for what it
+ *    was, and the outcome says `rebound`.
  *
- * A destination that is not configured is the caller's mistake, not a person's: it throws.
- * A level stored for it would take force unasked the day the destination exists.
+ * `dryRun` runs the same chain in a deferred read transaction, writes nothing and answers
+ * what the write would, so a caller can ask a server for the name between the two.
+ * A destination that is not configured, and an `as` that is no shared name, are the
+ * caller's mistake, not a person's: they throw.
  */
 export function setLevel(db: Db, input: SetLevelInput): SetLevelOutcome {
   const { projectId, destination, level, source, now } = input;
+  const as = input.as ?? null;
+  if (as !== null && !isSharedName(as)) throw new Error(`${as} is not a shared name`);
   const destinations = destinationsOf(db);
   if (!destinations.has(destination)) {
     throw new Error(`the sharing destination ${destination} is not configured`);
   }
   const ofServer = destinations !== DESTINATIONS;
-  const refused = (reason: SetLevelRefusal, server?: string): SetLevelOutcome =>
-    server === undefined ? { ok: false, reason } : { ok: false, reason, server };
+  const write = input.dryRun !== true;
+  const refused = (
+    reason: SetLevelRefusal,
+    extra: { server?: string; other?: string } = {},
+  ): SetLevelOutcome => ({ ok: false, reason, ...extra });
+  const done = (
+    old: Level,
+    widened: boolean,
+    boundAlias: string,
+    rebound: boolean,
+    named: boolean,
+  ): SetLevelOutcome => ({ ok: true, old, widened, boundAlias, rebound, named });
   // The log names the server once there is one (ADR 0027); the team's default as before.
   const what = ofServer ? `project:${projectId}@${destination}` : `project:${projectId}`;
-  return withWrite(db, (): SetLevelOutcome => {
+  const run = (): SetLevelOutcome => {
     if (!isLevel(level)) return refused("invalid");
     const project = projectState(db, projectId);
     if (!project.known) return refused("no-project");
@@ -399,43 +507,123 @@ export function setLevel(db: Db, input: SetLevelInput): SetLevelOutcome {
 
     if (level === "local") {
       // A row stored at `local` already says Nothing: there is nothing to remove or log.
-      if (stored !== null && stored.level !== level) {
+      if (write && stored !== null && stored.level !== level) {
         removeLevel(db, projectId, destination);
         logChange(db, now, source, what, stored.level, level);
         if (ofServer) noteUnbound(db, destination, stored.boundAlias, projectId, now);
+        // Nothing leaves the name's flags behind (missing, re-created, purged; ADR 0028).
+        if (ofServer && isSharedName(stored.boundAlias)) {
+          for (const state of NAME_STATES) {
+            db.run("DELETE FROM meta WHERE key = ?", [
+              nameFlagKey(state, destination, stored.boundAlias),
+            ]);
+          }
+        }
         bumpCounter(db);
       }
-      return { ok: true, old: inForce.level, widened: false, boundAlias: "", rebound: false };
+      return done(inForce.level, false, "", false, false);
     }
 
     if (project.disabled) return refused("disabled");
-    // A project's identity for a team is its git remote on a host: the only alias a level
-    // is bound to.
-    const remotes = project.aliases.filter(isHostLedAlias);
-    const boundAlias = aliasToBind(remotes, input.remoteAlias, stored?.boundAlias ?? null);
-    if (boundAlias === undefined) return refused("no-remote");
+    const remotes = project.aliases.filter(isHostLedAlias).sort();
+    const name = project.aliases.find(isSharedName) ?? null;
+    // A name the project does not carry yet: this call's alias row, once the rules allow it.
+    const naming = as !== null && as !== name;
+    if (naming) {
+      if (remotes.length > 0 && name === null) return refused("has-remote");
+      if (name !== null && boundAboveNothing(db, projectId)) return refused("renamed");
+      const owner = ownerOfAlias(db, as);
+      if (owner !== null && owner.projectId !== projectId) {
+        return refused("name-taken", { other: owner.name });
+      }
+    }
+    const carried = naming
+      ? [...project.aliases.filter((alias) => alias !== name), as]
+      : project.aliases;
+    const folderRemote =
+      typeof input.remoteAlias === "string" && remotes.includes(input.remoteAlias)
+        ? input.remoteAlias
+        : null;
+    const boundAlias = aliasToBind(
+      [as, naming ? null : name, folderRemote, remotes[0] ?? null],
+      stored,
+      carried,
+    );
+    if (boundAlias === undefined) return refused("no-name");
     // One server per project (ADR 0027): bound elsewhere, it is refused here.
     const elsewhere = ofServer ? otherBinding(db, projectId, destination, destinations) : null;
-    if (elsewhere !== null) return refused("one-server", elsewhere);
+    if (elsewhere !== null) return refused("one-server", { server: elsewhere });
+    const sameBinding =
+      stored !== null && stored.level !== "local" && stored.boundAlias === boundAlias;
+    const binding = as !== null && (!sameBinding || input.recreated === true);
     const widened = widens(inForce.level, level);
-    if (widened && !input.confirm) return refused("needs-confirm");
-    if (stored !== null && current === level) {
-      return { ok: true, old: current, widened, boundAlias: stored.boundAlias, rebound: false };
+    if ((widened || binding) && !input.confirm) return refused("needs-confirm");
+    if (stored !== null && current === level && !binding) {
+      return done(current, widened, stored.boundAlias, false, false);
     }
 
     const rebound = inForce.reason === "unbound-alias";
-    db.run(
-      `INSERT INTO sharing_levels (project_id, destination, level, bound_alias, set_at, source)
-       VALUES (?, ?, ?, ?, ?, ?)
-       ON CONFLICT (project_id, destination) DO UPDATE SET
-         level = excluded.level, bound_alias = excluded.bound_alias,
-         set_at = excluded.set_at, source = excluded.source`,
-      [projectId, destination, level, boundAlias, now, source],
-    );
-    logChange(db, now, source, what, rebound ? REBIND : current, level);
-    if (ofServer) clearUnbound(db, destination, boundAlias);
+    if (write) {
+      if (naming) {
+        if (name !== null) {
+          db.run("DELETE FROM project_aliases WHERE alias = ? AND project_id = ?", [
+            name,
+            projectId,
+          ]);
+          logChange(db, now, source, `name:${projectId}`, name, as);
+        }
+        db.run("INSERT INTO project_aliases (alias, project_id) VALUES (?, ?)", [as, projectId]);
+      }
+      // The name's registry id travels with the row: the caller's, else the one the row
+      // holds for the same name; null for a remote.
+      const nameId = isSharedName(boundAlias)
+        ? (input.nameId ??
+          (stored !== null && stored.boundAlias === boundAlias ? stored.nameId : null))
+        : null;
+      db.run(
+        `INSERT INTO sharing_levels (project_id, destination, level, bound_alias, set_at, source, name_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (project_id, destination) DO UPDATE SET
+           level = excluded.level, bound_alias = excluded.bound_alias,
+           set_at = excluded.set_at, source = excluded.source, name_id = excluded.name_id`,
+        [projectId, destination, level, boundAlias, now, source, nameId],
+      );
+      logChange(db, now, source, what, rebound ? REBIND : current, level);
+      if (ofServer) clearUnbound(db, destination, boundAlias);
+      bumpCounter(db);
+    }
+    return done(current, widened, boundAlias, rebound, naming);
+  };
+  return write ? withWrite(db, run) : db.transaction(run)();
+}
+
+/** What forgetting a project's shared name did, or why it was refused. */
+export type ForgetNameOutcome =
+  | { ok: true; alias: string }
+  | { ok: false; reason: "name-bound" | "no-name" | "no-project" };
+
+/**
+ * Forgets a project's shared name (ADR 0028): refused while a level above Nothing is stored
+ * for the project on any destination (`name-bound`), for a project with no name (`no-name`)
+ * and for an id the store does not know (`no-project`); else the alias row is deleted, the
+ * change logged as `name:<project id>` from the alias to nothing, and the counter moved once.
+ */
+export function forgetName(
+  db: Db,
+  projectId: number,
+  now: number,
+  source: Extract<ChangeSource, "viewer" | "cli">,
+): ForgetNameOutcome {
+  return withWrite(db, (): ForgetNameOutcome => {
+    const project = projectState(db, projectId);
+    if (!project.known) return { ok: false, reason: "no-project" };
+    const name = project.aliases.find(isSharedName);
+    if (name === undefined) return { ok: false, reason: "no-name" };
+    if (boundAboveNothing(db, projectId)) return { ok: false, reason: "name-bound" };
+    db.run("DELETE FROM project_aliases WHERE alias = ? AND project_id = ?", [name, projectId]);
+    logChange(db, now, source, `name:${projectId}`, name, "");
     bumpCounter(db);
-    return { ok: true, old: current, widened, boundAlias, rebound };
+    return { ok: true, alias: name };
   });
 }
 

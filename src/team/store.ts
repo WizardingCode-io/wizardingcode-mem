@@ -379,7 +379,7 @@ export function pendingMirrorCount(db: Db): number {
 export interface EntryRow {
   uuid: string;
   scope: string;
-  remote_alias: string | null;
+  project_alias: string | null;
   slug: string;
   created_by_member: string;
   revision: number;
@@ -394,7 +394,7 @@ export interface EntryRow {
 }
 
 const ENTRY_COLUMNS =
-  "uuid, scope, remote_alias, slug, created_by_member, revision, hash, size, writer_member, writer_device, updated_at, withdrawn_at, locked_by_admin, mirror_revision";
+  "uuid, scope, project_alias, slug, created_by_member, revision, hash, size, writer_member, writer_device, updated_at, withdrawn_at, locked_by_admin, mirror_revision";
 
 export function entryByUuid(db: Db, uuid: string): EntryRow | null {
   return db
@@ -408,7 +408,7 @@ export function upsertEntry(
   row: {
     uuid: string;
     scope: string;
-    remoteAlias: string | null;
+    projectAlias: string | null;
     slug: string;
     createdByMember: string;
     revision: number;
@@ -420,17 +420,17 @@ export function upsertEntry(
   },
 ): void {
   db.run(
-    `INSERT INTO entries (uuid, scope, remote_alias, slug, created_by_member, revision, hash, size, writer_member, writer_device, updated_at, withdrawn_at, locked_by_admin)
+    `INSERT INTO entries (uuid, scope, project_alias, slug, created_by_member, revision, hash, size, writer_member, writer_device, updated_at, withdrawn_at, locked_by_admin)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 0)
      ON CONFLICT(uuid) DO UPDATE SET
-       scope = excluded.scope, remote_alias = excluded.remote_alias, slug = excluded.slug,
+       scope = excluded.scope, project_alias = excluded.project_alias, slug = excluded.slug,
        revision = excluded.revision, hash = excluded.hash, size = excluded.size,
        writer_member = excluded.writer_member, writer_device = excluded.writer_device,
        updated_at = excluded.updated_at, withdrawn_at = NULL, locked_by_admin = 0`,
     [
       row.uuid,
       row.scope,
-      row.remoteAlias,
+      row.projectAlias,
       row.slug,
       row.createdByMember,
       row.revision,
@@ -465,7 +465,7 @@ export interface RevisionRow {
   seq: number;
   op: "send" | "withdraw";
   scope: string;
-  remote_alias: string | null;
+  project_alias: string | null;
   slug: string;
   frontmatter: string;
   body: string;
@@ -477,7 +477,7 @@ export interface RevisionRow {
 }
 
 const REVISION_COLUMNS =
-  "uuid, revision, seq, op, scope, remote_alias, slug, frontmatter, body, hash, writer_member, writer_device, client_epoch, at";
+  "uuid, revision, seq, op, scope, project_alias, slug, frontmatter, body, hash, writer_member, writer_device, client_epoch, at";
 
 export function insertRevision(
   db: Db,
@@ -487,7 +487,7 @@ export function insertRevision(
     seq: number;
     op: "send" | "withdraw";
     scope: string;
-    remoteAlias: string | null;
+    projectAlias: string | null;
     slug: string;
     frontmatter: string;
     body: string;
@@ -506,7 +506,7 @@ export function insertRevision(
       row.seq,
       row.op,
       row.scope,
-      row.remoteAlias,
+      row.projectAlias,
       row.slug,
       row.frontmatter,
       row.body,
@@ -525,7 +525,7 @@ export function revisionMatching(
   uuid: string,
   hash: string,
   scope: string,
-  remoteAlias: string | null,
+  projectAlias: string | null,
   slug: string,
   writerDevice: string,
 ): number | null {
@@ -534,10 +534,10 @@ export function revisionMatching(
       .query<{ revision: number }, [string, string, string, string, string | null, string]>(
         `SELECT revision FROM entry_revisions
           WHERE uuid = ? AND hash = ? AND writer_device = ? AND op = 'send'
-            AND scope = ? AND remote_alias IS ? AND slug = ?
+            AND scope = ? AND project_alias IS ? AND slug = ?
           ORDER BY revision DESC LIMIT 1`,
       )
-      .get(uuid, hash, writerDevice, scope, remoteAlias, slug)?.revision ?? null
+      .get(uuid, hash, writerDevice, scope, projectAlias, slug)?.revision ?? null
   );
 }
 
@@ -661,7 +661,7 @@ export function deleteEntry(db: Db, uuid: string): void {
 export interface MemoryRow {
   device_id: string;
   uid: string;
-  remote_alias: string;
+  project_alias: string;
   payload: string;
   hash: string;
   size: number;
@@ -674,7 +674,7 @@ export interface MemoryRow {
 }
 
 const MEMORY_COLUMNS =
-  "device_id, uid, remote_alias, payload, hash, size, revision, updated_at, member_id, received_at, withdrawn_at, locked_by_admin";
+  "device_id, uid, project_alias, payload, hash, size, revision, updated_at, member_id, received_at, withdrawn_at, locked_by_admin";
 
 export function memoryByKey(db: Db, deviceId: string, uid: string): MemoryRow | null {
   return db
@@ -690,7 +690,7 @@ export function upsertMemory(
   row: {
     deviceId: string;
     uid: string;
-    remoteAlias: string;
+    projectAlias: string;
     payload: string;
     hash: string;
     size: number;
@@ -701,16 +701,16 @@ export function upsertMemory(
   },
 ): void {
   db.run(
-    `INSERT INTO memories (device_id, uid, remote_alias, payload, hash, size, revision, updated_at, member_id, received_at, withdrawn_at, locked_by_admin)
+    `INSERT INTO memories (device_id, uid, project_alias, payload, hash, size, revision, updated_at, member_id, received_at, withdrawn_at, locked_by_admin)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 0)
      ON CONFLICT(device_id, uid) DO UPDATE SET
-       remote_alias = excluded.remote_alias, payload = excluded.payload, hash = excluded.hash,
+       project_alias = excluded.project_alias, payload = excluded.payload, hash = excluded.hash,
        size = excluded.size, revision = excluded.revision, updated_at = excluded.updated_at,
        received_at = excluded.received_at, withdrawn_at = NULL, locked_by_admin = 0`,
     [
       row.deviceId,
       row.uid,
-      row.remoteAlias,
+      row.projectAlias,
       row.payload,
       row.hash,
       row.size,
@@ -768,7 +768,7 @@ export interface ChangeRow {
   key: string;
   op: ChangeOp;
   scope: string;
-  remote_alias: string | null;
+  project_alias: string | null;
   revision: number;
   hash: string;
   moved_to: string | null;
@@ -780,7 +780,7 @@ export interface ChangeRow {
 }
 
 const CHANGE_COLUMNS =
-  "seq, kind, uid, key, op, scope, remote_alias, revision, hash, moved_to, member_id, device_id, client_epoch, at, current";
+  "seq, kind, uid, key, op, scope, project_alias, revision, hash, moved_to, member_id, device_id, client_epoch, at, current";
 
 /** Writes the key's new current row and retires its older one; returns the new `seq`. */
 export function insertChange(
@@ -791,7 +791,7 @@ export function insertChange(
     key: string;
     op: ChangeOp;
     scope: string;
-    remoteAlias: string | null;
+    projectAlias: string | null;
     revision: number;
     hash: string;
     movedTo: string | null;
@@ -803,7 +803,7 @@ export function insertChange(
 ): number {
   db.run("UPDATE changes SET current = 0 WHERE key = ? AND current = 1", [row.key]);
   const inserted = db.run(
-    `INSERT INTO changes (kind, uid, key, op, scope, remote_alias, revision, hash, moved_to, member_id, device_id, client_epoch, at, current)
+    `INSERT INTO changes (kind, uid, key, op, scope, project_alias, revision, hash, moved_to, member_id, device_id, client_epoch, at, current)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
     [
       row.kind,
@@ -811,7 +811,7 @@ export function insertChange(
       row.key,
       row.op,
       row.scope,
-      row.remoteAlias,
+      row.projectAlias,
       row.revision,
       row.hash,
       row.movedTo,
@@ -852,13 +852,13 @@ function feedSql(query: FeedQuery): { sql: string; params: (string | number)[] }
   const range = (where: string) =>
     `SELECT * FROM (SELECT ${CHANGE_COLUMNS} FROM changes WHERE ${where} AND current = 1 AND seq > ? ORDER BY seq LIMIT ?)`;
   if (query.scope === "all") {
-    ranges.push(range("scope = 'shared' AND remote_alias IS NULL"));
+    ranges.push(range("scope = 'shared' AND project_alias IS NULL"));
     params.push(query.since, query.limit);
-    ranges.push(range("scope = 'workspace' AND remote_alias IS NULL"));
+    ranges.push(range("scope = 'workspace' AND project_alias IS NULL"));
     params.push(query.since, query.limit);
   }
   for (const alias of query.projects) {
-    ranges.push(range("scope = 'project' AND remote_alias = ?"));
+    ranges.push(range("scope = 'project' AND project_alias = ?"));
     params.push(alias, query.since, query.limit);
   }
   if (ranges.length === 0) return null;
@@ -900,6 +900,136 @@ export function markPurged(db: Db, key: string): number {
     "UPDATE changes SET op = 'purge', hash = '', moved_to = NULL WHERE key = ? OR (key > ? || '@' AND key < ? || 'A')",
     [key, key, key],
   ).changes;
+}
+
+// --- The registry of shared names (ADR 0028) -------------------------------------------------
+
+export interface NameRow {
+  alias: string;
+  id: string;
+  created_by_member: string;
+  created_by_device: string;
+  created_at: number;
+  purged_at: number | null;
+}
+
+const NAME_COLUMNS = "alias, id, created_by_member, created_by_device, created_at, purged_at";
+
+export function insertName(
+  db: Db,
+  row: { alias: string; id: string; memberId: string; deviceId: string; at: number },
+): void {
+  db.run(
+    "INSERT INTO names (alias, id, created_by_member, created_by_device, created_at) VALUES (?, ?, ?, ?, ?)",
+    [row.alias, row.id, row.memberId, row.deviceId, row.at],
+  );
+}
+
+/** The row, purged or not; null for an alias the registry never held. */
+export function nameByAlias(db: Db, alias: string): NameRow | null {
+  return db
+    .query<NameRow, [string]>(`SELECT ${NAME_COLUMNS} FROM names WHERE alias = ?`)
+    .get(alias);
+}
+
+/** The row while it is not purged; null otherwise. */
+export function liveNameByAlias(db: Db, alias: string): NameRow | null {
+  return db
+    .query<NameRow, [string]>(
+      `SELECT ${NAME_COLUMNS} FROM names WHERE alias = ? AND purged_at IS NULL`,
+    )
+    .get(alias);
+}
+
+/** Whether another name holds the id: a given id is used only when unused. */
+export function nameIdInUse(db: Db, id: string): boolean {
+  return (
+    db.query<{ alias: string }, [string]>("SELECT alias FROM names WHERE id = ?").get(id) !== null
+  );
+}
+
+/** The live entries and memories under an alias, and the latest `updated_at` of either; by the two partial indexes. */
+export function nameCountsOf(
+  db: Db,
+  alias: string,
+): { entries: number; memories: number; lastChangeAt: number | null } {
+  const entries = db
+    .query<{ n: number; last: number | null }, [string]>(
+      "SELECT count(*) AS n, max(updated_at) AS last FROM entries WHERE project_alias = ? AND withdrawn_at IS NULL",
+    )
+    .get(alias);
+  const memories = db
+    .query<{ n: number; last: number | null }, [string]>(
+      "SELECT count(*) AS n, max(updated_at) AS last FROM memories WHERE project_alias = ? AND withdrawn_at IS NULL",
+    )
+    .get(alias);
+  const lasts = [entries?.last ?? null, memories?.last ?? null].filter(
+    (value): value is number => value !== null,
+  );
+  return {
+    entries: entries?.n ?? 0,
+    memories: memories?.n ?? 0,
+    lastChangeAt: lasts.length === 0 ? null : Math.max(...lasts),
+  };
+}
+
+/** The live names after `after` by alias, `limit` of them, and whether more follow (one row past the limit is read). */
+export function listLiveNames(
+  db: Db,
+  after: string | null,
+  limit: number,
+): { rows: NameRow[]; more: boolean } {
+  const rows =
+    after === null
+      ? db
+          .query<NameRow, [number]>(
+            `SELECT ${NAME_COLUMNS} FROM names WHERE purged_at IS NULL ORDER BY alias LIMIT ?`,
+          )
+          .all(limit + 1)
+      : db
+          .query<NameRow, [string, number]>(
+            `SELECT ${NAME_COLUMNS} FROM names WHERE purged_at IS NULL AND alias > ? ORDER BY alias LIMIT ?`,
+          )
+          .all(after, limit + 1);
+  return { rows: rows.slice(0, limit), more: rows.length > limit };
+}
+
+/** The ids of the live names among `aliases`, by alias: what a feed page's `nameId` reads. */
+export function nameIdsOf(db: Db, aliases: readonly string[]): Map<string, string> {
+  const wanted = [...new Set(aliases)];
+  if (wanted.length === 0) return new Map();
+  const marks = wanted.map(() => "?").join(", ");
+  return new Map(
+    db
+      .query<{ alias: string; id: string }, string[]>(
+        `SELECT alias, id FROM names WHERE purged_at IS NULL AND alias IN (${marks})`,
+      )
+      .all(...wanted)
+      .map((row) => [row.alias, row.id]),
+  );
+}
+
+/** The not-withdrawn entries and memories under an alias: what a purge of the name prints. */
+export function currentItemsUnder(db: Db, alias: string): { entries: number; memories: number } {
+  const counts = nameCountsOf(db, alias);
+  return { entries: counts.entries, memories: counts.memories };
+}
+
+/** Marks the name purged; `already` when it was, `none` for an alias the registry never held. */
+export function purgeName(db: Db, alias: string, at: number): "purged" | "already" | "none" {
+  const row = nameByAlias(db, alias);
+  if (row === null) return "none";
+  if (row.purged_at !== null) return "already";
+  db.run("UPDATE names SET purged_at = ? WHERE alias = ?", [at, alias]);
+  return "purged";
+}
+
+/** How many names are live. */
+export function countLiveNames(db: Db): number {
+  return (
+    db.query<{ n: number }, []>("SELECT count(*) AS n FROM names WHERE purged_at IS NULL").get()
+      ?.n ?? 0
+  );
 }
 
 // --- Purged keys ------------------------------------------------------------------------

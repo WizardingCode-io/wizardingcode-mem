@@ -14,7 +14,7 @@ import {
 import { TEAM_DESTINATION } from "../sharing/types.ts";
 import { withWrite } from "../store/db.ts";
 import { clearSyncStop, restoreHoldKey, stopSync } from "../store/meta.ts";
-import type { Limits } from "../team/contract.ts";
+import { CONTRACT, type Limits } from "../team/contract.ts";
 import { type ClientFailed, checkServerUrl, ServerUrlError, SyncClient } from "./client.ts";
 import type { SyncContext } from "./context.ts";
 import { authorisedUids, clearServerLedger, openConflictCount, writeAuthorised } from "./ledger.ts";
@@ -29,6 +29,7 @@ import {
   hostOf,
   insertPending,
   listServers,
+  lowerContract,
   muteMember,
   replaceDevice,
   type ServerRow,
@@ -83,7 +84,11 @@ export function failureMessage(failure: ClientFailed): string {
     case "forbidden":
       return `the server refused: ${failure.error}`;
     case "contract":
-      return `this client speaks 1, the server accepts ${failure.accepted.join(", ")}; upgrade wizardingcode-mem`;
+      return `this client speaks ${CONTRACT}, the server accepts ${failure.accepted.join(", ")}; upgrade wizardingcode-mem`;
+    case "conflict":
+      return `the server refused: ${failure.error}`;
+    case "oldServer":
+      return "the server speaks contract 1 and holds no shared names; upgrade it first (the runbook)";
     case "tooLarge":
       return "the server refused the request as too large";
     case "rate":
@@ -156,7 +161,8 @@ export async function joinServer(ctx: SyncContext, input: JoinInput): Promise<Jo
     memberId: answer.memberId,
     memberName: answer.name,
     role: answer.role,
-    contract: answer.contract,
+    // The contract spoken to this server: the lower of this binary's and the server's (ADR 0028).
+    contract: lowerContract(answer.contract, CONTRACT),
     instance: answer.instance,
   };
   const host = hostOf(origin);
@@ -174,7 +180,11 @@ export async function joinServer(ctx: SyncContext, input: JoinInput): Promise<Jo
       addedAt: ctx.clock.now,
     });
 
-  const me = await new SyncClient(ctx, { url: origin, token: answer.token }).me();
+  const me = await new SyncClient(ctx, {
+    url: origin,
+    token: answer.token,
+    contract: device.contract,
+  }).me();
   const first = confirmedServers(ctx.db).every((row) => row.serverId === answer.serverId);
   const destination = first ? TEAM_DESTINATION : answer.serverId;
   const policy = loadPolicy(ctx.db, ctx.dataDir, ctx.env, first ? undefined : answer.serverId);

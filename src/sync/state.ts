@@ -1,7 +1,10 @@
 // The per-server state: the cursors, the breaker, the last answers, and the report `status`,
 // `doctor` and the viewer read. Every write of the loop goes through `guarded`, which refuses
 // once the sync lease is no longer the process's own (the spec's rule 3).
+import { isSharedName, NAME_PREFIX } from "../core/identity.ts";
 import { redact } from "../core/redact.ts";
+import { boundAliasesOf } from "../sharing/levels.ts";
+import { NAME_STATES, type NameState, nameFlagKey } from "../sharing/types.ts";
 import { type Db, withWrite } from "../store/db.ts";
 import {
   failedStartBackoffMs,
@@ -13,6 +16,7 @@ import {
   readSyncStop,
   restoreHoldKey,
   SYNC_LEASE,
+  setMeta,
 } from "../store/meta.ts";
 import type { ClientFailed } from "./client.ts";
 import type { SyncContext } from "./context.ts";
@@ -252,6 +256,91 @@ export function recordAnswer(ctx: SyncContext, serverId: string, answer: Answer)
   });
 }
 
+// --- The flags of a shared name (ADR 0028) ----------------------------------------------------------
+
+export { NAME_STATES, type NameState, nameFlagKey };
+
+/** What a flag holds: when it was written, and what the sync knew (an id, a member). */
+export interface NameFlag {
+  at: number;
+  id?: string;
+  member?: { id: string; name: string };
+}
+
+/** Writes one flag of a name, as the sync's guarded write; a flag already there is replaced. */
+export function flagName(
+  ctx: SyncContext,
+  serverId: string,
+  alias: string,
+  state: NameState,
+  detail: Omit<NameFlag, "at"> = {},
+): void {
+  guarded(ctx, () => {
+    setMeta(
+      ctx.db,
+      nameFlagKey(state, serverId, alias),
+      JSON.stringify({ at: ctx.clock.now, ...detail }),
+    );
+  });
+}
+
+/** Clears one flag of a name, or all three. */
+export function clearName(
+  ctx: SyncContext,
+  serverId: string,
+  alias: string,
+  state?: NameState,
+): void {
+  guarded(ctx, () => {
+    for (const each of state === undefined ? NAME_STATES : [state]) {
+      ctx.db.run("DELETE FROM meta WHERE key = ?", [nameFlagKey(each, serverId, alias)]);
+    }
+  });
+}
+
+/** One flag as stored; null when it is not set or cannot be read. */
+export function nameFlag(
+  db: Db,
+  serverId: string,
+  alias: string,
+  state: NameState,
+): NameFlag | null {
+  const raw = getMeta(db, nameFlagKey(state, serverId, alias));
+  if (raw === null) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<NameFlag>;
+    return typeof parsed.at === "number" ? { ...parsed, at: parsed.at } : { at: 0 };
+  } catch {
+    return { at: 0 };
+  }
+}
+
+/** The one state a name reads as, when it carries several flags: purged, then re-created, then missing. */
+const STATE_ORDER: readonly NameState[] = ["purged", "recreated", "missing"];
+
+/** The flagged names of a server, each with the state it reads as. */
+export function flaggedNames(db: Db, serverId: string): Map<string, NameState> {
+  const found = new Map<string, NameState>();
+  for (const state of [...STATE_ORDER].reverse()) {
+    const prefix = nameFlagKey(state, serverId, "");
+    const rows = db
+      .query<{ key: string }, [number, string]>("SELECT key FROM meta WHERE substr(key, 1, ?) = ?")
+      .all(prefix.length, prefix)
+      .map((row) => row.key.slice(prefix.length));
+    // Written in the reverse of the order, so the state that wins is set last.
+    for (const alias of rows) found.set(alias, state);
+  }
+  return found;
+}
+
+/** The state a name reads as for a server, or null when none of its flags is set. */
+export function nameStateOf(db: Db, serverId: string, alias: string): NameState | null {
+  for (const state of STATE_ORDER) {
+    if (getMeta(db, nameFlagKey(state, serverId, alias)) !== null) return state;
+  }
+  return null;
+}
+
 // --- The report ------------------------------------------------------------------------------------
 
 /** The server rows as `status`, `doctor` and the viewer read them. */
@@ -266,6 +355,21 @@ export interface WithdrawalHold {
   at: number;
   /** The withdrawals the last sweep held; 0 until a sweep looked. */
   count: number;
+}
+
+/** One shared name bound to a server, as `status`, `doctor` and the viewer read it (ADR 0028). */
+export interface NameStatus {
+  alias: string;
+  slug: string;
+  /** Received under the name: the entries, the memories, the distinct members, the latest time. */
+  entries: number;
+  memories: number;
+  members: number;
+  lastAt: number | null;
+  /** `ok`, or the one flag the name reads as (`nameStateOf`). */
+  state: "ok" | NameState;
+  /** Who re-created the name on the server, when the flag says so. */
+  recreatedBy: string | null;
 }
 
 export interface ServerStatus {
@@ -301,6 +405,10 @@ export interface ServerStatus {
   lastError: string | null;
   lastErrorAt: number | null;
   muted: boolean;
+  /** The shared names bound to the server by enabled projects, with what was received under each. */
+  names: NameStatus[];
+  /** The row speaks 1 while a shared name is bound: nothing of those projects moves (ADR 0028). */
+  namesHeld: boolean;
 }
 
 /** The per-server counts the ledger gives (`ledger.ts`), beside the row's own columns. */
@@ -313,6 +421,32 @@ export interface ServerCounts {
 export type CountsOf = (db: Db, serverId: string) => ServerCounts;
 
 const NO_COUNTS: CountsOf = () => ({ dirtyPaths: 0, pendingRows: 0, openConflicts: 0 });
+
+/** What was received under one name, as the ledger counts it (`receivedNameCounts`). */
+export type NamesOf = (
+  db: Db,
+  serverId: string,
+  alias: string,
+) => Pick<NameStatus, "entries" | "memories" | "members" | "lastAt">;
+
+const NO_NAMES: NamesOf = () => ({ entries: 0, memories: 0, members: 0, lastAt: null });
+
+/** The shared names bound to a server, each with its counts and the state its flags give it. */
+function namesOfServer(db: Db, serverId: string, namesOf: NamesOf): NameStatus[] {
+  return boundAliasesOf(db, serverId)
+    .filter(isSharedName)
+    .map((alias) => {
+      const state = nameStateOf(db, serverId, alias) ?? "ok";
+      const recreated = state === "recreated" ? nameFlag(db, serverId, alias, "recreated") : null;
+      return {
+        alias,
+        slug: alias.slice(NAME_PREFIX.length),
+        ...namesOf(db, serverId, alias),
+        state,
+        recreatedBy: recreated?.member?.name ?? null,
+      };
+    });
+}
 
 export function readHold(db: Db, serverId: string): WithdrawalHold | null {
   const raw = getMeta(db, restoreHoldKey(serverId));
@@ -337,11 +471,13 @@ export function statusReport(
   db: Db,
   dataDir: string,
   countsOf: CountsOf = NO_COUNTS,
+  namesOf: NamesOf = NO_NAMES,
 ): ServerStatus[] {
   if (!hasServerTables(db)) return [];
   const tokens = readTokens(dataDir);
   return listServers(db).map((row) => {
     const counts = countsOf(db, row.serverId);
+    const names = namesOfServer(db, row.serverId, namesOf);
     const stateOf = (): [ServerState, string | null] => {
       if (row.confirmedAt === null) return ["pending", "share server add again"];
       if (!(row.serverId in tokens)) return ["token missing", "share server rejoin"];
@@ -380,6 +516,8 @@ export function statusReport(
       lastError: row.lastError,
       lastErrorAt: row.lastErrorAt,
       muted: row.muted,
+      names,
+      namesHeld: row.contract < 2 && names.length > 0,
     };
   });
 }

@@ -8,6 +8,8 @@ import {
   isLoopback,
   type JoinAnswer,
   type MeAnswer,
+  type NameItemShape,
+  type NamesPageShape,
   type PullPageShape,
   type PushItemShape,
   type PushResultShape,
@@ -53,10 +55,14 @@ export type ClientFailure =
   | { kind: "disabled"; status: 403; error: string }
   | { kind: "forbidden"; status: 403; error: string }
   | { kind: "contract"; status: 409; accepted: number[] }
+  /** A 409 with no accepted list: a names route's `exists` or `purged`, with the body (ADR 0028). */
+  | { kind: "conflict"; status: 409; error: string; body: Record<string, unknown> }
+  /** A names route answered the route table's own 404: a server that speaks 1 (ADR 0028). */
+  | { kind: "oldServer"; status: 404; error: string }
   | { kind: "gone"; status: 410; error: string; instance: string | null }
   | { kind: "tooLarge"; status: 413 }
   | { kind: "rate"; status: 429; retryAfterMs: number }
-  | { kind: "refused"; status: number; error: string }
+  | { kind: "refused"; status: number; error: string; body: Record<string, unknown> }
   | { kind: "server"; status: number; error: string }
   | { kind: "redirect"; status: number | null }
   | { kind: "network"; error: string }
@@ -101,8 +107,12 @@ function retryAfterMs(response: Response, body: Record<string, unknown>): number
 const text = (body: Record<string, unknown>, key: string): string | null =>
   typeof body[key] === "string" ? (body[key] as string) : null;
 
-/** The failure a status and a body mean to the client. */
-function failureOf(response: Response, body: Record<string, unknown>): ClientFailure {
+/** The failure a status and a body mean to the client; `names` says the request was a names route's. */
+function failureOf(
+  response: Response,
+  body: Record<string, unknown>,
+  names: boolean,
+): ClientFailure {
   const status = response.status;
   const error = text(body, "error") ?? `status ${status}`;
   const instance = text(body, "instance");
@@ -113,16 +123,19 @@ function failureOf(response: Response, body: Record<string, unknown>): ClientFai
       ? { kind: "disabled", status, error }
       : { kind: "forbidden", status, error };
   if (status === 409) {
-    const accepted = Array.isArray(body.accepted)
-      ? body.accepted.filter((value): value is number => typeof value === "number")
-      : [];
-    return { kind: "contract", status, accepted };
+    // The contract's 409 carries the accepted list; a names route's 409 (exists, purged) does not.
+    if (Array.isArray(body.accepted)) {
+      const accepted = body.accepted.filter((value): value is number => typeof value === "number");
+      return { kind: "contract", status, accepted };
+    }
+    return { kind: "conflict", status, error, body };
   }
+  if (status === 404 && names && error === "not found") return { kind: "oldServer", status, error };
   if (status === 410) return { kind: "gone", status, error, instance };
   if (status === 413) return { kind: "tooLarge", status };
   if (status === 429) return { kind: "rate", status, retryAfterMs: retryAfterMs(response, body) };
   if (status >= 500) return { kind: "server", status, error };
-  return { kind: "refused", status, error };
+  return { kind: "refused", status, error, body };
 }
 
 // --- The client --------------------------------------------------------------------------------
@@ -139,7 +152,7 @@ export interface ClientOptions {
 export class SyncClient {
   private readonly url: string;
   private readonly token: string | null;
-  private readonly contract: number;
+  private spoken: number;
 
   constructor(
     private readonly ctx: SyncContext,
@@ -147,7 +160,17 @@ export class SyncClient {
   ) {
     this.url = options.url.replace(/\/+$/, "");
     this.token = options.token;
-    this.contract = options.contract ?? CONTRACT;
+    this.spoken = options.contract ?? CONTRACT;
+  }
+
+  /** The contract named in the header now. */
+  get contract(): number {
+    return this.spoken;
+  }
+
+  /** Speaks another contract from the next request on: the live path down to a server at 1 (ADR 0028). */
+  speak(contract: number): void {
+    this.spoken = contract;
   }
 
   join(code: string, label: string, name?: string): Promise<ClientAnswer<JoinAnswer>> {
@@ -160,8 +183,8 @@ export class SyncClient {
     );
   }
 
-  me(): Promise<ClientAnswer<MeAnswer>> {
-    return this.request<MeAnswer>("GET", "/v1/me", undefined, {});
+  me(options: RequestOptions = {}): Promise<ClientAnswer<MeAnswer>> {
+    return this.request<MeAnswer>("GET", "/v1/me", undefined, options);
   }
 
   /** The items in the spec's order; a withdraw is an item of `op: "withdraw"`. A push is never held, so it takes the default deadline. */
@@ -170,6 +193,64 @@ export class SyncClient {
     epoch: number,
   ): Promise<ClientAnswer<{ results: PushResultShape[] }>> {
     return this.request<{ results: PushResultShape[] }>("POST", "/v1/push", { items, epoch }, {});
+  }
+
+  /** `POST /v1/names`: creates the name, with the id given when it is the creator's stored one (ADR 0028). */
+  createName(alias: string, id?: string | null): Promise<ClientAnswer<NameItemShape>> {
+    return this.request<NameItemShape>(
+      "POST",
+      "/v1/names",
+      { alias, ...(id === undefined || id === null ? {} : { id }) },
+      {},
+      { names: true },
+    );
+  }
+
+  /** `GET /v1/names/<alias>`: the live name's item; `refused` with `unknown-name` otherwise. */
+  nameByAlias(alias: string): Promise<ClientAnswer<NameItemShape>> {
+    return this.request<NameItemShape>(
+      "GET",
+      `/v1/names/${encodeURIComponent(alias)}`,
+      undefined,
+      {},
+      { names: true },
+    );
+  }
+
+  /** `GET /v1/names`: one page of the live names after `after`. */
+  listNames(after: string | null, limit: number): Promise<ClientAnswer<NamesPageShape>> {
+    const params = new URLSearchParams();
+    if (after !== null) params.set("after", after);
+    params.set("limit", String(limit));
+    return this.request<NamesPageShape>(
+      "GET",
+      `/v1/names?${params.toString()}`,
+      undefined,
+      {},
+      { names: true },
+    );
+  }
+
+  /** Every live name, page by page, at most `cap` of them; `truncated` when the server holds more. */
+  async namesAll(
+    cap = 1000,
+  ): Promise<
+    | { ok: true; names: NameItemShape[]; truncated: boolean }
+    | Extract<ClientAnswer<never>, { ok: false }>
+  > {
+    const names: NameItemShape[] = [];
+    let after: string | null = null;
+    for (;;) {
+      const page: ClientAnswer<NamesPageShape> = await this.listNames(
+        after,
+        Math.min(200, cap - names.length),
+      );
+      if (!page.ok) return page;
+      names.push(...page.body.items);
+      if (!page.body.more || page.body.next === null) return { ok: true, names, truncated: false };
+      if (names.length >= cap) return { ok: true, names, truncated: true };
+      after = page.body.next;
+    }
   }
 
   pull(input: PullInput, options: RequestOptions = {}): Promise<ClientAnswer<PullPageShape>> {
@@ -191,11 +272,11 @@ export class SyncClient {
     path: string,
     body: unknown,
     options: RequestOptions,
-    extra: { token?: boolean } = {},
+    extra: { token?: boolean; names?: boolean } = {},
   ): Promise<ClientAnswer<T>> {
     const id = requestId();
     const headers: Record<string, string> = {
-      [CONTRACT_HEADER]: String(this.contract),
+      [CONTRACT_HEADER]: String(this.spoken),
       [REQUEST_ID_HEADER]: id,
       accept: "application/json",
     };
@@ -276,6 +357,6 @@ export class SyncClient {
         };
       return { ok: true, status: response.status, body: parsed as T, requestId: answered };
     }
-    return { ok: false, requestId: answered, ...failureOf(response, record) };
+    return { ok: false, requestId: answered, ...failureOf(response, record, extra.names === true) };
   }
 }

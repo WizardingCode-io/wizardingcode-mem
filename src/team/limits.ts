@@ -40,11 +40,18 @@ export class Bucket {
   }
 }
 
-export type Buckets = { devices: Bucket; joins: Bucket; bytes: Bucket; auth: Bucket };
+export type Buckets = {
+  devices: Bucket;
+  joins: Bucket;
+  bytes: Bucket;
+  auth: Bucket;
+  /** Shared names created, per member and hour (ADR 0028). */
+  names: Bucket;
+};
 
 /**
  * The buckets the routes take from: requests per device, joins per address, applied bytes
- * per device, and failed authentications per address.
+ * per device, failed authentications per address, and names created per member.
  */
 export function createBuckets(
   limits: {
@@ -52,6 +59,7 @@ export function createBuckets(
     joinsPerMinute: number;
     payloadBytesPerHour: number;
     authFailuresPerMinute: number;
+    namesPerHour: number;
   },
   now: () => number,
 ): Buckets {
@@ -60,5 +68,6 @@ export function createBuckets(
     joins: new Bucket(limits.joinsPerMinute, limits.joinsPerMinute / 60, now),
     bytes: new Bucket(limits.payloadBytesPerHour, limits.payloadBytesPerHour / 3600, now),
     auth: new Bucket(limits.authFailuresPerMinute, limits.authFailuresPerMinute / 60, now),
+    names: new Bucket(limits.namesPerHour, limits.namesPerHour / 3600, now),
   };
 }

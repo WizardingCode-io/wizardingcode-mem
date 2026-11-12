@@ -5,6 +5,7 @@
 import { setLevelMessage, setServerLists } from "../sharing/store.ts";
 import { type ServerJson, serverJson, type SyncJson, syncJson } from "../status/report.ts";
 import type { Db } from "../store/db.ts";
+import { listServerNames } from "../sync/binding.ts";
 import { checkServerUrl, ServerUrlError } from "../sync/client.ts";
 import type { SyncContext } from "../sync/context.ts";
 import {
@@ -111,6 +112,10 @@ function joinFailure(reason: JoinReason, message: string): Answer {
     case "contract":
     case "tooLarge":
       return refused(400, reason, { detail: message });
+    case "oldServer":
+      return refused(400, "contract", { detail: message });
+    case "conflict":
+      return refused(409, "conflict", { detail: message });
     case "rate":
       return refused(429, "rate", { detail: message });
     default:
@@ -289,4 +294,22 @@ export function resumeRoute(
   if (body.yes !== true) return { status: 200, body: { preview: previews } };
   const { released } = resumeServer(ctx, previews);
   return { status: 200, body: { resumed: true, released } };
+}
+
+/**
+ * `GET /api/servers/<id>/names`: the server's live names, reassembled from its pages up to
+ * 1,000 (ADR 0028), for the dock's field. A row the list does not hold is `unknown-server`; a
+ * row not yet confirmed has no token to ask with, `pending`; a server at contract 1 (after the
+ * one `/v1/me` read, or on a bare 404, the row then set to 1) `contract`; a failure `unreachable`.
+ */
+export async function serverNamesView(ctx: SyncContext, serverId: string): Promise<Answer> {
+  const row = findServer(ctx.db, serverId);
+  if (row === null) return refused(404, "unknown-server");
+  if (row.confirmedAt === null) return refused(409, "pending");
+  const listed = await listServerNames(ctx, row);
+  if (listed.ok) {
+    return { status: 200, body: { names: listed.names, truncated: listed.truncated } };
+  }
+  if (listed.reason === "contract") return refused(409, "contract");
+  return refused(502, "unreachable", { detail: listed.message ?? listed.reason });
 }

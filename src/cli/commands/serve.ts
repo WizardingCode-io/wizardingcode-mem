@@ -31,8 +31,15 @@ import { purgeItem, runMirror } from "../../team/mirror.ts";
 import { disableWithItems, reinstateByAdmin, withdrawByAdmin } from "../../team/push.ts";
 import { startTeamServer } from "../../team/server.ts";
 import { readStatus, renderStatus } from "../../team/status.ts";
-import { insertAudit, sequenceHighWater } from "../../team/store.ts";
+import {
+  currentItemsUnder,
+  insertAudit,
+  purgeName as markNamePurged,
+  sequenceHighWater,
+  transaction,
+} from "../../team/store.ts";
 import { defaultDataDir } from "../../util/paths.ts";
+import { plural } from "../../util/text.ts";
 import { EXIT_USAGE } from "../exit.ts";
 
 const USAGE = `Usage: wizardingcode-mem serve [--data <dir>] [--host <addr>] [--port <n>] [--trust-proxy]
@@ -54,6 +61,7 @@ Subcommands (each takes --data <dir> as well; health takes --url alone):
        audit [--limit <n>]
        mirror [--rebuild]
        purge entry <uid> | memory remote:<alias>:<uid> --yes
+       purge name <alias> --yes
        instance renew
        health [--url <origin>]
 
@@ -488,13 +496,58 @@ function mirror(shell: Shell, argv: string[]): number {
   }
 }
 
+/**
+ * `purge name <alias> --yes` (ADR 0028): the registry row is marked purged, so the name leaves
+ * every member's list and no push lands under it; the items under it are the operator's to
+ * purge one by one. The string stays in the server's own records (the documented limit).
+ */
+type NamePurge = { result: "purged" | "already" | "none"; entries: number; memories: number };
+type NamePurgeWrite = {
+  result: NamePurge;
+  audit: { action: string; target: string; detail: string } | null;
+};
+
+function purgeName(shell: Shell, argv: string[]): number {
+  const parsed = parseFlags(argv, { yes: "flag" });
+  if ("error" in parsed) return usage(parsed.error);
+  const alias = parsed.rest[1];
+  if (alias === undefined) return usage("purge name needs an alias");
+  if (parsed.values.yes !== true) return usage("purge erases durably: add --yes");
+  const outcome = write<NamePurge>(shell, (db) =>
+    transaction(db, (): NamePurgeWrite => {
+      const result = markNamePurged(db, alias, shell.now);
+      if (result !== "purged") return { result: { result, entries: 0, memories: 0 }, audit: null };
+      const counts = currentItemsUnder(db, alias);
+      return {
+        result: { result, ...counts },
+        audit: {
+          action: "name purged",
+          target: alias,
+          detail: `${plural(counts.entries, "entry", "entries")}, ${plural(counts.memories, "memory", "memories")} under it`,
+        },
+      };
+    }),
+  );
+  if (outcome.result === "none") {
+    err(`wizardingcode-mem serve: no such name ${alias}`);
+    return 1;
+  }
+  if (outcome.result === "already") {
+    err(`wizardingcode-mem serve: ${alias} already purged`);
+    return 0;
+  }
+  emit({ event: "name purged", alias, entries: outcome.entries, memories: outcome.memories });
+  return 0;
+}
+
 function purge(shell: Shell, argv: string[]): number {
+  if (argv[0] === "name") return purgeName(shell, argv);
   const parsed = parseFlags(argv, { yes: "flag" });
   if ("error" in parsed) return usage(parsed.error);
   const kind = itemKind(parsed.rest[0]);
   const uid = parsed.rest[1];
   if (kind === null || uid === undefined)
-    return usage("purge needs entry <uid> or memory remote:<alias>:<uid>");
+    return usage("purge needs entry <uid>, memory remote:<alias>:<uid> or name <alias>");
   if (parsed.values.yes !== true) return usage("purge erases durably: add --yes");
   const db = openTeamForWrite(shell.dir, shell.now);
   try {

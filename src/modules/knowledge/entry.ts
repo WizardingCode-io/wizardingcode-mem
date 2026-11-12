@@ -2,13 +2,14 @@
 // frontmatter is a small YAML subset this file reads and writes itself (no dependency):
 // `key: value` lines, plain scalars, double-quoted strings, whole numbers, block lists.
 // Parsing never throws: a file that cannot be read as an entry becomes a draft with a problem.
+import { RESERVED, SLUG, SLUG_MAX } from "../../core/identity.ts";
 import { clip } from "../../util/text.ts";
 import { KnowledgeError } from "./errors.ts";
 import type { KnowledgeEntry, KnowledgeProposal, ListItem, Taxonomy } from "./types.ts";
 
 export const KINDS = /^(?:knowledge|strategy|persona|pattern)$/;
 export const STATUSES = /^(?:active|draft|archived)$/;
-export const SLUG = /^[a-z0-9][a-z0-9-]*$/;
+export { SLUG };
 export const AGENT_ID = /^[a-z0-9][a-z0-9-]*$/;
 /** The agent id of a host the MCP handshake does not name: the one fallback. */
 export const UNKNOWN_AGENT = "mcp";
@@ -21,11 +22,8 @@ export const TITLE_MAX = 200;
 export const FIELD_MAX = 120;
 export const LABEL_MAX = 60;
 export const AREA_MAX = 40;
-const SLUG_MAX = 80;
 /** Past this length a slug is cut at its last hyphen, so it does not end mid-word. */
 const SLUG_CUT_AFTER = 40;
-/** File names Windows refuses, whatever the extension. */
-const RESERVED = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$/;
 
 export const DEFAULT_AREAS: { id: string; label: string }[] = [
   { id: "code", label: "Code" },
@@ -69,8 +67,14 @@ export function splitFrontmatterLines(
 
 // --- Slugs ------------------------------------------------------------------------
 
-export function slugify(title: string): string {
-  let slug = title
+/**
+ * The slug a text makes, with no fallback: NFKD, the marks removed, lower case, every run
+ * of other characters one hyphen, the ends trimmed, cut at a hyphen past `SLUG_MAX`. Empty
+ * when no letter or digit survives, and a reserved name as it is: `slugify` adds the
+ * fallbacks for a file, and a shared name (ADR 0028) refuses instead.
+ */
+export function slugCore(text: string): string {
+  let slug = text
     .normalize("NFKD")
     .replace(/\p{M}+/gu, "")
     .toLowerCase()
@@ -82,6 +86,11 @@ export function slugify(title: string): string {
     if (hyphen > SLUG_CUT_AFTER) slug = slug.slice(0, hyphen);
     slug = slug.replace(/-+$/, "");
   }
+  return slug;
+}
+
+export function slugify(title: string): string {
+  const slug = slugCore(title);
   if (slug === "") return "entry";
   return RESERVED.test(slug) ? `${slug}-entry` : slug;
 }

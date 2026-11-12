@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { type Check, type DoctorContext, runChecks } from "../../src/doctor/checks.ts";
 import { KNOWLEDGE_MIGRATIONS, KNOWLEDGE_MODULE } from "../../src/modules/knowledge/migrations.ts";
 import { SHARING_MIGRATIONS, SHARING_MODULE } from "../../src/sharing/migrations.ts";
+import { setLevel } from "../../src/sharing/store.ts";
 import { formatStatus, statusReport } from "../../src/status/report.ts";
 import {
   clearSyncStop,
@@ -18,15 +19,19 @@ import {
   setMeta,
   writeFailedStart,
 } from "../../src/store/meta.ts";
+import { pullOnce } from "../../src/sync/inbound.ts";
 import { writeConflict, writePendingRow } from "../../src/sync/ledger.ts";
 import { sweep } from "../../src/sync/outbound.ts";
 import {
   forgetToken,
   insertPending,
+  setContract,
   setStopped,
   tokensPath,
   writeToken,
 } from "../../src/sync/servers.ts";
+import { clearName, flagName } from "../../src/sync/state.ts";
+import { readStatus, renderStatus, type TeamStatus } from "../../src/team/status.ts";
 import { runCliWith } from "../helpers/cli.ts";
 import {
   cleanSyncDirs,
@@ -34,7 +39,8 @@ import {
   type SyncTestStore,
   serverFixture,
 } from "../helpers/sync.ts";
-import { cleanWorlds, closeWorlds, memory, world } from "../helpers/sync-world.ts";
+import { cleanWorlds, closeWorlds, memory, NAME, world } from "../helpers/sync-world.ts";
+import { entryPayload, memberOf, memoryPayload, push, sendOf } from "../helpers/team.ts";
 
 const stores: SyncTestStore[] = [];
 afterEach(async () => {
@@ -368,5 +374,113 @@ describe("share explain --server", () => {
     expect(out.stdout).toContain(`memory ${id}: keep · already-sent`);
     expect(out.stdout).toContain("ledger: sent · revision 1");
     expect(out.stdout).not.toContain(w.token);
+  });
+});
+
+describe("status and doctor with a shared name (ADR 0028)", () => {
+  test("one name line per bound name with the received counts, the members and the state; contract 1 and names held; --json; doctor's warnings; serve status", async () => {
+    const w = await world("all", { named: true });
+    const bob = await memberOf(w.t, w.token, "Bob", "desk");
+    const rui = await memberOf(w.t, w.token, "Rui", "phone");
+    const entry = entryPayload({
+      scope: "project",
+      remoteAlias: NAME,
+      slug: "brand-voice",
+      title: "Brand voice",
+      area: "sales",
+    });
+    const mem = memoryPayload({ remoteAlias: NAME, title: "Rui on the brand" });
+    expect((await push(w.t.server, bob.token, [sendOf(entry)])).status).toBe(200);
+    expect((await push(w.t.server, rui.token, [sendOf(mem)])).status).toBe(200);
+    expect(await pullOnce(w.store.ctx, w.server(), { wait: false })).toMatchObject({ ok: true });
+
+    const full = () =>
+      statusReport(w.store.db, null, w.store.dataDir, {
+        env: w.store.ctx.env,
+        now: w.store.clock.now,
+      });
+    const lines = () => formatStatus(full()).split("\n");
+    const nameLine = () => lines().find((line) => line.startsWith("  name ")) ?? "";
+    const serverLine = () => lines().find((line) => line.startsWith("server ")) ?? "";
+    const check = () => {
+      const found = runChecks(doctorContext(w.store)).find((c) => c.name === "sync");
+      if (found === undefined) throw new Error("no sync check");
+      return found;
+    };
+    expect(nameLine()).toBe(
+      "  name wizardingcode · 1 entry, 1 memory received · 2 members · last 0 s ago",
+    );
+    expect(serverLine()).not.toContain("contract");
+    expect(serverLine()).not.toContain("names held");
+    expect(full().servers[0]).toMatchObject({
+      contract: 2,
+      namesHeld: false,
+      names: [
+        {
+          alias: NAME,
+          slug: "wizardingcode",
+          entries: 1,
+          memories: 1,
+          members: 2,
+          lastAt: w.store.clock.now,
+          state: "ok",
+        },
+      ],
+    });
+    expect(check().status).toBe("ok");
+
+    // The three flags, each read out and warned about once.
+    flagName(w.store.ctx, w.serverId, NAME, "missing");
+    expect(nameLine()).toContain(" · missing");
+    expect(full().servers[0]?.names[0]?.state).toBe("missing");
+    expect(check().status).toBe("warn");
+    expect(check().detail).toContain("the server does not hold `wizardingcode`");
+    clearName(w.store.ctx, w.serverId, NAME);
+    flagName(w.store.ctx, w.serverId, NAME, "recreated", {
+      id: "0123456789abcdef",
+      member: { id: bob.memberId, name: "Bob" },
+    });
+    expect(nameLine()).toContain(" · re-created on the server by Bob");
+    expect(check().detail).toContain("`wizardingcode` re-created on the server by Bob");
+    clearName(w.store.ctx, w.serverId, NAME);
+    flagName(w.store.ctx, w.serverId, NAME, "purged");
+    expect(nameLine()).toContain(" · removed by the operator");
+    expect(check().detail).toContain("the operator removed `wizardingcode`");
+    expect(check().detail.split("wizardingcode").length).toBe(2);
+    clearName(w.store.ctx, w.serverId, NAME);
+    expect(check().status).toBe("ok");
+
+    // The server at contract 1: the server line says so, and the names are held.
+    setContract(w.store.db, w.serverId, 1);
+    expect(serverLine()).toContain("contract 1");
+    expect(serverLine()).toContain("names held (server at contract 1)");
+    expect(full().servers[0]).toMatchObject({ contract: 1, namesHeld: true });
+    expect(check().status).toBe("warn");
+    expect(check().detail).toContain("names held: the server ");
+    expect(check().detail).toContain("speaks contract 1; upgrade it (the runbook)");
+    expect(check().detail.split("names held").length).toBe(2);
+    // With no bound name a row at 1 holds nothing.
+    expect(
+      setLevel(w.store.db, {
+        projectId: 2,
+        destination: w.serverId,
+        level: "local",
+        source: "cli",
+        now: w.store.clock.now,
+        confirm: true,
+      }).ok,
+    ).toBe(true);
+    expect(serverLine()).toContain("contract 1");
+    expect(serverLine()).not.toContain("names held");
+    expect(lines().some((line) => line.startsWith("  name "))).toBe(false);
+    expect(check().status).toBe("ok");
+    setContract(w.store.db, w.serverId, 2);
+    expect(serverLine()).not.toContain("contract");
+
+    // The team server's own status counts the live registry.
+    expect(renderStatus(readStatus(w.t.dir, w.store.clock.now) as TeamStatus)).toContain(
+      "names: 1\n",
+    );
+    expect(JSON.stringify(full())).not.toContain(w.token);
   });
 });

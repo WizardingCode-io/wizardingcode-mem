@@ -20,7 +20,8 @@ import {
 import { type Db, moduleSchemaState } from "../store/db.ts";
 import { getMeta } from "../store/meta.ts";
 import { syncReport } from "../sync/report.ts";
-import type { ServerStatus, SyncState } from "../sync/state.ts";
+import type { NameStatus, ServerStatus, SyncState } from "../sync/state.ts";
+import { CONTRACT } from "../team/contract.ts";
 import { plural } from "../util/text.ts";
 
 export interface Latency {
@@ -90,6 +91,12 @@ export interface ServerJson {
   pending: number;
   conflicts: number;
   hold: { reason: "restore" | "bulk"; count: number } | null;
+  /** The contract spoken to the server (ADR 0028). */
+  contract: number;
+  /** The row speaks 1 while a shared name is bound: nothing of those projects moves. */
+  namesHeld: boolean;
+  /** One entry per shared name bound to the server. */
+  names: NameStatus[];
 }
 
 export function syncJson(state: SyncState, servers: ServerStatus[]): SyncJson {
@@ -135,6 +142,9 @@ export const serverJson = (server: ServerStatus): ServerJson => ({
   pending: server.pendingRows,
   conflicts: server.openConflicts,
   hold: server.hold === null ? null : { reason: server.hold.reason, count: server.hold.count },
+  contract: server.contract,
+  namesHeld: server.namesHeld,
+  names: server.names,
 });
 
 /** `3 s ago`, `12 min ago`, `5 h ago`, `3 d ago`; `never` for null. */
@@ -199,7 +209,31 @@ export function formatServer(server: ServerJson, now: number): string {
       `held: ${server.hold.reason}${server.hold.count > 0 ? ` (${server.hold.count})` : ""}`,
     );
   }
+  if (server.contract < CONTRACT) parts.push(`contract ${server.contract}`);
+  if (server.namesHeld) parts.push(`names held (server at contract ${server.contract})`);
   return `server    ${parts.join(" · ")}`;
+}
+
+/** What a name's state adds to its line; nothing for `ok`. */
+function nameStateText(name: NameStatus): string {
+  switch (name.state) {
+    case "ok":
+      return "";
+    case "missing":
+      return " · missing";
+    case "recreated":
+      return ` · re-created on the server${name.recreatedBy === null ? "" : ` by ${name.recreatedBy}`}`;
+    case "purged":
+      return " · removed by the operator";
+  }
+}
+
+/** One `  name` line per shared name bound to the server, under its `server` line (ADR 0028). */
+export function formatNames(server: ServerJson, now: number): string[] {
+  return server.names.map(
+    (name) =>
+      `  name ${name.slug} · ${plural(name.entries, "entry", "entries")}, ${plural(name.memories, "memory", "memories")} received · ${plural(name.members, "member")} · last ${ago(now, name.lastAt)}${nameStateText(name)}`,
+  );
 }
 
 /** What the agent can be shown from the knowledge index, over every repository. */
@@ -564,7 +598,9 @@ export function formatStatus(report: StatusReport): string {
   if (sync !== null && (report.servers.length > 0 || sync.state !== "idle" || sync.pid !== null)) {
     lines.push(formatSync(sync, report.now));
   }
-  for (const server of report.servers) lines.push(formatServer(server, report.now));
+  for (const server of report.servers) {
+    lines.push(formatServer(server, report.now), ...formatNames(server, report.now));
+  }
   if (hooks.runs > 0) {
     const speeds = hooks.latency.map((l) => `${l.event} p50 ${l.p50} ms, p95 ${l.p95} ms`);
     lines.push(

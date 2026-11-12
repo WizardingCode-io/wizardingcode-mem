@@ -3,8 +3,10 @@
 // never returned: it lives in the file alone, written whole under the store's write lock.
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { aliasKind } from "../core/identity.ts";
 import { hasTable } from "../sharing/store.ts";
 import { type Db, withWrite } from "../store/db.ts";
+import { CONTRACT } from "../team/contract.ts";
 import { writeFileAtomic } from "../util/atomic-write.ts";
 import type { SyncContext } from "./context.ts";
 
@@ -406,6 +408,58 @@ export function replaceDevice(db: Db, serverId: string, device: Device): void {
       serverId,
     ],
   );
+}
+
+/** The contract this client speaks to the server from now on (ADR 0028): the lower of its own and the server's. */
+export function setContract(db: Db, serverId: string, contract: number): void {
+  db.run("UPDATE sharing_servers SET contract = ? WHERE server_id = ?", [contract, serverId]);
+}
+
+/**
+ * The contract to speak after a 409 with an accepted list: the highest value at or below this
+ * binary's and below the one spoken, or null when the list holds none (the server is ahead, or
+ * accepts nothing this binary speaks).
+ */
+export function acceptableContract(accepted: readonly number[], spoken: number): number | null {
+  const fit = accepted.filter(
+    (value) => Number.isInteger(value) && value <= CONTRACT && value < spoken,
+  );
+  return fit.length === 0 ? null : Math.max(...fit);
+}
+
+/** How long one `/v1/me` read may take, wherever it is made: the sync's start and full sweep, the dock, the CLI (ADR 0028). */
+export const CONTRACT_READ_MS = 5_000;
+
+/**
+ * The contract to speak after a server named one (the join, `/v1/me`): the lower of this
+ * binary's and the value answered, when it is an integer; else `fallback`, so a broken answer
+ * never reaches the row.
+ */
+export function lowerContract(answered: unknown, fallback: number): number {
+  return Number.isInteger(answered) ? Math.min(CONTRACT, answered as number) : fallback;
+}
+
+/**
+ * The contract to speak after one `/v1/me` read (ADR 0028): the lower of this binary's and the
+ * server's answer; on a contract refusal, the highest value of its list this binary speaks; on
+ * any other failure, the one stored. The one rule the sync's start and full sweep, the dock
+ * and the CLI apply.
+ */
+export function spokenAfterMe(
+  me:
+    | { ok: true; body: { contract: unknown } }
+    | { ok: false; kind: string; accepted?: readonly number[] },
+  spoken: number,
+): number {
+  if (me.ok) return lowerContract(me.body.contract, spoken);
+  if (me.kind === "contract" && me.accepted !== undefined)
+    return acceptableContract(me.accepted, spoken) ?? spoken;
+  return spoken;
+}
+
+/** Whether an alias is held out of the sync while the server speaks 1: a shared name is contract 2's (ADR 0028). */
+export function heldByContract(server: { contract: number }, alias: string | null): boolean {
+  return alias !== null && server.contract < 2 && aliasKind(alias) === "name";
 }
 
 export function setStopped(db: Db, serverId: string, stopped: Stopped | null): void {

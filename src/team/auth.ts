@@ -1,5 +1,5 @@
 // Who is calling: the device token, the member's state, the role, the contract.
-import { ACCEPTED_CONTRACTS, CONTRACT_HEADER } from "./contract.ts";
+import { CONTRACT_HEADER } from "./contract.ts";
 import type { Db } from "./db.ts";
 import { HttpError } from "./errors.ts";
 import { hashSecret, sameHash } from "./ids.ts";
@@ -39,12 +39,12 @@ export function requireAdmin(caller: Caller): void {
   if (caller.member.role !== "admin") throw new HttpError(403, { error: "admin only" });
 }
 
-/** `X-WCM-Contract` absent or one the server accepts; another is 409 with the list. */
-export function checkContract(request: Request): void {
+/** `X-WCM-Contract` absent or one of `accepted` (the server's seam, ADR 0028); another is 409 with the list. */
+export function checkContract(request: Request, accepted: readonly number[]): void {
   const header = request.headers.get(CONTRACT_HEADER);
   if (header === null) return;
   const contract = Number(header);
-  if (!ACCEPTED_CONTRACTS.includes(contract)) {
-    throw new HttpError(409, { error: "contract", accepted: [...ACCEPTED_CONTRACTS] });
+  if (!accepted.includes(contract)) {
+    throw new HttpError(409, { error: "contract", accepted: [...accepted] });
   }
 }

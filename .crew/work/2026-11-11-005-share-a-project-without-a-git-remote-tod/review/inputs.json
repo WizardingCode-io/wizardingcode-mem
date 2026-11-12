@@ -1,0 +1,445 @@
+{
+  "dependencies": [],
+  "phrases": [],
+  "fingerprint": "sha256:e057cb219b7b5350132ae1862f2c0adf57661e105bce155b4eef63a4469522f3",
+  "at": "2026-11-12T10:24:00.510Z",
+  "captures": [
+    {
+      "page": "projects",
+      "state": "created",
+      "file": "review/ui/projects-created@360-dark.png",
+      "files": [
+        "review/ui/projects-created@360-dark.png",
+        "review/ui/projects-created@768-dark.png",
+        "review/ui/projects-created@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-projects-created.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "projects",
+      "state": "creating",
+      "file": "review/ui/projects-creating@360-dark.png",
+      "files": [
+        "review/ui/projects-creating@360-dark.png",
+        "review/ui/projects-creating@768-dark.png",
+        "review/ui/projects-creating@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-projects-creating.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "projects",
+      "state": "exists",
+      "file": "review/ui/projects-exists@360-dark.png",
+      "files": [
+        "review/ui/projects-exists@360-dark.png",
+        "review/ui/projects-exists@768-dark.png",
+        "review/ui/projects-exists@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-projects-exists.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "projects",
+      "state": "held",
+      "file": "review/ui/projects-held@360-dark.png",
+      "files": [
+        "review/ui/projects-held@360-dark.png",
+        "review/ui/projects-held@768-dark.png",
+        "review/ui/projects-held@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-projects-held.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "projects",
+      "state": "joining",
+      "file": "review/ui/projects-joining@360-dark.png",
+      "files": [
+        "review/ui/projects-joining@360-dark.png",
+        "review/ui/projects-joining@768-dark.png",
+        "review/ui/projects-joining@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-projects-joining.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "projects",
+      "state": "joins",
+      "file": "review/ui/projects-joins@360-dark.png",
+      "files": [
+        "review/ui/projects-joins@360-dark.png",
+        "review/ui/projects-joins@768-dark.png",
+        "review/ui/projects-joins@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-projects-joins.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "projects",
+      "state": "missing",
+      "file": "review/ui/projects-missing@360-dark.png",
+      "files": [
+        "review/ui/projects-missing@360-dark.png",
+        "review/ui/projects-missing@768-dark.png",
+        "review/ui/projects-missing@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-projects-missing.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "projects",
+      "state": "named",
+      "file": "review/ui/projects-named@360-dark.png",
+      "files": [
+        "review/ui/projects-named@360-dark.png",
+        "review/ui/projects-named@768-dark.png",
+        "review/ui/projects-named@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-projects-named.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "projects",
+      "state": "new",
+      "file": "review/ui/projects-new@360-dark.png",
+      "files": [
+        "review/ui/projects-new@360-dark.png",
+        "review/ui/projects-new@768-dark.png",
+        "review/ui/projects-new@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-projects-new.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "projects",
+      "state": "purged",
+      "file": "review/ui/projects-purged@360-dark.png",
+      "files": [
+        "review/ui/projects-purged@360-dark.png",
+        "review/ui/projects-purged@768-dark.png",
+        "review/ui/projects-purged@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-projects-purged.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "projects",
+      "state": "recreated",
+      "file": "review/ui/projects-recreated@360-dark.png",
+      "files": [
+        "review/ui/projects-recreated@360-dark.png",
+        "review/ui/projects-recreated@768-dark.png",
+        "review/ui/projects-recreated@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-projects-recreated.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "projects",
+      "state": "refused",
+      "file": "review/ui/projects-refused@360-dark.png",
+      "files": [
+        "review/ui/projects-refused@360-dark.png",
+        "review/ui/projects-refused@768-dark.png",
+        "review/ui/projects-refused@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-projects-refused.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "projects",
+      "state": "removed",
+      "file": "review/ui/projects-removed@360-dark.png",
+      "files": [
+        "review/ui/projects-removed@360-dark.png",
+        "review/ui/projects-removed@768-dark.png",
+        "review/ui/projects-removed@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-projects-removed.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "projects",
+      "state": "taken",
+      "file": "review/ui/projects-taken@360-dark.png",
+      "files": [
+        "review/ui/projects-taken@360-dark.png",
+        "review/ui/projects-taken@768-dark.png",
+        "review/ui/projects-taken@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-projects-taken.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "projects",
+      "state": "unnamed",
+      "file": "review/ui/projects-unnamed@360-dark.png",
+      "files": [
+        "review/ui/projects-unnamed@360-dark.png",
+        "review/ui/projects-unnamed@768-dark.png",
+        "review/ui/projects-unnamed@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-projects-unnamed.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "projects-imported",
+      "state": "stay",
+      "file": "review/ui/projects-imported-stay@360-dark.png",
+      "files": [
+        "review/ui/projects-imported-stay@360-dark.png",
+        "review/ui/projects-imported-stay@768-dark.png",
+        "review/ui/projects-imported-stay@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-projects-imported-stay.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "projects-more",
+      "state": "names",
+      "file": "review/ui/projects-more-names@360-dark.png",
+      "files": [
+        "review/ui/projects-more-names@360-dark.png",
+        "review/ui/projects-more-names@768-dark.png",
+        "review/ui/projects-more-names@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-projects-more-names.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "projects-named",
+      "state": "nothing",
+      "file": "review/ui/projects-named-nothing@360-dark.png",
+      "files": [
+        "review/ui/projects-named-nothing@360-dark.png",
+        "review/ui/projects-named-nothing@768-dark.png",
+        "review/ui/projects-named-nothing@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-projects-named-nothing.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "projects-not",
+      "state": "changed",
+      "file": "review/ui/projects-not-changed@360-dark.png",
+      "files": [
+        "review/ui/projects-not-changed@360-dark.png",
+        "review/ui/projects-not-changed@768-dark.png",
+        "review/ui/projects-not-changed@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-projects-not-changed.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "projects-remote",
+      "state": "too",
+      "file": "review/ui/projects-remote-too@360-dark.png",
+      "files": [
+        "review/ui/projects-remote-too@360-dark.png",
+        "review/ui/projects-remote-too@768-dark.png",
+        "review/ui/projects-remote-too@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-projects-remote-too.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "settings",
+      "state": "flagged",
+      "file": "review/ui/settings-flagged@360-dark.png",
+      "files": [
+        "review/ui/settings-flagged@360-dark.png",
+        "review/ui/settings-flagged@768-dark.png",
+        "review/ui/settings-flagged@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-settings-flagged.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "settings",
+      "state": "held",
+      "file": "review/ui/settings-held@360-dark.png",
+      "files": [
+        "review/ui/settings-held@360-dark.png",
+        "review/ui/settings-held@768-dark.png",
+        "review/ui/settings-held@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-settings-held.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "settings",
+      "state": "names",
+      "file": "review/ui/settings-names@360-dark.png",
+      "files": [
+        "review/ui/settings-names@360-dark.png",
+        "review/ui/settings-names@768-dark.png",
+        "review/ui/settings-names@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-settings-names.json",
+      "meta": null,
+      "by": "session"
+    }
+  ]
+}

@@ -1,11 +1,9 @@
 // How a project's level reads, and the policy's epoch. A leaf over `types.ts`: the store
 // (which writes levels) and the loader (which reads them) both import it, and the store
 // never imports the loader, so the two apply one rule.
+import { isHostLedAlias, isSharedName, isTeamAlias } from "../core/identity.ts";
 import type { Db } from "../store/db.ts";
 import { isLevel, type Level, type Reason, type SharingPolicy, TEAM_DESTINATION } from "./types.ts";
-
-/** The prefix of an alias taken from a git remote. */
-const REMOTE_ALIAS = "remote:";
 
 /**
  * The destinations there are: the team's server, alone. The roots and the areas apply to
@@ -97,21 +95,27 @@ export function aliasBoundTo(db: Db, serverId: string, alias: string): boolean {
   return boundAliasesOf(db, serverId).includes(alias);
 }
 
-/** A host name of dotted labels (letters, digits, hyphens), with a port or without. */
-const HOST = /^[a-z0-9-]+(\.[a-z0-9-]+)+(:\d+)?$/i;
-
 /**
- * Whether an alias names a project for a team: a `remote:` alias whose normalized remote
- * begins with a host name, as `remote:github.com/acme/site` does. A remote that is a local
- * path or a `file://` origin (`normalizeRemote` leaves those as the path) names a folder on
- * this machine, never a project a team shares, so a level is never bound to it.
+ * The alias a level would be bound to on a project with no stored level (ADR 0028): the
+ * shared name the project carries, else the folder's host-led remote when it is the
+ * project's, else the project's first host-led remote by bytes; undefined with none. The
+ * order `setLevel` applies after the alias a stored level is bound to, for a preview of a
+ * level on a project with no row and for the dock's prefill.
  */
-export function isHostLedAlias(alias: string): boolean {
-  if (!alias.startsWith(REMOTE_ALIAS)) return false;
-  const remote = alias.slice(REMOTE_ALIAS.length);
-  const slash = remote.indexOf("/");
-  return HOST.test(slash === -1 ? remote : remote.slice(0, slash));
+export function defaultTeamAlias(
+  aliases: readonly string[],
+  remoteAlias: string | null | undefined,
+): string | undefined {
+  const name = aliases.find(isSharedName);
+  if (name !== undefined) return name;
+  const remotes = aliases.filter(isHostLedAlias).sort();
+  if (typeof remoteAlias === "string" && remotes.includes(remoteAlias)) return remoteAlias;
+  return remotes[0];
 }
+
+// The rule for "a name a team knows a project by" lives in the identity leaf (ADR 0028);
+// the host-led predicate is still read from here by part 4's readers.
+export { isHostLedAlias } from "../core/identity.ts";
 
 /**
  * The destination a project's level is read for (ADR 0027): the confirmed server its level
@@ -150,9 +154,9 @@ export function effectiveLevel(
   if (!project.known) return local("no-project");
   if (row === null || row.level === "local") return local("level-local");
   if (project.disabled) return local("disabled");
-  // A row bound to an alias the project lost, or to one that is not host-led (written before
-  // the rule), is a level with no name a team knows the project by.
-  if (!project.aliases.includes(row.boundAlias) || !isHostLedAlias(row.boundAlias)) {
+  // A row bound to an alias the project lost, or to one a team cannot know it by (neither a
+  // host-led remote nor a shared name; written before the rule), is a level with no name.
+  if (!project.aliases.includes(row.boundAlias) || !isTeamAlias(row.boundAlias)) {
     return local("unbound-alias");
   }
   // Bound to the server, sending nothing: for what leaves it reads as `local` (ADR 0027).

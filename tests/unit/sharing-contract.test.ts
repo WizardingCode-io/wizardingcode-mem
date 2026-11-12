@@ -226,6 +226,10 @@ describe("the reasons", () => {
     }
   });
 
+  test("a lost binding names both identities a level can be bound to (ADR 0028)", () => {
+    expect(REASON_TEXT["unbound-alias"]).toContain("git remote or shared name");
+  });
+
   test("names the receive level's reason (ADR 0027): bound to a server, sending nothing", () => {
     expect(REASONS).toContain("level-receive");
     expect(REASON_TEXT["level-receive"]).toBe(

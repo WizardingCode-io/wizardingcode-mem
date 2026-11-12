@@ -23,6 +23,8 @@ export interface Limits {
   heldPullsPerDevice: number;
   /** Aliases one pull may name. */
   aliasesPerPull: number;
+  /** Shared names one member may create per hour (ADR 0028). */
+  namesPerHour: number;
   minFreeBytes: number;
   minFreeBytesHealth: number;
 }
@@ -35,6 +37,8 @@ export interface Context {
   trustProxy: boolean;
   limits: Limits;
   buckets: Buckets;
+  /** The contract this server speaks and the ones it accepts: a seam, so a test server can be a 0.7.0 server. */
+  contract: { current: number; accepted: readonly number[] };
   signal: ChangeSignal;
   /** The pulls each device holds open now. */
   held: Map<string, number>;

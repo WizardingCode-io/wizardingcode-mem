@@ -1,3 +1,10 @@
+import {
+  aliasKind,
+  isHostLedAlias,
+  isSharedName,
+  NAME_PREFIX,
+  TEAM_ALIAS_SQL,
+} from "../core/identity.ts";
 import type { ProjectRef } from "../core/project.ts";
 import { redact } from "../core/redact.ts";
 import { MEMORY_KINDS, type MemoryKind } from "../core/types.ts";
@@ -11,14 +18,23 @@ import {
   boundServerOf,
   confirmedServerRefs,
   destinationOf,
-  isHostLedAlias,
+  levelKey,
   levelOf,
 } from "../sharing/levels.ts";
+import { nameOf, noNameMessage, sharedNameOf } from "../sharing/names.ts";
 import { knownAreas, loadPolicy } from "../sharing/policy.ts";
-import { type PolicyChange, type Report, withChange, wouldLeave } from "../sharing/report.ts";
+import {
+  importedStayCounts,
+  type PolicyChange,
+  type Report,
+  withChange,
+  wouldLeave,
+} from "../sharing/report.ts";
 import {
   type ChangeRow,
+  forgetName,
   lastChange,
+  projectState,
   type SetLevelRefusal,
   setLevel,
   setLevelMessage,
@@ -27,10 +43,12 @@ import {
   isLevel,
   isRoot,
   type Level,
+  type NameState,
   type Reason,
   type Root,
   SHARE_AREA,
   type SharingPolicy,
+  TEAM_DESTINATION,
 } from "../sharing/types.ts";
 import { hookLatency } from "../status/report.ts";
 import { type Db, withWrite } from "../store/db.ts";
@@ -45,6 +63,16 @@ import {
   visibleProjects,
 } from "../store/links.ts";
 import { getMeta, setMeta } from "../store/meta.ts";
+import {
+  type BindContext,
+  type BindReason,
+  type BindRefusal,
+  bindMessage,
+  commitBinding,
+  prepareBinding,
+} from "../sync/binding.ts";
+import type { SyncContext } from "../sync/context.ts";
+import { nameStateOf } from "../sync/report.ts";
 import { inProjects } from "../util/words.ts";
 
 // What the viewer reads and the little it may change, as plain functions over the
@@ -68,6 +96,14 @@ export interface ProjectSummary {
    * which a level is bound to. A remote that is a local path or a `file://` origin is none.
    */
   remote: boolean;
+  /** The slug of its shared name (`name:<slug>`, ADR 0028), the other name a team can match it by; null without one. */
+  sharedName: string | null;
+  /** What the level in force is bound by: the git remote or the shared name; null at Nothing. */
+  boundTo: "remote" | "name" | null;
+  /** Its active imported memories, which stay whatever the level (the claude-mem imports, never a teammate's copy). */
+  imported: number;
+  /** The bound shared name's state: `ok`, or the one flag it carries (`nameStateOf`); null when not bound by a name. */
+  nameState: "ok" | NameState | null;
   /** Memory is off for it. */
   disabled: boolean;
   /** The confirmed server its level binds it to (ADR 0027); null when none. */
@@ -80,19 +116,35 @@ export interface ProjectSummary {
  * (memory off, the remote gone) shows as Nothing, with the reason.
  */
 export function listProjects(db: Db, policy: SharingPolicy): ProjectSummary[] {
-  type Counted = Omit<ProjectSummary, "sharing" | "sharingReason" | "remote" | "disabled"> & {
+  type Counted = Omit<
+    ProjectSummary,
+    | "sharing"
+    | "sharingReason"
+    | "remote"
+    | "sharedName"
+    | "boundTo"
+    | "imported"
+    | "nameState"
+    | "disabled"
+  > & {
     disabled: number;
   };
-  // The one rule for "a name a team knows the project by" is isHostLedAlias (ADR 0025), so
-  // the remote aliases are read and judged in code, never by a pattern in SQL.
+  // The rule for "a name a team knows the project by" is the identity leaf's (ADR 0028): the
+  // SQL only narrows to its two prefixes, and each alias is judged in code.
   const named = new Set<number>();
+  const sharedNames = new Map<number, string>();
   const serverNames = new Map(confirmedServerRefs(db).map((row) => [row.serverId, row.name]));
+  const imported = importedStayCounts(db);
   for (const { projectId, alias } of db
     .query<{ projectId: number; alias: string }, []>(
-      "SELECT project_id AS projectId, alias FROM project_aliases WHERE alias LIKE 'remote:%'",
+      `SELECT project_id AS projectId, alias FROM project_aliases
+        WHERE ${TEAM_ALIAS_SQL} ORDER BY alias`,
     )
     .all()) {
     if (isHostLedAlias(alias)) named.add(projectId);
+    else if (isSharedName(alias) && !sharedNames.has(projectId)) {
+      sharedNames.set(projectId, alias.slice(NAME_PREFIX.length));
+    }
   }
   return db
     .query<Counted, []>(
@@ -108,9 +160,18 @@ export function listProjects(db: Db, policy: SharingPolicy): ProjectSummary[] {
     )
     .all()
     .map((row) => {
-      const { level, reason } = levelOf(policy, row.id, destinationOf(db, policy, row.id));
+      const destination = destinationOf(db, policy, row.id);
+      const { level, reason } = levelOf(policy, row.id, destination);
       const bound = boundServerOf(db, row.id);
       const serverName = bound === null ? undefined : serverNames.get(bound);
+      // What the level in force is bound by, judged by the identity leaf from the policy's
+      // row (never SQL over the levels here); nothing at Nothing (ADR 0028).
+      const inForce = reason === "allowed" || reason === "level-receive";
+      const boundAlias = inForce
+        ? (policy.levels.get(levelKey(row.id, destination))?.boundAlias ?? null)
+        : null;
+      const kind = boundAlias === null ? null : aliasKind(boundAlias);
+      const boundTo = kind === "remote" || kind === "name" ? kind : null;
       return {
         ...row,
         // Receive only sends nothing, so the policy reads it as Nothing for what leaves; the
@@ -118,6 +179,13 @@ export function listProjects(db: Db, policy: SharingPolicy): ProjectSummary[] {
         sharing: reason === "level-receive" ? "receive" : level,
         sharingReason: reason,
         remote: named.has(row.id),
+        sharedName: sharedNames.get(row.id) ?? null,
+        boundTo,
+        imported: imported.get(row.id) ?? 0,
+        nameState:
+          boundTo === "name" && boundAlias !== null
+            ? (nameStateOf(db, destination, boundAlias) ?? "ok")
+            : null,
         disabled: row.disabled === 1,
         server: bound !== null && serverName !== undefined ? { id: bound, name: serverName } : null,
       };
@@ -916,9 +984,18 @@ export interface SharingView {
 /** An answer the server turns into a response: the status, and the JSON body. */
 type Answer<Status extends number> = { status: Status; body: unknown };
 
-const refused = <Status extends number>(status: Status, error: string): Answer<Status> => ({
+/**
+ * A refusal of a sharing route, in one shape (ADR 0028): the sentence a person reads, the
+ * code the dock switches on, and what the code needs (`other`, `name`, `named`).
+ */
+const refused = <Status extends number>(
+  status: Status,
+  error: string,
+  reason: string,
+  extra: Record<string, unknown> = {},
+): Answer<Status> => ({
   status,
-  body: { error },
+  body: { error, reason, ...extra },
 });
 
 /**
@@ -974,33 +1051,37 @@ export function sharingPreview(
   body: unknown,
 ): Answer<200 | 400 | 404> {
   if (body === null || typeof body !== "object" || Array.isArray(body)) {
-    return refused(400, "body must be an object");
+    return refused(400, "body must be an object", "body");
   }
   const { level, roots, areas } = body as Record<string, unknown>;
   const policy = loadPolicy(db, dataDir, env);
   const change: PolicyChange = {};
   if (level !== undefined) {
     if (level === null || typeof level !== "object") {
-      return refused(400, "level must name a project and a level");
+      return refused(400, "level must name a project and a level", "body");
     }
     const asked = level as { projectId?: unknown; level?: unknown; server?: unknown };
     if (typeof asked.projectId !== "number" || !policy.projects.has(asked.projectId)) {
-      return refused(400, NO_PROJECT);
+      return refused(400, NO_PROJECT, "no-project");
     }
-    if (!isLevel(asked.level)) return refused(400, setLevelMessage("invalid"));
+    if (!isLevel(asked.level)) return refused(400, setLevelMessage("invalid"), "invalid");
     const destination = destinationFor(db, policy, asked.projectId, asked.server);
     if (typeof destination !== "string") return destination;
     change.level = { projectId: asked.projectId, level: asked.level, destination };
   }
   if (roots !== undefined) {
     if (!isStrings(roots) || !roots.every(isRoot)) {
-      return refused(400, "roots must be a list of workspace and shared");
+      return refused(400, "roots must be a list of workspace and shared", "roots");
     }
     change.roots = roots;
   }
   if (areas !== undefined) {
     if (!isStrings(areas) || !areas.every((id) => SHARE_AREA.test(id))) {
-      return refused(400, "areas must be a list of root-qualified ids such as workspace:sales");
+      return refused(
+        400,
+        "areas must be a list of root-qualified ids such as workspace:sales",
+        "areas",
+      );
     }
     change.areas = areas;
   }
@@ -1013,10 +1094,24 @@ export function sharingPreview(
 const REFUSAL_STATUS: Record<SetLevelRefusal, 400 | 404 | 409> = {
   invalid: 400,
   "needs-confirm": 400,
+  "no-name": 400,
   "no-project": 404,
-  "no-remote": 409,
   disabled: 409,
+  "has-remote": 409,
+  renamed: 409,
+  "name-taken": 409,
+  "name-bound": 409,
   "one-server": 409,
+};
+
+/** The status of each refusal the bind under a shared name adds to `setLevel`'s (ADR 0028). */
+const BIND_STATUS: Record<Exclude<BindReason, SetLevelRefusal>, 404 | 409 | 502> = {
+  contract: 409,
+  exists: 409,
+  purged: 409,
+  "unknown-name": 404,
+  unreachable: 502,
+  server: 502,
 };
 
 /**
@@ -1024,7 +1119,7 @@ const REFUSAL_STATUS: Record<SetLevelRefusal, 400 | 404 | 409> = {
  * confirmed), else the sharing module's one rule, `destinationOf` (the server the project is
  * bound to, else the policy's server, else the team's default while no server is confirmed;
  * ADR 0027). With several servers confirmed and the project bound to none, the request must
- * name one: `400 { error: "server" }`.
+ * name one: `400 { error, reason: "server" }`.
  */
 function destinationFor(
   db: Db,
@@ -1035,52 +1130,214 @@ function destinationFor(
   if (typeof server === "string") {
     return confirmedServerRefs(db).some((row) => row.serverId === server)
       ? server
-      : refused(404, "no such server");
+      : refused(404, "no such server", "server");
   }
-  if (server !== undefined) return refused(400, "server");
+  if (server !== undefined) return refused(400, "server must name a listed server", "server");
   if (boundServerOf(db, projectId) === null && confirmedServerRefs(db).length > 1)
-    return refused(400, "server");
+    return refused(400, "several servers are listed; name the one the level is set for", "server");
   return destinationOf(db, policy, projectId);
 }
 
+/** The slug of a shared name alias; null for a remote or for nothing. */
+const slugOf = (alias: string): string | null =>
+  isSharedName(alias) ? alias.slice(NAME_PREFIX.length) : null;
+
+/** The alias a request's `as` makes (`sharedNameOf`): null when absent, `no-name` when the text makes none. */
+function aliasFrom(as: unknown): { ok: true; alias: string | null } | { ok: false; answer: Answer<400> } {
+  if (as === undefined || as === null || as === "") return { ok: true, alias: null };
+  if (typeof as !== "string") {
+    return { ok: false, answer: refused(400, "as must be a text", "no-name") };
+  }
+  const named = sharedNameOf(as);
+  if (!named.ok) return { ok: false, answer: refused(400, noNameMessage(as, named), "no-name") };
+  return { ok: true, alias: named.alias };
+}
+
+/** What a bind refusal's sentence names, for one project and the server its level goes to. */
+function contextOf(
+  db: Db,
+  projectId: number,
+  alias: string | null,
+  destination: string,
+): BindContext {
+  const server =
+    confirmedServerRefs(db).find((row) => row.serverId === destination)?.name ??
+    (destination === TEAM_DESTINATION ? "the team" : destination);
+  const current = nameOf(projectState(db, projectId).aliases);
+  return {
+    slug: alias === null ? null : slugOf(alias),
+    server,
+    current: current === null ? null : slugOf(current),
+  };
+}
+
+const DEFAULT_CONTEXT: BindContext = { slug: null, server: "the server", current: null };
+
 /**
- * Sets what a project shares, from its dock. Refused in this order: a project the store
- * does not know (404), a level that is not one (400), then what `setLevel` refuses, in its
- * own order: memory off and no git remote (409) before a widening nobody confirmed (400),
- * so nobody is asked to confirm what would then be refused. `confirm` is the request's own,
- * passed on as it came: the widening is judged by `setLevel` under its write lock, against
- * what the store holds by then. Answers the level, the one that was in force, and the
- * remote alias the level is bound to, empty for Nothing.
+ * A refusal to set a level, as the route answers it: its status, the sentence, the code and
+ * what the code needs. `server` is the routes' code for "name the server", so a server fault
+ * of the bind is answered as `unreachable`, with its own sentence. A refusal after a create
+ * keeps `named`, so the dock can say the name is on the server.
  */
-export function setProjectSharing(
+export function statusOf(
+  refusal: BindRefusal,
+  context: BindContext = DEFAULT_CONTEXT,
+): Answer<400 | 404 | 409 | 502> {
+  const { reason } = refusal;
+  const status =
+    reason in REFUSAL_STATUS
+      ? REFUSAL_STATUS[reason as SetLevelRefusal]
+      : BIND_STATUS[reason as Exclude<BindReason, SetLevelRefusal>];
+  const sentence = bindMessage(refusal, context);
+  // After a create whose write refused, the one created-name sentence follows the refusal's.
+  const error =
+    reason === "no-project"
+      ? NO_PROJECT
+      : refusal.named === true && refusal.message !== undefined
+        ? `${sentence}; ${refusal.message}`
+        : sentence;
+  return refused(status, error, reason === "server" ? "unreachable" : reason, {
+    ...(refusal.other === undefined ? {} : { other: refusal.other }),
+    ...(refusal.server === undefined ? {} : { server: refusal.server }),
+    ...(refusal.name === undefined ? {} : { name: refusal.name }),
+    ...(refusal.named === true ? { named: true } : {}),
+  });
+}
+
+/**
+ * What every project route checks first, in this order: a policy that could not be loaded
+ * (409), a project the store does not know (404), a level that is not one (400), then the
+ * destination (`destinationFor`).
+ */
+function projectRoute(
   db: Db,
   dataDir: string,
   env: Env,
   projectId: number,
   level: unknown,
-  confirm: boolean,
-  now: number,
-  server?: unknown,
-): Answer<200 | 400 | 404 | 409> {
+  server: unknown,
+): { destination: string; level: Level } | Answer<400 | 404 | 409> {
   const policy = loadPolicy(db, dataDir, env);
   const closed = sharingRefusal(policy);
-  if (closed !== null) return refused(409, closed);
-  if (!policy.projects.has(projectId)) return refused(404, NO_PROJECT);
-  if (!isLevel(level)) return refused(400, setLevelMessage("invalid"));
+  if (closed !== null) return refused(409, closed, "closed");
+  if (!policy.projects.has(projectId)) return refused(404, NO_PROJECT, "no-project");
+  if (!isLevel(level)) return refused(400, setLevelMessage("invalid"), "invalid");
   const destination = destinationFor(db, policy, projectId, server);
   if (typeof destination !== "string") return destination;
+  return { destination, level };
+}
+
+/**
+ * `POST /api/projects/<id>/sharing/preview`: what setting the level under the name would do,
+ * from `setLevel`'s dry run (no write, no request): `ok` with the alias the level would bind
+ * to and whether the name would be the project's new one, or the refusal with its status.
+ * The sentence under the dock's field reads it.
+ */
+export function previewProjectSharing(
+  db: Db,
+  dataDir: string,
+  env: Env,
+  projectId: number,
+  level: unknown,
+  as: unknown,
+  server: unknown,
+  now: number,
+): Answer<200 | 400 | 404 | 409 | 502> {
+  const checked = projectRoute(db, dataDir, env, projectId, level, server);
+  if ("status" in checked) return checked;
+  const named = aliasFrom(as);
+  if (!named.ok) return named.answer;
+  const { destination } = checked;
+  // A re-created name is joined again on purpose: the dry run reads it as a confirmed re-binding.
+  const recreated =
+    named.alias !== null && nameStateOf(db, destination, named.alias) === "recreated";
   const outcome = setLevel(db, {
     projectId,
     destination,
-    level,
+    level: checked.level,
     source: "viewer",
     now,
-    confirm,
+    confirm: true,
+    dryRun: true,
+    as: named.alias,
+    recreated,
   });
-  if (!outcome.ok) {
-    const { reason } = outcome;
-    const why = reason === "no-project" ? NO_PROJECT : setLevelMessage(reason);
-    return refused(REFUSAL_STATUS[reason], why);
+  if (!outcome.ok) return statusOf(outcome, contextOf(db, projectId, named.alias, destination));
+  return {
+    status: 200,
+    body: { ok: true, boundAlias: outcome.boundAlias, named: outcome.named },
+  };
+}
+
+/**
+ * `PUT /api/projects/<id>/sharing`: sets what a project shares, from its dock. The checks of
+ * `projectRoute` first, then `no-name` when `as` leaves no shared slug. Then the two-phase
+ * bind (ADR 0028), with `as` or without, as the CLI's: the dry run and every local refusal
+ * before any request; the server only when the level binds a shared name the project is not
+ * bound by yet (the name it carries at Nothing included: a create with `create: true`, else
+ * the join of the name the server holds); a remote, Nothing, or a level change on a name
+ * already bound need no server step; then the write with the name's id, the request's own
+ * `confirm` judged under the write lock. The answer carries the level, the one that was in
+ * force, the alias bound and the shared name's slug.
+ */
+export async function setProjectSharing(
+  ctx: SyncContext,
+  projectId: number,
+  body: Record<string, unknown>,
+  now: number,
+): Promise<Answer<200 | 400 | 404 | 409 | 502>> {
+  const { db, dataDir, env } = ctx;
+  const checked = projectRoute(db, dataDir, env, projectId, body.level, body.server);
+  if ("status" in checked) return checked;
+  const { destination, level } = checked;
+  const confirm = body.confirm === true;
+  const named = aliasFrom(body.as);
+  if (!named.ok) return named.answer;
+  const context = contextOf(db, projectId, named.alias, destination);
+  // The write is timed by the route's clock, as every change the viewer logs.
+  const at: SyncContext = { ...ctx, clock: { ...ctx.clock, now } };
+  const prepared = await prepareBinding(at, {
+    projectId,
+    destination,
+    level,
+    as: named.alias,
+    source: "viewer",
+  });
+  if (!prepared.ok) return statusOf(prepared, context);
+  const outcome = await commitBinding(at, prepared, { confirm, create: body.create === true });
+  if (!outcome.ok) return statusOf(outcome, context);
+  const answered = {
+    level,
+    old: outcome.old,
+    boundAlias: outcome.boundAlias,
+    sharedName: slugOf(outcome.boundAlias),
+  };
+  // A bind that asked the server adds what it did (named, created, joined) to the four every
+  // answer carries: the level, the one that was in force, the alias bound and the shared name's slug.
+  return {
+    status: 200,
+    body:
+      prepared.action === "none"
+        ? answered
+        : { ...answered, named: outcome.named, created: outcome.created, joined: outcome.joined },
+  };
+}
+
+/** `DELETE /api/projects/<id>/name`: the project leaves its shared name, at Nothing (`forgetName`). */
+export function forgetProjectName(db: Db, projectId: number, now: number): Answer<200 | 404 | 409> {
+  const outcome = forgetName(db, projectId, now, "viewer");
+  if (outcome.ok) {
+    return {
+      status: 200,
+      body: { forgotten: true, sharedName: outcome.alias.slice(NAME_PREFIX.length) },
+    };
   }
-  return { status: 200, body: { level, old: outcome.old, boundAlias: outcome.boundAlias } };
+  switch (outcome.reason) {
+    case "no-project":
+      return refused(404, NO_PROJECT, "no-project");
+    case "no-name":
+      return refused(404, "this project has no shared name", "no-name");
+    case "name-bound":
+      return refused(409, setLevelMessage("name-bound"), "name-bound");
+  }
 }

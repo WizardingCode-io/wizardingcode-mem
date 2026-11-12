@@ -8,10 +8,21 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveProject } from "../../src/core/project.ts";
-import { serverLists } from "../../src/sharing/store.ts";
+import { serverLists, setLevel } from "../../src/sharing/store.ts";
 import { getMeta, restoreHoldKey, SYNC_LEASE, setMeta } from "../../src/store/meta.ts";
 import { writeConflict, writeSent } from "../../src/sync/ledger.ts";
-import { insertPending, readTokens, serverById, writeToken } from "../../src/sync/servers.ts";
+import {
+  insertPending,
+  readTokens,
+  type ServerRow,
+  serverById,
+  setContract,
+  writeToken,
+} from "../../src/sync/servers.ts";
+import { flagName } from "../../src/sync/state.ts";
+import { newHexId } from "../../src/team/ids.ts";
+import type { ServerOptions } from "../../src/team/server.ts";
+import { insertName } from "../../src/team/store.ts";
 import { startUi, type UiServer } from "../../src/ui/server.ts";
 import { realGit } from "../helpers/stub-git.ts";
 import {
@@ -21,7 +32,13 @@ import {
   serverFixture,
   settle,
 } from "../helpers/sync.ts";
-import { cleanTestDirs, invite, startTestServer, type TestServer } from "../helpers/team.ts";
+import {
+  cleanTestDirs,
+  eventsOf,
+  invite,
+  startTestServer,
+  type TestServer,
+} from "../helpers/team.ts";
 
 const MINUTE = 60_000;
 const TOKEN = `wcm1_${"t".repeat(43)}`;
@@ -48,9 +65,11 @@ afterEach(async () => {
 });
 
 /** A store with a fake clock, the team server on the same clock, and the viewer over the store. */
-async function world(): Promise<{ store: SyncTestStore; t: TestServer; ui: UiServer }> {
+async function world(
+  overrides: Partial<ServerOptions> = {},
+): Promise<{ store: SyncTestStore; t: TestServer; ui: UiServer }> {
   store = openSyncStore({ fetch: (input, init) => fetch(input, init) });
-  t = await startTestServer({}, { clock: store.clock, timers: store.timers });
+  t = await startTestServer(overrides, { clock: store.clock, timers: store.timers });
   ui = await startUi({
     dataDir: store.dataDir,
     homeDir: join(store.dataDir, "brand"),
@@ -412,7 +431,7 @@ describe("the server a level or a list is set for", () => {
           confirm: true,
         }),
       ),
-    ).toMatchObject({ status: 400, body: { error: "server" } });
+    ).toMatchObject({ status: 400, body: { error: expect.any(String), reason: "server" } });
     expect(
       await bodyOf(
         await send(viewer, "PUT", `/api/projects/${projectId}/sharing`, {
@@ -488,5 +507,167 @@ describe("the level the dock shows", () => {
       ),
     ).toMatchObject({ status: 200, body: { level: "local" } });
     expect(await listed()).toMatchObject({ sharing: "local", server: null });
+  }, 60_000);
+});
+
+describe("GET /api/servers/<id>/names", () => {
+  test("reassembles the server's names from its pages; the entries of GET /api/servers carry the contract, the held flag and each bound name's state", async () => {
+    const { t: team, ui: viewer, store: own } = await world();
+    const { id } = await joined();
+    const row = serverById(own.db, id) as ServerRow;
+    const seed = (from: number, to: number) => {
+      for (let i = from; i < to; i++) {
+        insertName(team.server.db, {
+          alias: `name:n-${String(i).padStart(4, "0")}`,
+          id: newHexId(),
+          memberId: row.memberId,
+          deviceId: row.deviceId,
+          at: own.clock.now,
+        });
+      }
+    };
+    expect(await bodyOf(await api(viewer, `/api/servers/${id}/names`))).toEqual({
+      status: 200,
+      body: { names: [], truncated: false },
+    });
+    seed(0, 120);
+    const listed = await bodyOf(await api(viewer, `/api/servers/${id}/names`));
+    expect(listed.status).toBe(200);
+    const names = listed.body.names as {
+      alias: string;
+      id: string;
+      createdBy: { name: string };
+      entries: number;
+      memories: number;
+      lastChangeAt: number | null;
+    }[];
+    expect(names).toHaveLength(120);
+    expect(listed.body.truncated).toBe(false);
+    expect(names[0]).toMatchObject({
+      alias: "name:n-0000",
+      createdBy: { name: "Ana" },
+      entries: 0,
+      memories: 0,
+      lastChangeAt: null,
+    });
+    expect(names.map((n) => n.alias)).toEqual([...names.map((n) => n.alias)].sort());
+    seed(120, 1050);
+    const capped = await bodyOf(await api(viewer, `/api/servers/${id}/names`));
+    expect((capped.body.names as unknown[]).length).toBe(1000);
+    expect(capped.body.truncated).toBe(true);
+    // The refusals, in the servers routes' shape.
+    expect(await bodyOf(await api(viewer, "/api/servers/nope/names"))).toEqual({
+      status: 404,
+      body: { error: "unknown-server" },
+    });
+    insertPending(
+      own.db,
+      serverFixture("22222222aaaaaaaa", { url: "https://two.acme.test", name: "Two" }),
+    );
+    expect(await bodyOf(await api(viewer, "/api/servers/22222222aaaaaaaa/names"))).toEqual({
+      status: 409,
+      body: { error: "pending" },
+    });
+    // The entries: the contract, nothing held, then a bound name with its state.
+    const entries = async () =>
+      (await bodyOf(await api(viewer, "/api/servers"))).body.servers as Record<string, unknown>[];
+    expect((await entries()).find((s) => s.id === id)).toMatchObject({
+      contract: 2,
+      namesHeld: false,
+      names: [],
+    });
+    own.db.run(
+      "INSERT INTO projects (id, key, name, created_at) VALUES (7, 'path:/w/brand', 'brand', 1)",
+    );
+    own.db.run("INSERT INTO project_aliases (alias, project_id) VALUES ('path:/w/brand', 7)");
+    expect(
+      setLevel(own.db, {
+        projectId: 7,
+        destination: id,
+        level: "receive",
+        source: "cli",
+        now: own.clock.now,
+        confirm: true,
+        as: "name:n-0001",
+        nameId: names[1]?.id ?? null,
+      }),
+    ).toMatchObject({ ok: true });
+    expect((await entries()).find((s) => s.id === id)).toMatchObject({
+      names: [
+        { alias: "name:n-0001", slug: "n-0001", state: "ok", entries: 0, memories: 0, members: 0 },
+      ],
+    });
+    flagName(own.ctx, id, "name:n-0001", "purged");
+    expect(
+      ((await entries()).find((s) => s.id === id)?.names as { state: string }[] | undefined)?.[0]
+        ?.state,
+    ).toBe("purged");
+  }, 60_000);
+
+  test("a row at 1 reads /v1/me once and is 409 contract; a bare 404 is 409 contract and sets the row to 1; a server that cannot be reached is 502 unreachable", async () => {
+    const {
+      t: team,
+      ui: viewer,
+      store: own,
+    } = await world({
+      contract: { current: 1, accepted: [1] },
+    });
+    const { id } = await joined();
+    expect(serverById(own.db, id)?.contract).toBe(1);
+    const mes = () =>
+      eventsOf(team, "request").filter((e) => String(e.route).includes("/v1/me")).length;
+    const before = mes();
+    expect(await bodyOf(await api(viewer, `/api/servers/${id}/names`))).toEqual({
+      status: 409,
+      body: { error: "contract" },
+    });
+    expect(mes()).toBe(before + 1);
+    setContract(own.db, id, 2);
+    expect(await bodyOf(await api(viewer, `/api/servers/${id}/names`))).toEqual({
+      status: 409,
+      body: { error: "contract" },
+    });
+    expect(serverById(own.db, id)?.contract).toBe(1);
+    expect(mes()).toBe(before + 1);
+    // With a name bound to the row at 1, the entry says the names are held.
+    own.db.run(
+      "INSERT INTO projects (id, key, name, created_at) VALUES (7, 'path:/w/brand', 'brand', 1)",
+    );
+    own.db.run("INSERT INTO project_aliases (alias, project_id) VALUES ('path:/w/brand', 7)");
+    expect(
+      setLevel(own.db, {
+        projectId: 7,
+        destination: id,
+        level: "receive",
+        source: "cli",
+        now: own.clock.now,
+        confirm: true,
+        as: "name:brand",
+        nameId: newHexId(),
+      }),
+    ).toMatchObject({ ok: true });
+    expect(
+      (
+        (await bodyOf(await api(viewer, "/api/servers"))).body.servers as Record<string, unknown>[]
+      ).find((s) => s.id === id),
+    ).toMatchObject({
+      contract: 1,
+      namesHeld: true,
+      names: [{ alias: "name:brand", state: "ok" }],
+    });
+    // A server that cannot be reached.
+    insertPending(
+      own.db,
+      serverFixture("33333333aaaaaaaa", { url: "http://127.0.0.1:1", name: "Three", contract: 2 }),
+    );
+    own.db.run("UPDATE sharing_servers SET confirmed_at = ? WHERE server_id = ?", [
+      own.clock.now,
+      "33333333aaaaaaaa",
+    ]);
+    writeToken(own.ctx, "33333333aaaaaaaa", TOKEN);
+    expect(await bodyOf(await api(viewer, "/api/servers/33333333aaaaaaaa/names"))).toMatchObject({
+      status: 502,
+      body: { error: "unreachable" },
+    });
   }, 60_000);
 });

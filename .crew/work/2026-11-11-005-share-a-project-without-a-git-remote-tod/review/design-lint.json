@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-12T10:20:21.856Z",
+  "files": [
+    "ui/src/components/ProjectsView.vue",
+    "ui/src/components/settings/Servers.vue",
+    "ui/src/components/settings/Sharing.vue"
+  ],
+  "skipped": [],
+  "hits": [],
+  "unresolved": [],
+  "inventory": [],
+  "disabled": []
+}

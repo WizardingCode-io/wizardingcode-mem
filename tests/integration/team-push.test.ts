@@ -63,7 +63,7 @@ interface ChangeRow {
   key: string;
   op: string;
   scope: string;
-  remote_alias: string | null;
+  project_alias: string | null;
   revision: number;
   hash: string;
   moved_to: string | null;
@@ -85,7 +85,7 @@ const entryRow = (t: TestServer, uuid: string) =>
     .query<
       {
         scope: string;
-        remote_alias: string | null;
+        project_alias: string | null;
         slug: string;
         revision: number;
         hash: string;
@@ -95,7 +95,7 @@ const entryRow = (t: TestServer, uuid: string) =>
       },
       [string]
     >(
-      "SELECT scope, remote_alias, slug, revision, hash, withdrawn_at, locked_by_admin, created_by_member FROM entries WHERE uuid = ?",
+      "SELECT scope, project_alias, slug, revision, hash, withdrawn_at, locked_by_admin, created_by_member FROM entries WHERE uuid = ?",
     )
     .get(uuid);
 
@@ -113,7 +113,7 @@ const memoryRow = (t: TestServer, deviceId: string, uid: string) =>
   t.server.db
     .query<
       {
-        remote_alias: string;
+        project_alias: string;
         revision: number;
         hash: string;
         updated_at: number;
@@ -122,7 +122,7 @@ const memoryRow = (t: TestServer, deviceId: string, uid: string) =>
       },
       [string, string]
     >(
-      "SELECT remote_alias, revision, hash, updated_at, withdrawn_at, locked_by_admin FROM memories WHERE device_id = ? AND uid = ?",
+      "SELECT project_alias, revision, hash, updated_at, withdrawn_at, locked_by_admin FROM memories WHERE device_id = ? AND uid = ?",
     )
     .get(deviceId, uid);
 
@@ -348,7 +348,7 @@ describe("entry sends: revisions, idempotency, stale, appliedAs", () => {
       op: "upsert",
       uid: inB.uid,
       scope: "project",
-      remote_alias: ALIAS_B,
+      project_alias: ALIAS_B,
       revision: 2,
       current: 1,
     });
@@ -357,7 +357,7 @@ describe("entry sends: revisions, idempotency, stale, appliedAs", () => {
       op: "tombstone",
       uid: inA.uid,
       scope: "project",
-      remote_alias: ALIAS_A,
+      project_alias: ALIAS_A,
       revision: 2,
       moved_to: inB.uid,
       current: 1,
@@ -365,7 +365,7 @@ describe("entry sends: revisions, idempotency, stale, appliedAs", () => {
     expect(rows[0]).toMatchObject({ key: uuid, current: 0 });
     expect(entryRow(t, uuid)).toMatchObject({
       scope: "project",
-      remote_alias: ALIAS_B,
+      project_alias: ALIAS_B,
       revision: 2,
     });
     const renamed = { ...inB, slug: "renamed" };
@@ -465,7 +465,7 @@ describe("entry sends: refusals", () => {
     });
     expect(feedOf(t)[0]).toMatchObject({
       scope: "project",
-      remote_alias: ALIAS_A,
+      project_alias: ALIAS_A,
       uid: payload.uid,
     });
   });
@@ -795,7 +795,7 @@ describe("memories", () => {
       uid: feedUid,
       op: "upsert",
       scope: "project",
-      remote_alias: ALIAS_A,
+      project_alias: ALIAS_A,
       revision: 1,
       hash: m.hash,
       member_id: ana.memberId,
@@ -826,17 +826,20 @@ describe("memories", () => {
     expect(feedOf(t, `${key}@3`)[0]).toMatchObject({
       op: "tombstone",
       scope: "project",
-      remote_alias: ALIAS_A,
+      project_alias: ALIAS_A,
       moved_to: feedUid,
       revision: 3,
     });
     expect(feedOf(t, key).at(-1)).toMatchObject({
       op: "upsert",
-      remote_alias: ALIAS_B,
+      project_alias: ALIAS_B,
       revision: 3,
       current: 1,
     });
-    expect(memoryRow(t, ana.deviceId, m.uid)).toMatchObject({ remote_alias: ALIAS_B, revision: 3 });
+    expect(memoryRow(t, ana.deviceId, m.uid)).toMatchObject({
+      project_alias: ALIAS_B,
+      revision: 3,
+    });
     // The admin locks it through the feed form; a send is refused until reinstated.
     const lock = await api(
       t.server,

@@ -1,6 +1,6 @@
 // The pull: the feed's current rows after a cursor, in the scopes and aliases a device names,
 // paged by count and by bytes, with the wait that makes the sync near-live (D-11, D-13, D-22).
-import { isHostLedAlias } from "../sharing/levels.ts";
+import { aliasKind, isTeamAlias } from "../core/identity.ts";
 import type { OutgoingMemory } from "../sharing/types.ts";
 import type { FeedItemShape, PullPageShape } from "./contract.ts";
 import type { Db } from "./db.ts";
@@ -13,6 +13,7 @@ import {
   hasChanges,
   memberById,
   memoryByKey,
+  nameIdsOf,
   readTransaction,
   revisionAt,
   sequenceHighWater,
@@ -54,7 +55,7 @@ export function parsePullQuery(url: URL, limits: Limits): PullQuery {
   const projects = rawProjects === "" ? [] : [...new Set(rawProjects.split(","))];
   if (projects.length > limits.aliasesPerPull) throw new HttpError(400, { error: "projects" });
   for (const alias of projects) {
-    if (!isHostLedAlias(alias)) throw new HttpError(400, { error: "projects" });
+    if (!isTeamAlias(alias)) throw new HttpError(400, { error: "projects" });
   }
   const rawScope = params.get("scope") ?? "all";
   if (rawScope !== "all" && rawScope !== "project") throw new HttpError(400, { error: "scope" });
@@ -68,6 +69,7 @@ function toItem(
   row: ChangeRow,
   admin: boolean,
   names: Map<string, string>,
+  nameIds: Map<string, string>,
 ): { item: FeedItem; bytes: number } {
   let member = OPERATOR_MEMBER;
   if (row.member_id !== OPERATOR_ID) {
@@ -84,9 +86,15 @@ function toItem(
     uid: row.uid,
     op: row.op,
     scope: row.scope,
-    remoteAlias: row.remote_alias,
+    remoteAlias: row.project_alias,
     revision: row.revision,
     hash: row.hash,
+    // The registry's id of a shared name on an upsert under it; null for a remote, a tombstone,
+    // a purge, and a name the registry holds no live row for (ADR 0028).
+    nameId:
+      row.op === "upsert" && row.project_alias !== null
+        ? (nameIds.get(row.project_alias) ?? null)
+        : null,
     member,
     at: row.at,
   };
@@ -132,9 +140,17 @@ export function pull(
     let more = rows.length > query.limit;
     const items: FeedItem[] = [];
     const names = new Map<string, string>();
+    const page = rows.slice(0, query.limit);
+    // One read per page for the ids of the shared names its upserts are under.
+    const nameIds = nameIdsOf(
+      db,
+      page
+        .filter((row) => row.op === "upsert" && aliasKind(row.project_alias ?? "") === "name")
+        .map((row) => row.project_alias as string),
+    );
     let bytes = 0;
-    for (const row of rows.slice(0, query.limit)) {
-      const next = toItem(db, row, viewer.admin, names);
+    for (const row of page) {
+      const next = toItem(db, row, viewer.admin, names, nameIds);
       if (items.length > 0 && bytes + next.bytes > limits.pullBytes) {
         more = true;
         break;

@@ -113,7 +113,7 @@ const LEVEL_PROBLEMS: Partial<Record<Reason, (project: string) => string>> = {
   disabled: (project) =>
     `memory is off for ${project}; its level is ${LEVEL_LABELS.local} until you turn memory on and set it again`,
   "unbound-alias": (project) =>
-    `${project} lost the git remote its level was bound to; its level is ${LEVEL_LABELS.local} until you set it again`,
+    `${project} lost the git remote or the shared name its level was bound to; its level is ${LEVEL_LABELS.local} until you set it again`,
   // Raised for a stored level that is not one of the levels; a row stored at `local` reads
   // `level-local` too, and is no problem.
   "level-local": (project) =>
@@ -194,6 +194,7 @@ function levelsOf(
       destination: row.destination,
       level,
       boundAlias: row.boundAlias,
+      nameId: row.nameId,
       reason,
     });
     const problem = row.level === "local" ? undefined : LEVEL_PROBLEMS[reason];

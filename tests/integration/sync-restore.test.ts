@@ -760,7 +760,7 @@ describe("backup --restore beside the sync", () => {
     expect(upgradeCopies(live.dataDir)).toEqual([]);
     const restored = openDb({ dataDir: live.dataDir, busyTimeoutMs: 2000 });
     live.db = restored;
-    expect(moduleVersion(restored, SHARING_MODULE)).toBe(2);
+    expect(moduleVersion(restored, SHARING_MODULE)).toBe(3);
     expect(moduleVersion(restored, KNOWLEDGE_MODULE)).toBe(8);
     expect(restored.query<{ n: number }, []>("SELECT count(*) AS n FROM memories").get()?.n).toBe(
       1,

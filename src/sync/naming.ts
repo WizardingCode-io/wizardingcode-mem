@@ -2,9 +2,9 @@
 // where the folder is `shared`, `members/<member id>` (the client's own naming, by id alone)
 // or the contract's project folder, and the file name is the contract's. Every component the
 // server supplies is checked here before it reaches a path.
+import { isTeamAlias } from "../core/identity.ts";
 import { isSlug, UUID } from "../modules/knowledge/entry.ts";
 import { KnowledgeError } from "../modules/knowledge/errors.ts";
-import { isHostLedAlias } from "../sharing/levels.ts";
 import { fileNameFor, repoFolder } from "../team/contract.ts";
 
 /** The server's hex id: sixteen lower-case hex characters (`newHexId` of the server). */
@@ -65,7 +65,7 @@ export function receivedFolder(
 ): string {
   if (scope === "shared") return "shared";
   if (scope === "project") {
-    if (remoteAlias === null || !isHostLedAlias(remoteAlias))
+    if (remoteAlias === null || !isTeamAlias(remoteAlias))
       throw new KnowledgeError("invalid", `alias ${JSON.stringify(remoteAlias)} names no project`);
     const folder = repoFolder("project", remoteAlias, null);
     checkComponent("project-folder", folder.slice("projects/".length));

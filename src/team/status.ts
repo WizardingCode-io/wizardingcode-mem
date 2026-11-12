@@ -9,6 +9,7 @@ import { freeBytes } from "./disk.ts";
 import { type Marks, readHighWater } from "./instance.ts";
 import { SERVE_LEASE } from "./lease.ts";
 import {
+  countLiveNames,
   deviceCounts,
   getMeta,
   leaseOf,
@@ -32,6 +33,8 @@ export interface TeamStatus {
   instance: string;
   members: { active: number; disabled: number };
   devices: { active: number; revoked: number };
+  /** The live shared names in the registry (ADR 0028); 0 on a schema before 2. */
+  names: number;
   pendingBootstrap: boolean;
   lastSeq: number;
   marks: Marks;
@@ -86,6 +89,7 @@ export function readStatus(dir: string, now: number): TeamStatus | null {
       instance: getMeta(db, "server.instance") ?? "",
       members: memberCounts(db),
       devices: deviceCounts(db),
+      names: teamSchemaVersion(db) >= 2 ? countLiveNames(db) : 0,
       pendingBootstrap: pendingBootstrapInvitation(db, now) !== null,
       lastSeq: sequenceHighWater(db, "changes"),
       marks: readHighWater(paths.feedFile),
@@ -110,6 +114,7 @@ export function renderStatus(status: TeamStatus): string {
     `members.disabled: ${status.members.disabled}`,
     `devices.active: ${status.devices.active}`,
     `devices.revoked: ${status.devices.revoked}`,
+    `names: ${status.names}`,
     `pendingBootstrap: ${status.pendingBootstrap}`,
     `lastSeq: ${status.lastSeq}`,
     `marks.changes: ${status.marks.changes}`,

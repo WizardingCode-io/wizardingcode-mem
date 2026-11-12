@@ -2,6 +2,7 @@
 // every item; the payloads leave through the edge; the answers write the ledger; the
 // withdrawals run at the sixty-second mark behind D-10's two guards.
 import { join } from "node:path";
+import { aliasKind } from "../core/identity.ts";
 import { ENTRY_MAX_BYTES, splitFrontmatterLines } from "../modules/knowledge/entry.ts";
 import { KnowledgeError } from "../modules/knowledge/errors.ts";
 import { ensureFresh } from "../modules/knowledge/index-store.ts";
@@ -56,8 +57,25 @@ import {
   writeSent,
 } from "./ledger.ts";
 import { logError } from "./log.ts";
-import { readTokens, type ServerRow } from "./servers.ts";
-import { failureAnswer, readHold, recordAnswer, updateState } from "./state.ts";
+import {
+  acceptableContract,
+  heldByContract,
+  readTokens,
+  type ServerRow,
+  setContract,
+  setStopped,
+} from "./servers.ts";
+import {
+  clearName,
+  failureAnswer,
+  flaggedNames,
+  flagName,
+  guarded,
+  type NameState,
+  readHold,
+  recordAnswer,
+  updateState,
+} from "./state.ts";
 
 /** A batch: at most this many items, and this many bytes of the serialized body (under the server's 1 MiB). */
 export const BATCH_ITEMS = 200;
@@ -109,6 +127,67 @@ const refreshCursor = new Map<string, number>();
 
 /** The alias of a project entry's uid, by the one parser of the uid grammar; null for any other uid. */
 const projectOf = (uid: string): string | null => parseEntryUid(uid)?.remoteAlias ?? null;
+
+/** A push item's alias: an entry's from its uid, a memory's from its payload. */
+function aliasOfItem(item: PushItemShape): string | null {
+  if (item.kind === "entry") return projectOf(item.uid);
+  const payload = item.payload as { remoteAlias?: unknown } | undefined;
+  return typeof payload?.remoteAlias === "string" ? payload.remoteAlias : null;
+}
+
+/** A candidate's alias: an entry's from its uid, a memory's from its payload. */
+const aliasOfCandidate = (candidate: Outgoing): string | null =>
+  candidate.item.kind === "entry"
+    ? projectOf(candidate.item.uid)
+    : (candidate.payload as OutgoingMemory).remoteAlias;
+
+/**
+ * Whether nothing of an alias leaves in this sweep (ADR 0028): a shared name held by the
+ * contract, flagged re-created or purged, or answered `name` or `name-purged` earlier in it.
+ */
+function heldAlias(
+  server: ServerRow,
+  flagged: ReadonlyMap<string, NameState>,
+  heldNow: ReadonlySet<string>,
+  alias: string | null,
+): boolean {
+  if (alias === null) return false;
+  if (heldByContract(server, alias) || heldNow.has(alias)) return true;
+  const state = flagged.get(alias);
+  return state === "recreated" || state === "purged";
+}
+
+/**
+ * One push under the contract spoken (ADR 0028): a 409 with an accepted value below it sets the
+ * row, speaks the value, drops the items under a shared name when it fell to 1 and repeats once;
+ * a batch left empty is answered as applied to nothing; a second 409 stops the server as
+ * `contract`. `state.server` carries the contract between the batches of one sweep.
+ */
+async function pushUnderContract(
+  ctx: SyncContext,
+  state: { server: ServerRow; downgraded: boolean },
+  client: SyncClient,
+  items: PushItemShape[],
+  epoch: number,
+  aliasOf: (item: PushItemShape) => string | null,
+): Promise<Awaited<ReturnType<SyncClient["push"]>>> {
+  const answer = await client.push(items, epoch);
+  if (answer.ok || answer.kind !== "contract") return answer;
+  const serverId = state.server.serverId;
+  const next = state.downgraded ? null : acceptableContract(answer.accepted, state.server.contract);
+  if (next === null) {
+    guarded(ctx, () => setStopped(ctx.db, serverId, "contract"));
+    return answer;
+  }
+  state.downgraded = true;
+  guarded(ctx, () => setContract(ctx.db, serverId, next));
+  client.speak(next);
+  state.server = { ...state.server, contract: next };
+  const kept = items.filter((item) => !heldByContract(state.server, aliasOf(item)));
+  if (kept.length === 0)
+    return { ok: true, status: 200, body: { results: [] }, requestId: answer.requestId ?? "" };
+  return client.push(kept, epoch);
+}
 
 // --- The repositories -----------------------------------------------------------------------------
 
@@ -304,8 +383,14 @@ export async function sweep(
   if (policy.closed) return { ...NONE, stopped: "closed" };
   const generation = generationOf(ctx.db);
   if (generation === null) return NONE;
-  const client = new SyncClient(ctx, { url: server.url, token });
+  const client = new SyncClient(ctx, { url: server.url, token, contract: server.contract });
+  const contract = { server, downgraded: false };
   const result: SweepResult = { ...NONE };
+  // The names nothing leaves under in this sweep: the flags as they stand, and those a push
+  // answers `name` or `name-purged` for before the sweep ends.
+  const flagged = flaggedNames(ctx.db, serverId);
+  const heldNow = new Set<string>();
+  const held = (alias: string | null) => heldAlias(contract.server, flagged, heldNow, alias);
 
   const repos = openRepos(ctx, policy, serverId, options.full ? REFRESH_PER_SWEEP : 0);
 
@@ -382,6 +467,8 @@ export async function sweep(
           .map((row) => [`${row.repo_id}:${row.id}`, row]),
   );
   for (const entry of entries) {
+    // A project under a shared name held by the contract or a flag sends nothing (ADR 0028).
+    if (held(projectOf(entry.uid))) continue;
     const records = entryLedger.get(entry.uid) ?? [];
     const ruling = decide(policy, serverId, entry, records);
     if (ruling.answer !== "send") continue;
@@ -431,6 +518,7 @@ export async function sweep(
     if (row === undefined) continue;
     const alias = policy.levels.get(levelKey(memory.projectId, serverId))?.boundAlias;
     if (alias === undefined || alias === "") continue;
+    if (held(alias)) continue;
     const built = memoryPayloadOf(ctx, memory.uid, alias, row);
     if (refusalFor(ctx.db, serverId, "memory", memory.uid, built.hash) !== null) continue;
     const own = sentRow(ctx.db, serverId, "memory", memory.uid);
@@ -477,7 +565,10 @@ export async function sweep(
 
   let backlog = sendable.length;
   let stopped: SweepResult["stopped"] = null;
-  const pushBatch = async (batch: Outgoing[]): Promise<boolean> => {
+  const pushBatch = async (given: Outgoing[]): Promise<boolean> => {
+    // A name answered `name` or `name-purged` earlier in the sweep holds the rest of its project.
+    const batch = given.filter((candidate) => !held(aliasOfCandidate(candidate)));
+    backlog -= given.length - batch.length;
     if (batch.length === 0) return true;
     if (loadPolicy(ctx.db, ctx.dataDir, ctx.env, serverId).epoch !== policy.epoch) {
       stopped = "epoch";
@@ -491,7 +582,7 @@ export async function sweep(
       baseHash: candidate.base.hash,
       payload: candidate.payload,
     }));
-    const answer = await client.push(items, policy.epoch);
+    const answer = await pushUnderContract(ctx, contract, client, items, policy.epoch, aliasOfItem);
     const at = now();
     if (!answer.ok) {
       if (answer.kind === "tooLarge" && batch.length > 1) {
@@ -538,7 +629,16 @@ export async function sweep(
       );
       if (outcome === "sent") result.sent++;
       else if (outcome === "refused") result.refused++;
-      else if (typeof outcome === "object" && outcome !== null) {
+      else if (outcome === "name" || outcome === "name-purged") {
+        // The registry's word (ADR 0028): no refusal row, the name flagged, the project's
+        // remaining items of this sweep held; the next sweep tries a missing name again.
+        const alias = aliasOfCandidate(candidate);
+        if (alias !== null) {
+          heldNow.add(alias);
+          flagName(ctx, serverId, alias, outcome === "name" ? "missing" : "purged");
+        }
+        result.refused++;
+      } else if (typeof outcome === "object" && outcome !== null) {
         // A server rollback: re-sent on `current`, once.
         if (candidate.retried !== true) {
           rollbacks.push({ ...candidate, base: outcome.current, retried: true });
@@ -571,7 +671,15 @@ export async function sweep(
   if (stopped === null) await pushBatch(batch);
 
   if (options.full && stopped === null) {
-    const withdrawn = await withdrawSweep(ctx, server, client, policy, repos, entryByUid, memories);
+    const withdrawn = await withdrawSweep(
+      ctx,
+      contract,
+      client,
+      policy,
+      repos,
+      entryByUid,
+      memories,
+    );
     result.withdrawn = withdrawn.withdrawn;
     result.held = withdrawn.held;
     if (withdrawn.stopped !== null) stopped = withdrawn.stopped;
@@ -603,6 +711,8 @@ function applyAnswer(
   | "refused"
   | "rate"
   | "storage"
+  | "name"
+  | "name-purged"
   | { current: { revision: number; hash: string } }
   | null {
   const kind = candidate.item.kind;
@@ -617,6 +727,9 @@ function applyAnswer(
       at,
     });
     if (candidate.movedFrom !== null) retireMoved(ctx, serverId, candidate.movedFrom, at);
+    // A push that landed under a name the registry had lost: the name is back (ADR 0028).
+    const alias = aliasOfCandidate(candidate);
+    if (alias !== null && aliasKind(alias) === "name") clearName(ctx, serverId, alias, "missing");
     return "sent";
   }
   if (line.result === "stale") {
@@ -692,6 +805,8 @@ function applyAnswer(
     purgedKey(ctx, serverId, kind, uid, at);
     return "refused";
   }
+  // The registry's refusals are a state of the server, not of the item: no refusal row.
+  if (reason === "name" || reason === "name-purged") return reason;
   writeRefusal(ctx, serverId, kind, uid, candidate.hash, reason, line.rule ?? null, at);
   return "refused";
 }
@@ -734,9 +849,22 @@ export function withdrawals(
   const entryLedger = ledgerRecords(ctx.db, serverId, "entry");
   const memoryLedger = ledgerRecords(ctx.db, serverId, "memory");
   const found: Withdrawal[] = [];
+  const boundAliasOf = (projectId: number | null): string | null =>
+    projectId === null
+      ? null
+      : (policy.levels.get(levelKey(projectId, serverId))?.boundAlias ?? null);
+  const flagged = flaggedNames(ctx.db, serverId);
+  const heldHere = (alias: string | null) => heldAlias(server, flagged, new Set(), alias);
   for (const row of liveSentRows(ctx.db, serverId)) {
     const alias = projectOf(row.itemUid);
     let projectId: number | null = null;
+    // Nothing of a project under a shared name is withdrawn while the server speaks 1, nor
+    // under a name flagged re-created or purged (ADR 0028).
+    if (row.itemKind === "entry" && heldHere(alias)) continue;
+    if (row.itemKind === "memory") {
+      const item = memoriesByUid.get(row.itemUid);
+      if (item !== undefined && heldHere(boundAliasOf(item.projectId))) continue;
+    }
     if (row.itemKind === "entry") {
       const item = entryByUid.get(row.itemUid);
       if (item !== undefined) {
@@ -824,22 +952,17 @@ export function wouldWithdraw(ctx: SyncContext, server: ServerRow): Withdrawal[]
 
 async function withdrawSweep(
   ctx: SyncContext,
-  server: ServerRow,
+  contract: { server: ServerRow; downgraded: boolean },
   client: SyncClient,
   policy: SharingPolicy,
   repos: Repos,
   entryByUid: Map<string, EntryItem>,
   memories: Item[],
 ): Promise<{ withdrawn: number; held: number; stopped: SweepResult["stopped"] }> {
+  const server = contract.server;
   const serverId = server.serverId;
-  const all = withdrawals(
-    ctx,
-    server,
-    policy,
-    repos,
-    entryByUid,
-    new Map(memories.map((m) => [m.uid, m])),
-  );
+  const memoriesByUid = new Map(memories.map((m) => [m.uid, m]));
+  const all = withdrawals(ctx, server, policy, repos, entryByUid, memoriesByUid);
   if (all.length === 0) return { withdrawn: 0, held: 0, stopped: null };
   const authorised = new Set(authorisedUids(ctx.db, serverId));
   const total = liveSentRows(ctx.db, serverId).length;
@@ -864,7 +987,19 @@ async function withdrawSweep(
       baseRevision: w.row.version,
       baseHash: w.row.hash,
     }));
-    const answer = await client.push(items, policy.epoch);
+    const byProject = new Map(batch.map((w) => [w.row.itemUid, w.projectId]));
+    const withdrawAlias = (item: PushItemShape): string | null =>
+      item.kind === "entry"
+        ? projectOf(item.uid)
+        : (policy.levels.get(levelKey(byProject.get(item.uid) ?? 0, serverId))?.boundAlias ?? null);
+    const answer = await pushUnderContract(
+      ctx,
+      contract,
+      client,
+      items,
+      policy.epoch,
+      withdrawAlias,
+    );
     const at = ctx.clock.now;
     if (!answer.ok) {
       recordAnswer(ctx, serverId, failureAnswer("push", answer, at));
@@ -901,14 +1036,22 @@ export async function withdrawAll(
 ): Promise<{ ok: boolean; left: number }> {
   const token = readTokens(ctx.dataDir)[server.serverId];
   if (token === undefined) return { ok: false, left: liveSentRows(ctx.db, server.serverId).length };
-  const client = new SyncClient(ctx, { url: server.url, token });
+  const client = new SyncClient(ctx, { url: server.url, token, contract: server.contract });
+  const contract = { server, downgraded: false };
   const epoch = loadPolicy(ctx.db, ctx.dataDir, ctx.env, server.serverId).epoch;
+  // A server that speaks 1 never held an item under a shared name: an entry's uid says which
+  // it is; a memory's uid names no alias and is withdrawn as any other.
+  const aliasOfRow = (item: PushItemShape): string | null =>
+    item.kind === "entry" ? projectOf(item.uid) : null;
   let rows = liveSentRows(ctx.db, server.serverId);
   for (let round = 0; round < 2 && rows.length > 0; round++) {
     const stale: SentRow[] = [];
     for (let start = 0; start < rows.length; start += BATCH_ITEMS) {
       const batch = rows.slice(start, start + BATCH_ITEMS);
-      const answer = await client.push(
+      const answer = await pushUnderContract(
+        ctx,
+        contract,
+        client,
         batch.map((row) => ({
           op: "withdraw" as const,
           kind: row.itemKind,
@@ -917,6 +1060,7 @@ export async function withdrawAll(
           baseHash: row.hash,
         })),
         epoch,
+        aliasOfRow,
       );
       const at = ctx.clock.now;
       if (!answer.ok) {

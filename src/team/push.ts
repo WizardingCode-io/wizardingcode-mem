@@ -1,5 +1,6 @@
 // The push: an entry or a memory sent or withdrawn, one item at a time, each in its own
 // transaction, in the order the spec gives its rules (D-6, D-7, D-8, D-12, D-15, D-20).
+import { aliasKind } from "../core/identity.ts";
 import { entryUid } from "../sharing/types.ts";
 import type { Caller } from "./auth.ts";
 import type { PushItemShape, PushReason, PushResultShape } from "./contract.ts";
@@ -21,6 +22,7 @@ import {
   type MemoryRow,
   memoriesOfDevices,
   memoryByKey,
+  nameByAlias,
   revisionMatching,
   sequenceHighWater,
   setEntryLock,
@@ -33,7 +35,13 @@ import {
   workspaceEntriesOf,
 } from "./store.ts";
 import type { Context } from "./types.ts";
-import { checkEntryPayload, checkMemoryPayload, type Refusal } from "./validate.ts";
+import {
+  checkEntryPayload,
+  checkMemoryPayload,
+  NAME_PURGED_RULE,
+  NAME_RULE,
+  type Refusal,
+} from "./validate.ts";
 
 /** The shapes are the contract's; the names stay for the server's own modules and tests. */
 export type PushItem = PushItemShape;
@@ -101,11 +109,11 @@ function tombstoneEntry(
   const revision = row.revision + 1;
   const seq = insertChange(db, {
     kind: "entry",
-    uid: entryUid(row.scope as "workspace" | "shared" | "project", row.remote_alias, row.uuid),
+    uid: entryUid(row.scope as "workspace" | "shared" | "project", row.project_alias, row.uuid),
     key: row.uuid,
     op: "tombstone",
     scope: row.scope,
-    remoteAlias: row.remote_alias,
+    projectAlias: row.project_alias,
     revision,
     hash: row.hash,
     movedTo: null,
@@ -120,7 +128,7 @@ function tombstoneEntry(
     seq,
     op: "withdraw",
     scope: row.scope,
-    remoteAlias: row.remote_alias,
+    projectAlias: row.project_alias,
     slug: row.slug,
     frontmatter: "",
     body: "",
@@ -158,7 +166,7 @@ function tombstoneMemory(
     key: memoryKey(row.device_id, row.uid),
     op: "tombstone",
     scope: "project",
-    remoteAlias: row.remote_alias,
+    projectAlias: row.project_alias,
     revision,
     hash: row.hash,
     movedTo: null,
@@ -172,6 +180,21 @@ function tombstoneMemory(
 }
 
 // --- Sends ------------------------------------------------------------------------------
+
+/**
+ * The registry's word on a send under a shared name (ADR 0028), inside the item's transaction,
+ * after the pure checks and `purged` and before the replay shortcut: a name the registry never
+ * held refuses `name`, a purged one `name-purged`; a remote needs nothing of the registry.
+ */
+function nameRefusal(db: Db, alias: string | null): Refusal | null {
+  if (alias === null || aliasKind(alias) !== "name") return null;
+  const row = nameByAlias(db, alias);
+  if (row === null) return { result: "refused", reason: "name", rule: NAME_RULE };
+  if (row.purged_at !== null) {
+    return { result: "refused", reason: "name-purged", rule: NAME_PURGED_RULE };
+  }
+  return null;
+}
 
 type Gates = { bytes: (deviceId: string, size: number) => boolean; lowDisk: () => boolean };
 
@@ -198,13 +221,15 @@ export function applyEntry(
   const { payload, bytes, hash, scope, remoteAlias, uuid } = checked;
   return transaction(db, () => {
     if (isPurged(db, uuid)) return refused(item.uid, "purged");
+    const unheld = nameRefusal(db, remoteAlias);
+    if (unheld !== null) return refused(item.uid, unheld);
     const row = entryByUuid(db, uuid);
     if (
       row !== null &&
       row.withdrawn_at === null &&
       row.hash === hash &&
       row.scope === scope &&
-      row.remote_alias === remoteAlias &&
+      row.project_alias === remoteAlias &&
       row.slug === payload.slug
     ) {
       return { uid: item.uid, result: "applied", revision: row.revision, hash: row.hash };
@@ -240,7 +265,7 @@ export function applyEntry(
       key: uuid,
       op: "upsert",
       scope,
-      remoteAlias,
+      projectAlias: remoteAlias,
       revision,
       hash,
       movedTo: null,
@@ -249,14 +274,14 @@ export function applyEntry(
       clientEpoch: epoch,
       at: now,
     });
-    if (row !== null && (row.scope !== scope || row.remote_alias !== remoteAlias)) {
+    if (row !== null && (row.scope !== scope || row.project_alias !== remoteAlias)) {
       insertChange(db, {
         kind: "entry",
-        uid: entryUid(row.scope as "workspace" | "shared" | "project", row.remote_alias, uuid),
+        uid: entryUid(row.scope as "workspace" | "shared" | "project", row.project_alias, uuid),
         key: `${uuid}@${revision}`,
         op: "tombstone",
         scope: row.scope,
-        remoteAlias: row.remote_alias,
+        projectAlias: row.project_alias,
         revision,
         hash,
         movedTo: item.uid,
@@ -269,7 +294,7 @@ export function applyEntry(
     upsertEntry(db, {
       uuid,
       scope,
-      remoteAlias,
+      projectAlias: remoteAlias,
       slug: payload.slug,
       createdByMember: row?.created_by_member ?? caller.member.id,
       revision,
@@ -285,7 +310,7 @@ export function applyEntry(
       seq,
       op: "send",
       scope,
-      remoteAlias,
+      projectAlias: remoteAlias,
       slug: payload.slug,
       frontmatter: payload.frontmatter,
       body: payload.body,
@@ -314,12 +339,14 @@ export function applyMemory(
   const key = memoryKey(caller.device.id, payload.uid);
   return transaction(db, () => {
     if (isPurged(db, key)) return refused(item.uid, "purged");
+    const unheld = nameRefusal(db, payload.remoteAlias);
+    if (unheld !== null) return refused(item.uid, unheld);
     const row = memoryByKey(db, caller.device.id, payload.uid);
     if (
       row !== null &&
       row.withdrawn_at === null &&
       row.hash === hash &&
-      row.remote_alias === payload.remoteAlias
+      row.project_alias === payload.remoteAlias
     ) {
       return { uid: item.uid, result: "applied", revision: row.revision, hash: row.hash };
     }
@@ -341,7 +368,7 @@ export function applyMemory(
       key,
       op: "upsert",
       scope: "project",
-      remoteAlias: payload.remoteAlias,
+      projectAlias: payload.remoteAlias,
       revision,
       hash,
       movedTo: null,
@@ -350,14 +377,14 @@ export function applyMemory(
       clientEpoch: epoch,
       at: now,
     });
-    if (row !== null && row.remote_alias !== payload.remoteAlias) {
+    if (row !== null && row.project_alias !== payload.remoteAlias) {
       insertChange(db, {
         kind: "memory",
         uid: feedUid,
         key: `${key}@${revision}`,
         op: "tombstone",
         scope: "project",
-        remoteAlias: row.remote_alias,
+        projectAlias: row.project_alias,
         revision,
         hash,
         movedTo: feedUid,
@@ -370,7 +397,7 @@ export function applyMemory(
     upsertMemory(db, {
       deviceId: caller.device.id,
       uid: payload.uid,
-      remoteAlias: payload.remoteAlias,
+      projectAlias: payload.remoteAlias,
       payload: JSON.stringify(payload),
       hash,
       size,

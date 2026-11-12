@@ -85,7 +85,7 @@ describe("the knowledge module's schema", () => {
     const db = open();
     expect(userVersion(db)).toBe(LATEST_VERSION);
     const recorded = rows(db);
-    expect(recorded).toHaveLength(5);
+    expect(recorded).toHaveLength(6);
     expect(recorded[0]).toMatchObject({ module: "knowledge", version: 6, name: "knowledge_store" });
     expect(recorded[0]?.applied_at).toBeGreaterThan(0);
     expect(recorded[1]).toMatchObject({ module: "knowledge", version: 7, name: "knowledge_agent" });
@@ -98,6 +98,7 @@ describe("the knowledge module's schema", () => {
     expect(recorded[3]).toMatchObject({ module: "sharing", version: 1, name: "sharing_policy" });
     expect(recorded[3]?.applied_at).toBeGreaterThan(0);
     expect(recorded[4]).toMatchObject({ module: "sharing", version: 2, name: "sharing_servers" });
+    expect(recorded[5]).toMatchObject({ module: "sharing", version: 3, name: "sharing_names" });
     const names = tables(db);
     expect(names).toEqual(
       expect.arrayContaining(["knowledge_repos", "knowledge_entries", "knowledge_proposals"]),
@@ -111,7 +112,7 @@ describe("the knowledge module's schema", () => {
   test("a second open applies nothing and takes no backup", () => {
     open().close();
     const db = open();
-    expect(rows(db)).toHaveLength(5);
+    expect(rows(db)).toHaveLength(6);
     expect(backups()).toEqual([]);
     db.close();
   });
@@ -126,6 +127,7 @@ describe("the knowledge module's schema", () => {
       ["knowledge", 8, "knowledge_received"],
       ["sharing", 1, "sharing_policy"],
       ["sharing", 2, "sharing_servers"],
+      ["sharing", 3, "sharing_names"],
     ]);
     expect(backups()).toEqual([]);
     db.close();
@@ -150,6 +152,7 @@ describe("the knowledge module's schema", () => {
       ["knowledge", 9],
       ["sharing", 1],
       ["sharing", 2],
+      ["sharing", 3],
     ]);
     again.close();
   });
@@ -221,6 +224,7 @@ describe("the knowledge module's schema", () => {
       expect.objectContaining({ module: "knowledge", version: 8, name: "knowledge_received" }),
       expect.objectContaining({ module: "sharing", version: 1, name: "sharing_policy" }),
       expect.objectContaining({ module: "sharing", version: 2, name: "sharing_servers" }),
+      expect.objectContaining({ module: "sharing", version: 3, name: "sharing_names" }),
     ]);
     const names = tables(db);
     for (const gone of [
@@ -431,6 +435,7 @@ describe("the knowledge module's schema", () => {
       ["knowledge", 8],
       ["sharing", 1],
       ["sharing", 2],
+      ["sharing", 3],
     ]);
     db.close();
   }, 30_000);

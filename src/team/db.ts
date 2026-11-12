@@ -9,12 +9,13 @@ import { type Backups, type Db, type Migration, openExistingFile, openFile } fro
 import { NotATeamDatabaseError, SchemaBehindError } from "./errors.ts";
 import { newHexId } from "./ids.ts";
 import teamInit from "./migrations/0001_team_init.sql" with { type: "text" };
+import teamNames from "./migrations/0002_team_names.sql" with { type: "text" };
 import { leaseActive } from "./store.ts";
 
 export type { Db, Migration };
 
 export const TEAM_DB_FILE = "team.db";
-export const TEAM_LATEST = 1;
+export const TEAM_LATEST = 2;
 
 /** Migration 1 also mints what names this server: `team.schema`, `server.id`, `server.instance`, `server.created_at`. */
 function mintIdentity(lock: Db): void {
@@ -32,6 +33,7 @@ function mintIdentity(lock: Db): void {
 /** Forward-only, like the client store's list. */
 export const TEAM_MIGRATIONS: readonly Migration[] = [
   { version: 1, name: "team_init", sql: teamInit, run: mintIdentity },
+  { version: 2, name: "team_names", sql: teamNames },
 ];
 
 /** Where `team.db`'s upgrade copies go: the team's own `backups/`, prefixed `team-`. */
