@@ -5,11 +5,7 @@
 - CTO plan: none
 - Packs: none
 - Checklists: sync (1 file)
-- Verdict: **Not proven**
-
-## Not proven
-
-- judgement gate test-quality not proven (6 findings)
+- Verdict: **Proven**
 
 ## Spec review
 
@@ -46,52 +42,47 @@ The file: `spec-review/consolidated.md`.
 | AC-29 | behavior | the automatic check makes no request when WIZARDINGCODE_MEM_UPDATE is off or any value but check, from the environment or from <data dir>/env, or when CI is set; a forced check makes no request when the key is off or any value but check, and makes one when only CI is set; the settings refuse any value of the key but check and off. | red then green |
 | AC-30 | behavior | doctor prints a check update: warn when a release is out, ok otherwise, the failed check included, and its exit code is what it is without that check; the checks runChecks returns do not include it. wizardingcode-mem update asks now, prints the lines and the four commands, and exits 1 when its check failed or its result could not be recorded; with the key off it asks nothing, prints the off line and how to turn the check on where the value was set (the file, or this environment), prints no commands, and exits 0. | red then green |
 | AC-31 | behavior | updateLine gives line 1 by the Design's first table, top to bottom: off from the file; off from the environment; an unknown value; a latest known and higher than the current, with and without a failed last check, and with the staged binary answering a version and not; CI with nothing asked; never checked; a failed check with and without a last known version; the latest equal; the latest lower. Line 2 follows the second table: none for the staged binary itself, for no staged file and for equal versions; the plain sentence for a higher staged version; wizardingcode-mem install moves them to it for a lower one; wizardingcode-mem install replaces it for a staged file that answers no version. status prints them with the commands when a release is out; with a store that cannot be opened it still prints them and exits 1, and status --json then prints one object with version, update and error. No command but install stages a binary. | red then green |
-| AC-32 | behavior | status, doctor and update do not run the staged file when the command runs as root or when <data dir>/bin belongs to another user: the report says the staged binary was not run and why, and takes the running copy as the current version. A report that cannot be built is said with its reason in status, as in doctor, and a reconciliation that throws lets the command run in this copy. | red then green |
+| AC-32 | behavior | status, doctor and update do not run the staged file when the command runs as root or when <data dir>/bin belongs to another user: the report says the staged binary was not run and why, and takes the running copy as the current version. A report that cannot be built is said with its reason in status, as in doctor, and a reconciliation that throws lets the command run in this copy. | red then green; the red recorded 2 times (the latest decides); the green recorded 2 times (the latest decides) |
 
 ## Gates
 
 | Gate | Target | Status | Command | Duration | Log |
 | :- | :- | :- | :- | -: | :- |
-| secrets | . | pass | `built-in secret scan` | 62 ms |  |
-| prose | . | pass | `built-in prose scan` | 50 ms |  |
-| build | . | pass | `bun run build` | 2565 ms | logs/build-_-1794511029893.txt |
-| test | . | pass | `bun run test` | 218714 ms | logs/test-_-1794511032485.txt |
-| lint | . | pass: 1 untouched file with problems, none of the item's | `bun run lint` | 94 ms | logs/lint-_-1794511251199.txt |
-| typecheck | . | pass | `bun run typecheck` | 392 ms | logs/typecheck-_-1794511251294.txt |
+| secrets | . | pass | `built-in secret scan` | 58 ms |  |
+| prose | . | pass | `built-in prose scan` | 54 ms |  |
+| build | . | pass | `bun run build` | 2734 ms | logs/build-_-1794511473499.txt |
+| test | . | pass | `bun run test` | 225446 ms | logs/test-_-1794511476266.txt |
+| lint | . | pass: 1 untouched file with problems, none of the item's | `bun run lint` | 95 ms | logs/lint-_-1794511701712.txt |
+| typecheck | . | pass | `bun run typecheck` | 393 ms | logs/typecheck-_-1794511701809.txt |
 
 ## Judgement gates
 
 | Gate | Verdict | Reviewer | Findings | Tokens |
 | :- | :- | :- | -: | -: |
-| code-quality | proven | review-code-quality | 4 | 230940 |
-| test-quality | not proven | review-test-quality | 6 | 252542 |
-| security | proven | review-security | 4 | 200717 |
-| risk | proven | review-risk | 5 | 271741 |
-| architecture | proven | review-architecture | 1 | 290171 |
-| infra | proven | review-infra | 3 | 229321 |
+| code-quality | proven | review-code-quality | 1 | 373830 |
+| test-quality | proven | review-test-quality | 5 | 392567 |
+| security | proven | review-security | 4 | 311662 |
+| risk | proven | review-risk | 5 | 423541 |
+| architecture | proven | review-architecture | 0 | 458079 |
+| infra | proven | review-infra | 3 | 356928 |
 
-- code-quality: src/update/reconcile.ts:10 Advisory, as filed (questions 1 and 6). `mayRunStaged` and `binOwner` live in `report.ts`, the module of sentences, and `reconcile.ts` imports them from there. The dependency stays inside `src/update/`. Moving them to a leaf would be cleaner, but no unit fails to change for a single reason. (advisory)
-- code-quality: src/update/reconcile.ts:75 Advisory, as filed (questions 1 and 3). `gather` is described as a read but also deletes `WIZARDINGCODE_MEM_HANDED` from the environment. Its name does not say the opposite of what it does, so this is advisory under the rubric. (advisory)
-- code-quality: src/update/report.ts:133 Advisory, as filed (questions 2 and 3). The one-line reduction of an error to its first line appears as `firstLine`, as `said` and inline in reconcile.ts. That is boilerplate-sized duplication, and `said` could be named more sharply. (advisory)
-- code-quality: src/update/report.ts:1 Advisory, as filed (question 10). The header says `updateLine` and `agentsLine` are the only writers of these sentences, but `reportOrReason` and update.ts also write lines for the person. The comment is stale; the behaviour is not wrong. (advisory)
-- test-quality: tests/unit/update-report.test.ts:163 Upheld (question 1). The first part of AC-32: `status`, `doctor` and `update` must not run the staged file as root or from a folder another user owns. The tests cover `mayRunStaged`'s table (line 173) and `agentsLine` given a hand-built `refused: true` (line 177). No test reaches `stagedFacts` (src/update/report.ts:55-66), where the guard is applied. I checked: no test file references `stagedFacts`. If it always ran `stagedVersion` with `refused: false`, every test would still pass. A behaviour criterion has no test that fails on reversion. (defect, verified by Jev (0.97))
-- test-quality: tests/integration/update-command.test.ts:222 Upheld (question 1). AC-32 says 'a report that cannot be built is said with its reason in `status`, as in `doctor`'. `reportOrReason` is tested alone (update-report.test.ts:193). Every `status` case in this describe block (lines 236-280) builds a report that succeeds. If status.ts went back to swallowing the error silently, no test would fail. (defect, verified by Jev (0.96))
-- test-quality: tests/unit/update-reconcile.test.ts:50 Advisory, as filed. The `realpathSync` step in `gather` is still not exercised. It is deferred in docs/real-use/findings.md, and AC-23's `decide` rule is tested on its inputs. (advisory)
-- test-quality: tests/e2e/update-reconcile.test.ts:101 Advisory, as filed. AC-31 is pinned only through `status`. This is a gap in breadth, deferred. (advisory)
-- test-quality: tests/e2e/install-forward.test.ts:1247 Advisory, as filed (questions 5 and 6). The test asserts the observable hand-over, not that `handOver` is the function used. Deferred. (advisory)
-- test-quality: tests/unit/settings.test.ts:1733 Advisory, as filed. Temporary folders are not removed. This is fixture hygiene, deferred. (advisory)
-- security: src/update/report.ts:55 Advisory, as filed. Round 1's defect is closed. I checked diff lines 1036-1053: `stagedFacts` asks `mayRunStaged` (no root, and the folder must be the effective user's) before `stagedVersion`, and reports `refused` otherwise. (advisory)
-- security: src/update/check.ts:740 Advisory, as filed. The request and the state-file boundary remain sound: the URL is fixed, redirects are not followed, `Location` is matched strictly and `readState` re-validates every field. (advisory)
-- security: src/cli/commands/status.ts:44 Advisory, as filed (public-api, question 6). `status --json` gains `update` (with `stagedPath` and `refused`), and a store error now writes JSON to stdout with exit 1. The change is additive and documented, and no field is removed or changed. (advisory)
+- code-quality: src/update/reason.ts:5 Advisory, as filed (question 2). `reason` repeats `firstLine`'s one-line body instead of calling `firstLine`. The rubric treats duplicated boilerplate as advisory. The round 2 advisories are resolved. (advisory)
+- test-quality: tests/unit/update-report.test.ts:228 Advisory, as filed. The owner case would fail when the suite runs as root, because it is skipped only on Windows. That is an environment gap, not a test that passes by construction or survives reversion. Both of round 2's defects are resolved: I confirmed `describe("stagedFacts")` at tests/unit/update-report.test.ts:211 and the throwing-build `status` case at tests/integration/update-command.test.ts:279. (advisory)
+- test-quality: tests/unit/update-reconcile.test.ts:50 Advisory, as filed. The `realpathSync` step in `gather` is still not exercised. Recorded as deferred. (advisory)
+- test-quality: tests/e2e/update-reconcile.test.ts:101 Advisory, as filed. AC-31 is pinned only through `status`. Recorded as deferred. (advisory)
+- test-quality: tests/e2e/install-forward.test.ts:1247 Advisory, as filed (questions 5 and 6). The test asserts the observable hand-over, not that `handOver` is the function used. Recorded as deferred. (advisory)
+- test-quality: tests/unit/settings.test.ts:1733 Advisory, as filed. Temporary folders are not removed. This is fixture hygiene, recorded as deferred. (advisory)
+- security: src/update/staged.ts:58 Advisory, as filed. The root and owner guard is intact after the move. `who` defaults to the real effective user, and no argument or environment variable can supply it. (advisory)
+- security: src/update/reconcile.ts:94 Advisory, as filed. `WIZARDINGCODE_MEM_HANDED` is now read and removed before the guarded look at the machine, so a failing look no longer leaves it for child processes. This is a hardening. (advisory)
+- security: src/cli/commands/status.ts:44 Advisory, as filed (public-api, question 6). `status --json` gains an additive `update` field, and a store error now writes JSON to stdout. It is documented and recorded as deferred, and no field is removed or changed. (advisory)
 - security: src/install/binary.ts:52 Advisory, debt (outside the change). `stageBinary` still runs the staged file's `--version` with no root or owner check. Recorded as deferred. (advisory)
-- risk: src/update/check.ts:124 Advisory, as filed. When the data directory cannot be written, one log entry is written per turn and nothing caps the repetition. The spec's Limits state it, and it is recorded as deferred. (advisory)
-- risk: src/update/reconcile.ts:972 Advisory, as filed. A hung staged binary can delay a command by up to about 20 s. This is a stated limit, bounded in the code. (advisory)
+- risk: src/update/check.ts:120 Advisory, as filed. When the data directory cannot be written, the log gets one entry per turn and nothing caps the repetition. The spec's Limits state it, and it is recorded as deferred. (advisory)
+- risk: src/update/reconcile.ts:104 Advisory, as filed. A hung staged binary can delay a command by up to about 20 s. This is a stated limit, bounded in the code. (advisory)
 - risk: src/install/binary.ts:45 Advisory, debt (outside the change). `stageBinary` (and so `install`) still runs `--version` with no root or owner check. Recorded as deferred. (advisory)
 - risk: src/install/binary.ts:45 Advisory, debt (outside the change). Two writers can collide on the fixed `<target>.new` name. Recorded as deferred. (advisory)
 - risk: tests/helpers/cli.ts:52 Advisory, debt (outside the change). `spawnCli` does not pass on the preload's `WIZARDINGCODE_MEM_UPDATE=off`. Recorded as deferred. (advisory, outside the change)
-- architecture: src/update/reconcile.ts:875 Advisory, as filed. The staged-run rule lives in `report.ts`, so the hand-over loads the report's imports to read one rule. A leaf such as `src/update/staged.ts` would keep the rule apart. No boundary of AC-27 is crossed, and `main.ts` still loads `reconcile.ts` only through a dynamic import. (advisory)
 - infra: docs/runbooks/release.md:80 Advisory, as filed (question 4). The rollback for a wrong notice is stated but has never been run, and the runbook says so. (advisory, outside the change)
-- infra: src/cli/commands/distill.ts:210 Advisory, as filed (question 1). The suite stays offline through the preload and the helpers' copied environment, and CI stays offline through `mode()` returning `ci`. Recorded as deferred. (advisory)
+- infra: src/cli/commands/distill.ts:210 Advisory, as filed (question 1). The suite stays offline through the preload and the copied environment, and CI stays offline through `mode()` returning `ci`. Recorded as deferred. (advisory)
 - infra: .github/workflows/release.yml:148 Advisory, debt (outside the change). A plain release on an older line becomes GitHub's latest and moves the notice back. The runbook names the manual correction. (advisory, outside the change)
 
 ## Verifications
@@ -137,7 +128,7 @@ The file: `spec-review/consolidated.md`.
 | lead-devops | devops | risk area infra |
 | judge |  | a gate is planned |
 
-- Rounds: judgement 2 of 2, validation 3 of 2
+- Rounds: judgement 3 of 2, validation 3 of 2
 - Runtimes: claude (context at start: enforced; the status line per prompt: enforced; the denial of engine files: enforced; the denial of forbidden commands: enforced; the hold at Stop: enforced; the roles' answers filed: enforced; the roles read-only: enforced)
 
 ## Validations
@@ -216,6 +207,13 @@ The file: `spec-review/consolidated.md`.
 | review-risk | claude-opus-5-5 | - | 2026-11-12T19:22:00.144Z | 241556 | review/risk.findings.md | hook |
 | review-test-quality | claude-opus-5-5 | - | 2026-11-12T19:22:11.069Z | 222357 | review/test-quality.findings.md | hook |
 | judge | claude-opus-5-5 | - | 2026-11-12T19:23:09.659Z | 181108 | review/ruling.json | hook |
+| review-test-quality | claude-opus-5-5 | - | 2026-11-12T19:29:05.691Z | 344495 | review/test-quality.findings.md | hook |
+| review-architecture | claude-opus-5-5 | - | 2026-11-12T19:29:06.458Z | 410007 | review/architecture.findings.md | hook |
+| review-security | claude-opus-5-5 | - | 2026-11-12T19:29:06.947Z | 263590 | review/security.findings.md | hook |
+| review-infra | claude-opus-5-5 | - | 2026-11-12T19:29:07.717Z | 308856 | review/infra.findings.md | hook |
+| review-risk | claude-opus-5-5 | - | 2026-11-12T19:29:08.243Z | 375469 | review/risk.findings.md | hook |
+| review-code-quality | claude-opus-5-5 | - | 2026-11-12T19:29:08.610Z | 325758 | review/code-quality.findings.md | hook |
+| judge | claude-opus-5-5 | - | 2026-11-12T19:29:45.427Z | 288432 | review/ruling.json | hook |
 
 ## Decisions
 
@@ -250,5 +248,7 @@ The file: `spec-review/consolidated.md`.
 - for the roles (2026-11-12T19:21:34.998Z), not proven: judgement gate code-quality not run on the current code
 - for the roles (2026-11-12T19:22:05.097Z), not proven: judgement gate code-quality not run on the current code
 - for the roles (2026-11-12T19:22:29.891Z), not proven: judgement gate code-quality not run on the current code
+- for the roles (2026-11-12T19:28:56.487Z), not proven: judgement gate code-quality not run on the current code
+- for the roles (2026-11-12T19:29:28.035Z), not proven: judgement gate code-quality not run on the current code
 
-Fingerprint: sha256:043c68a3e16bd8be5f8062f13506595c1109997a37a7463c32badd5403d679b7
+Fingerprint: sha256:15f04ea811bc559ec5e2d2ee47383a6de821275cf2d6882bc48334c34920e04e

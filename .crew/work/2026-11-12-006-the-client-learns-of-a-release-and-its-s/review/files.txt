@@ -17,8 +17,10 @@ src/settings/settings.ts
 src/status/report.ts
 src/update/channels.ts
 src/update/check.ts
+src/update/reason.ts
 src/update/reconcile.ts
 src/update/report.ts
+src/update/staged.ts
 src/update/state.ts
 src/util/ago.ts
 src/util/version.ts

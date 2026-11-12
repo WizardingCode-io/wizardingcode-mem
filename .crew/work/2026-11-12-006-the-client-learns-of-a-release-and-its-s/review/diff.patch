@@ -329,10 +329,10 @@ index 00be5e3..94c4a08 100644
  import { logError } from "../../util/log.ts";
  import { resolvePaths } from "../../util/paths.ts";
 diff --git a/src/cli/commands/status.ts b/src/cli/commands/status.ts
-index 853e4ac..ee37dd8 100644
+index 853e4ac..606667a 100644
 --- a/src/cli/commands/status.ts
 +++ b/src/cli/commands/status.ts
-@@ -1,20 +1,30 @@
+@@ -1,20 +1,32 @@
 +import pkg from "../../../package.json" with { type: "json" };
  import { claudeCodeRoot } from "../../adapters/claude-code/history.ts";
  import { codexRoot } from "../../adapters/codex/history.ts";
@@ -340,18 +340,21 @@ index 853e4ac..ee37dd8 100644
  import { historyStatus } from "../../history/status.ts";
  import { formatStatus, statusReport } from "../../status/report.ts";
  import { type Db, openExisting } from "../../store/db.ts";
-+import { reportOrReason, updateReport } from "../../update/report.ts";
++import { reportOrReason, type UpdateReport, updateReport } from "../../update/report.ts";
  import { resolvePaths } from "../../util/paths.ts";
  
  /** `wizardingcode-mem status [--json]`: what is stored for this project, and how wizardingcode-mem is behaving. */
- export function run(argv: string[]): number {
+-export function run(argv: string[]): number {
++export function run(
++  argv: string[],
++  build: (dataDir: string) => UpdateReport = (dataDir) =>
++    updateReport({ dataDir, env: process.env, now: Date.now(), running: pkg.version }),
++): number {
    const { dataDir, storeDir } = resolvePaths();
 +  const json = argv.includes("--json");
 +  // Read from the data directory alone, before the store: it is said also when the store
 +  // cannot be opened, which is when a person most needs to know which copy runs.
-+  const { report: update, lines } = reportOrReason(() =>
-+    updateReport({ dataDir, env: process.env, now: Date.now(), running: pkg.version }),
-+  );
++  const { report: update, lines } = reportOrReason(() => build(dataDir));
 +  const notice = [...lines, ...(update?.commands ?? [])];
    let db: Db | null = null;
    try {
@@ -363,7 +366,7 @@ index 853e4ac..ee37dd8 100644
      if (db !== null) {
        report.history = historyStatus(
          db,
-@@ -24,13 +34,17 @@ export function run(argv: string[]): number {
+@@ -24,13 +36,17 @@ export function run(argv: string[]): number {
        );
      }
      process.stdout.write(
@@ -715,14 +718,15 @@ index 0000000..8560425
 +  ];
 diff --git a/src/update/check.ts b/src/update/check.ts
 new file mode 100644
-index 0000000..7eb447d
+index 0000000..3720dfe
 --- /dev/null
 +++ b/src/update/check.ts
-@@ -0,0 +1,138 @@
+@@ -0,0 +1,134 @@
 +// The one request this product makes by itself: which release is the latest. It reads the
 +// redirect github.com answers for `releases/latest` and nothing else: no body, no API, no
 +// download. Everything that is not that redirect is a reason, never a version.
 +import { isPlainVersion } from "../util/version.ts";
++import { reason } from "./reason.ts";
 +import { lastFailed, readState, type UpdateState, writeState } from "./state.ts";
 +
 +export const REQUEST_LIMIT_MS = 5000;
@@ -811,11 +815,6 @@ index 0000000..7eb447d
 +  error?: string;
 +}
 +
-+const said = (error: unknown): string =>
-+  (error as { code?: string }).code ??
-+  (error instanceof Error ? error.message : String(error)).split("\n")[0] ??
-+  "unknown";
-+
 +/**
 + * Asks once and records what came of it. The automatic check asks only in mode `check` and
 + * when due; a forced one (a person typed `update`) asks in CI too and whatever the age.
@@ -844,7 +843,7 @@ index 0000000..7eb447d
 +  try {
 +    writeState(input.dataDir, attempt);
 +  } catch (error) {
-+    return { asked: false, state: before, error: said(error) };
++    return { asked: false, state: before, error: reason(error) };
 +  }
 +  const answer = await latestRelease(input.fetch, input.repository);
 +  const after: UpdateState = answer.ok
@@ -853,16 +852,33 @@ index 0000000..7eb447d
 +  try {
 +    writeState(input.dataDir, after);
 +  } catch (error) {
-+    return { asked: true, state: attempt, error: said(error) };
++    return { asked: true, state: attempt, error: reason(error) };
 +  }
 +  return { asked: true, state: after };
 +}
+diff --git a/src/update/reason.ts b/src/update/reason.ts
+new file mode 100644
+index 0000000..76a3747
+--- /dev/null
++++ b/src/update/reason.ts
+@@ -0,0 +1,11 @@
++/** An error as one line a person can read: its code when it has one, else its first line. */
++export function reason(error: unknown): string {
++  const code = (error as { code?: unknown } | null)?.code;
++  if (typeof code === "string" && code !== "") return code;
++  return (error instanceof Error ? error.message : String(error)).split("\n")[0] ?? "";
++}
++
++/** The first line of an error's message, whatever its code. */
++export function firstLine(error: unknown): string {
++  return (error instanceof Error ? error.message : String(error)).split("\n")[0] ?? "";
++}
 diff --git a/src/update/reconcile.ts b/src/update/reconcile.ts
 new file mode 100644
-index 0000000..499d05d
+index 0000000..caa1af4
 --- /dev/null
 +++ b/src/update/reconcile.ts
-@@ -0,0 +1,116 @@
+@@ -0,0 +1,113 @@
 +// A copy older than the staged binary hands a person's command over to it, so that the
 +// command never meets a store the newer binary migrated. Nothing here stages a binary:
 +// only `install` does.
@@ -872,7 +888,8 @@ index 0000000..499d05d
 +import { defaultDataDir } from "../util/paths.ts";
 +import { isCompiled } from "../util/self.ts";
 +import { olderThan } from "../util/version.ts";
-+import { binOwner, mayRunStaged } from "./report.ts";
++import { firstLine } from "./reason.ts";
++import { binOwner, mayRunStaged, whoAmI } from "./staged.ts";
 +
 +export type Decision = "skip" | "compare";
 +const HANDED = "WIZARDINGCODE_MEM_HANDED";
@@ -923,31 +940,24 @@ index 0000000..499d05d
 +    });
 +    return handed.exitCode ?? 1;
 +  } catch (error) {
-+    const message = error instanceof Error ? error.message : String(error);
-+    process.stderr.write(fail(message.split("\n")[0] ?? message));
++    process.stderr.write(fail(firstLine(error)));
 +    return 1;
 +  }
 +}
 +
-+/** What this process and the staged binary are, read from the machine. */
-+function gather(): { path: string; decision: Decision } {
++/** What this process and the staged binary are, read from the machine. It changes nothing. */
++function gather(handed: boolean): { path: string; decision: Decision } {
 +  const path = stagedPath(defaultDataDir());
 +  const exists = existsSync(path);
-+  const uid = process.geteuid?.() ?? null;
-+  const owner = exists ? binOwner(path) : null;
-+  // Read, then removed: nothing this command starts may inherit it.
-+  const handed = Boolean(process.env[HANDED]);
-+  delete process.env[HANDED];
 +  return {
 +    path,
 +    decision: decide({
-+      platform: process.platform,
++      ...whoAmI(),
 +      compiled: isCompiled(),
 +      self: realpathSync(process.execPath),
 +      staged: exists ? realpathSync(path) : null,
 +      handed,
-+      uid,
-+      binOwner: owner,
++      binOwner: exists ? binOwner(path) : null,
 +    }),
 +  };
 +}
@@ -959,11 +969,14 @@ index 0000000..499d05d
 + */
 +export function reconcile(
 +  argv: string[],
-+  look: () => { path: string; decision: Decision } = gather,
++  look: (handed: boolean) => { path: string; decision: Decision } = gather,
 +): { code: number } | null {
++  // The mark of a hand-over is read, then removed: nothing this command starts may inherit it.
++  const handed = Boolean(process.env[HANDED]);
++  delete process.env[HANDED];
 +  let found: { path: string; decision: Decision };
 +  try {
-+    found = look();
++    found = look(handed);
 +  } catch {
 +    return null;
 +  }
@@ -981,77 +994,23 @@ index 0000000..499d05d
 +}
 diff --git a/src/update/report.ts b/src/update/report.ts
 new file mode 100644
-index 0000000..02fb4ae
+index 0000000..5a83ab1
 --- /dev/null
 +++ b/src/update/report.ts
-@@ -0,0 +1,228 @@
+@@ -0,0 +1,170 @@
 +// What a person is told about releases and about the copy their agents run. `updateLine`
-+// and `agentsLine` are the only places these sentences are written.
-+import { existsSync, lstatSync, realpathSync } from "node:fs";
-+import { dirname, join } from "node:path";
++// and `agentsLine` write the two lines; `reportOrReason` writes the one said when they cannot
++// be built, and the `update` command adds how to turn the check on.
++import { join } from "node:path";
 +import pkg from "../../package.json" with { type: "json" };
-+import { stagedPath, stagedVersion } from "../install/binary.ts";
 +import { type Source, updateSetting } from "../settings/settings.ts";
 +import { ago } from "../util/ago.ts";
 +import { olderThan } from "../util/version.ts";
 +import { CHANNEL_COMMANDS } from "./channels.ts";
 +import { type Mode, mode as modeOf } from "./check.ts";
++import { firstLine } from "./reason.ts";
++import { type StagedFacts, stagedFacts } from "./staged.ts";
 +import { lastFailed, readState, type UpdateState } from "./state.ts";
-+
-+export interface StagedFacts {
-+  path: string;
-+  exists: boolean;
-+  /** The version the staged binary answers; null when there is none or it answers none. */
-+  version: string | null;
-+  /** Whether this process is the staged binary. */
-+  isSelf: boolean;
-+  /** Whether the file was left unrun: this command is root, or the folder is another user's. */
-+  refused: boolean;
-+}
-+
-+/**
-+ * Whether this process may run the file staged in the data directory. Never as root and
-+ * never from a folder of another user: that file is the user's to write. Windows has no
-+ * user ids to compare.
-+ */
-+export function mayRunStaged(input: {
-+  platform: string;
-+  uid: number | null;
-+  binOwner: number | null;
-+}): boolean {
-+  if (input.platform === "win32") return true;
-+  return input.uid !== null && input.uid !== 0 && input.binOwner === input.uid;
-+}
-+
-+/** Who owns the folder the staged binary is in, or null when that cannot be read. */
-+export function binOwner(path: string): number | null {
-+  try {
-+    return lstatSync(dirname(path)).uid;
-+  } catch {
-+    return null;
-+  }
-+}
-+
-+/** The staged binary as this process finds it. It is run only when it is another file, and only by its owner. */
-+export function stagedFacts(dataDir: string, running: string): StagedFacts {
-+  const path = stagedPath(dataDir);
-+  if (!existsSync(path))
-+    return { path, exists: false, version: null, isSelf: false, refused: false };
-+  if (realpathSync(path) === realpathSync(process.execPath))
-+    return { path, exists: true, version: running, isSelf: true, refused: false };
-+  const allowed = mayRunStaged({
-+    platform: process.platform,
-+    uid: process.geteuid?.() ?? null,
-+    binOwner: binOwner(path),
-+  });
-+  return {
-+    path,
-+    exists: true,
-+    version: allowed ? stagedVersion(path) : null,
-+    isSelf: false,
-+    refused: !allowed,
-+  };
-+}
 +
 +/** Line 1: the first row of the spec's table that applies. */
 +export function updateLine(input: {
@@ -1115,10 +1074,6 @@ index 0000000..02fb4ae
 +    ? `${plain}: wizardingcode-mem install moves them to it`
 +    : plain;
 +}
-+
-+/** The first line of an error, as a person can read it on one line. */
-+const firstLine = (error: unknown): string =>
-+  (error instanceof Error ? error.message : String(error)).split("\n")[0] ?? "";
 +
 +/**
 + * The report, or the reason it could not be built: `status` and `doctor` both say it, so a
@@ -1211,6 +1166,78 @@ index 0000000..02fb4ae
 +    out: first.out,
 +    lines: second === null ? [first.line] : [first.line, second],
 +    commands: first.out ? commandLines() : [],
++  };
++}
+diff --git a/src/update/staged.ts b/src/update/staged.ts
+new file mode 100644
+index 0000000..d515f54
+--- /dev/null
++++ b/src/update/staged.ts
+@@ -0,0 +1,66 @@
++// The staged binary as a process finds it, and the one rule on who may run it. A leaf of
++// this folder: the report and the hand-over both read it.
++import { existsSync, lstatSync, realpathSync } from "node:fs";
++import { dirname } from "node:path";
++import { stagedPath, stagedVersion } from "../install/binary.ts";
++
++export interface StagedFacts {
++  path: string;
++  exists: boolean;
++  /** The version the staged binary answers; null when there is none or it answers none. */
++  version: string | null;
++  /** Whether this process is the staged binary. */
++  isSelf: boolean;
++  /** Whether the file was left unrun: this command is root, or the folder is another user's. */
++  refused: boolean;
++}
++
++/** Who is asking: the platform and the effective user, null where there is none. */
++export interface Who {
++  platform: string;
++  uid: number | null;
++}
++export const whoAmI = (): Who => ({
++  platform: process.platform,
++  uid: process.geteuid?.() ?? null,
++});
++
++/**
++ * Whether this process may run the file staged in the data directory. Never as root and
++ * never from a folder of another user: that file is the user's to write. Windows has no
++ * user ids to compare.
++ */
++export function mayRunStaged(input: {
++  platform: string;
++  uid: number | null;
++  binOwner: number | null;
++}): boolean {
++  if (input.platform === "win32") return true;
++  return input.uid !== null && input.uid !== 0 && input.binOwner === input.uid;
++}
++
++/** Who owns the folder the staged binary is in, or null when that cannot be read. */
++export function binOwner(path: string): number | null {
++  try {
++    return lstatSync(dirname(path)).uid;
++  } catch {
++    return null;
++  }
++}
++
++/** The staged binary as this process finds it. It is run only when it is another file, and only by its owner. */
++export function stagedFacts(dataDir: string, running: string, who: Who = whoAmI()): StagedFacts {
++  const path = stagedPath(dataDir);
++  if (!existsSync(path))
++    return { path, exists: false, version: null, isSelf: false, refused: false };
++  if (realpathSync(path) === realpathSync(process.execPath))
++    return { path, exists: true, version: running, isSelf: true, refused: false };
++  const allowed = mayRunStaged({ ...who, binOwner: binOwner(path) });
++  return {
++    path,
++    exists: true,
++    version: allowed ? stagedVersion(path) : null,
++    isSelf: false,
++    refused: !allowed,
 +  };
 +}
 diff --git a/src/update/state.ts b/src/update/state.ts
@@ -1479,10 +1506,10 @@ index 9872ef7..93e08ad 100644
          "turns     3 distilled · 1 skipped (unknown 1) · 1 failed · 1 queued",
 diff --git a/tests/integration/update-command.test.ts b/tests/integration/update-command.test.ts
 new file mode 100644
-index 0000000..43daa4e
+index 0000000..4fe4703
 --- /dev/null
 +++ b/tests/integration/update-command.test.ts
-@@ -0,0 +1,285 @@
+@@ -0,0 +1,296 @@
 +// The release notice through its commands: the step after the drain, `update`, `doctor` and
 +// `status`. `distill` and `update` run in this process with a fetch of the test's own, so
 +// nothing here reaches github.com.
@@ -1492,6 +1519,7 @@ index 0000000..43daa4e
 +import { join } from "node:path";
 +import pkg from "../../package.json" with { type: "json" };
 +import { run as distill } from "../../src/cli/commands/distill.ts";
++import { run as status } from "../../src/cli/commands/status.ts";
 +import { run as update } from "../../src/cli/commands/update.ts";
 +import { runChecks } from "../../src/doctor/checks.ts";
 +import { doctorContext } from "../../src/doctor/context.ts";
@@ -1758,6 +1786,16 @@ index 0000000..43daa4e
 +    const parsed = JSON.parse(json.stdout) as Record<string, unknown>;
 +    expect(Object.keys(parsed).sort()).toEqual(["error", "update", "version"]);
 +    expect((parsed.update as { latest: string }).latest).toBe("99.0.0");
++  });
++
++  test("a report that cannot be built is said with its reason, and status goes on", () => {
++    const failing = () => {
++      throw new Error("EACCES: permission denied, realpath '/data/bin'\nat somewhere");
++    };
++    expect(status([], failing)).toBe(0);
++    const lines = out.split("\n");
++    expect(lines[0]).toBe(`wizardingcode-mem ${pkg.version}`);
++    expect(lines[1]).toBe("update: not checked: EACCES: permission denied, realpath '/data/bin'");
 +  });
 +
 +  test("--json carries the report beside what it already had", async () => {
@@ -2414,22 +2452,28 @@ index 0000000..40309c5
 +});
 diff --git a/tests/unit/update-report.test.ts b/tests/unit/update-report.test.ts
 new file mode 100644
-index 0000000..4a0bd92
+index 0000000..bc0e954
 --- /dev/null
 +++ b/tests/unit/update-report.test.ts
-@@ -0,0 +1,203 @@
+@@ -0,0 +1,267 @@
 +// The sentences a person reads about releases and about the copy their agents run: one
 +// function writes them, and this table is all of them.
-+import { describe, expect, test } from "bun:test";
-+import { CHANNEL_COMMANDS } from "../../src/update/channels.ts";
++import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 +import {
-+  agentsLine,
-+  commandLines,
-+  mayRunStaged,
-+  reportOrReason,
-+  type StagedFacts,
-+  updateLine,
-+} from "../../src/update/report.ts";
++  chmodSync,
++  existsSync,
++  mkdirSync,
++  mkdtempSync,
++  realpathSync,
++  rmSync,
++  statSync,
++  writeFileSync,
++} from "node:fs";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++import { CHANNEL_COMMANDS } from "../../src/update/channels.ts";
++import { agentsLine, commandLines, reportOrReason, updateLine } from "../../src/update/report.ts";
++import { mayRunStaged, type StagedFacts, stagedFacts } from "../../src/update/staged.ts";
 +import type { UpdateState } from "../../src/update/state.ts";
 +
 +const NOW = 1_800_000_000_000;
@@ -2619,6 +2663,64 @@ index 0000000..4a0bd92
 +    });
 +    const report = { lines: ["update: not checked yet"], out: false } as never;
 +    expect(reportOrReason(() => report)).toEqual({ report, lines: ["update: not checked yet"] });
++  });
++});
++
++describe("stagedFacts", () => {
++  let dir: string;
++  let staged: string;
++  beforeEach(() => {
++    dir = realpathSync(mkdtempSync(join(tmpdir(), "wizardingcode-mem-facts-")));
++    mkdirSync(join(dir, "bin"));
++    staged = join(dir, "bin", "wizardingcode-mem");
++    // A staged "binary" that leaves a trace each time it is run.
++    writeFileSync(staged, `#!/bin/sh\necho ran >> "${dir}/ran.txt"\necho 1.2.3\n`);
++    chmodSync(staged, 0o755);
++  });
++  afterEach(() => {
++    rmSync(dir, { recursive: true, force: true });
++  });
++  const ran = () => existsSync(join(dir, "ran.txt"));
++  const me = statSync(join(tmpdir())).uid;
++
++  test.skipIf(process.platform === "win32")(
++    "its owner runs the staged file to ask its version",
++    () => {
++      const owner = statSync(join(dir, "bin")).uid;
++      expect(stagedFacts(dir, "0.9.0", { platform: "linux", uid: owner })).toEqual({
++        path: staged,
++        exists: true,
++        version: "1.2.3",
++        isSelf: false,
++        refused: false,
++      });
++      expect(ran()).toBe(true);
++    },
++  );
++
++  test.each([
++    ["root", 0],
++    ["another user", me + 4242],
++  ])("%s does not run it, and the facts say it was refused", (_who, uid) => {
++    expect(stagedFacts(dir, "0.9.0", { platform: "linux", uid })).toEqual({
++      path: staged,
++      exists: true,
++      version: null,
++      isSelf: false,
++      refused: true,
++    });
++    expect(ran()).toBe(false);
++  });
++
++  test("with no staged file there is nothing to run or refuse", () => {
++    rmSync(staged);
++    expect(stagedFacts(dir, "0.9.0", { platform: "linux", uid: 0 })).toEqual({
++      path: staged,
++      exists: false,
++      version: null,
++      isSelf: false,
++      refused: false,
++    });
 +  });
 +});
 diff --git a/ui/src/api.ts b/ui/src/api.ts

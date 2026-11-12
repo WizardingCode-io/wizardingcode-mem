@@ -86,7 +86,7 @@
   "skips": [],
   "baseCommit": "7d096f6a80d7edc81fb74dfd3dc9eba1f9448f96",
   "createdAt": "2026-11-12T17:55:06.868Z",
-  "updatedAt": "2026-11-12T19:23:31.103Z",
+  "updatedAt": "2026-11-12T19:29:55.844Z",
   "specReview": true,
   "kind": "feature",
   "kindFrom": "work_type feature",
@@ -372,9 +372,9 @@
     }
   ],
   "rounds": {
-    "judgement": 2,
+    "judgement": 3,
     "validation": 3,
-    "judgementCode": "sha256:043c68a3e16bd8be5f8062f13506595c1109997a37a7463c32badd5403d679b7"
+    "judgementCode": "sha256:15f04ea811bc559ec5e2d2ee47383a6de821275cf2d6882bc48334c34920e04e"
   },
   "removedCriteria": [
     {
@@ -506,6 +506,14 @@
       },
       "at": "2026-11-12T18:18:07.659Z",
       "standing": true
+    },
+    {
+      "what": "judgement",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-12T19:29:55.765Z",
+      "standing": true
     }
   ],
   "knowledgeFiles": [],
@@ -543,6 +551,16 @@
     },
     {
       "at": "2026-11-12T19:22:29.891Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-12T19:28:56.487Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-12T19:29:28.035Z",
       "reason": "judgement gate code-quality not run on the current code",
       "kind": "role"
     }

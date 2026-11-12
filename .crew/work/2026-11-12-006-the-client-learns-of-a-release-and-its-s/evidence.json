@@ -1,5 +1,5 @@
 {
-  "fingerprint": "sha256:043c68a3e16bd8be5f8062f13506595c1109997a37a7463c32badd5403d679b7",
+  "fingerprint": "sha256:15f04ea811bc559ec5e2d2ee47383a6de821275cf2d6882bc48334c34920e04e",
   "tdd": [
     {
       "criterion": "AC-10",
@@ -425,11 +425,11 @@
       "confirmed": true,
       "exit": 0,
       "status": "pass",
-      "durationMs": 62,
-      "at": "2026-11-12T19:17:09.780Z",
+      "durationMs": 58,
+      "at": "2026-11-12T19:24:33.387Z",
       "log": null,
       "tail": "no secrets found in the change",
-      "fingerprint": "sha256:043c68a3e16bd8be5f8062f13506595c1109997a37a7463c32badd5403d679b7"
+      "fingerprint": "sha256:15f04ea811bc559ec5e2d2ee47383a6de821275cf2d6882bc48334c34920e04e"
     },
     {
       "gate": "prose",
@@ -439,11 +439,11 @@
       "confirmed": true,
       "exit": 0,
       "status": "pass",
-      "durationMs": 50,
-      "at": "2026-11-12T19:17:09.842Z",
+      "durationMs": 54,
+      "at": "2026-11-12T19:24:33.445Z",
       "log": null,
       "tail": "no chatbot artefacts in the change",
-      "fingerprint": "sha256:043c68a3e16bd8be5f8062f13506595c1109997a37a7463c32badd5403d679b7"
+      "fingerprint": "sha256:15f04ea811bc559ec5e2d2ee47383a6de821275cf2d6882bc48334c34920e04e"
     },
     {
       "gate": "build",
@@ -453,11 +453,11 @@
       "confirmed": true,
       "exit": 0,
       "status": "pass",
-      "durationMs": 2565,
-      "at": "2026-11-12T19:17:09.892Z",
-      "log": "logs/build-_-1794511029893.txt",
-      "tail": "$ bun run ui:build && bun scripts/build.ts\n$ vite build --config ui/vite.config.ts\nvite v8.3.3 building client environment for production...\ntransforming...\n\n/assets/unbounded-variable.woff2 referenced in /assets/unbounded-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/instrument-sans-variable.woff2 referenced in /assets/instrument-sans-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/jetbrains-mono-variable.woff2 referenced in /assets/jetbrains-mono-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n✓ 851 modules transformed.\nrendering chunks...\n[plugin vite:singlefile] \n\n[plugin vite:singlefile] Inlining: index-BdJDDbwQ.js\n[plugin vite:singlefile] Inlining: style-CMyPmnXo.css\nsrc/ui/dist/index.html  1,228.95 kB\n\n✓ built in 756ms\n✓ wizardingcode-mem-darwin-arm64  68.0 MB\n✓ wizardingcode-mem-darwin-x64  74.7 MB\n✓ wizardingcode-mem-linux-x64  86.1 MB\n✓ wizardingcode-mem-linux-arm64  86.1 MB\n✓ wizardingcode-mem-windows-x64.exe  90.7 MB",
-      "fingerprint": "sha256:043c68a3e16bd8be5f8062f13506595c1109997a37a7463c32badd5403d679b7"
+      "durationMs": 2734,
+      "at": "2026-11-12T19:24:33.499Z",
+      "log": "logs/build-_-1794511473499.txt",
+      "tail": "$ bun run ui:build && bun scripts/build.ts\n$ vite build --config ui/vite.config.ts\nvite v8.3.3 building client environment for production...\ntransforming...\n\n/assets/unbounded-variable.woff2 referenced in /assets/unbounded-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/instrument-sans-variable.woff2 referenced in /assets/instrument-sans-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/jetbrains-mono-variable.woff2 referenced in /assets/jetbrains-mono-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n✓ 851 modules transformed.\nrendering chunks...\n[plugin vite:singlefile] \n\n[plugin vite:singlefile] Inlining: index-BdJDDbwQ.js\n[plugin vite:singlefile] Inlining: style-CMyPmnXo.css\nsrc/ui/dist/index.html  1,228.95 kB\n\n✓ built in 776ms\n✓ wizardingcode-mem-darwin-arm64  68.0 MB\n✓ wizardingcode-mem-darwin-x64  74.7 MB\n✓ wizardingcode-mem-linux-x64  86.1 MB\n✓ wizardingcode-mem-linux-arm64  86.1 MB\n✓ wizardingcode-mem-windows-x64.exe  90.7 MB",
+      "fingerprint": "sha256:15f04ea811bc559ec5e2d2ee47383a6de821275cf2d6882bc48334c34920e04e"
     },
     {
       "gate": "test",
@@ -467,11 +467,11 @@
       "confirmed": true,
       "exit": 0,
       "status": "pass",
-      "durationMs": 218714,
-      "at": "2026-11-12T19:17:12.485Z",
-      "log": "logs/test-_-1794511032485.txt",
-      "tail": "heuristic precision 100%  recall 100%  kind 83%\ntypesafe  precision 85%  recall 94%  kind 88%  wrongly kept: en-none-obvious-from-code, en-none-general-knowledge, pt-none-your-turn  missed: en-change-json-flag\n\ntests/golden/search.test.ts:\ntop 5: 35/44 → 39/44; Portuguese of English: 1/8 → 4/8\nsemantic-only results for unrelated queries: 29/43\n\ntests/golden/retrieval.test.ts:\nrecall@5: 19/24 — missed: redact-first, pt-lingua, pt-cursor, ts-extension, hook-runs\nprecision: 19/21 notes given were the expected ones\nfalse injections: 0/23\n\ntests/perf/budgets.test.ts:\nrebuild write transaction, 2000 entries: median 34.3 ms over 5 (34.3, 43.7, 24.8, 41.7, 27.1)\nprompt: p50 64.8 ms, p95 68.2 ms\nsession-start: p50 20.5 ms, p95 23.5 ms\nturn-end: p50 14.6 ms, p95 15.9 ms\nfile-read: p50 17.7 ms, p95 19.3 ms\ntool-failed: p50 23.6 ms, p95 26.4 ms\nqwen prompt: p50 66.6 ms, p95 70.1 ms\nqwen session-start: p50 21.2 ms, p95 24.4 ms\ndroid prompt: p50 66.3 ms, p95 67.8 ms\ndroid session-start: p50 20.5 ms, p95 21.7 ms\ncopilot session-start: p50 20.2 ms, p95 21.9 ms\ncopilot prompt (capture only): p50 15.0 ms, p95 16.3 ms\nantigravity pre-invocation: p50 20.9 ms, p95 23.2 ms\nlinked prompt: p50 31.0 ms, p95 37.4 ms (30 of 30 with a note from outside)\nlinked session-start: p50 21.3 ms, p95 22.6 ms\n\ntests/perf/large-project.test.ts:\nlarge project prompt: p50 19.0 ms, p95 21.7 ms (40 of 40 given notes)\n\ntests/perf/semantic.test.ts:\nsemantic global median: 16.0 ms\n\n 3547 pass\n 4 skip\n 0 fail\n 26 snapshots, 40483 expect() calls\nRan 3551 tests across 223 files. [217.41s]",
-      "fingerprint": "sha256:043c68a3e16bd8be5f8062f13506595c1109997a37a7463c32badd5403d679b7"
+      "durationMs": 225446,
+      "at": "2026-11-12T19:24:36.266Z",
+      "log": "logs/test-_-1794511476266.txt",
+      "tail": "heuristic precision 100%  recall 100%  kind 83%\ntypesafe  precision 85%  recall 94%  kind 88%  wrongly kept: en-none-obvious-from-code, en-none-general-knowledge, pt-none-your-turn  missed: en-change-json-flag\n\ntests/golden/search.test.ts:\ntop 5: 35/44 → 39/44; Portuguese of English: 1/8 → 4/8\nsemantic-only results for unrelated queries: 29/43\n\ntests/golden/retrieval.test.ts:\nrecall@5: 19/24 — missed: redact-first, pt-lingua, pt-cursor, ts-extension, hook-runs\nprecision: 19/21 notes given were the expected ones\nfalse injections: 0/23\n\ntests/perf/budgets.test.ts:\nrebuild write transaction, 2000 entries: median 34.8 ms over 5 (34.8, 41.5, 23.8, 39.5, 24.9)\nprompt: p50 62.3 ms, p95 65.1 ms\nsession-start: p50 19.9 ms, p95 21.3 ms\nturn-end: p50 14.5 ms, p95 17.8 ms\nfile-read: p50 17.5 ms, p95 18.4 ms\ntool-failed: p50 22.9 ms, p95 24.1 ms\nqwen prompt: p50 65.7 ms, p95 70.1 ms\nqwen session-start: p50 20.6 ms, p95 22.4 ms\ndroid prompt: p50 67.0 ms, p95 71.6 ms\ndroid session-start: p50 20.7 ms, p95 22.1 ms\ncopilot session-start: p50 20.3 ms, p95 21.5 ms\ncopilot prompt (capture only): p50 30.3 ms, p95 37.7 ms\nantigravity pre-invocation: p50 23.8 ms, p95 40.6 ms\nlinked prompt: p50 39.1 ms, p95 48.7 ms (30 of 30 with a note from outside)\nlinked session-start: p50 26.8 ms, p95 32.3 ms\n\ntests/perf/large-project.test.ts:\nlarge project prompt: p50 17.9 ms, p95 20.4 ms (40 of 40 given notes)\n\ntests/perf/semantic.test.ts:\nsemantic global median: 15.8 ms\n\n 3552 pass\n 4 skip\n 0 fail\n 26 snapshots, 40498 expect() calls\nRan 3556 tests across 223 files. [224.14s]",
+      "fingerprint": "sha256:15f04ea811bc559ec5e2d2ee47383a6de821275cf2d6882bc48334c34920e04e"
     },
     {
       "gate": "lint",
@@ -481,11 +481,11 @@
       "confirmed": true,
       "exit": 1,
       "status": "pass",
-      "durationMs": 94,
-      "at": "2026-11-12T19:20:51.199Z",
-      "log": "logs/lint-_-1794511251199.txt",
+      "durationMs": 95,
+      "at": "2026-11-12T19:28:21.712Z",
+      "log": "logs/lint-_-1794511701712.txt",
       "tail": "$ biome check .\nChecked 0 files in 4ms. No fixes applied.\ncheck ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n  × No files were processed in the specified paths.\n  \n  i Check your biome.json or biome.jsonc to ensure the paths are not ignored by the configuration.\n  \n  i These paths were provided but ignored:\n  \n  - .\n  \n\nerror: script \"lint\" exited with code 1",
-      "fingerprint": "sha256:043c68a3e16bd8be5f8062f13506595c1109997a37a7463c32badd5403d679b7",
+      "fingerprint": "sha256:15f04ea811bc559ec5e2d2ee47383a6de821275cf2d6882bc48334c34920e04e",
       "reason": "1 file with problems, none changed by this item (pre-existing)",
       "problems": {
         "touched": [],
@@ -500,17 +500,15 @@
       "confirmed": true,
       "exit": 0,
       "status": "pass",
-      "durationMs": 392,
-      "at": "2026-11-12T19:20:51.294Z",
-      "log": "logs/typecheck-_-1794511251294.txt",
+      "durationMs": 393,
+      "at": "2026-11-12T19:28:21.809Z",
+      "log": "logs/typecheck-_-1794511701809.txt",
       "tail": "$ tsc --noEmit",
-      "fingerprint": "sha256:043c68a3e16bd8be5f8062f13506595c1109997a37a7463c32badd5403d679b7"
+      "fingerprint": "sha256:15f04ea811bc559ec5e2d2ee47383a6de821275cf2d6882bc48334c34920e04e"
     }
   ],
-  "verdict": "unproven",
-  "unproven": [
-    "judgement gate test-quality not proven (6 findings)"
-  ],
+  "verdict": "proven",
+  "unproven": [],
   "verifications": [
     {
       "what": "knowledge",
@@ -1192,6 +1190,74 @@
       "agentId": "abc4f5fea78c5fa8d",
       "at": "2026-11-12T19:23:09.659Z",
       "tokens": 181108,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/ruling.json"
+    },
+    {
+      "agent": "review-test-quality",
+      "agentId": "a7ac080d120508850",
+      "at": "2026-11-12T19:29:05.691Z",
+      "tokens": 344495,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/test-quality.findings.md",
+      "team": "qa"
+    },
+    {
+      "agent": "review-architecture",
+      "agentId": "ae594f125ae89b123",
+      "at": "2026-11-12T19:29:06.458Z",
+      "tokens": 410007,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/architecture.findings.md",
+      "team": "architects"
+    },
+    {
+      "agent": "review-security",
+      "agentId": "a21707398d42e1b34",
+      "at": "2026-11-12T19:29:06.947Z",
+      "tokens": 263590,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/security.findings.md",
+      "team": "security"
+    },
+    {
+      "agent": "review-infra",
+      "agentId": "aa9aa50875dbef920",
+      "at": "2026-11-12T19:29:07.717Z",
+      "tokens": 308856,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/infra.findings.md",
+      "team": "devops"
+    },
+    {
+      "agent": "review-risk",
+      "agentId": "a5a2e42a269dcdfc9",
+      "at": "2026-11-12T19:29:08.243Z",
+      "tokens": 375469,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/risk.findings.md"
+    },
+    {
+      "agent": "review-code-quality",
+      "agentId": "ab5a095006bae1b44",
+      "at": "2026-11-12T19:29:08.610Z",
+      "tokens": 325758,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/code-quality.findings.md",
+      "team": "backend"
+    },
+    {
+      "agent": "judge",
+      "agentId": "abc4f5fea78c5fa8d",
+      "at": "2026-11-12T19:29:45.427Z",
+      "tokens": 288432,
       "tokensFrom": "transcript",
       "model": "claude-opus-5-5",
       "file": "review/ruling.json"
@@ -2740,88 +2806,56 @@
       "judge": "judge",
       "findings": [
         {
-          "file": "src/update/reconcile.ts",
-          "line": 10,
-          "text": "Advisory, as filed (questions 1 and 6). `mayRunStaged` and `binOwner` live in `report.ts`, the module of sentences, and `reconcile.ts` imports them from there. The dependency stays inside `src/update/`. Moving them to a leaf would be cleaner, but no unit fails to change for a single reason.",
-          "severity": "advisory"
-        },
-        {
-          "file": "src/update/reconcile.ts",
-          "line": 75,
-          "text": "Advisory, as filed (questions 1 and 3). `gather` is described as a read but also deletes `WIZARDINGCODE_MEM_HANDED` from the environment. Its name does not say the opposite of what it does, so this is advisory under the rubric.",
-          "severity": "advisory"
-        },
-        {
-          "file": "src/update/report.ts",
-          "line": 133,
-          "text": "Advisory, as filed (questions 2 and 3). The one-line reduction of an error to its first line appears as `firstLine`, as `said` and inline in reconcile.ts. That is boilerplate-sized duplication, and `said` could be named more sharply.",
-          "severity": "advisory"
-        },
-        {
-          "file": "src/update/report.ts",
-          "line": 1,
-          "text": "Advisory, as filed (question 10). The header says `updateLine` and `agentsLine` are the only writers of these sentences, but `reportOrReason` and update.ts also write lines for the person. The comment is stale; the behaviour is not wrong.",
+          "file": "src/update/reason.ts",
+          "line": 5,
+          "text": "Advisory, as filed (question 2). `reason` repeats `firstLine`'s one-line body instead of calling `firstLine`. The rubric treats duplicated boilerplate as advisory. The round 2 advisories are resolved.",
           "severity": "advisory"
         }
       ],
-      "tokens": 230940,
-      "at": "2026-11-12T19:23:30.845Z",
-      "fingerprint": "sha256:043c68a3e16bd8be5f8062f13506595c1109997a37a7463c32badd5403d679b7"
+      "tokens": 373830,
+      "at": "2026-11-12T19:29:55.768Z",
+      "fingerprint": "sha256:15f04ea811bc559ec5e2d2ee47383a6de821275cf2d6882bc48334c34920e04e"
     },
     {
       "gate": "test-quality",
-      "verdict": "not-proven",
+      "verdict": "proven",
       "reviewer": "review-test-quality",
       "judge": "judge",
       "findings": [
         {
           "file": "tests/unit/update-report.test.ts",
-          "line": 163,
-          "text": "Upheld (question 1). The first part of AC-32: `status`, `doctor` and `update` must not run the staged file as root or from a folder another user owns. The tests cover `mayRunStaged`'s table (line 173) and `agentsLine` given a hand-built `refused: true` (line 177). No test reaches `stagedFacts` (src/update/report.ts:55-66), where the guard is applied. I checked: no test file references `stagedFacts`. If it always ran `stagedVersion` with `refused: false`, every test would still pass. A behaviour criterion has no test that fails on reversion.",
-          "severity": "defect",
-          "verification": {
-            "status": "verified",
-            "confidence": 0.97
-          }
-        },
-        {
-          "file": "tests/integration/update-command.test.ts",
-          "line": 222,
-          "text": "Upheld (question 1). AC-32 says 'a report that cannot be built is said with its reason in `status`, as in `doctor`'. `reportOrReason` is tested alone (update-report.test.ts:193). Every `status` case in this describe block (lines 236-280) builds a report that succeeds. If status.ts went back to swallowing the error silently, no test would fail.",
-          "severity": "defect",
-          "verification": {
-            "status": "verified",
-            "confidence": 0.96
-          }
+          "line": 228,
+          "text": "Advisory, as filed. The owner case would fail when the suite runs as root, because it is skipped only on Windows. That is an environment gap, not a test that passes by construction or survives reversion. Both of round 2's defects are resolved: I confirmed `describe(\"stagedFacts\")` at tests/unit/update-report.test.ts:211 and the throwing-build `status` case at tests/integration/update-command.test.ts:279.",
+          "severity": "advisory"
         },
         {
           "file": "tests/unit/update-reconcile.test.ts",
           "line": 50,
-          "text": "Advisory, as filed. The `realpathSync` step in `gather` is still not exercised. It is deferred in docs/real-use/findings.md, and AC-23's `decide` rule is tested on its inputs.",
+          "text": "Advisory, as filed. The `realpathSync` step in `gather` is still not exercised. Recorded as deferred.",
           "severity": "advisory"
         },
         {
           "file": "tests/e2e/update-reconcile.test.ts",
           "line": 101,
-          "text": "Advisory, as filed. AC-31 is pinned only through `status`. This is a gap in breadth, deferred.",
+          "text": "Advisory, as filed. AC-31 is pinned only through `status`. Recorded as deferred.",
           "severity": "advisory"
         },
         {
           "file": "tests/e2e/install-forward.test.ts",
           "line": 1247,
-          "text": "Advisory, as filed (questions 5 and 6). The test asserts the observable hand-over, not that `handOver` is the function used. Deferred.",
+          "text": "Advisory, as filed (questions 5 and 6). The test asserts the observable hand-over, not that `handOver` is the function used. Recorded as deferred.",
           "severity": "advisory"
         },
         {
           "file": "tests/unit/settings.test.ts",
           "line": 1733,
-          "text": "Advisory, as filed. Temporary folders are not removed. This is fixture hygiene, deferred.",
+          "text": "Advisory, as filed. Temporary folders are not removed. This is fixture hygiene, recorded as deferred.",
           "severity": "advisory"
         }
       ],
-      "tokens": 252542,
-      "at": "2026-11-12T19:23:30.845Z",
-      "fingerprint": "sha256:043c68a3e16bd8be5f8062f13506595c1109997a37a7463c32badd5403d679b7"
+      "tokens": 392567,
+      "at": "2026-11-12T19:29:55.768Z",
+      "fingerprint": "sha256:15f04ea811bc559ec5e2d2ee47383a6de821275cf2d6882bc48334c34920e04e"
     },
     {
       "gate": "security",
@@ -2830,21 +2864,21 @@
       "judge": "judge",
       "findings": [
         {
-          "file": "src/update/report.ts",
-          "line": 55,
-          "text": "Advisory, as filed. Round 1's defect is closed. I checked diff lines 1036-1053: `stagedFacts` asks `mayRunStaged` (no root, and the folder must be the effective user's) before `stagedVersion`, and reports `refused` otherwise.",
+          "file": "src/update/staged.ts",
+          "line": 58,
+          "text": "Advisory, as filed. The root and owner guard is intact after the move. `who` defaults to the real effective user, and no argument or environment variable can supply it.",
           "severity": "advisory"
         },
         {
-          "file": "src/update/check.ts",
-          "line": 740,
-          "text": "Advisory, as filed. The request and the state-file boundary remain sound: the URL is fixed, redirects are not followed, `Location` is matched strictly and `readState` re-validates every field.",
+          "file": "src/update/reconcile.ts",
+          "line": 94,
+          "text": "Advisory, as filed. `WIZARDINGCODE_MEM_HANDED` is now read and removed before the guarded look at the machine, so a failing look no longer leaves it for child processes. This is a hardening.",
           "severity": "advisory"
         },
         {
           "file": "src/cli/commands/status.ts",
           "line": 44,
-          "text": "Advisory, as filed (public-api, question 6). `status --json` gains `update` (with `stagedPath` and `refused`), and a store error now writes JSON to stdout with exit 1. The change is additive and documented, and no field is removed or changed.",
+          "text": "Advisory, as filed (public-api, question 6). `status --json` gains an additive `update` field, and a store error now writes JSON to stdout. It is documented and recorded as deferred, and no field is removed or changed.",
           "severity": "advisory"
         },
         {
@@ -2854,9 +2888,9 @@
           "severity": "advisory"
         }
       ],
-      "tokens": 200717,
-      "at": "2026-11-12T19:23:30.845Z",
-      "fingerprint": "sha256:043c68a3e16bd8be5f8062f13506595c1109997a37a7463c32badd5403d679b7"
+      "tokens": 311662,
+      "at": "2026-11-12T19:29:55.768Z",
+      "fingerprint": "sha256:15f04ea811bc559ec5e2d2ee47383a6de821275cf2d6882bc48334c34920e04e"
     },
     {
       "gate": "risk",
@@ -2866,13 +2900,13 @@
       "findings": [
         {
           "file": "src/update/check.ts",
-          "line": 124,
-          "text": "Advisory, as filed. When the data directory cannot be written, one log entry is written per turn and nothing caps the repetition. The spec's Limits state it, and it is recorded as deferred.",
+          "line": 120,
+          "text": "Advisory, as filed. When the data directory cannot be written, the log gets one entry per turn and nothing caps the repetition. The spec's Limits state it, and it is recorded as deferred.",
           "severity": "advisory"
         },
         {
           "file": "src/update/reconcile.ts",
-          "line": 972,
+          "line": 104,
           "text": "Advisory, as filed. A hung staged binary can delay a command by up to about 20 s. This is a stated limit, bounded in the code.",
           "severity": "advisory"
         },
@@ -2896,26 +2930,19 @@
           "outside": true
         }
       ],
-      "tokens": 271741,
-      "at": "2026-11-12T19:23:30.845Z",
-      "fingerprint": "sha256:043c68a3e16bd8be5f8062f13506595c1109997a37a7463c32badd5403d679b7"
+      "tokens": 423541,
+      "at": "2026-11-12T19:29:55.768Z",
+      "fingerprint": "sha256:15f04ea811bc559ec5e2d2ee47383a6de821275cf2d6882bc48334c34920e04e"
     },
     {
       "gate": "architecture",
       "verdict": "proven",
       "reviewer": "review-architecture",
       "judge": "judge",
-      "findings": [
-        {
-          "file": "src/update/reconcile.ts",
-          "line": 875,
-          "text": "Advisory, as filed. The staged-run rule lives in `report.ts`, so the hand-over loads the report's imports to read one rule. A leaf such as `src/update/staged.ts` would keep the rule apart. No boundary of AC-27 is crossed, and `main.ts` still loads `reconcile.ts` only through a dynamic import.",
-          "severity": "advisory"
-        }
-      ],
-      "tokens": 290171,
-      "at": "2026-11-12T19:23:30.845Z",
-      "fingerprint": "sha256:043c68a3e16bd8be5f8062f13506595c1109997a37a7463c32badd5403d679b7"
+      "findings": [],
+      "tokens": 458079,
+      "at": "2026-11-12T19:29:55.768Z",
+      "fingerprint": "sha256:15f04ea811bc559ec5e2d2ee47383a6de821275cf2d6882bc48334c34920e04e"
     },
     {
       "gate": "infra",
@@ -2933,7 +2960,7 @@
         {
           "file": "src/cli/commands/distill.ts",
           "line": 210,
-          "text": "Advisory, as filed (question 1). The suite stays offline through the preload and the helpers' copied environment, and CI stays offline through `mode()` returning `ci`. Recorded as deferred.",
+          "text": "Advisory, as filed (question 1). The suite stays offline through the preload and the copied environment, and CI stays offline through `mode()` returning `ci`. Recorded as deferred.",
           "severity": "advisory"
         },
         {
@@ -2944,9 +2971,9 @@
           "outside": true
         }
       ],
-      "tokens": 229321,
-      "at": "2026-11-12T19:23:30.845Z",
-      "fingerprint": "sha256:043c68a3e16bd8be5f8062f13506595c1109997a37a7463c32badd5403d679b7"
+      "tokens": 356928,
+      "at": "2026-11-12T19:29:55.768Z",
+      "fingerprint": "sha256:15f04ea811bc559ec5e2d2ee47383a6de821275cf2d6882bc48334c34920e04e"
     }
   ]
 }
