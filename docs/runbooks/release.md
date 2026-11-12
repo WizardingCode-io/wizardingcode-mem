@@ -36,18 +36,20 @@ From the second release on, the tag's own run distributes.
 
 ## What a run shows
 
-One line per target in the run's summary:
+One line per target in the run's summary, in these words:
 
 | Target | Lines |
 | :- | :- |
-| npm, per package | `<name> <version>: published (dist-tag latest)`, `… (dist-tag next)`, `… already published`, `… would publish (dry run)` |
-| the token, per repository | `MARKETPLACE_TOKEN expires on <date> (<n> days)`, `renew it: …`, `MARKETPLACE_TOKEN: expiry unknown …` |
-| tap | `tap: written, <version>`, `tap: already at <version>`, `tap: would write <version> (dry run)`, `tap: skipped: pre-release` |
-| marketplace | the same four, and `marketplace: left alone, the manifest names <higher>` |
-| latest | `latest: moved to <version>`, `latest: would move to <version> (dry run)`, `latest: held: …`, `latest: moved to <version>, the hold released by hand`, `latest: not moved: <job> did not succeed`, `latest: skipped: pre-release` |
-| a failure | `<target>: failed: <sentence>`, or `distribute: refused: <sentence>` when `plan` refuses the tag |
+| npm, per package | `<name> <version>: published (dist-tag <dist-tag>)`; `<name> <version>: already published`; `<name> <version>: would publish (dry run)` |
+| the token, per repository | `MARKETPLACE_TOKEN expires on <date> (<n> days)`; `renew it: MARKETPLACE_TOKEN expires on <date> (<n> days)`; `MARKETPLACE_TOKEN: expiry unknown (no expiration header); check the date noted when it was created` |
+| tap | `tap: written, <version>`; `tap: already at <version>`; `tap: would write <version> (dry run)`; `tap: skipped: pre-release` |
+| marketplace | `marketplace: written, <version>`; `marketplace: already at <version>`; `marketplace: left alone, the manifest names <higher>`; `marketplace: would write <version> (dry run)`; `marketplace: skipped: pre-release` |
+| latest | `latest: moved to <version>`; `latest: would move to <version> (dry run)`; `latest: held: <tag> accepts contract <n> and up; <previous> speaks <n>`; `latest: held: <the read that failed>`; `latest: moved to <version>, the hold released by hand`; `latest: not moved: <job> did not succeed`; `latest: skipped: pre-release` |
+| a failure | `tap: failed: <sentence>`, and the same with the name of any other target; `distribute: refused: <sentence>` when the first job refuses the tag |
 
-`latest` moves last and only when npm, the tap and the marketplace all succeeded.
+The dist-tag is "latest" for a plain release and "next" for a pre-release.
+
+The image's latest tag moves last, and only when npm, the tap and the marketplace all succeeded.
 
 ## Repeating a target
 

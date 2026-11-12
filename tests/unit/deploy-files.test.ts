@@ -301,6 +301,10 @@ describe("the workflows", () => {
       const retag = latest?.steps.find((step) => step.run?.includes("imagetools create"));
       expect(retag?.if).toBe(expr("!inputs.dry_run"));
       expect(retag?.run).toContain(`-t ${IMAGE}:latest "${IMAGE}:$VERSION"`);
+      // A failed retag still gets its line in the summary.
+      expect(retag?.run).toContain(
+        `echo "${summaryLine("latest", { kind: "failed", sentence: "the image's retag did not succeed" })}"`,
+      );
       const last = latest?.steps.at(-1);
       expect(last?.env).toEqual({ LINE: expr("needs.plan.outputs.latest_line") });
     });

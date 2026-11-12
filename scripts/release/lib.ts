@@ -3,7 +3,7 @@
 // target writes, and every line the run's summary carries. docs/runbooks/release.md is the
 // author's side of it; docs/adr/0029-release-distribution.md says why it has this shape.
 import { appendFileSync } from "node:fs";
-import { isVersion, olderThan } from "../../src/util/version.ts";
+import { highestVersion, isVersion, olderThan } from "../../src/util/version.ts";
 import { TARGETS } from "../build.ts";
 
 /** A refusal or a failure a person reads: one sentence, printed and written to the summary. */
@@ -339,10 +339,9 @@ export function editManifests(
   version: string,
 ): { claude: string; agents: string; outcome: ManifestEdit["outcome"]; higher?: string } {
   const edits = [editManifest(claude, "claude", version), editManifest(agents, "agents", version)];
-  const higher = edits
-    .map((edit) => edit.higher)
-    .filter((each): each is string => each !== undefined)
-    .sort((a, b) => Bun.semver.order(b, a))[0];
+  const higher = highestVersion(
+    edits.map((edit) => edit.higher).filter((each): each is string => each !== undefined),
+  );
   if (higher !== undefined) return { claude, agents, outcome: "left-alone", higher };
   const [first, second] = edits as [ManifestEdit, ManifestEdit];
   const written = first.outcome === "written" || second.outcome === "written";
@@ -394,6 +393,11 @@ export interface PlanFacts {
 export const isVersionTag = (tag: string): boolean =>
   tag.startsWith("v") && isVersion(tag.slice(1));
 const isPrerelease = (tag: string): boolean => tag.includes("-");
+/** The highest of some version tags, or null for none. */
+const highestTag = (tags: string[]): string | null => {
+  const highest = highestVersion(tags.map((tag) => tag.slice(1)));
+  return highest === undefined ? null : `v${highest}`;
+};
 
 /** Facts with which every refusal passes: the command fills them in one by one, in the refusals' order. */
 export function passingFacts(ref: string, tag: string): PlanFacts {
@@ -450,8 +454,8 @@ export function decidePlan(
   const rivals = facts.tags.filter(
     (other) => isVersionTag(other) && (isPrerelease(tag) || !isPrerelease(other)),
   );
-  const highest = rivals.sort((a, b) => Bun.semver.order(b.slice(1), a.slice(1)))[0];
-  if (highest !== undefined && olderThan(version, highest.slice(1)))
+  const highest = highestTag(rivals);
+  if (highest !== null && olderThan(version, highest.slice(1)))
     return no(
       `${tag} is not the highest release (${highest} exists); an older release is never distributed`,
     );
@@ -491,11 +495,11 @@ export function parseContract(source: string): { contract: number; accepted: num
 
 /** The highest plain version tag below `tag`: the release whose members the hold protects. */
 export function previousPlain(tag: string, tags: string[]): string | null {
-  const below = tags
-    .filter((other) => isVersionTag(other) && !isPrerelease(other))
-    .filter((other) => olderThan(other.slice(1), tag.slice(1)))
-    .sort((a, b) => Bun.semver.order(b.slice(1), a.slice(1)));
-  return below[0] ?? null;
+  return highestTag(
+    tags
+      .filter((other) => isVersionTag(other) && !isPrerelease(other))
+      .filter((other) => olderThan(other.slice(1), tag.slice(1))),
+  );
 }
 
 /**

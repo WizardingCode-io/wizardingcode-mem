@@ -131,13 +131,21 @@ export function commitAndPush(options: PushOptions): Outcome {
         throw new ReleaseError(
           `the push to ${remote} was refused: MARKETPLACE_TOKEN may lack contents write there`,
         );
+      // Only a refusal because the remote moved is worth a second try; anything else (the
+      // network, the credentials) is said as git said it.
+      if (!/non-fast-forward|fetch first|\[rejected\]/.test(first.stderr))
+        throw new ReleaseError(`the push to ${remote} failed: ${first.stderr.trim()}`);
       // Someone else pushed meanwhile: replay this one commit over theirs, once.
-      if (git(["pull", "--rebase", "--quiet"], authed).code !== 0) {
+      const rebased = git(["pull", "--rebase", "--quiet"], authed);
+      if (rebased.code !== 0) {
         git(["rebase", "--abort"]);
-        throw new ReleaseError(`the push to ${remote} was refused and the rebase failed`);
+        throw new ReleaseError(
+          `the push to ${remote} was refused and the rebase failed: ${rebased.stderr.trim()}`,
+        );
       }
-      if (git(["push", "--quiet", "origin", "HEAD"], authed).code !== 0)
-        throw new ReleaseError(`the push to ${remote} was refused twice`);
+      const second = git(["push", "--quiet", "origin", "HEAD"], authed);
+      if (second.code !== 0)
+        throw new ReleaseError(`the push to ${remote} was refused twice: ${second.stderr.trim()}`);
     }
     return { kind: "written", version };
   } finally {

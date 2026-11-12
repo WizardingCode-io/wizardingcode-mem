@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { OLDER_JS } from "../../scripts/plugins.ts";
-import { olderThan } from "../../src/util/version.ts";
+import { highestVersion, olderThan } from "../../src/util/version.ts";
 import { VERSION_ORDER } from "../fixtures/version-order.ts";
 import { shellOlderBlock } from "../helpers/version.ts";
 
@@ -37,6 +37,16 @@ describe("one version order, in three implementations", () => {
       );
       expect({ ...pair, got: run.exitCode === 0 }).toEqual({ ...pair, got: pair.older });
     }
+  });
+});
+
+describe("the highest of some versions", () => {
+  test("is the one no other is above, by the same order", () => {
+    expect(highestVersion(["0.9.0", "0.10.0-rc.1", "0.9.1", "0.10.0-rc.10", "0.10.0-rc.9"])).toBe(
+      "0.10.0-rc.10",
+    );
+    expect(highestVersion(["0.9.0", "0.10.0-rc.1", "0.10.0"])).toBe("0.10.0");
+    expect(highestVersion([])).toBeUndefined();
   });
 });
 

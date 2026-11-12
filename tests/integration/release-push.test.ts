@@ -204,6 +204,29 @@ describe("the writer to another repository", () => {
     expect(calls.filter((cmd) => cmd[1] === "pull")).toHaveLength(0);
   });
 
+  test("a push that fails for another reason is said as git said it, with no second try", () => {
+    const calls: string[][] = [];
+    const runner: Runner = (cmd, more) => {
+      calls.push(cmd);
+      return run(cmd, more);
+    };
+    expect(() =>
+      commitAndPush(
+        options(
+          (dir) => {
+            change(dir);
+            // The repository goes away between the clone and the push, as a network would.
+            rmSync(other, { recursive: true, force: true });
+            return null;
+          },
+          { runner },
+        ),
+      ),
+    ).toThrow(new RegExp(`^the push to ${other.replaceAll(".", "\\.")} failed: .+`));
+    expect(calls.filter((cmd) => cmd[1] === "pull")).toHaveLength(0);
+    expect(calls.filter((cmd) => cmd[1] === "push")).toHaveLength(1);
+  });
+
   test("the token travels in the child's environment only: never in an argument or a URL", () => {
     const calls: Array<{ cmd: string[]; env: Record<string, string | undefined> | undefined }> = [];
     const runner: Runner = (cmd, more) => {
@@ -225,6 +248,7 @@ describe("the writer to another repository", () => {
       for (const call of holds(name))
         expect(call.env?.GIT_CONFIG_VALUE_0).toBe(`Authorization: Basic ${encoded}`);
     }
+    expect(holds("ls-remote").length).toBeGreaterThan(0);
     for (const call of holds("ls-remote")) expect(call.env?.GIT_CONFIG_VALUE_0).toBeUndefined();
   });
 });

@@ -5,6 +5,11 @@ export function isVersion(text: string): boolean {
   return VERSION.test(text);
 }
 
+/** The highest of some versions by that order, or undefined for none. */
+export function highestVersion(versions: readonly string[]): string | undefined {
+  return [...versions].sort((a, b) => Bun.semver.order(b, a))[0];
+}
+
 /**
  * True when `have` is missing, not a version, or older than `wanted` by semantic versioning's
  * order. The same rule as the JavaScript and shell `older()` the plugins and the installers

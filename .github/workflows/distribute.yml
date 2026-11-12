@@ -199,7 +199,11 @@ jobs:
       - if: ${{ !inputs.dry_run }}
         env:
           VERSION: ${{ needs.plan.outputs.version }}
-        run: docker buildx imagetools create -t ghcr.io/wizardingcode-io/wizardingcode-mem:latest "ghcr.io/wizardingcode-io/wizardingcode-mem:$VERSION"
+        run: |
+          docker buildx imagetools create -t ghcr.io/wizardingcode-io/wizardingcode-mem:latest "ghcr.io/wizardingcode-io/wizardingcode-mem:$VERSION" || {
+            echo "latest: failed: the image's retag did not succeed" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          }
       - env:
           LINE: ${{ needs.plan.outputs.latest_line }}
         run: echo "$LINE" | tee -a "$GITHUB_STEP_SUMMARY"
