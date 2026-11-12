@@ -34,7 +34,7 @@ The first tag that carries this procedure is pushed after steps 1 and 2 and befo
 1. Push the tag. `release.yml` makes the release; the run of `distribute.yml` it starts stops in `plan` with "the environment release does not exist" and writes nothing.
 2. Do steps 3 to 5 of the setup.
 3. Start `distribute.yml` from `main` (Actions, "distribute", "Run workflow") with the tag and `dry_run` on. Read the summary: it says what each target would write. A dry run proves the checks, the token's read, the formula and the manifests' edits. It makes none of the four writes to the outside (the npm publish, the two pushes, the image's retag), so it cannot show that they will succeed.
-4. Start it again with `dry_run` off. This is the first test of those four writes. If one fails, fix its cause and start the workflow again: what already succeeded is found done and is not written twice.
+4. Start it again with `dry_run` off. This is the first test of the writes that tag makes: for a pre-release, the npm publish alone; for a plain tag, all four. If one fails, fix its cause and start the workflow again: what already succeeded is found done and is not written twice.
 
 From the second release on, the tag's own run distributes.
 
