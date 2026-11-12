@@ -1,0 +1,47 @@
+# Homebrew formula for wizardingcode-mem. Generated from packaging/homebrew/wizardingcode-mem.rb.template
+# in WizardingCode-io/wizardingcode-mem by its release; do not edit it in the tap.
+#
+#   brew install wizardingcode-io/wizardingcode/wizardingcode-mem
+class WizardingcodeMem < Formula
+  desc "Persistent memory for coding agents: one local binary, no daemon"
+  homepage "https://github.com/WizardingCode-io/wizardingcode-mem"
+  version "@VERSION@"
+  license "Apache-2.0"
+
+  on_macos do
+    on_arm do
+      url "https://github.com/WizardingCode-io/wizardingcode-mem/releases/download/v@VERSION@/wizardingcode-mem-darwin-arm64"
+      sha256 "@SHA256_DARWIN_ARM64@"
+    end
+    on_intel do
+      url "https://github.com/WizardingCode-io/wizardingcode-mem/releases/download/v@VERSION@/wizardingcode-mem-darwin-x64"
+      sha256 "@SHA256_DARWIN_X64@"
+    end
+  end
+
+  on_linux do
+    on_arm do
+      url "https://github.com/WizardingCode-io/wizardingcode-mem/releases/download/v@VERSION@/wizardingcode-mem-linux-arm64"
+      sha256 "@SHA256_LINUX_ARM64@"
+    end
+    on_intel do
+      url "https://github.com/WizardingCode-io/wizardingcode-mem/releases/download/v@VERSION@/wizardingcode-mem-linux-x64"
+      sha256 "@SHA256_LINUX_X64@"
+    end
+  end
+
+  def install
+    bin.install Dir["wizardingcode-mem-*"].first => "wizardingcode-mem"
+  end
+
+  def caveats
+    <<~EOS
+      Set it up for the agents on this machine:
+        wizardingcode-mem install
+    EOS
+  end
+
+  test do
+    assert_match version.to_s, shell_output("#{bin}/wizardingcode-mem --version")
+  end
+end
