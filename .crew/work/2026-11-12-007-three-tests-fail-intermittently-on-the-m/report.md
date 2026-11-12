@@ -43,22 +43,24 @@
 
 | Gate | Target | Status | Command | Duration | Log |
 | :- | :- | :- | :- | -: | :- |
-| secrets | . | pass | `built-in secret scan` | 36 ms |  |
-| prose | . | pass | `built-in prose scan` | 39 ms |  |
-| build | . | pass | `bun run build` | 2517 ms | logs/build-_-1794517120056.txt |
-| test | . | pass | `bun run test` | 212245 ms | logs/test-_-1794517122602.txt |
-| lint | . | pass: 1 untouched file with problems, none of the item's | `bun run lint` | 91 ms | logs/lint-_-1794517334848.txt |
-| typecheck | . | pass | `bun run typecheck` | 355 ms | logs/typecheck-_-1794517334940.txt |
+| secrets | . | pass | `built-in secret scan` | 37 ms |  |
+| prose | . | pass | `built-in prose scan` | 38 ms |  |
+| build | . | pass | `bun run build` | 2539 ms | logs/build-_-1794517533224.txt |
+| test | . | pass | `bun run test` | 213011 ms | logs/test-_-1794517535788.txt |
+| lint | . | pass: 1 untouched file with problems, none of the item's | `bun run lint` | 97 ms | logs/lint-_-1794517748799.txt |
+| typecheck | . | pass | `bun run typecheck` | 380 ms | logs/typecheck-_-1794517748896.txt |
 
 ## Judgement gates
 
 | Gate | Verdict | Reviewer | Findings | Tokens |
 | :- | :- | :- | -: | -: |
-| code-quality | proven | review-code-quality | 1 | 230944 |
-| test-quality | proven | review-test-quality | 1 | 251344 |
+| code-quality | proven | review-code-quality | 2 | 358964 |
+| test-quality | proven | review-test-quality | 2 | 388306 |
 
-- code-quality: tests/integration/team-mirror.test.ts:522 Lowered to an advisory as debt outside the change. This older test parses the stub's `recordArgsTo` file inline here and again at line 570, on lines this diff did not write. `recordedCalls` in tests/helpers/stub-git.ts now does the same parsing. The round 1 duplication defect is resolved: in the regenerated diff, both new test files import `recordedCalls`, `tracedCommands` and `commitsEachMaintained` from tests/helpers/stub-git.ts (diff.patch lines 148-175, 208, 345). The reviewer raised no finding in round 2. (advisory, outside the change)
-- test-quality: tests/unit/knowledge-maintenance.test.ts:492 Kept as an advisory. Under a whole revert, AC-13's red is a race: the commit's own detached maintenance may pack the objects before the assertions run. The test fails every time when only the runner's call is removed, so a test does fail on reversion of the behaviour. The round 1 AC-10 defect is resolved: the test now finds the paragraph that starts '- A `.git` that holds anything' and asserts it contains 'started by the runner after a commit, in the foreground' (diff.patch lines 544-549). The ADR's lines carrying that phrase are in the diff. (advisory)
+- code-quality: tests/unit/knowledge-maintenance.test.ts:173 Kept as an advisory under question 11. The reviewer cited line 505 of diff.patch; the file's own lines are 172-174. The new comment says geometric repacking is the default strategy from git 2.54 on, with no source. That disagrees with spec.md:27, where `gc.auto=1` alone repacked on git 2.54.0. The claim should name the version actually seen or be marked `[source?]`. Under the rubric, a defect is a rewrite that drops or alters a fact or invents a source. This is a new comment that alters no earlier text, so it stays advisory. (advisory)
+- code-quality: tests/integration/team-mirror.test.ts:522 Lowered to an advisory as debt outside the change. This older test parses the `recordArgsTo` file inline here and again at line 570, the same parsing `recordedCalls` in tests/helpers/stub-git.ts already does. This diff did not write those lines. (advisory, outside the change)
+- test-quality: tests/unit/knowledge-maintenance.test.ts:177 Kept as an advisory under question 6. The reviewer cited line 509 of diff.patch; this is the file's line 177. The host now also passes `maintenance.geometric-repack.auto=1`, while AC-13 in spec.md:42 names only `gc.auto=1`. The test still fails when the runner's call is removed: with `maintenance.auto=false`, nothing else packs the objects in `objects/17`. So the criterion is proven, and only its wording lags the test. (advisory)
+- test-quality: tests/unit/knowledge-maintenance.test.ts:160 Kept as an advisory, carried over from round 2. The reviewer cited line 492 of diff.patch; this is the file's line 160. Under a whole revert, AC-13's red is a race: the commit's own detached maintenance may pack the objects before the assertions run. With only the runner's call removed, the test fails every time, so a test does fail on reversion of the behaviour. (advisory)
 
 ## Verifications
 
@@ -102,7 +104,7 @@
 | lead-security | security | standard route |
 | judge |  | a gate is planned |
 
-- Rounds: judgement 2 of 2, validation 3 of 2
+- Rounds: judgement 3 of 2, validation 3 of 2
 - Runtimes: claude (context at start: enforced; the status line per prompt: enforced; the denial of engine files: enforced; the denial of forbidden commands: enforced; the hold at Stop: enforced; the roles' answers filed: enforced; the roles read-only: enforced)
 
 ## Validations
@@ -141,6 +143,9 @@
 | review-code-quality | claude-opus-5-5 | - | 2026-11-12T21:02:38.767Z | 160070 | review/code-quality.findings.md | hook |
 | review-test-quality | claude-opus-5-5 | - | 2026-11-12T21:02:54.959Z | 180470 | review/test-quality.findings.md | hook |
 | judge | claude-opus-5-5 | - | 2026-11-12T21:03:15.298Z | 141748 | review/ruling.json | hook |
+| review-test-quality | claude-opus-5-5 | - | 2026-11-12T21:17:31.740Z | 279016 | review/test-quality.findings.md | hook |
+| review-code-quality | claude-opus-5-5 | - | 2026-11-12T21:17:31.934Z | 249674 | review/code-quality.findings.md | hook |
+| judge | claude-opus-5-5 | - | 2026-11-12T21:18:01.110Z | 218580 | review/ruling.json | hook |
 
 ## Decisions
 
@@ -160,10 +165,13 @@
 - for the roles (2026-11-12T21:02:28.361Z), not proven: judgement gate code-quality not run on the current code
 - for the roles (2026-11-12T21:02:55.028Z), not proven: judgement gate code-quality not run on the current code
 - for the roles (2026-11-12T21:03:01.905Z), not proven: judgement gate code-quality not run on the current code
+- for the roles (2026-11-12T21:09:12.439Z), not proven: judgement gate code-quality not run on the current code
+- for the roles (2026-11-12T21:17:24.361Z), not proven: judgement gate code-quality not run on the current code
+- for the roles (2026-11-12T21:17:50.053Z), not proven: judgement gate code-quality not run on the current code
 
 ## Objections
 
 - O-1 (advisory, raised by gap-round) open: The commit that crosses git's threshold waits for the repack inside the runner's timeout; a repack that exceeded it would report a failure for a commit that landed. Not measured at that size.
 - O-2 (advisory, raised by gap-round) open: The end of the three failures cannot be shown on the author's machine: the evidence is the runner's probe and the suite's later runs there.
 
-Fingerprint: sha256:9dc31ec764575a3c7a16b844095728e1a0e2ff9d7d0c3ddd91cc2a24bd7d59cf
+Fingerprint: sha256:ff520c9cf236b2a328e5e5a3a2cd9f0dffa42665c3e253d5ba62a72a2405bc80

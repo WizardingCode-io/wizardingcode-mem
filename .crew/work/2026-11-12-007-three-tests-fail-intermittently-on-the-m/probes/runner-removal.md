@@ -62,3 +62,15 @@ After a commit returns, git's own `git maintenance run --auto --detach` is still
 - Why the author's machine never fails: the same detached command is started there. Not measured; the likely reading is that the process ends sooner than the removal starts.
 - Why case C never failed in 300 repetitions while the suite's same removal fails once in several runs. Not measured; the store's last call before the removal is not a commit.
 - Which of Bun's steps turns one missing child into an `ENOENT` for the root. Bun's source was not read.
+
+## After the change (pull request 41)
+
+| Run | Commit | `check (macos-latest)` | `check (ubuntu-latest)` |
+| :- | :- | :- | :- |
+| 43303693995 | `f7955dc` | failed on the item's own new test alone (an exact count of loose objects); the three tests that used to fail passed | failed on the same new test |
+| 43305613360 | `2f7edd8` | not read (the run was replaced) | failed on the same new test: git 2.56.0 found nothing due with `gc.auto=1` alone |
+| 43306754559 | `421df55` | passed | passed |
+
+git 2.56.0 runs on both runners. Its release notes say that from 2.54.0 `git maintenance` uses the geometric strategy by default, whose loose-object threshold is `maintenance.geometric-repack.auto`; Apple's git 2.54.0 on the author's machine repacked with `gc.auto=1` alone. The compaction test lowers both.
+
+One green run does not show that an intermittent failure is gone: the three tests failed in 3 of the 6 runs read before the change. The later runs on the runner are the evidence.
