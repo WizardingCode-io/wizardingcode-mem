@@ -1,0 +1,68 @@
+{
+  "id": "2026-11-12-001-ci-slack-for-the-two-perf-budgets-withou",
+  "title": "CI slack for the two perf budgets without one. tests/perf/budgets.test.ts holds ",
+  "input": "CI slack for the two perf budgets without one. tests/perf/budgets.test.ts holds a rebuild's write transaction at 2000 entries to 50 ms on one measurement, and tests/perf/semantic.test.ts holds the median of a global search by meaning over 65000 memories to 40 ms, with no slack on CI, while the hook budgets in the same file hold the median with a 2.5 slack on a CI runner (CI=1). On GitHub's macos-latest runner the rebuild took 70, 59 and 64 ms and the search 47 ms in three runs of PR 35 and in the push run of #34, so check (macos-latest) fails and the ruleset blocks the merge. The fix: the rebuild is measured five times and its median held, and both budgets carry the file's SLACK (2.5 on CI, 1 on a developer's machine), so the budgets on a developer's machine stay 50 ms and 40 ms.",
+  "type": "chore",
+  "route": "fast",
+  "routeReasons": [
+    "chore in one spot, clear request, no risk area"
+  ],
+  "riskAreas": [],
+  "phase": "learn",
+  "awaiting": null,
+  "criteria": [
+    {
+      "id": "AC-1",
+      "kind": "observed",
+      "text": "With CI=1 the two tests announce and hold the budgets with the slack (the rebuild median of five measurements under 125 ms, the semantic median under 100 ms); without CI they announce 50 ms and 40 ms: checked by running both tests with and without CI=1 and reading the names and the measured lines"
+    },
+    {
+      "id": "AC-2",
+      "kind": "preserve",
+      "text": "The two perf tests keep passing on this machine with the budgets unchanged at 50 ms (the rebuild) and 40 ms (the semantic median) when CI is unset"
+    }
+  ],
+  "approvals": [],
+  "skips": [],
+  "baseCommit": "24e86b9ce7aa93545937869553fe721d51978abe",
+  "createdAt": "2026-11-12T12:10:44.023Z",
+  "updatedAt": "2026-11-12T12:31:08.569Z",
+  "kind": "feature",
+  "kindFrom": "work_type chore",
+  "knowledge": {
+    "readAt": "2026-11-12T12:10:44.036Z",
+    "listed": [
+      "K-381",
+      "K-371",
+      "K-363",
+      "K-372",
+      "K-346",
+      "K-343",
+      "K-375",
+      "K-316",
+      "K-311",
+      "K-376"
+    ]
+  },
+  "priority": "normal",
+  "phaseAt": {
+    "build": "2026-11-12T12:10:44.325Z",
+    "gate": "2026-11-12T12:18:26.347Z",
+    "deliver": "2026-11-12T12:30:59.756Z",
+    "learn": "2026-11-12T12:31:08.407Z"
+  },
+  "runtimes": [
+    "claude"
+  ],
+  "seats": [],
+  "knowledgeFiles": [],
+  "knowledgeLabels": [],
+  "primaryTeam": "backend",
+  "learned": {
+    "at": "2026-11-12T12:31:08.569Z",
+    "entries": [
+      "K-382"
+    ],
+    "confirmed": []
+  }
+}
