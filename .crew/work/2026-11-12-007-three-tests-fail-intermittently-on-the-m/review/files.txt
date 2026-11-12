@@ -1,0 +1,6 @@
+CLAUDE.md
+docs/adr/0024-knowledge-module.md
+src/modules/knowledge/repo.ts
+tests/helpers/stub-git.ts
+tests/integration/team-mirror-maintenance.test.ts
+tests/unit/knowledge-maintenance.test.ts
