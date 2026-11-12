@@ -1,6 +1,6 @@
 # ADR 0008 — M5: distribution
 
-Date: 2026-10-05 · Status: accepted.
+Date: 2026-10-05 · Status: accepted; its Homebrew row superseded, and its npm and curl rows amended, by [ADR 0029](0029-release-distribution.md), which also carries out the release automation listed below as left to do.
 
 ## What exists
 

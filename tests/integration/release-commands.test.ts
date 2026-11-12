@@ -473,6 +473,24 @@ describe("push.ts", () => {
     expect(lower.summary).toBe("marketplace: left alone, the manifest names 9.9.9\n");
   });
 
+  test("on a runner the two test overrides are ignored: the command writes only where it is meant to", async () => {
+    // A git that reaches nothing and records what it was asked.
+    stub("git", "");
+    const result = await script("push.ts", ["--target", "marketplace"], {
+      TAG: "v9.9.9",
+      SHA: "a".repeat(40),
+      VERSION: "9.9.9",
+      DRY_RUN: "false",
+      GITHUB_REPOSITORY: "o/r",
+      GITHUB_ACTIONS: "true",
+      PUSH_ORIGIN: join(base, "elsewhere.git"),
+      PUSH_REMOTE: join(base, "elsewhere.git"),
+    });
+    expect(result.exitCode).toBe(1);
+    expect(log("git")).toContain("ls-remote --tags https://github.com/o/r.git");
+    expect(log("git")).not.toContain("elsewhere.git");
+  });
+
   test("a tag moved since it was judged stops the write, and the summary says so", async () => {
     const origin = tagged();
     const tap = repository("tap", { "README.md": "the tap\n" });

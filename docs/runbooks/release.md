@@ -25,7 +25,7 @@ If the repository's settings offer immutable releases, turn them on: a release's
 
 ## The first release
 
-The first tag after this setup exists is pushed after steps 1 and 2 and before step 3, while there is no environment:
+The first tag that carries this procedure is pushed after steps 1 and 2 and before step 3, while the environment does not exist:
 
 1. Push the tag. `release.yml` makes the release; the run of `distribute.yml` it starts stops in `plan` with "the environment release does not exist" and writes nothing.
 2. Do steps 3 to 5 of the setup.
@@ -64,7 +64,7 @@ Wait for a run to end before starting another. The workflow runs one at a time a
 - **npm fails with the sentence about the trusted publisher.** Step 5 of the setup is missing for that package, or names another workflow or environment.
 - **`MARKETPLACE_TOKEN is not granted to <repository>, or the organisation has not approved it`.** The token does not cover that repository, or the organisation requires approval for fine-grained tokens and has not given it.
 - **`the push to <repository> was refused: MARKETPLACE_TOKEN may lack contents write there`.** The token reads but cannot write: give it "Contents: read and write", or lift a rule on that repository's default branch that stops a direct push.
-- **`the push to <repository> was refused by a rule on its branch`.** That repository's default branch does not take a direct push from the token's owner (step 4 of the setup): lift the rule for that person, then start the workflow again.
+- **`the push to <repository> was refused by a rule on its branch`.** That repository's default branch does not take a direct push from the token's owner (step 4 of the setup), whether by a branch protection or by a ruleset: lift the rule for that person, then start the workflow again.
 - **`<tag> no longer names the commit that was judged`.** The tag was moved while the run was going. Find out who moved it and why before anything else.
 - **The image's retag fails.** The version's image is missing from `ghcr.io/wizardingcode-io/wizardingcode-mem` (look at `release.yml`'s `docker` job), or the package's settings do not let this repository's workflows write to it.
 
@@ -84,7 +84,7 @@ Two things limit it. An agent's plugin that is still at the newer version puts t
 
 ## Releasing a hold
 
-`latest` is held when the new release's server would refuse the members still on the previous release: its lowest accepted contract is above the contract the previous release speaks. The summary says `latest: held: <tag> accepts contract <n> and up; <previous> speaks <m>`. When those members have updated, start `distribute.yml` with the tag and `release_hold` on.
+`latest` is held when the new release's server would refuse the members still on the previous release: its lowest accepted contract is above the contract the previous release speaks. The summary says `latest: held: <tag> accepts contract <n> and up; <previous> speaks <n>`, each `<n>` being that release's own contract number. When those members have updated, start `distribute.yml` with the tag and `release_hold` on.
 
 The rule looks one release back, which is what the server promises (it accepts its own contract and the one before). A member two or more releases behind is refused by a release that drops their contract whether `latest` is held or not.
 

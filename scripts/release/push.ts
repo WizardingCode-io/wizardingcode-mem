@@ -123,7 +123,8 @@ export function commitAndPush(options: PushOptions): Outcome {
     must(["commit", "--quiet", "-m", `wizardingcode-mem ${version}`]);
     const first = git(["push", "--quiet", "origin", "HEAD"], authed);
     if (first.code !== 0) {
-      if (/GH006|protected branch/i.test(first.stderr))
+      // GitHub's refusals by a rule: a protected branch (GH006), a ruleset (GH013).
+      if (/GH006|GH013|protected branch|repository rule violations/i.test(first.stderr))
         throw new ReleaseError(
           `the push to ${remote} was refused by a rule on its branch: it must accept a direct push from the token's owner`,
         );
@@ -211,10 +212,14 @@ if (import.meta.main) {
   }
   command(target, () => {
     const version = need("VERSION");
+    const onRunner = process.env.GITHUB_ACTIONS === "true";
     const outcome = commitAndPush({
-      // The two overrides exist for the command's test, which writes to local repositories.
-      remote: process.env.PUSH_REMOTE || REMOTES[target],
-      origin: process.env.PUSH_ORIGIN || `https://github.com/${need("GITHUB_REPOSITORY")}.git`,
+      // The two overrides exist for the command's test, which writes to local repositories;
+      // on a runner they are never read, so the token's writer goes only where it is meant to.
+      remote: (onRunner ? undefined : process.env.PUSH_REMOTE) || REMOTES[target],
+      origin:
+        (onRunner ? undefined : process.env.PUSH_ORIGIN) ||
+        `https://github.com/${need("GITHUB_REPOSITORY")}.git`,
       tag: need("TAG"),
       sha: need("SHA"),
       version,

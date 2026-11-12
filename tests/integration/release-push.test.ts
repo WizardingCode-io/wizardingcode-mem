@@ -185,13 +185,14 @@ describe("the writer to another repository", () => {
     expect(head(other)).toBe(before);
   });
 
-  test("a push refused by a rule on the branch says so, and is not retried as a race", () => {
-    // The other repository refuses every push, the way a protected branch does.
+  // GitHub's two refusals by a rule: a protected branch (GH006) and a ruleset (GH013).
+  test.each([
+    ["a protected branch", "GH006: Protected branch update failed for refs/heads/main."],
+    ["a ruleset", "GH013: Repository rule violations found for refs/heads/main."],
+  ])("a push refused by %s says so, and is not retried as a race", (_rule, refusal) => {
+    // The other repository refuses every push, in GitHub's words.
     const hook = join(other, "hooks", "pre-receive");
-    writeFileSync(
-      hook,
-      "#!/bin/sh\necho 'GH006: Protected branch update failed for refs/heads/main.' >&2\nexit 1\n",
-    );
+    writeFileSync(hook, `#!/bin/sh\necho '${refusal}' >&2\nexit 1\n`);
     chmodSync(hook, 0o755);
     const calls: string[][] = [];
     const runner: Runner = (cmd, more) => {
