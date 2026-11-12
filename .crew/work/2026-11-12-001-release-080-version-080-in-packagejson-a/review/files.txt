@@ -1,0 +1,11 @@
+.claude-plugin/plugin.json
+.env.example
+npm/package.json
+package.json
+plugin/wizardingcode-mem.sh
+plugins/codex/.codex-plugin/plugin.json
+plugins/codex/wizardingcode-mem.sh
+plugins/cursor/.cursor-plugin/plugin.json
+plugins/cursor/wizardingcode-mem.sh
+plugins/opencode/binary.js
+plugins/opencode/package.json
