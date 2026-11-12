@@ -13,7 +13,7 @@ Output:
 Checked 10 files in 29ms. No fixes applied.
 ```
 
-The whole of `src`, `scripts`, `tests`, `npm` and `ui/src` was also checked at error level before each commit of the item (`biome check --diagnostic-level=error`): no error.
+`src`, `scripts`, `tests` and `npm` were also checked at error level before each commit of the item (`biome check --diagnostic-level=error`): no error. That run named `ui/src` too, and read nothing of it or of `src/ui` (below).
 
 ## What the ten are, and the nine the linter does not read
 

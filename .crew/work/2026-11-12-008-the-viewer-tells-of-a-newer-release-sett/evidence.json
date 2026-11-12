@@ -795,6 +795,16 @@
       "tokens": 209892,
       "tokensFrom": "transcript",
       "model": "claude-fable-5-2",
+      "file": "conclave/lead-qa.delivery-reply.round2.md",
+      "team": "qa"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "ad376a6610d3a717f",
+      "at": "2026-11-12T22:41:12.993Z",
+      "tokens": 217652,
+      "tokensFrom": "transcript",
+      "model": "claude-fable-5-2",
       "file": "conclave/lead-qa.delivery-reply.md",
       "team": "qa"
     }
