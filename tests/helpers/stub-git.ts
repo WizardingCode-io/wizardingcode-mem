@@ -17,6 +17,10 @@ export interface StubBehaviour {
   recordArgsTo?: string;
   /** Arguments put ahead of the caller's on every call that reaches the real git. */
   prepend?: string[];
+  /** The real git writes its own trace (`GIT_TRACE`) here: what it ran, in its words. */
+  traceTo?: string;
+  /** Sleeps this long before this subcommand alone; the others run at once. */
+  stallOn?: { subcommand: string; ms: number };
 }
 
 const REAL_GIT = Bun.which("git");
@@ -60,6 +64,10 @@ export function stubGit(dir: string, behaviour: StubBehaviour): string {
     "  esac",
     "done",
   );
+  if (behaviour.stallOn !== undefined) {
+    const { subcommand, ms } = behaviour.stallOn;
+    lines.push(`if [ "$sub" = ${quoted(subcommand)} ]; then sleep ${ms / 1000}; fi`);
+  }
   if (behaviour.fail !== undefined) {
     lines.push(`if [ "$sub" = ${quoted(behaviour.fail)} ]; then echo ${stderr} >&2; exit 1; fi`);
   }
@@ -74,6 +82,8 @@ export function stubGit(dir: string, behaviour: StubBehaviour): string {
     );
   }
   const prepended = (behaviour.prepend ?? []).map((arg) => `${quoted(arg)} `).join("");
+  // The trace is the stub's to ask for: the runner's own environment is closed and never carries it.
+  if (behaviour.traceTo !== undefined) lines.push(`export GIT_TRACE=${quoted(behaviour.traceTo)}`);
   lines.push(`exec ${quoted(REAL_GIT)} ${prepended}"$@"`);
   const script = join(dir, "git");
   writeFileSync(script, `${lines.join("\n")}\n`);
@@ -81,10 +91,14 @@ export function stubGit(dir: string, behaviour: StubBehaviour): string {
   return dir;
 }
 
-/** The real git, for a test that inspects a repository itself. Never the stub. */
+/**
+ * The real git, for a test that inspects a repository itself. Never the stub. A commit made
+ * through it starts no maintenance: a detached one would still be writing in a repository
+ * the test goes on to remove.
+ */
 export function realGit(cwd: string, ...args: string[]): string {
   if (REAL_GIT === null) throw new Error("realGit needs a real git on PATH");
-  const result = Bun.spawnSync([REAL_GIT, ...args], {
+  const result = Bun.spawnSync([REAL_GIT, "-c", "maintenance.auto=false", ...args], {
     cwd,
     env: {
       PATH: process.env.PATH ?? "",

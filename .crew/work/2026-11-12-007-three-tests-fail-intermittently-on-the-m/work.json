@@ -1,0 +1,262 @@
+{
+  "id": "2026-11-12-007-three-tests-fail-intermittently-on-the-m",
+  "title": "Three tests fail intermittently on the macOS runner and block the required check",
+  "input": "Three tests fail intermittently on the macOS runner and block the required check 'check (macos-latest)' on pull requests 38, 39 and 40, none of which touches their code: tests/unit/knowledge-resolve.test.ts ('migration 7: dropping a repository's rows > a repository whose folder is gone loses its rows to rebuildAll', ENOENT lstat of a projects folder), tests/unit/knowledge-index.test.ts ('rebuildAll > maps a project folder through its manifest, reports orphans, forgets folders that are gone'), and tests/integration/team-mirror.test.ts:762 ('a throw outside the per-revision blocks is recorded in mirror.last': runMirror did not throw under a read-only parent, and reported ENOENT on an entry's temporary file instead). All three remove or lose a directory and then expect a precise outcome. Find the cause on macOS and make the tests, or the code if it is at fault, deterministic.",
+  "type": "fix",
+  "route": "standard",
+  "routeReasons": [
+    "fix, scope level 1, clear request"
+  ],
+  "riskAreas": [],
+  "phase": "build",
+  "awaiting": null,
+  "criteria": [
+    {
+      "id": "AC-6",
+      "kind": "behavior",
+      "text": "Every git call of the knowledge store carries maintenance.auto=false, maintenance.autoDetach=false and gc.autoDetach=false; the trace git itself writes of a store write, taken through the stub's traceTo, holds one git maintenance run --auto --quiet command for each commit, started by the runner after the commit, and no git command with --detach; a trace without the maintenance command fails the test."
+    },
+    {
+      "id": "AC-7",
+      "kind": "behavior",
+      "text": "A mirror run that commits: every git call carries the three settings, and git's own trace holds the runner's maintenance command after each commit and no --detach."
+    },
+    {
+      "id": "AC-8",
+      "kind": "behavior",
+      "text": "A maintenance call that fails, and one that passes the timeout, do not fail the write: the entry is written and committed, the tree equals HEAD, and the failure is in the log."
+    },
+    {
+      "id": "AC-9",
+      "kind": "behavior",
+      "text": "The tests' own git reads maintenance.auto as false."
+    },
+    {
+      "id": "AC-10",
+      "kind": "behavior",
+      "text": "ADR 0024 and CLAUDE.md name the three settings and the runner's own maintenance call; ADR 0024 says in both places it speaks of housekeeping that it still runs, started by the runner after a commit in the foreground, and keeps the known limit open: unchecked files inside the folders of objects/, housekeeping that removes and rewrites files there, the sync part to close it."
+    },
+    {
+      "id": "AC-11",
+      "kind": "preserve",
+      "text": "tests/unit/knowledge-repo.test.ts, tests/unit/knowledge-git-host.test.ts and tests/integration/team-mirror.test.ts pass as before."
+    },
+    {
+      "id": "AC-12",
+      "kind": "behavior",
+      "text": "A lease lost at the maintenance call: in the store, the write returns, the entry is written and committed and the tree equals HEAD; in the mirror, the run stops with its lost-lease error, as at any other git call."
+    },
+    {
+      "id": "AC-13",
+      "kind": "behavior",
+      "text": "With work due (two loose objects in the folder git samples, and gc.auto=1 given by the host), the runner's call after a commit, carrying the three settings, packs the loose objects before commitPaths returns."
+    }
+  ],
+  "approvals": [
+    {
+      "what": "spec",
+      "at": "2026-11-12T20:33:32.857Z",
+      "by": "validator",
+      "rule": "complete-gap-round"
+    }
+  ],
+  "skips": [],
+  "baseCommit": "e4f859635e6f95949ce6a7b5a21605af66a0fcee",
+  "createdAt": "2026-11-12T19:49:20.046Z",
+  "updatedAt": "2026-11-12T20:33:40.955Z",
+  "kind": "issue",
+  "kindFrom": "work_type fix",
+  "knowledge": {
+    "readAt": "2026-11-12T20:24:26.349Z",
+    "listed": [
+      "K-363",
+      "K-346",
+      "K-343",
+      "K-390",
+      "K-371",
+      "K-335",
+      "K-381",
+      "K-394",
+      "K-391",
+      "K-382"
+    ]
+  },
+  "priority": "normal",
+  "seats": [
+    {
+      "role": "researcher",
+      "team": "researchers",
+      "kind": "debate",
+      "reason": "standard route"
+    },
+    {
+      "role": "review-code-quality",
+      "team": "backend",
+      "kind": "gate",
+      "gate": "code-quality",
+      "reason": "standard route"
+    },
+    {
+      "role": "review-test-quality",
+      "team": "qa",
+      "kind": "gate",
+      "gate": "test-quality",
+      "reason": "standard route"
+    },
+    {
+      "role": "lead-qa",
+      "team": "qa",
+      "kind": "lead",
+      "reason": "standard route"
+    },
+    {
+      "role": "lead-security",
+      "team": "security",
+      "kind": "lead",
+      "reason": "standard route"
+    },
+    {
+      "role": "judge",
+      "team": null,
+      "kind": "debate",
+      "reason": "a gate is planned"
+    }
+  ],
+  "primaryTeam": "backend",
+  "runtimes": [
+    "claude"
+  ],
+  "phaseAt": {
+    "analyse": "2026-11-12T20:25:22.965Z",
+    "understand": "2026-11-12T20:25:23.090Z",
+    "specify": "2026-11-12T20:25:28.071Z",
+    "conclave": "2026-11-12T20:27:06.017Z",
+    "plan": "2026-11-12T20:33:32.982Z",
+    "build": "2026-11-12T20:33:40.955Z"
+  },
+  "decisions": [
+    {
+      "id": "D-1",
+      "question": "How does the product's git runner treat git's automatic maintenance, which a commit starts detached?",
+      "default": "In the foreground: maintenance.autoDetach=false and gc.autoDetach=false on every call",
+      "answer": "Em primeiro plano (Recomendado): maintenance.autoDetach=false and gc.autoDetach=false on every call; git keeps compacting, inside the commit, and nothing runs after it",
+      "at": "2026-11-12T20:26:26.979Z",
+      "by": "user",
+      "relayed": true
+    }
+  ],
+  "checklists": [
+    {
+      "kind": "none",
+      "paths": [],
+      "reason": "A fix inside the one git runner's settings: no endpoint, permission, payment, upload, migration, third party, link, deletion path of the product, merge or screen changes",
+      "at": "2026-11-12T20:27:11.345Z"
+    }
+  ],
+  "knowledgeFiles": [],
+  "knowledgeLabels": [],
+  "removedCriteria": [
+    {
+      "id": "AC-1",
+      "kind": "behavior",
+      "text": "Every git call of the knowledge store carries maintenance.autoDetach=false and gc.autoDetach=false, and a write of the store, traced by git itself, runs no git command with --detach.",
+      "at": "2026-11-12T20:30:42.743Z"
+    },
+    {
+      "id": "AC-2",
+      "kind": "behavior",
+      "text": "Every git call of a mirror run carries the two settings, and a run that commits, traced by git itself, runs no git command with --detach.",
+      "at": "2026-11-12T20:30:42.800Z"
+    },
+    {
+      "id": "AC-3",
+      "kind": "behavior",
+      "text": "The tests' own git reads maintenance.autoDetach and gc.autoDetach as false.",
+      "at": "2026-11-12T20:30:42.856Z"
+    },
+    {
+      "id": "AC-4",
+      "kind": "behavior",
+      "text": "ADR 0024 and CLAUDE.md name the two settings, and ADR 0024 no longer says that the store leaves git's housekeeping as it is.",
+      "at": "2026-11-12T20:30:42.912Z"
+    },
+    {
+      "id": "AC-5",
+      "kind": "preserve",
+      "text": "tests/unit/knowledge-repo.test.ts, tests/unit/knowledge-git-host.test.ts and tests/integration/team-mirror.test.ts pass as before.",
+      "at": "2026-11-12T20:30:42.967Z"
+    }
+  ],
+  "validations": [
+    {
+      "what": "spec",
+      "by": "lead-qa",
+      "verdict": "returned",
+      "returns": 1,
+      "round": 1,
+      "file": "conclave/lead-qa.md",
+      "hash": "sha256:d516783747501ddacd56ba04ea2545459e21045fa8fdd4026c6647d09c8aa6fd",
+      "fileHash": "sha256:e3796f650c83727b377010d0bb5dad43254805bba10128958a6d5ac50ae63350",
+      "at": "2026-11-12T20:31:06.990Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-security",
+      "verdict": "returned",
+      "returns": 2,
+      "round": 1,
+      "file": "conclave/lead-security.md",
+      "hash": "sha256:d516783747501ddacd56ba04ea2545459e21045fa8fdd4026c6647d09c8aa6fd",
+      "fileHash": "sha256:ab9c84c95bf541521d60eaa6e3319928fe72ea4a16265056c92e058e61c69156",
+      "at": "2026-11-12T20:31:07.044Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-security",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 2,
+      "file": "conclave/lead-security-reply.md",
+      "hash": "sha256:bed53291b660fc115f40356d5a82332354f6fdd850eab0f41098ee719d7d0c4e",
+      "fileHash": "sha256:fa392df48ad56a2cacb83fdbd48d641baff95ac34fcc41e0af6da6ffc1123663",
+      "at": "2026-11-12T20:32:59.450Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-qa",
+      "verdict": "returned",
+      "returns": 1,
+      "round": 2,
+      "file": "conclave/lead-qa-reply.md",
+      "hash": "sha256:bed53291b660fc115f40356d5a82332354f6fdd850eab0f41098ee719d7d0c4e",
+      "fileHash": "sha256:c510e5869c625d9f0cdbb2f9ab7f89fafa4f7b5fd4d32518fd2468610c5ef3a4",
+      "at": "2026-11-12T20:32:59.506Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-qa",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 2,
+      "file": "conclave/lead-qa-reply.md",
+      "hash": "sha256:bed53291b660fc115f40356d5a82332354f6fdd850eab0f41098ee719d7d0c4e",
+      "fileHash": "sha256:74ce0e3598947d2e3c94cdf98ac08d19582f08ee4609d0b7551a7ddad1c23bf5",
+      "at": "2026-11-12T20:33:32.476Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-security",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 2,
+      "file": "conclave/lead-security-reply.md",
+      "hash": "sha256:bed53291b660fc115f40356d5a82332354f6fdd850eab0f41098ee719d7d0c4e",
+      "fileHash": "sha256:e49b485d64da44296f277de136daa7cea9a0cb41328f37dfce2c00fece840a94",
+      "at": "2026-11-12T20:33:32.533Z"
+    }
+  ],
+  "rounds": {
+    "judgement": 0,
+    "validation": 2
+  }
+}
