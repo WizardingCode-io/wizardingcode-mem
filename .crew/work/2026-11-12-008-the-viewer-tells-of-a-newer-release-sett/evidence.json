@@ -133,12 +133,12 @@
       "green": {
         "command": "./node_modules/.bin/bun test tests/unit/ui-update.test.ts",
         "exit": 0,
-        "at": "2026-11-12T22:08:08.425Z",
+        "at": "2026-11-12T22:13:39.554Z",
         "durationMs": 15,
-        "log": "logs/tdd-AC-11-green-1794521288409.txt",
-        "tail": "bun test v1.4.2 (744846f84)\n\n 14 pass\n 0 fail\n 31 expect() calls\nRan 14 tests across 1 file. [7.00ms]",
+        "log": "logs/tdd-AC-11-green-1794521619538.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\n 15 pass\n 0 fail\n 33 expect() calls\nRan 15 tests across 1 file. [8.00ms]",
         "timedOut": false,
-        "passed": 14
+        "passed": 15
       },
       "reds": [
         {
@@ -156,6 +156,18 @@
             "tests/unit/update-boundary.test.ts",
             "tests/unit/update-docs.test.ts"
           ]
+        }
+      ],
+      "greens": [
+        {
+          "command": "./node_modules/.bin/bun test tests/unit/ui-update.test.ts",
+          "exit": 0,
+          "at": "2026-11-12T22:08:08.425Z",
+          "durationMs": 15,
+          "log": "logs/tdd-AC-11-green-1794521288409.txt",
+          "tail": "bun test v1.4.2 (744846f84)\n\n 14 pass\n 0 fail\n 31 expect() calls\nRan 14 tests across 1 file. [7.00ms]",
+          "timedOut": false,
+          "passed": 14
         }
       ]
     },

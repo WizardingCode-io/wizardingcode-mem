@@ -1,7 +1,13 @@
 // What the viewer says of a release: the banner's line, the About card's status and its
 // tone, and the mark on the Settings list. Pure texts, driven without a browser.
 import { describe, expect, test } from "bun:test";
-import { aboutMark, bannerLine, releaseStatus, type ViewerUpdate } from "../../ui/src/update.ts";
+import {
+  aboutMark,
+  bannerLine,
+  bannerShort,
+  releaseStatus,
+  type ViewerUpdate,
+} from "../../ui/src/update.ts";
 
 const base: ViewerUpdate = {
   running: "0.8.0",
