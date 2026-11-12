@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watchEffect } from "vue";
 import { api } from "./api";
 import HistoryOffer from "./components/HistoryOffer.vue";
 import LinksOffer from "./components/LinksOffer.vue";
+import UpdateBanner from "./components/UpdateBanner.vue";
 import ProjectsView from "./components/ProjectsView.vue";
 import RulesView from "./components/RulesView.vue";
 import MemoryDetail from "./components/MemoryDetail.vue";
@@ -223,6 +224,7 @@ onMounted(async () => {
             </template>
             <span v-else class="flex h-9 items-center gap-2 border-b-2 border-(--ink) pt-0.5 text-[12.5px] font-semibold"><span aria-hidden="true" class="size-2.5 rounded-[3px] bg-[#FFC53D]" />This machine</span>
           </div>
+          <UpdateBanner v-if="!failed" @how="openSettings('about')" />
           <HistoryOffer v-if="state.tab === 'memories' && !failed" @progress="openSettings('history')" />
           <LinksOffer v-if="state.tab === 'memories' && !failed" @review="tab = $event" />
           <div v-if="failed" class="m-4 rounded-xl border border-(--danger) bg-(--danger-soft) px-3.5 py-3 text-[13px] text-(--danger)">Could not reach wizardingcode-mem: {{ failed }}</div>

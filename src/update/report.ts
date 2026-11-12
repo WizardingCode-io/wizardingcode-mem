@@ -7,7 +7,7 @@ import { type Source, updateSetting } from "../settings/settings.ts";
 import { ago } from "../util/ago.ts";
 import { olderThan } from "../util/version.ts";
 import { CHANNEL_COMMANDS } from "./channels.ts";
-import { type Mode, mode as modeOf } from "./check.ts";
+import { type Mode, mode as modeOf } from "./mode.ts";
 import { firstLine } from "./reason.ts";
 import { type StagedFacts, stagedFacts } from "./staged.ts";
 import { lastFailed, readState, type UpdateState } from "./state.ts";

@@ -1,0 +1,319 @@
+{
+  "id": "2026-11-12-008-the-viewer-tells-of-a-newer-release-sett",
+  "title": "The viewer tells of a newer release: Settings → About says the latest release, w",
+  "input": "The viewer tells of a newer release: Settings → About says the latest release, when it was checked and the channel's command; a dismissible banner at the top says a newer release is out; Settings gains the field for WIZARDINGCODE_MEM_UPDATE (check or off). The viewer only reads what the daily check kept in update.json and never asks the network.",
+  "type": "feature",
+  "route": "standard",
+  "routeReasons": [
+    "feature, scope level 1, clear request"
+  ],
+  "riskAreas": [],
+  "phase": "build",
+  "awaiting": null,
+  "criteria": [
+    {
+      "id": "AC-8",
+      "kind": "behavior",
+      "text": "GET /api/update answers the report in the viewer's shape for each state: a release out (the four channels' commands, banner true); the running version the latest; the check off in the file; off by the environment (fromEnvironment true); a value neither check nor off (off-unknown); CI set (ci); not checked yet; a last check that failed; a staged binary of another version gives the agents line; a builder that throws gives 200 with the shape, line saying why, out and banner false and no commands."
+    },
+    {
+      "id": "AC-9",
+      "kind": "behavior",
+      "text": "POST /api/update/dismiss keeps the release dismissed: banner is false for it afterwards and true again when update.json names a later release; with no release known it keeps nothing; a body that names another version changes nothing of that."
+    },
+    {
+      "id": "AC-10",
+      "kind": "behavior",
+      "text": "No file of src/ui/ reaches src/update/check.ts through static or dynamic imports, at any depth; and with a check due, answering GET /api/update and POST /api/update/dismiss makes no request to any host but the viewer's own loopback address, counted by a wrapped fetch."
+    },
+    {
+      "id": "AC-11",
+      "kind": "behavior",
+      "text": "The banner's line, the card's status and tone and the Settings list's mark, as ui/src/update.ts writes them, for each state: out with a staged copy, out with none, latest, ahead, off, off by the environment, off-unknown, not checked in CI, not checked yet, could not check, and a report that could not be built; the About card, the banner over the memories view and the marked list show them at the three widths in both schemes.",
+      "screens": [
+        {
+          "page": "settings-about",
+          "state": "latest"
+        },
+        {
+          "page": "settings-about",
+          "state": "out"
+        },
+        {
+          "page": "settings-about",
+          "state": "off"
+        },
+        {
+          "page": "settings-about",
+          "state": "off-env"
+        },
+        {
+          "page": "settings-about",
+          "state": "unchecked"
+        },
+        {
+          "page": "settings-about",
+          "state": "failed"
+        },
+        {
+          "page": "memories",
+          "state": "update-out"
+        }
+      ]
+    },
+    {
+      "id": "AC-12",
+      "kind": "behavior",
+      "text": "The switch's two values go through PUT /api/settings: WIZARDINGCODE_MEM_UPDATE=off and =check are written to the env file, and GET /api/update then says the mode it was set to."
+    },
+    {
+      "id": "AC-13",
+      "kind": "behavior",
+      "text": "The README says in neither of its two places that WIZARDINGCODE_MEM_UPDATE is set by hand, and says where the viewer tells of a release; CLAUDE.md names the two routes and the files; in docs/real-use/findings.md the row of the missing About line and Settings field says that part is answered, its other remark kept."
+    },
+    {
+      "id": "AC-14",
+      "kind": "preserve",
+      "text": "tests/integration/ui.test.ts, tests/integration/ui-settings.test.ts and the tests tests/unit/update-boundary.test.ts holds today pass as before."
+    }
+  ],
+  "approvals": [
+    {
+      "what": "spec",
+      "at": "2026-11-12T22:04:16.769Z",
+      "by": "validator",
+      "rule": "complete-gap-round"
+    }
+  ],
+  "skips": [],
+  "baseCommit": "82143cb8d4f255bcff6aad3b541f5e9ca9726554",
+  "createdAt": "2026-11-12T21:59:17.551Z",
+  "updatedAt": "2026-11-12T22:04:17.027Z",
+  "kind": "feature",
+  "kindFrom": "work_type feature",
+  "knowledge": {
+    "readAt": "2026-11-12T21:59:17.563Z",
+    "listed": [
+      "K-394",
+      "K-381",
+      "K-363",
+      "K-398",
+      "K-391",
+      "K-390",
+      "K-371",
+      "K-346",
+      "K-335",
+      "K-383"
+    ]
+  },
+  "priority": "normal",
+  "seats": [
+    {
+      "role": "researcher",
+      "team": "researchers",
+      "kind": "debate",
+      "reason": "standard route"
+    },
+    {
+      "role": "review-code-quality",
+      "team": "backend",
+      "kind": "gate",
+      "gate": "code-quality",
+      "reason": "standard route"
+    },
+    {
+      "role": "review-test-quality",
+      "team": "qa",
+      "kind": "gate",
+      "gate": "test-quality",
+      "reason": "standard route"
+    },
+    {
+      "role": "lead-qa",
+      "team": "qa",
+      "kind": "lead",
+      "reason": "standard route"
+    },
+    {
+      "role": "lead-security",
+      "team": "security",
+      "kind": "lead",
+      "reason": "standard route"
+    },
+    {
+      "role": "judge",
+      "team": null,
+      "kind": "debate",
+      "reason": "a gate is planned"
+    }
+  ],
+  "primaryTeam": "backend",
+  "runtimes": [
+    "claude"
+  ],
+  "knowledgeFiles": [],
+  "knowledgeLabels": [],
+  "decisions": [
+    {
+      "id": "D-1",
+      "question": "Where does the viewer show that a newer release is out?",
+      "default": "Only in Settings, About",
+      "answer": "About + faixa no topo: the About card says the latest release, when it was checked and the channel's command, and a dismissible banner at the top of the viewer says a newer release is out",
+      "at": "2026-11-12T21:59:44.535Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-2",
+      "question": "May the viewer ask github.com for the latest release on a button, or does it only read update.json?",
+      "default": "It only reads update.json",
+      "answer": "Só lê (Recomendado): the viewer shows what update.json holds and never asks the network",
+      "at": "2026-11-12T21:59:44.652Z",
+      "by": "user",
+      "relayed": true
+    }
+  ],
+  "phaseAt": {
+    "understand": "2026-11-12T22:00:15.835Z",
+    "specify": "2026-11-12T22:00:16.076Z",
+    "conclave": "2026-11-12T22:00:59.495Z",
+    "plan": "2026-11-12T22:04:16.897Z",
+    "build": "2026-11-12T22:04:17.026Z"
+  },
+  "checklists": [
+    {
+      "kind": "endpoint",
+      "paths": [
+        "/Users/andreagroferreira/.local/share/wizardingcode-developer-crew/skills/crew/checklists/endpoint.md"
+      ],
+      "at": "2026-11-12T22:00:59.550Z"
+    },
+    {
+      "kind": "screen",
+      "paths": [
+        "/Users/andreagroferreira/.local/share/wizardingcode-developer-crew/skills/crew/checklists/screen.md"
+      ],
+      "at": "2026-11-12T22:00:59.612Z"
+    }
+  ],
+  "validations": [
+    {
+      "what": "spec",
+      "by": "lead-qa",
+      "verdict": "returned",
+      "returns": 3,
+      "round": 1,
+      "file": "conclave/lead-qa.md",
+      "hash": "sha256:96c847792276a2c83734a744d5a31959198af5cba7ab510764b58f5e305bf993",
+      "fileHash": "sha256:bedc526d72be7b7d5d66413586903c42cb52a1ec8ec16761b38a9e6457b51ab1",
+      "at": "2026-11-12T22:03:00.382Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-security",
+      "verdict": "returned",
+      "returns": 1,
+      "round": 1,
+      "file": "conclave/lead-security.md",
+      "hash": "sha256:96c847792276a2c83734a744d5a31959198af5cba7ab510764b58f5e305bf993",
+      "fileHash": "sha256:97c3f6543cce81a1c3b5ef34de6e38215937f4c001e3ba59856fc4b2d12e7627",
+      "at": "2026-11-12T22:03:00.450Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-qa",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 2,
+      "file": "conclave/lead-qa-reply.md",
+      "hash": "sha256:90e82a105ca44d3f179fa77a2a0e3554f49eb87581ce0602b52994e3a196f3b0",
+      "fileHash": "sha256:88d1a60b31d4d9c1149fddb3db1a19312ef0e8a4cff9c5e5236df9aabb15e1ef",
+      "at": "2026-11-12T22:04:16.384Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-security",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 2,
+      "file": "conclave/lead-security-reply.md",
+      "hash": "sha256:90e82a105ca44d3f179fa77a2a0e3554f49eb87581ce0602b52994e3a196f3b0",
+      "fileHash": "sha256:2441acf20882c17854c3eed2ae0ebe1c7e19203a03ed1b05cc435a6d40f1356e",
+      "at": "2026-11-12T22:04:16.440Z"
+    }
+  ],
+  "rounds": {
+    "judgement": 0,
+    "validation": 2
+  },
+  "removedCriteria": [
+    {
+      "id": "AC-1",
+      "kind": "behavior",
+      "text": "GET /api/update answers the report in the viewer's shape for each state of the data directory: a release out (with the four channels' commands and banner true), the running version the latest, the check off in the file, the check off by the environment (fromEnvironment true), not checked yet, and a last check that failed; a staged binary of another version gives the agents line.",
+      "at": "2026-11-12T22:03:30.621Z"
+    },
+    {
+      "id": "AC-2",
+      "kind": "behavior",
+      "text": "POST /api/update/dismiss keeps the release dismissed: banner is false for it afterwards and true again when update.json names a later release; with no release known it keeps nothing.",
+      "at": "2026-11-12T22:03:30.687Z"
+    },
+    {
+      "id": "AC-3",
+      "kind": "behavior",
+      "text": "Nothing in src/ui/ imports src/update/check.ts, directly or through another file of src/ui/, and answering GET /api/update calls fetch zero times.",
+      "at": "2026-11-12T22:03:30.754Z"
+    },
+    {
+      "id": "AC-4",
+      "kind": "behavior",
+      "text": "The banner's line, the card's status and tone and the Settings list's mark, as ui/src/update.ts writes them, for each state: out with a staged copy, out with none, latest, ahead, off, off by the environment, not checked, could not check; the About card, the banner over the memories view and the marked list show them at the three widths in both schemes.",
+      "screens": [
+        {
+          "page": "settings-about",
+          "state": "latest"
+        },
+        {
+          "page": "settings-about",
+          "state": "out"
+        },
+        {
+          "page": "settings-about",
+          "state": "off"
+        },
+        {
+          "page": "settings-about",
+          "state": "unchecked"
+        },
+        {
+          "page": "settings-about",
+          "state": "failed"
+        },
+        {
+          "page": "memories",
+          "state": "update-out"
+        }
+      ],
+      "at": "2026-11-12T22:03:30.821Z"
+    },
+    {
+      "id": "AC-5",
+      "kind": "behavior",
+      "text": "The switch's two values go through PUT /api/settings: WIZARDINGCODE_MEM_UPDATE=off and =check are written to the env file, and GET /api/update then says the mode it was set to.",
+      "at": "2026-11-12T22:03:30.886Z"
+    },
+    {
+      "id": "AC-6",
+      "kind": "behavior",
+      "text": "The README no longer says WIZARDINGCODE_MEM_UPDATE has no field and says where the viewer tells of a release; CLAUDE.md names the two routes and the files; docs/real-use/findings.md marks the row of the missing About line as answered.",
+      "at": "2026-11-12T22:03:30.962Z"
+    },
+    {
+      "id": "AC-7",
+      "kind": "preserve",
+      "text": "tests/integration/ui.test.ts, tests/integration/ui-settings.test.ts and tests/unit/update-boundary.test.ts pass as before.",
+      "at": "2026-11-12T22:03:31.031Z"
+    }
+  ]
+}

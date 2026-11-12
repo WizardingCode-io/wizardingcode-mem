@@ -4,13 +4,8 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  checkForRelease,
-  due,
-  latestRelease,
-  mode,
-  REQUEST_LIMIT_MS,
-} from "../../src/update/check.ts";
+import { checkForRelease, due, latestRelease, REQUEST_LIMIT_MS } from "../../src/update/check.ts";
+import { mode } from "../../src/update/mode.ts";
 import { readState, STATE_FILE, type UpdateState, writeState } from "../../src/update/state.ts";
 
 const REPO = "o/r";
