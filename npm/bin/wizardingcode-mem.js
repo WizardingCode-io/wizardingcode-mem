@@ -37,6 +37,35 @@ function installedVersion() {
   }
 }
 
+// True when `have` is missing, not a version, or older than `wanted` (scripts/plugins.ts, OLDER_JS).
+function older(have, wanted) {
+  const shape = /^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/;
+  if (!have || !shape.test(have)) return true;
+  const split = (version) => {
+    const cut = version.indexOf("-");
+    return cut === -1 ? [version, null] : [version.slice(0, cut), version.slice(cut + 1)];
+  };
+  const [coreA, preA] = split(have);
+  const [coreB, preB] = split(wanted);
+  const a = coreA.split(".").map(Number);
+  const b = coreB.split(".").map(Number);
+  for (let i = 0; i < 3; i++) {
+    if (a[i] !== b[i]) return a[i] < b[i];
+  }
+  if (preA === null || preB === null) return preA !== null && preB === null;
+  const x = preA.split(".");
+  const y = preB.split(".");
+  for (let i = 0; i < Math.min(x.length, y.length); i++) {
+    if (x[i] === y[i]) continue;
+    const p = /^\d+$/.test(x[i]);
+    const q = /^\d+$/.test(y[i]);
+    if (p && q) return Number(x[i]) < Number(y[i]);
+    if (p !== q) return p;
+    return x[i] < y[i];
+  }
+  return x.length < y.length;
+}
+
 async function fetchText(url) {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);

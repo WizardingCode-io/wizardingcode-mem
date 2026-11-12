@@ -37,6 +37,30 @@ case "$arch" in
 esac
 file="wizardingcode-mem-$os-$arch"
 
+# True when version $1 is missing or older than $2, by semantic versioning's order: a pre-release
+# is older than its release, and numeric identifiers compare as numbers. Not a version: older.
+older() {
+  [ -z "$1" ] && return 0
+  LC_ALL=C awk -v a="$1" -v b="$2" 'BEGIN {
+    if (a !~ /^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$/) exit 0
+    i = index(a, "-"); j = index(b, "-")
+    ca = i ? substr(a, 1, i - 1) : a; pa = i ? substr(a, i + 1) : ""
+    cb = j ? substr(b, 1, j - 1) : b; pb = j ? substr(b, j + 1) : ""
+    split(ca, x, "."); split(cb, y, ".")
+    for (k = 1; k <= 3; k++) { p = x[k] + 0; q = y[k] + 0; if (p < q) exit 0; if (p > q) exit 1 }
+    if (!i || !j) exit ((i && !j) ? 0 : 1)
+    n = split(pa, u, "."); m = split(pb, v, ".")
+    for (k = 1; k <= n && k <= m; k++) {
+      if ((u[k] "") == (v[k] "")) continue
+      s = (u[k] ~ /^[0-9]+$/); t = (v[k] ~ /^[0-9]+$/)
+      if (s && t) exit ((u[k] + 0 < v[k] + 0) ? 0 : 1)
+      if (s != t) exit (s ? 0 : 1)
+      exit (((u[k] "") < (v[k] "")) ? 0 : 1)
+    }
+    exit ((n < m) ? 0 : 1)
+  }'
+}
+
 home="${WIZARDINGCODE_HOME:-$HOME/.wizardingcode}"
 data="${WIZARDINGCODE_MEM_DATA_DIR:-$home/mem}"
 bin="${WIZARDINGCODE_MEM_BIN_DIR:-$data/bin}"

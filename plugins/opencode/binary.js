@@ -35,18 +35,33 @@ function installedVersion() {
   }
 }
 
-/** True when `have` is missing or older than `wanted`. A pre-release is older than its release; of two, the one that sorts first. */
+/** True when `have` is missing, not a version, or older than `wanted`, by semantic versioning's order. */
 export function older(have, wanted) {
-  if (!have) return true;
-  if (have === wanted) return false;
-  const a = have.split(".").map((part) => Number.parseInt(part, 10) || 0);
-  const b = wanted.split(".").map((part) => Number.parseInt(part, 10) || 0);
+  const shape = /^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/;
+  if (!have || !shape.test(have)) return true;
+  const split = (version) => {
+    const cut = version.indexOf("-");
+    return cut === -1 ? [version, null] : [version.slice(0, cut), version.slice(cut + 1)];
+  };
+  const [coreA, preA] = split(have);
+  const [coreB, preB] = split(wanted);
+  const a = coreA.split(".").map(Number);
+  const b = coreB.split(".").map(Number);
   for (let i = 0; i < 3; i++) {
-    if ((a[i] ?? 0) < (b[i] ?? 0)) return true;
-    if ((a[i] ?? 0) > (b[i] ?? 0)) return false;
+    if (a[i] !== b[i]) return a[i] < b[i];
   }
-  if (have.includes("-") && !wanted.includes("-")) return true;
-  return have.includes("-") && wanted.includes("-") && have < wanted;
+  if (preA === null || preB === null) return preA !== null && preB === null;
+  const x = preA.split(".");
+  const y = preB.split(".");
+  for (let i = 0; i < Math.min(x.length, y.length); i++) {
+    if (x[i] === y[i]) continue;
+    const p = /^\d+$/.test(x[i]);
+    const q = /^\d+$/.test(y[i]);
+    if (p && q) return Number(x[i]) < Number(y[i]);
+    if (p !== q) return p;
+    return x[i] < y[i];
+  }
+  return x.length < y.length;
 }
 
 /** Fetches the binary of this package's version when there is none, or an older one. */
