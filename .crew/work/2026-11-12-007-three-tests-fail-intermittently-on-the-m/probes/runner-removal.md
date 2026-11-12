@@ -73,4 +73,4 @@ After a commit returns, git's own `git maintenance run --auto --detach` is still
 
 git 2.56.0 runs on both runners. Its release notes say that from 2.54.0 `git maintenance` uses the geometric strategy by default, whose loose-object threshold is `maintenance.geometric-repack.auto`; Apple's git 2.54.0 on the author's machine repacked with `gc.auto=1` alone. The compaction test lowers both.
 
-One green run does not show that an intermittent failure is gone: the three tests failed in 3 of the 6 runs read before the change. The later runs on the runner are the evidence.
+One green run does not show that an intermittent failure is gone: one of the three tests failed in 4 of the 6 failed runs read before the change (43291158026, 43274479753, 43266344890, 43203363318). The later runs on the runner are the evidence.
