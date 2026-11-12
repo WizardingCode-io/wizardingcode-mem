@@ -7,6 +7,10 @@ const read = (name: string) => readFileSync(join(ROOT, name), "utf8");
 const parseYaml = (text: string): unknown =>
   (Bun as unknown as { YAML: { parse(text: string): unknown } }).YAML.parse(text);
 
+/** A workflow expression, spelled so that it is never a JavaScript template placeholder. */
+const OPEN = `$${"{{"}`;
+const expr = (text: string) => `${OPEN} ${text} }}`;
+
 const DIGEST = /@sha256:[0-9a-f]{64}/;
 const IMAGE = "ghcr.io/wizardingcode-io/wizardingcode-mem";
 
@@ -29,17 +33,32 @@ interface Compose {
 }
 interface Step {
   name?: string;
+  id?: string;
   uses?: string;
   run?: string;
   with?: Record<string, unknown>;
+  env?: Record<string, string>;
   if?: string;
 }
-interface Workflow {
+interface Job {
+  needs?: string | string[];
   permissions?: Record<string, string>;
-  jobs: Record<
+  environment?: string;
+  if?: string;
+  "runs-on"?: string;
+  "timeout-minutes"?: number;
+  outputs?: Record<string, string>;
+  steps: Step[];
+}
+interface Workflow {
+  on?: Record<
     string,
-    { needs?: string | string[]; permissions?: Record<string, string>; steps: Step[] }
+    { inputs?: Record<string, { required?: boolean; type?: string; default?: unknown }> }
   >;
+  "run-name"?: string;
+  concurrency?: Record<string, unknown>;
+  permissions?: Record<string, string>;
+  jobs: Record<string, Job>;
 }
 
 const envList = (service: Service): string[] =>
@@ -142,7 +161,7 @@ describe("the compose file, the Caddyfile and the environment example", () => {
 });
 
 describe("the workflows", () => {
-  test("release.yml: a docker job after sign publishes the image for both platforms, and publish waits for it", () => {
+  test("release.yml: docker pushes the version tag only, publish reads the full history, and distribute starts distribute.yml", () => {
     const release = parseYaml(read(".github/workflows/release.yml")) as Workflow;
     const docker = release.jobs.docker;
     expect(docker).toBeDefined();
@@ -162,13 +181,163 @@ describe("the workflows", () => {
     expect(String(metadata?.with?.images).trim()).toBe(IMAGE);
     const tags = String(metadata?.with?.tags);
     expect(tags).toContain("type=semver,pattern={{version}}");
-    expect(tags).toMatch(
-      /type=raw,value=latest,enable=\$\{\{ !contains\(github\.ref_name, '-'\) \}\}/,
-    );
+    // The image's latest tag is moved last, by distribute.yml, never by the build.
+    expect(tags).not.toContain("latest");
     const build = docker?.steps.find((step) => step.uses?.startsWith("docker/build-push-action@"));
     expect(build?.with).toMatchObject({ context: ".", file: "Dockerfile", push: true });
     expect(String(build?.with?.platforms)).toBe("linux/amd64,linux/arm64");
     expect(release.jobs.publish?.needs).toEqual(["sign", "docker"]);
+    const history = release.jobs.publish?.steps.find((step) =>
+      step.uses?.startsWith("actions/checkout@"),
+    );
+    expect(history?.with?.["fetch-depth"]).toBe(0);
+
+    const distribute = release.jobs.distribute;
+    expect(distribute?.needs).toBe("publish");
+    expect(distribute?.["runs-on"]).toBe("ubuntu-latest");
+    expect(distribute?.permissions).toEqual({ actions: "write" });
+    expect(distribute?.steps).toHaveLength(1);
+    const start = distribute?.steps[0];
+    expect(start?.uses).toBeUndefined();
+    expect(start?.run).toContain(
+      'gh workflow run distribute.yml --ref main -f tag="$GITHUB_REF_NAME"',
+    );
+    expect(start?.run).not.toContain(OPEN);
+    expect(Object.keys(start?.env ?? {}).sort()).toEqual(["GH_REPO", "GH_TOKEN"]);
+  });
+
+  describe("distribute.yml", () => {
+    const raw = () => read(".github/workflows/distribute.yml");
+    const workflow = () => parseYaml(raw()) as Workflow;
+    const PLAIN = "needs.plan.outputs.prerelease == 'false'";
+
+    test("is dispatch-only, queued in one group, and starts from no permission", () => {
+      const file = workflow();
+      expect(Object.keys(file.on ?? {})).toEqual(["workflow_dispatch"]);
+      const inputs = file.on?.workflow_dispatch?.inputs ?? {};
+      expect(Object.keys(inputs).sort()).toEqual(["dry_run", "release_hold", "tag"]);
+      expect(inputs.tag).toMatchObject({ required: true, type: "string" });
+      expect(inputs.dry_run).toMatchObject({ type: "boolean", default: false });
+      expect(inputs.release_hold).toMatchObject({ type: "boolean", default: false });
+      expect(file["run-name"]).toBe(`distribute ${expr("inputs.tag")}`);
+      expect(file.concurrency).toEqual({ group: "distribute", "cancel-in-progress": false });
+      expect(file.permissions).toEqual({});
+    });
+
+    test("five jobs on ubuntu, each with a time limit; only three enter the environment", () => {
+      const jobs = workflow().jobs;
+      expect(Object.keys(jobs).sort()).toEqual(["latest", "marketplace", "npm", "plan", "tap"]);
+      for (const [name, job] of Object.entries(jobs)) {
+        expect({ name, runner: job["runs-on"], minutes: job["timeout-minutes"] }).toEqual({
+          name,
+          runner: "ubuntu-latest",
+          minutes: 15,
+        });
+      }
+      expect(jobs.npm?.environment).toBe("release");
+      expect(jobs.tap?.environment).toBe("release");
+      expect(jobs.marketplace?.environment).toBe("release");
+      expect(jobs.plan?.environment).toBeUndefined();
+      expect(jobs.latest?.environment).toBeUndefined();
+    });
+
+    test("each job has only the permissions it needs", () => {
+      const jobs = workflow().jobs;
+      expect(jobs.plan?.permissions).toEqual({ contents: "read", actions: "read" });
+      expect(jobs.npm?.permissions).toEqual({ contents: "read", "id-token": "write" });
+      expect(jobs.tap?.permissions).toEqual({ contents: "read" });
+      expect(jobs.marketplace?.permissions).toEqual({ contents: "read" });
+      expect(jobs.latest?.permissions).toEqual({ packages: "write" });
+    });
+
+    test("latest comes last, only for a plain release that is not held, and says so when a target failed", () => {
+      const jobs = workflow().jobs;
+      expect(jobs.npm?.needs).toBe("plan");
+      expect(jobs.tap?.needs).toBe("plan");
+      expect(jobs.marketplace?.needs).toBe("plan");
+      expect(jobs.npm?.if).toBeUndefined();
+      expect(jobs.tap?.if).toBe(PLAIN);
+      expect(jobs.marketplace?.if).toBe(PLAIN);
+      const latest = jobs.latest;
+      expect(latest?.needs).toEqual(["plan", "npm", "tap", "marketplace"]);
+      // A status function, so the job still runs to write its line when a needed job failed.
+      expect(latest?.if).toBe(
+        `\${{ !cancelled() && ${PLAIN} && needs.plan.outputs.held == 'false' }}`,
+      );
+      const [first] = latest?.steps ?? [];
+      expect(first?.env).toEqual({
+        NPM: expr("needs.npm.result"),
+        TAP: expr("needs.tap.result"),
+        MARKETPLACE: expr("needs.marketplace.result"),
+      });
+      expect(first?.run).toContain("latest: not moved: $job did not succeed");
+      expect(first?.run).toContain("exit 1");
+      const retag = latest?.steps.find((step) => step.run?.includes("imagetools create"));
+      expect(retag?.if).toBe(expr("!inputs.dry_run"));
+      expect(retag?.run).toContain(`-t ${IMAGE}:latest "${IMAGE}:$VERSION"`);
+      const last = latest?.steps.at(-1);
+      expect(last?.env).toEqual({ LINE: expr("needs.plan.outputs.latest_line") });
+    });
+
+    test("npm publishes the commit plan judged, never the tag by name", () => {
+      const jobs = workflow().jobs;
+      expect(jobs.plan?.outputs).toEqual({
+        version: expr("steps.plan.outputs.version"),
+        sha: expr("steps.plan.outputs.sha"),
+        prerelease: expr("steps.plan.outputs.prerelease"),
+        held: expr("steps.plan.outputs.held"),
+        latest_line: expr("steps.plan.outputs.latest_line"),
+      });
+      const tree = jobs.npm?.steps.find((step) => step.with?.path === "release");
+      expect(tree?.uses).toStartWith("actions/checkout@");
+      expect(tree?.with?.ref).toBe(expr("needs.plan.outputs.sha"));
+      for (const job of Object.values(jobs)) {
+        for (const step of job.steps) expect(String(step.with?.ref ?? "")).not.toContain("inputs.");
+      }
+      const runs = (jobs.npm?.steps ?? []).map((step) => step.run ?? "");
+      expect(runs).toContain("bun scripts/release/npm.ts release/npm");
+      expect(runs).toContain("bun scripts/release/npm.ts release/plugins/opencode");
+    });
+
+    test("nothing reaches a shell by interpolation, every action is pinned by commit, no checkout keeps credentials", () => {
+      for (const [name, job] of Object.entries(workflow().jobs)) {
+        for (const step of job.steps) {
+          if (step.run !== undefined)
+            expect({ name, run: step.run.includes(OPEN) }).toEqual({ name, run: false });
+          if (step.uses !== undefined) {
+            const pin = step.uses.split("@")[1] ?? "";
+            expect({ uses: step.uses, pinned: /^[0-9a-f]{40}$/.test(pin) }).toEqual({
+              uses: step.uses,
+              pinned: true,
+            });
+            if (step.uses.startsWith("actions/checkout@"))
+              expect(step.with?.["persist-credentials"]).toBe(false);
+          }
+        }
+      }
+    });
+
+    test("the marketplace token is named four times, each in the environment of a step of tap or marketplace", () => {
+      const SECRET = expr("secrets.MARKETPLACE_TOKEN");
+      expect(raw().split("secrets.MARKETPLACE_TOKEN")).toHaveLength(5);
+      const holders: string[] = [];
+      for (const [name, job] of Object.entries(workflow().jobs)) {
+        for (const step of job.steps) {
+          for (const [key, value] of Object.entries(step.env ?? {})) {
+            if (value.includes("secrets.MARKETPLACE_TOKEN")) {
+              expect({ key, value }).toEqual({ key: "MARKETPLACE_TOKEN", value: SECRET });
+              holders.push(`${name}: ${step.run}`);
+            }
+          }
+        }
+      }
+      expect(holders.sort()).toEqual([
+        "marketplace: bun scripts/release/push.ts --target marketplace",
+        "marketplace: bun scripts/release/token.ts WizardingCode-io/wizardingcode-plugins",
+        "tap: bun scripts/release/push.ts --target tap",
+        "tap: bun scripts/release/token.ts WizardingCode-io/homebrew-wizardingcode",
+      ]);
+    });
   });
 
   test("ci.yml: the build job builds the image, runs it hardened, waits for health, checks the user and the exit code", () => {

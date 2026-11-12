@@ -1,0 +1,205 @@
+name: distribute
+
+# Carries a published release to npm, the Homebrew tap and the plugin marketplace, then moves
+# the team server image's latest tag, last. release.yml starts it for each tag; a person
+# starts it from main to repeat a target that failed (docs/runbooks/release.md).
+#
+# Dispatch only, and only from main: the marketplace token and the right to publish to npm sit
+# behind the environment "release", whose rule allows the branch main alone. npmjs.com has
+# this file's name and that environment registered as the trusted publisher of both packages:
+# renaming either breaks publishing until they are registered again.
+#
+# No run: script interpolates an expression (values arrive through env:), every action is
+# pinned by commit, and no checkout keeps credentials. tests/unit/deploy-files.test.ts holds it.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The release's tag, v<version>
+        required: true
+        type: string
+      dry_run:
+        description: Write nothing; say what would be written
+        type: boolean
+        default: false
+      release_hold:
+        description: Move latest although the contract rule holds it
+        type: boolean
+        default: false
+
+run-name: distribute ${{ inputs.tag }}
+
+# One at a time, in order; a run in progress is never cancelled.
+concurrency:
+  group: distribute
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  # What may be distributed: the tag is a version, on main, the highest, with a whole release,
+  # and the environment has its rule. Every other job works from the commit it judged.
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      version: ${{ steps.plan.outputs.version }}
+      sha: ${{ steps.plan.outputs.sha }}
+      prerelease: ${{ steps.plan.outputs.prerelease }}
+      held: ${{ steps.plan.outputs.held }}
+      latest_line: ${{ steps.plan.outputs.latest_line }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .bun-version
+      - id: plan
+        env:
+          TAG: ${{ inputs.tag }}
+          RELEASE_HOLD: ${{ inputs.release_hold }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          GH_TOKEN: ${{ github.token }}
+        run: bun scripts/release/plan.ts
+
+  # Both npm packages, by trusted publishing: no token. The tree published is the commit plan
+  # judged, never the tag by name, which could have moved since.
+  npm:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+          path: release
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .bun-version
+      - name: npm is new enough for trusted publishing
+        run: |
+          bun -e 'const found = Bun.spawnSync(["npm", "--version"]).stdout.toString().trim(); if (Bun.semver.order(found, "11.5.1") < 0) { console.error(`npm ${found} is older than 11.5.1`); process.exit(1); }'
+      - env:
+          VERSION: ${{ needs.plan.outputs.version }}
+          PRERELEASE: ${{ needs.plan.outputs.prerelease }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: bun scripts/release/npm.ts release/npm
+      - env:
+          VERSION: ${{ needs.plan.outputs.version }}
+          PRERELEASE: ${{ needs.plan.outputs.prerelease }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: bun scripts/release/npm.ts release/plugins/opencode
+
+  # The Homebrew formula, rendered from the template with the release's checksums.
+  tap:
+    needs: plan
+    if: needs.plan.outputs.prerelease == 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: release
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .bun-version
+      - env:
+          MARKETPLACE_TOKEN: ${{ secrets.MARKETPLACE_TOKEN }}
+        run: bun scripts/release/token.ts WizardingCode-io/homebrew-wizardingcode
+      - env:
+          TAG: ${{ inputs.tag }}
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download "$TAG" -p checksums.txt -D "$RUNNER_TEMP"
+      - env:
+          TAG: ${{ inputs.tag }}
+          SHA: ${{ needs.plan.outputs.sha }}
+          VERSION: ${{ needs.plan.outputs.version }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          CHECKSUMS: ${{ runner.temp }}/checksums.txt
+          MARKETPLACE_TOKEN: ${{ secrets.MARKETPLACE_TOKEN }}
+        run: bun scripts/release/push.ts --target tap
+
+  # The plugin's entry in the marketplace's two manifests.
+  marketplace:
+    needs: plan
+    if: needs.plan.outputs.prerelease == 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: release
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .bun-version
+      - env:
+          MARKETPLACE_TOKEN: ${{ secrets.MARKETPLACE_TOKEN }}
+        run: bun scripts/release/token.ts WizardingCode-io/wizardingcode-plugins
+      - env:
+          TAG: ${{ inputs.tag }}
+          SHA: ${{ needs.plan.outputs.sha }}
+          VERSION: ${{ needs.plan.outputs.version }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          MARKETPLACE_TOKEN: ${{ secrets.MARKETPLACE_TOKEN }}
+        run: bun scripts/release/push.ts --target marketplace
+
+  # The image's latest tag, last: a release that did not reach every channel is not the one a
+  # server should follow. It runs even when a target failed, to say that it did not move.
+  latest:
+    needs: [plan, npm, tap, marketplace]
+    if: ${{ !cancelled() && needs.plan.outputs.prerelease == 'false' && needs.plan.outputs.held == 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      packages: write
+    steps:
+      - env:
+          NPM: ${{ needs.npm.result }}
+          TAP: ${{ needs.tap.result }}
+          MARKETPLACE: ${{ needs.marketplace.result }}
+        run: |
+          for pair in "npm:$NPM" "tap:$TAP" "marketplace:$MARKETPLACE"; do
+            job="${pair%%:*}"
+            if [ "${pair#*:}" != "success" ]; then
+              echo "latest: not moved: $job did not succeed" | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
+          done
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # The manifest list already pushed gets a second tag; nothing is rebuilt.
+      - if: ${{ !inputs.dry_run }}
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: docker buildx imagetools create -t ghcr.io/wizardingcode-io/wizardingcode-mem:latest "ghcr.io/wizardingcode-io/wizardingcode-mem:$VERSION"
+      - env:
+          LINE: ${{ needs.plan.outputs.latest_line }}
+        run: echo "$LINE" | tee -a "$GITHUB_STEP_SUMMARY"
