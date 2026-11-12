@@ -1,5 +1,5 @@
 {
-  "fingerprint": "sha256:2a3e9c4789b1567de2a4d10ca921cd3f3e9fc87cd8901da92921e6a8b1910eff",
+  "fingerprint": "sha256:742340deb79d64109724dd8dc35aeb607f9a378ee06eb48f849c6e7dcf897547",
   "tdd": [
     {
       "criterion": "AC-14",
@@ -334,6 +334,19 @@
         "timedOut": false,
         "passed": 1
       }
+    },
+    {
+      "criterion": "AC-15",
+      "observed": {
+        "command": "sh -c 'ls .crew/work/2026-11-12-008-the-viewer-tells-of-a-newer-release-sett/review/ui | grep -E '\\''^(settings-about-(ahead|off-unknown|ci|unbuilt)|memories-update-out-copy)@(360|768|1280)-(light|dark)\\.png$'\\'' | wc -l | grep -qx '\\'' *30'\\'''",
+        "exit": 0,
+        "at": "2026-11-12T22:35:05.329Z",
+        "durationMs": 11,
+        "log": "logs/tdd-AC-15-observed-1794522905318.txt",
+        "tail": "",
+        "timedOut": false
+      },
+      "reason": "Whether a state is seen is shown by its capture, which no test of this project can fail on purpose (no browser test harness; the e2e gate is skipped by the author's standing decision). The states' texts, tones and signs are held by AC-11's tests, red then green."
     }
   ],
   "runs": [
@@ -345,11 +358,11 @@
       "confirmed": true,
       "exit": 0,
       "status": "pass",
-      "durationMs": 40,
-      "at": "2026-11-12T22:13:39.932Z",
+      "durationMs": 44,
+      "at": "2026-11-12T22:28:39.887Z",
       "log": null,
       "tail": "no secrets found in the change",
-      "fingerprint": "sha256:2a3e9c4789b1567de2a4d10ca921cd3f3e9fc87cd8901da92921e6a8b1910eff"
+      "fingerprint": "sha256:742340deb79d64109724dd8dc35aeb607f9a378ee06eb48f849c6e7dcf897547"
     },
     {
       "gate": "prose",
@@ -360,10 +373,10 @@
       "exit": 0,
       "status": "pass",
       "durationMs": 43,
-      "at": "2026-11-12T22:13:39.972Z",
+      "at": "2026-11-12T22:28:39.931Z",
       "log": null,
       "tail": "no chatbot artefacts in the change",
-      "fingerprint": "sha256:2a3e9c4789b1567de2a4d10ca921cd3f3e9fc87cd8901da92921e6a8b1910eff"
+      "fingerprint": "sha256:742340deb79d64109724dd8dc35aeb607f9a378ee06eb48f849c6e7dcf897547"
     },
     {
       "gate": "design-lint",
@@ -373,11 +386,11 @@
       "confirmed": true,
       "exit": 0,
       "status": "pass",
-      "durationMs": 82,
-      "at": "2026-11-12T22:13:40.015Z",
+      "durationMs": 77,
+      "at": "2026-11-12T22:28:39.974Z",
       "log": null,
       "tail": "unresolved: 0\ninventory: 0 animated declarations (review/design-lint.json)",
-      "fingerprint": "sha256:2a3e9c4789b1567de2a4d10ca921cd3f3e9fc87cd8901da92921e6a8b1910eff",
+      "fingerprint": "sha256:742340deb79d64109724dd8dc35aeb607f9a378ee06eb48f849c6e7dcf897547",
       "lint": {
         "file": "review/design-lint.json",
         "defects": 0,
@@ -396,11 +409,11 @@
       "confirmed": true,
       "exit": 0,
       "status": "pass",
-      "durationMs": 2802,
-      "at": "2026-11-12T22:13:40.098Z",
-      "log": "logs/build-_-1794521620098.txt",
-      "tail": "$ bun run ui:build && bun scripts/build.ts\n$ vite build --config ui/vite.config.ts\nvite v8.3.3 building client environment for production...\ntransforming...\n\n/assets/unbounded-variable.woff2 referenced in /assets/unbounded-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/instrument-sans-variable.woff2 referenced in /assets/instrument-sans-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/jetbrains-mono-variable.woff2 referenced in /assets/jetbrains-mono-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n✓ 855 modules transformed.\nrendering chunks...\n[plugin vite:singlefile] \n\n[plugin vite:singlefile] Inlining: index-DFMF2Dpu.js\n[plugin vite:singlefile] Inlining: style-DhfwMfWu.css\nsrc/ui/dist/index.html  1,234.72 kB\n\n✓ built in 771ms\n✓ wizardingcode-mem-darwin-arm64  68.0 MB\n✓ wizardingcode-mem-darwin-x64  74.7 MB\n✓ wizardingcode-mem-linux-x64  86.1 MB\n✓ wizardingcode-mem-linux-arm64  86.1 MB\n✓ wizardingcode-mem-windows-x64.exe  90.7 MB",
-      "fingerprint": "sha256:2a3e9c4789b1567de2a4d10ca921cd3f3e9fc87cd8901da92921e6a8b1910eff"
+      "durationMs": 2619,
+      "at": "2026-11-12T22:28:40.051Z",
+      "log": "logs/build-_-1794522520051.txt",
+      "tail": "$ bun run ui:build && bun scripts/build.ts\n$ vite build --config ui/vite.config.ts\nvite v8.3.3 building client environment for production...\ntransforming...\n\n/assets/unbounded-variable.woff2 referenced in /assets/unbounded-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/instrument-sans-variable.woff2 referenced in /assets/instrument-sans-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/jetbrains-mono-variable.woff2 referenced in /assets/jetbrains-mono-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n✓ 855 modules transformed.\nrendering chunks...\n[plugin vite:singlefile] \n\n[plugin vite:singlefile] Inlining: index-CsGLRbxi.js\n[plugin vite:singlefile] Inlining: style-DL7J-sjm.css\nsrc/ui/dist/index.html  1,235.23 kB\n\n✓ built in 710ms\n✓ wizardingcode-mem-darwin-arm64  68.0 MB\n✓ wizardingcode-mem-darwin-x64  74.7 MB\n✓ wizardingcode-mem-linux-x64  86.1 MB\n✓ wizardingcode-mem-linux-arm64  86.1 MB\n✓ wizardingcode-mem-windows-x64.exe  90.7 MB",
+      "fingerprint": "sha256:742340deb79d64109724dd8dc35aeb607f9a378ee06eb48f849c6e7dcf897547"
     },
     {
       "gate": "test",
@@ -410,11 +423,11 @@
       "confirmed": true,
       "exit": 0,
       "status": "pass",
-      "durationMs": 234587,
-      "at": "2026-11-12T22:13:42.928Z",
-      "log": "logs/test-_-1794521622928.txt",
-      "tail": "heuristic precision 100%  recall 100%  kind 83%\ntypesafe  precision 85%  recall 94%  kind 88%  wrongly kept: en-none-obvious-from-code, en-none-general-knowledge, pt-none-your-turn  missed: en-change-json-flag\n\ntests/golden/search.test.ts:\ntop 5: 35/44 → 39/44; Portuguese of English: 1/8 → 4/8\nsemantic-only results for unrelated queries: 29/43\n\ntests/golden/retrieval.test.ts:\nrecall@5: 19/24 — missed: redact-first, pt-lingua, pt-cursor, ts-extension, hook-runs\nprecision: 19/21 notes given were the expected ones\nfalse injections: 0/23\n\ntests/perf/budgets.test.ts:\nrebuild write transaction, 2000 entries: median 28.0 ms over 5 (28.0, 28.5, 21.5, 29.7, 23.8)\nprompt: p50 66.7 ms, p95 70.3 ms\nsession-start: p50 21.4 ms, p95 25.2 ms\nturn-end: p50 15.7 ms, p95 16.5 ms\nfile-read: p50 18.7 ms, p95 20.6 ms\ntool-failed: p50 24.4 ms, p95 25.3 ms\nqwen prompt: p50 67.6 ms, p95 70.0 ms\nqwen session-start: p50 22.0 ms, p95 25.8 ms\ndroid prompt: p50 66.6 ms, p95 69.2 ms\ndroid session-start: p50 21.6 ms, p95 22.6 ms\ncopilot session-start: p50 21.6 ms, p95 22.7 ms\ncopilot prompt (capture only): p50 16.0 ms, p95 20.0 ms\nantigravity pre-invocation: p50 21.9 ms, p95 24.1 ms\nlinked prompt: p50 31.2 ms, p95 35.3 ms (30 of 30 with a note from outside)\nlinked session-start: p50 22.6 ms, p95 23.5 ms\n\ntests/perf/large-project.test.ts:\nlarge project prompt: p50 18.7 ms, p95 21.3 ms (40 of 40 given notes)\n\ntests/perf/semantic.test.ts:\nsemantic global median: 16.3 ms\n\n 3594 pass\n 4 skip\n 0 fail\n 26 snapshots, 40736 expect() calls\nRan 3598 tests across 227 files. [233.26s]",
-      "fingerprint": "sha256:2a3e9c4789b1567de2a4d10ca921cd3f3e9fc87cd8901da92921e6a8b1910eff"
+      "durationMs": 234321,
+      "at": "2026-11-12T22:28:42.703Z",
+      "log": "logs/test-_-1794522522704.txt",
+      "tail": "heuristic precision 100%  recall 100%  kind 83%\ntypesafe  precision 85%  recall 94%  kind 88%  wrongly kept: en-none-obvious-from-code, en-none-general-knowledge, pt-none-your-turn  missed: en-change-json-flag\n\ntests/golden/search.test.ts:\ntop 5: 35/44 → 39/44; Portuguese of English: 1/8 → 4/8\nsemantic-only results for unrelated queries: 29/43\n\ntests/golden/retrieval.test.ts:\nrecall@5: 19/24 — missed: redact-first, pt-lingua, pt-cursor, ts-extension, hook-runs\nprecision: 19/21 notes given were the expected ones\nfalse injections: 0/23\n\ntests/perf/budgets.test.ts:\nrebuild write transaction, 2000 entries: median 27.0 ms over 5 (27.0, 27.8, 20.8, 30.0, 23.4)\nprompt: p50 65.2 ms, p95 70.9 ms\nsession-start: p50 21.4 ms, p95 21.8 ms\nturn-end: p50 16.0 ms, p95 16.8 ms\nfile-read: p50 18.5 ms, p95 19.2 ms\ntool-failed: p50 25.0 ms, p95 26.2 ms\nqwen prompt: p50 65.7 ms, p95 68.1 ms\nqwen session-start: p50 22.4 ms, p95 25.1 ms\ndroid prompt: p50 66.4 ms, p95 71.3 ms\ndroid session-start: p50 21.3 ms, p95 21.9 ms\ncopilot session-start: p50 21.3 ms, p95 22.1 ms\ncopilot prompt (capture only): p50 15.8 ms, p95 16.4 ms\nantigravity pre-invocation: p50 21.3 ms, p95 22.5 ms\nlinked prompt: p50 31.1 ms, p95 35.4 ms (30 of 30 with a note from outside)\nlinked session-start: p50 22.0 ms, p95 22.7 ms\n\ntests/perf/large-project.test.ts:\nlarge project prompt: p50 18.3 ms, p95 20.4 ms (40 of 40 given notes)\n\ntests/perf/semantic.test.ts:\nsemantic global median: 16.1 ms\n\n 3598 pass\n 4 skip\n 0 fail\n 26 snapshots, 40739 expect() calls\nRan 3602 tests across 227 files. [233.00s]",
+      "fingerprint": "sha256:742340deb79d64109724dd8dc35aeb607f9a378ee06eb48f849c6e7dcf897547"
     },
     {
       "gate": "lint",
@@ -424,11 +437,11 @@
       "confirmed": true,
       "exit": 1,
       "status": "pass",
-      "durationMs": 109,
-      "at": "2026-11-12T22:17:37.515Z",
-      "log": "logs/lint-_-1794521857515.txt",
-      "tail": "$ biome check .\nChecked 0 files in 19ms. No fixes applied.\ncheck ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n  × No files were processed in the specified paths.\n  \n  i Check your biome.json or biome.jsonc to ensure the paths are not ignored by the configuration.\n  \n  i These paths were provided but ignored:\n  \n  - .\n  \n\nerror: script \"lint\" exited with code 1",
-      "fingerprint": "sha256:2a3e9c4789b1567de2a4d10ca921cd3f3e9fc87cd8901da92921e6a8b1910eff",
+      "durationMs": 96,
+      "at": "2026-11-12T22:32:37.025Z",
+      "log": "logs/lint-_-1794522757025.txt",
+      "tail": "$ biome check .\nChecked 0 files in 4ms. No fixes applied.\ncheck ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n  × No files were processed in the specified paths.\n  \n  i Check your biome.json or biome.jsonc to ensure the paths are not ignored by the configuration.\n  \n  i These paths were provided but ignored:\n  \n  - .\n  \n\nerror: script \"lint\" exited with code 1",
+      "fingerprint": "sha256:742340deb79d64109724dd8dc35aeb607f9a378ee06eb48f849c6e7dcf897547",
       "reason": "1 file with problems, none changed by this item (pre-existing)",
       "problems": {
         "touched": [],
@@ -444,10 +457,10 @@
       "exit": 0,
       "status": "pass",
       "durationMs": 395,
-      "at": "2026-11-12T22:17:37.625Z",
-      "log": "logs/typecheck-_-1794521857625.txt",
+      "at": "2026-11-12T22:32:37.123Z",
+      "log": "logs/typecheck-_-1794522757123.txt",
       "tail": "$ tsc --noEmit",
-      "fingerprint": "sha256:2a3e9c4789b1567de2a4d10ca921cd3f3e9fc87cd8901da92921e6a8b1910eff"
+      "fingerprint": "sha256:742340deb79d64109724dd8dc35aeb607f9a378ee06eb48f849c6e7dcf897547"
     },
     {
       "gate": "e2e",
@@ -458,18 +471,16 @@
       "exit": null,
       "status": "skipped",
       "durationMs": 0,
-      "at": "2026-11-12T22:17:38.020Z",
+      "at": "2026-11-12T22:32:37.518Z",
       "log": null,
       "tail": "",
       "reason": "This project has no e2e suite: the viewer's UI evidence is the session's captures under review/ui/ (manifest by the session). Decided by the author on 2026-11-09 with 'sim força' after the two options (a standing skip, or an environment and an e2e command in the profile) were presented; relayed by the agent.",
       "standing": "2026-11-09T19:47:57.623Z",
-      "fingerprint": "sha256:2a3e9c4789b1567de2a4d10ca921cd3f3e9fc87cd8901da92921e6a8b1910eff"
+      "fingerprint": "sha256:742340deb79d64109724dd8dc35aeb607f9a378ee06eb48f849c6e7dcf897547"
     }
   ],
-  "verdict": "unproven",
-  "unproven": [
-    "judgement gate ui-ux not proven (11 findings)"
-  ],
+  "verdict": "proven",
+  "unproven": [],
   "verifications": [
     {
       "what": "knowledge",
@@ -717,6 +728,55 @@
       "tokensFrom": "transcript",
       "model": "claude-opus-5-5",
       "file": "review/ruling.json"
+    },
+    {
+      "agent": "review-security",
+      "agentId": "a00e7668d82d05900",
+      "at": "2026-11-12T22:35:21.916Z",
+      "tokens": 151162,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/security.findings.md",
+      "team": "security"
+    },
+    {
+      "agent": "review-code-quality",
+      "agentId": "a1dff7d3b50300433",
+      "at": "2026-11-12T22:35:30.948Z",
+      "tokens": 173539,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/code-quality.findings.md",
+      "team": "backend"
+    },
+    {
+      "agent": "review-test-quality",
+      "agentId": "af3637119798d9290",
+      "at": "2026-11-12T22:35:38.815Z",
+      "tokens": 222629,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/test-quality.findings.md",
+      "team": "qa"
+    },
+    {
+      "agent": "review-ui-ux",
+      "agentId": "a91acfd93315473a1",
+      "at": "2026-11-12T22:38:03.789Z",
+      "tokens": 417028,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/ui-ux.findings.md",
+      "team": "frontend"
+    },
+    {
+      "agent": "judge",
+      "agentId": "a5b7e6ca1982ad711",
+      "at": "2026-11-12T22:38:37.619Z",
+      "tokens": 160722,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/ruling.json"
     }
   ],
   "judgement": [
@@ -727,80 +787,25 @@
       "judge": "judge",
       "findings": [
         {
-          "file": "ui/src/update.ts",
-          "line": 6,
-          "text": "Upheld as advisory (Q10/Q11). The doc comment says 'api.ts re-exports the type', but ui/src/api.ts only imports it. The comment says something the code does not do. Either add the re-export or drop the clause. (The reviewer placed this at file line 12. In the current file the comment is on line 6.)",
-          "severity": "advisory"
-        },
-        {
-          "file": "ui/src/update.ts",
-          "line": 43,
-          "text": "Upheld as advisory (Q5/Q6). releaseStatus spots a report that could not be built by matching the server's literal prefix 'not checked: ' (NOT_BUILT, from src/ui/update.ts). The two files are tied by a string the type does not carry. A field in ViewerUpdate would carry that fact instead.",
-          "severity": "advisory"
-        },
-        {
-          "file": "ui/src/update.ts",
-          "line": 54,
-          "text": "Upheld as advisory (Q2). The 'failed' predicate rewrites lastFailed from src/update/state.ts on the client. It is one expression, and state.ts loads node:fs, so the browser cannot import it. The server could send the fact instead.",
-          "severity": "advisory"
-        },
-        {
-          "file": "ui/src/components/settings/About.vue",
-          "line": 32,
-          "text": "Upheld as advisory (Q3). The 'daily' switch reads on whenever the value is not 'off'. With an unknown value (mode off-unknown) the switch shows on while no check runs. Reading updateState's mode would make them agree.",
-          "severity": "advisory"
-        },
-        {
           "file": "src/ui/update.ts",
-          "line": 17,
-          "text": "Upheld as advisory (Q2). ViewerUpdate is declared on the server here and again on the client in ui/src/update.ts, and nothing keeps the two in step. The client also spells Mode out instead of importing it from the leaf src/update/mode.ts.",
+          "line": 226,
+          "text": "Upheld as advisory (question 5). To call lastFailed, the viewer builds a stand-in UpdateState with an invented attemptAt: null. src/update/report.ts already computes 'failed' from the real state, so the report could carry it as a field. This is duplication, not a defect. The five advisories from round 1 are resolved: one ViewerUpdate declaration, the server's built/failed fields, and checksDaily.",
           "severity": "advisory"
         }
       ],
-      "tokens": 87256,
-      "at": "2026-11-12T22:24:13.677Z",
-      "fingerprint": "sha256:2a3e9c4789b1567de2a4d10ca921cd3f3e9fc87cd8901da92921e6a8b1910eff"
+      "tokens": 213720,
+      "at": "2026-11-12T22:38:54.141Z",
+      "fingerprint": "sha256:742340deb79d64109724dd8dc35aeb607f9a378ee06eb48f849c6e7dcf897547"
     },
     {
       "gate": "test-quality",
       "verdict": "proven",
       "reviewer": "review-test-quality",
       "judge": "judge",
-      "findings": [
-        {
-          "file": "tests/integration/ui-update.test.ts",
-          "line": 201,
-          "text": "Upheld as advisory (rubric Q5, as the reviewer files it). AC-8's case where the builder throws calls viewerUpdate directly, so neither the route nor the 200 status is checked through /api/update. The test still fails if the catch is reverted.",
-          "severity": "advisory"
-        },
-        {
-          "file": "tests/integration/ui-update.test.ts",
-          "line": 267,
-          "text": "Upheld as advisory. fetch is wrapped only after start({}) has returned, so a check made at viewer startup would go unseen. The criterion's wording (the two routes) is met.",
-          "severity": "advisory"
-        },
-        {
-          "file": "tests/unit/update-boundary.test.ts",
-          "line": 778,
-          "text": "Upheld as advisory. The import walk reuses a regex that matches only quoted specifiers, so a template-literal dynamic import would not be followed. The positive controls show the walk itself is real.",
-          "severity": "advisory"
-        },
-        {
-          "file": "tests/unit/ui-update.test.ts",
-          "line": 117,
-          "text": "Upheld as advisory. The expected status text is built with the same capitalise formula the code uses, so the test mirrors the implementation. The tones are literals and fail on reversion.",
-          "severity": "advisory"
-        },
-        {
-          "file": "tests/unit/ui-update.test.ts",
-          "line": 146,
-          "text": "Upheld as advisory. No test exercises agentsNote. AC-11 does not list the agents line, so this is not a defect.",
-          "severity": "advisory"
-        }
-      ],
-      "tokens": 112256,
-      "at": "2026-11-12T22:24:13.677Z",
-      "fingerprint": "sha256:2a3e9c4789b1567de2a4d10ca921cd3f3e9fc87cd8901da92921e6a8b1910eff"
+      "findings": [],
+      "tokens": 262810,
+      "at": "2026-11-12T22:38:54.141Z",
+      "fingerprint": "sha256:742340deb79d64109724dd8dc35aeb607f9a378ee06eb48f849c6e7dcf897547"
     },
     {
       "gate": "security",
@@ -810,96 +815,62 @@
       "findings": [
         {
           "file": "src/ui/update.ts",
-          "line": 185,
-          "text": "Upheld as advisory. GET /api/update can return the first line of an error and the staged binary's absolute path, and either may contain home-directory paths. The audience does not change: the route is behind the Host and token checks on the loopback-only server, and status/doctor already print the same lines to the same person. The text is rendered as plain Vue text, never as HTML. This is not a broader exposure.",
+          "line": 209,
+          "text": "Upheld as advisory. 'line' (the error's first line when the report cannot be built) and 'agents' (the staged binary's absolute path) can carry home-directory paths to the page. The audience is not wider: the route is behind the Host and token checks on the loopback-only viewer, and status/doctor already print the same lines to the same person. The updateReport seam is in-process only, and no request or CLI command sets it.",
           "severity": "advisory"
         }
       ],
-      "tokens": 80675,
-      "at": "2026-11-12T22:24:13.677Z",
-      "fingerprint": "sha256:2a3e9c4789b1567de2a4d10ca921cd3f3e9fc87cd8901da92921e6a8b1910eff"
+      "tokens": 191343,
+      "at": "2026-11-12T22:38:54.141Z",
+      "fingerprint": "sha256:742340deb79d64109724dd8dc35aeb607f9a378ee06eb48f849c6e7dcf897547"
     },
     {
       "gate": "ui-ux",
-      "verdict": "not-proven",
+      "verdict": "proven",
       "reviewer": "review-ui-ux",
       "judge": "judge",
       "findings": [
         {
+          "file": "src/ui/update.ts",
+          "line": 74,
+          "text": "Lowered to advisory (judge's evidence rule). The reviewer's defect, under question 5: in the unbuilt state the About status line shows a raw system error, 'Not checked: EIO: i/o error, read' (settings-about-unbuilt@1280-dark.png, @360-light.png). It is not upheld as a defect for two reasons. (1) The captures are listed only in the session-written review/ui/manifest.json. review/ui-evidence.json is absent, so they are not evidence that can uphold a ui-ux defect, and a raw error on screen is what a capture shows, so the diff-line branch does not apply. (2) The wording is what spec.md:16 prescribes ('not checked: <the error's first line>'), and AC-8 holds it. Only the spec can change that, not a gate ruling. If the author wants the plain sentence, it is a spec change: amend spec.md:16 and AC-8.",
+          "severity": "advisory"
+        },
+        {
           "file": "ui/src/update.ts",
-          "line": 52,
-          "text": "Upheld as a defect (Q2: an undeclared reachable branch). The finding was filed at spec.md:30, which is not a line of this gate's diff. It is placed at the diff lines the finding itself names. The Screens line of spec.md:30 declares six About states plus update-out, but the diff reaches more branches, and AC-11 names every one of them. They are: the warning tone for a report that could not be built (ui/src/update.ts:52); the muted tone for off-unknown and ci (ui/src/update.ts:53); the quiet tone for 'ahead' (ui/src/update.ts:57); and the banner's 'This copy is <running>.' line when no copy is staged (ui/src/update.ts:33). None is declared or captured. A capture cannot show a missing declaration, so this rests on the diff lines. Fix: declare these states in the spec's Screens line and capture them.",
-          "severity": "defect",
-          "verification": {
-            "status": "verified",
-            "confidence": 0.84
-          }
-        },
-        {
-          "file": "ui/src/App.vue",
-          "line": 227,
-          "text": "Lowered to advisory (judge's evidence rule). The reviewer's defect: in memories-update-out@360-dark.png and @360-light.png, only the icon and 'How to' show. '0.9.0 is out.' and Dismiss are past the right edge, because main sits beside the 216px projects sidebar, which stays open. Looking at review/ui/memories-update-out@360-dark.png confirms this, and it contradicts the manifest note 'uncut beside the two actions'. It cannot be upheld as a defect because review/ui-evidence.json, the engine's manifest, is absent. These captures are listed only in a session-written review/ui/manifest.json. An overflow is exactly what a capture shows, so the diff-line branch does not apply either. The root cause is ui/src/App.vue:165 (the existing sidebar, outside the change). To be decided on engine-recorded evidence in the next round.",
+          "line": 74,
+          "text": "Upheld as advisory. When the report cannot be built, the server sends mode 'check' and fromEnvironment false. checksDaily then shows the switch on and enabled even when the setting is off. This is a narrow fallback state (settings-about-unbuilt@1280-dark.png).",
           "severity": "advisory"
         },
         {
-          "file": "ui/src/components/UpdateBanner.vue",
-          "line": 33,
-          "text": "Upheld as advisory. At 768 the full line truncates through the staged version ('The agents run 0…'). The spec allows a line that truncates (memories-update-out@768-dark.png, @768-light.png).",
+          "file": "ui/src/update.ts",
+          "line": 37,
+          "text": "Upheld as advisory. In the off-env state the status line and the switch description say the same thing twice (settings-about-off-env@1280-dark.png, @360-light.png).",
           "severity": "advisory"
         },
         {
           "file": "ui/src/components/settings/About.vue",
-          "line": 60,
-          "text": "Upheld as advisory. The agents line repeats the agents' version from the status line and prints the staged binary's full temporary path, which takes four lines at 360 (settings-about-out@1280-dark.png, settings-about-out@360-light.png). The text comes from src/update/report.ts.",
-          "severity": "advisory"
-        },
-        {
-          "file": "ui/src/components/settings/About.vue",
-          "line": 66,
-          "text": "Upheld as advisory. break-all splits the shell commands in the middle of words at every width. The copy button means nothing is lost (settings-about-out@1280-dark.png, @768-dark.png, @360-dark.png).",
-          "severity": "advisory"
-        },
-        {
-          "file": "ui/src/components/settings/About.vue",
-          "line": 20,
-          "text": "Upheld as advisory. The warning tone uses the same upgrade-arrow icon for 'a release is out' and 'Could not check', so a failed check shows the wrong signal (settings-about-failed@1280-dark.png, @1280-light.png).",
-          "severity": "advisory"
-        },
-        {
-          "file": "src/update/report.ts",
-          "line": 33,
-          "text": "Upheld as advisory (Q5, copy). The off-env status line uses the terminal's wording ('this command's environment') inside the viewer (settings-about-off-env@1280-dark.png, @360-light.png).",
-          "severity": "advisory"
-        },
-        {
-          "file": "ui/src/components/settings/About.vue",
-          "line": 65,
-          "text": "Upheld as advisory. The channel names 'plugin' and 'script' are lowercase next to Homebrew and npm, and the plugin instruction starts lowercase (settings-about-out@1280-light.png).",
-          "severity": "advisory"
-        },
-        {
-          "file": "ui/src/components/settings/About.vue",
-          "line": 69,
-          "text": "Upheld as advisory. At 360 each copy button wraps under its command, so four rows become twelve. Crowding that still holds (settings-about-out@360-dark.png, @360-light.png).",
+          "line": 57,
+          "text": "Upheld as advisory. In the off state the status line prints the data directory's full env path, which takes five lines at 360 (settings-about-off@360-dark.png, @1280-light.png). Crowding that still holds.",
           "severity": "advisory"
         },
         {
           "file": "ui/src/App.vue",
           "line": 165,
-          "text": "Advisory, debt (outside the change). The 216px projects sidebar stays open at 768 and 360, which squeezes main. This is the cause underneath the 360 banner overflow (memories-update-out@768-dark.png, @360-dark.png).",
+          "text": "Advisory, debt (outside the change). The 216px projects panel stays open at 768 and 360. The banner no longer depends on it (memories-update-out@768-dark.png, @360-light.png).",
           "severity": "advisory"
         },
         {
           "file": "ui/vite.config.ts",
           "line": 60,
-          "text": "Advisory, debt (outside the change). In the light scheme the off track of USwitch is barely visible on white cards, across every switch in Settings (settings-about-off@1280-light.png).",
+          "text": "Advisory, debt (outside the change). In the light scheme the USwitch off track is barely visible on white cards, across every switch in Settings (settings-about-off-unknown@1280-light.png).",
           "severity": "advisory",
           "outside": true
         }
       ],
-      "tokens": 164786,
-      "at": "2026-11-12T22:24:13.677Z",
-      "fingerprint": "sha256:2a3e9c4789b1567de2a4d10ca921cd3f3e9fc87cd8901da92921e6a8b1910eff"
+      "tokens": 457209,
+      "at": "2026-11-12T22:38:54.141Z",
+      "fingerprint": "sha256:742340deb79d64109724dd8dc35aeb607f9a378ee06eb48f849c6e7dcf897547"
     }
   ]
 }

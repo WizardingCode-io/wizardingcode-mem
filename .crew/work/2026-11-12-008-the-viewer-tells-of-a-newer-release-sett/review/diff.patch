@@ -1,5 +1,5 @@
 diff --git a/CLAUDE.md b/CLAUDE.md
-index e91bea5..45f532d 100644
+index e91bea5..bd94016 100644
 --- a/CLAUDE.md
 +++ b/CLAUDE.md
 @@ -27,7 +27,7 @@ Brand conventions: products, plugins and skills are called `wizardingcode-<thing
@@ -7,7 +7,7 @@ index e91bea5..45f532d 100644
  - `bun run plugins` — rewrites what each agent installs (manifests, hooks, `wizardingcode-mem.sh`, the OpenCode package) from `scripts/plugins.ts`; run it after changing the version or the events
  - Releasing (ADR 0029, `docs/runbooks/release.md`): a tag `v<version>` runs `.github/workflows/release.yml` (build, sign, the image by its version, the GitHub release), which starts `.github/workflows/distribute.yml` from `main`: `plan` (what may be distributed, `decidePlan`'s refusals in a fixed order; the hold of the image's `latest` by the contract rule), `npm` (both packages, trusted publishing, from the commit `plan` judged), `tap` and `marketplace` (the formula from `packaging/homebrew/wizardingcode-mem.rb.template`, the plugin's entry in the marketplace's two manifests), `latest` (the image's tag, last). The decisions are pure functions in `scripts/release/lib.ts` (which also holds what the commands share: `run`, `summary`, `output`, `command`), with the commands `plan.ts`, `npm.ts`, `token.ts` and `push.ts` beside it (Bun's and Node's built-ins only; no `bun install` runs in that workflow). The marketplace token and the publish right sit behind the GitHub environment `release` (branch `main` only), which `plan` checks. In `distribute.yml` no `run:` interpolates an expression, every action is pinned by commit and no checkout keeps credentials; `tests/unit/deploy-files.test.ts` holds both workflows' shape. `push.ts` redacts the token's encoded credential by exact match from every text git answers (`redact`; another form of the credential needs its own), and its command takes no destination from its environment: writes are tested through `commitAndPush`. The tap holds the only rendered formula.
 -- The release notice (ADR 0030): `src/update/` asks github.com which release is the latest (the `releases/latest` redirect, never the API; `checkForRelease`, at most once a day, as a step after the drain in `distill`, never on a hook path, never in CI) and keeps the answer in `<data dir>/update.json`, read strictly. It downloads nothing. `status`, `doctor` and `wizardingcode-mem update` say what is out and one command per channel (`CHANNEL_COMMANDS`); `WIZARDINGCODE_MEM_UPDATE=off` in `<data dir>/env` turns it off, and the test preload sets it off for the suite. A compiled copy older than the staged binary hands `status`, `doctor`, `update` and `ui` over to it (`src/cli/reconciled.ts`, `src/update/reconcile.ts`); a newer copy only tells, and only `install` stages. A compiled build of a lower version than your own staged binary therefore hands over to it unless `WIZARDINGCODE_HOME` points elsewhere. `src/update/` imports nothing from the store, the modules, the engine, the sync, the status or the doctor (`tests/unit/update-boundary.test.ts`).
-+- The release notice (ADR 0030): `src/update/` asks github.com which release is the latest (the `releases/latest` redirect, never the API; `checkForRelease`, at most once a day, as a step after the drain in `distill`, never on a hook path, never in CI) and keeps the answer in `<data dir>/update.json`, read strictly. It downloads nothing. `status`, `doctor` and `wizardingcode-mem update` say what is out and one command per channel (`CHANNEL_COMMANDS`); `WIZARDINGCODE_MEM_UPDATE=off` in `<data dir>/env` turns it off, and the test preload sets it off for the suite. A compiled copy older than the staged binary hands `status`, `doctor`, `update` and `ui` over to it (`src/cli/reconciled.ts`, `src/update/reconcile.ts`); a newer copy only tells, and only `install` stages. A compiled build of a lower version than your own staged binary therefore hands over to it unless `WIZARDINGCODE_HOME` points elsewhere. `src/update/` imports nothing from the store, the modules, the engine, the sync, the status or the doctor (`tests/unit/update-boundary.test.ts`). The viewer tells it too and asks nothing: `GET /api/update` (`viewerUpdate` in `src/ui/update.ts`: the report in the page's shape, with `banner`) and `POST /api/update/dismiss` (the release dismissed, `update.dismissed` in `meta`; a later release brings the banner back); `ui/src/update.ts` holds the texts and tones, `ui/src/update-state.ts` the one read per page load, `UpdateBanner.vue` the banner and `settings/About.vue` the Release block with the switch. The rule of the mode is the leaf `src/update/mode.ts`, so that no file of `src/ui/` reaches `src/update/check.ts`, the one file that asks (`tests/unit/update-boundary.test.ts` walks the imports).
++- The release notice (ADR 0030): `src/update/` asks github.com which release is the latest (the `releases/latest` redirect, never the API; `checkForRelease`, at most once a day, as a step after the drain in `distill`, never on a hook path, never in CI) and keeps the answer in `<data dir>/update.json`, read strictly. It downloads nothing. `status`, `doctor` and `wizardingcode-mem update` say what is out and one command per channel (`CHANNEL_COMMANDS`); `WIZARDINGCODE_MEM_UPDATE=off` in `<data dir>/env` turns it off, and the test preload sets it off for the suite. A compiled copy older than the staged binary hands `status`, `doctor`, `update` and `ui` over to it (`src/cli/reconciled.ts`, `src/update/reconcile.ts`); a newer copy only tells, and only `install` stages. A compiled build of a lower version than your own staged binary therefore hands over to it unless `WIZARDINGCODE_HOME` points elsewhere. `src/update/` imports nothing from the store, the modules, the engine, the sync, the status or the doctor (`tests/unit/update-boundary.test.ts`). The viewer tells it too and asks nothing: `GET /api/update` (`viewerUpdate` in `src/ui/update.ts`: the report in the page's shape, with `banner`) and `POST /api/update/dismiss` (the release dismissed, `update.dismissed` in `meta`; a later release brings the banner back); `ui/src/update.ts` holds the texts and tones, `ui/src/update-state.ts` the one read per page load, `UpdateBanner.vue` the banner (under the top bar, across the window) and `settings/About.vue` the Release block with the switch. The rule of the mode is the leaf `src/update/mode.ts`, so that no file of `src/ui/` reaches `src/update/check.ts`, the one file that asks (`tests/unit/update-boundary.test.ts` walks the imports).
  - The staged binary (`<data dir>/bin`) only moves forward: the plugins' script, the OpenCode package, the npm shim (`npm/bin/wizardingcode-mem.js`), `stageBinary` (`src/install/binary.ts`) and `scripts/install.sh` each replace only an older or equal version, by one order (semantic versioning's; `src/util/version.ts`, `OLDER_JS` in `scripts/plugins.ts`, the shell `older()`), held equal by `tests/fixtures/version-order.ts`. A copy of `older()` is never edited alone: change `OLDER_JS` or the template and regenerate. `install` stages once per run and hands over to a newer staged binary; `install --force` replaces it.
  - `wizardingcode-mem install [claude-code|claude-desktop|codex|cursor|opencode|qwen|droid|copilot|antigravity]` installs for one agent (Claude Desktop: its chat gets the MCP server with `--global`, across every project; Cowork gets the plugin; ADR 0012); with no agent, for every one it finds. In Claude Code it imports claude-mem's memories and retires it (with confirmation); `wizardingcode-mem import claude-mem` only imports. claude-mem's database is only read, never changed. Qwen Code, Droid, Copilot and Antigravity install directly (hooks file and MCP server, no plugin; ADR 0016). Gemini CLI is no longer supported: `install gemini` points to Antigravity, `uninstall gemini` removes an old install (`src/install/gemini-leftover.ts`; never touches Antigravity's `~/.gemini/config`).
  - Adapters in `src/adapters/<agent>/`; installers in `src/install/`. The design per agent, and what was or was not confirmed in real sessions, is in ADR 0006 (Claude Code, Codex, Cursor, OpenCode) and ADR 0016 (Qwen Code, Droid, Copilot, Antigravity).
@@ -84,24 +84,42 @@ index e5841d8..57c7d60 100644
  import { lastFailed } from "../../update/state.ts";
  import { defaultDataDir } from "../../util/paths.ts";
 diff --git a/src/ui/server.ts b/src/ui/server.ts
-index 1033e2d..81ba11e 100644
+index 1033e2d..71e0216 100644
 --- a/src/ui/server.ts
 +++ b/src/ui/server.ts
-@@ -67,6 +67,7 @@ import { logError } from "../util/log.ts";
+@@ -67,6 +67,8 @@ import { logError } from "../util/log.ts";
  import { brandHome, storeDirOf } from "../util/paths.ts";
  import { spawnDetached } from "../util/self.ts";
  import { clearUiState, writeUiState } from "./state.ts";
++import type { UpdateReport } from "../update/report.ts";
 +import { dismissUpdate, viewerUpdate } from "./update.ts";
  import { acceptProposal, rejectProposal, undoUserRule } from "../links/rules.ts";
  import {
    addLink,
-@@ -836,6 +837,13 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
+@@ -120,6 +122,8 @@ export interface UiOptions {
+   openBrowser?: (url: string) => void;
+   /** Refuse to start when another viewer is already on record (see `UiClaimedError`). */
+   exclusive?: boolean;
++  /** How the release report is built; `updateReport` unless a test or a capture gives its own. */
++  updateReport?: () => UpdateReport;
+   /** How a background run is started (`history import`, ...); tests record instead. */
+   spawn?: (...args: string[]) => void;
+   /** The modules this binary has (`BUILT_IN`); tests add the fixture. */
+@@ -836,6 +840,21 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
        setMeta(db, HISTORY_OFFER_DISMISSED, "1");
        return json({ dismissed: true });
      }
 +    // The release notice (ADR 0030): what the daily check kept, read and never asked for here.
 +    if (path === "/api/update" && request.method === "GET") {
-+      return json(viewerUpdate({ db, dataDir: options.dataDir, env, now: now() }));
++      return json(
++        viewerUpdate({
++          db,
++          dataDir: options.dataDir,
++          env,
++          now: now(),
++          ...(options.updateReport === undefined ? {} : { build: options.updateReport }),
++        }),
++      );
 +    }
 +    if (path === "/api/update/dismiss" && request.method === "POST") {
 +      return json({ dismissed: dismissUpdate(db, options.dataDir) });
@@ -111,10 +129,10 @@ index 1033e2d..81ba11e 100644
        return json(semanticStatus(db, options.dataDir, env, now()));
 diff --git a/src/ui/update.ts b/src/ui/update.ts
 new file mode 100644
-index 0000000..6fb72cd
+index 0000000..f7ae421
 --- /dev/null
 +++ b/src/ui/update.ts
-@@ -0,0 +1,103 @@
+@@ -0,0 +1,117 @@
 +// What the viewer says of releases (ADR 0030): the report `status` prints, in the page's
 +// shape, and the release whose banner was dismissed. It reads what the daily check kept in
 +// `update.json`; it never asks the network, and it loads no code that does.
@@ -126,7 +144,7 @@ index 0000000..6fb72cd
 +import type { Mode } from "../update/mode.ts";
 +import { firstLine } from "../update/reason.ts";
 +import { type UpdateReport, updateReport } from "../update/report.ts";
-+import { readState } from "../update/state.ts";
++import { lastFailed, readState } from "../update/state.ts";
 +
 +/** The `meta` key of the release whose banner the person dismissed. */
 +export const UPDATE_DISMISSED = "update.dismissed";
@@ -141,6 +159,10 @@ index 0000000..6fb72cd
 +  mode: Mode;
 +  /** Whether a release newer than what runs here is known. */
 +  out: boolean;
++  /** Whether the last check failed, a release still known or not. */
++  failed: boolean;
++  /** False when the report itself could not be built: `line` then says why. */
++  built: boolean;
 +  /** The report's first line, without its label. */
 +  line: string;
 +  /** What the agents run, when it is another copy than this one. */
@@ -182,6 +204,8 @@ index 0000000..6fb72cd
 +      reason: null,
 +      mode: "check",
 +      out: false,
++      failed: false,
++      built: false,
 +      line: `not checked: ${firstLine(error)}`,
 +      agents: null,
 +      commands: [],
@@ -199,6 +223,14 @@ index 0000000..6fb72cd
 +    reason: report.reason,
 +    mode: report.mode,
 +    out: report.out,
++    failed: lastFailed({
++      latest: report.latest,
++      checkedAt: report.checkedAt,
++      attemptAt: null,
++      failedAt: report.failedAt,
++      reason: report.reason,
++    }),
++    built: true,
 +    line: first.replace(/^update: /, ""),
 +    agents: second ?? null,
 +    commands: report.out
@@ -278,10 +310,10 @@ index 5a83ab1..0edef98 100644
  import { lastFailed, readState, type UpdateState } from "./state.ts";
 diff --git a/tests/integration/ui-update.test.ts b/tests/integration/ui-update.test.ts
 new file mode 100644
-index 0000000..3ff2b81
+index 0000000..5006aec
 --- /dev/null
 +++ b/tests/integration/ui-update.test.ts
-@@ -0,0 +1,313 @@
+@@ -0,0 +1,343 @@
 +// The viewer tells of a newer release (ADR 0030): it reads what the daily check kept, says it
 +// in its own shape, remembers a dismissed banner per release, and asks the network nothing.
 +import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -374,6 +406,8 @@ index 0000000..3ff2b81
 +      reason: null,
 +      mode: "check",
 +      out: true,
++      failed: false,
++      built: true,
 +      line: `${NEWER} is out (checked 3 h ago); this copy is ${RUNNING}`,
 +      agents: null,
 +      commands: CHANNEL_COMMANDS.map(({ channel, command, shell }) => ({
@@ -459,6 +493,8 @@ index 0000000..3ff2b81
 +      failedAt: NOW - 2 * HOUR,
 +      reason: "offline",
 +      out: false,
++      failed: true,
++      built: true,
 +      line: "could not check (offline, 2 h ago); no release known yet",
 +      banner: false,
 +    });
@@ -503,6 +539,8 @@ index 0000000..3ff2b81
 +        reason: null,
 +        mode: "check",
 +        out: false,
++        failed: false,
++        built: false,
 +        line: "not checked: EACCES: permission denied, open '/x/update.json'",
 +        agents: null,
 +        commands: [],
@@ -512,6 +550,30 @@ index 0000000..3ff2b81
 +    } finally {
 +      db.close();
 +    }
++  });
++});
++
++describe("a report that cannot be built, through the route", () => {
++  test("answers 200 with the shape and the reason, never a stack", async () => {
++    server = await startUi({
++      dataDir,
++      port: 0,
++      open: false,
++      now: () => NOW,
++      env: {},
++      updateReport: () => {
++        throw new Error("EIO: i/o error, read\n    at readState (state.ts:30)");
++      },
++    });
++    const answer = await call(server, "/api/update");
++    expect(answer.status).toBe(200);
++    expect(await answer.json()).toMatchObject({
++      built: false,
++      out: false,
++      banner: false,
++      commands: [],
++      line: "not checked: EIO: i/o error, read",
++    });
 +  });
 +});
 +
@@ -548,26 +610,26 @@ index 0000000..3ff2b81
 +});
 +
 +describe("the viewer asks the network nothing", () => {
-+  test("with a check due, neither route makes a request to another host", async () => {
-+    // No update.json, and neither the setting nor CI in the environment: a check is due.
-+    const s = await start({});
++  test("with a check due, neither starting the viewer nor its two routes make a request to another host", async () => {
 +    const real = globalThis.fetch;
 +    const elsewhere: string[] = [];
-+    let own = 0;
++    const seen: string[] = [];
 +    globalThis.fetch = ((input: Parameters<typeof fetch>[0], init?: RequestInit) => {
-+      const url = String(input instanceof Request ? input.url : input);
-+      if (url.startsWith(s.origin)) own++;
-+      else elsewhere.push(url);
++      seen.push(String(input instanceof Request ? input.url : input));
 +      return real(input, init);
 +    }) as typeof fetch;
 +    try {
++      // No update.json, and neither the setting nor CI in the environment: a check is due.
++      const s = await start({});
 +      expect((await update(s)).mode).toBe("check");
 +      expect((await dismiss(s)).status).toBe(200);
 +      expect((await update(s)).line).toBe("not checked yet");
++      for (const url of seen) if (!url.startsWith(s.origin)) elsewhere.push(url);
 +    } finally {
 +      globalThis.fetch = real;
 +    }
-+    expect(own).toBe(3);
++    // The test's own three calls, and nothing else.
++    expect(seen.length).toBe(3);
 +    expect(elsewhere).toEqual([]);
 +  });
 +});
@@ -597,17 +659,21 @@ index 0000000..3ff2b81
 +});
 diff --git a/tests/unit/ui-update.test.ts b/tests/unit/ui-update.test.ts
 new file mode 100644
-index 0000000..b0e9e7b
+index 0000000..5fb4ec9
 --- /dev/null
 +++ b/tests/unit/ui-update.test.ts
-@@ -0,0 +1,154 @@
-+// What the viewer says of a release: the banner's line, the About card's status and its
-+// tone, and the mark on the Settings list. Pure texts, driven without a browser.
+@@ -0,0 +1,270 @@
++// What the viewer says of a release: the banner's line, the About card's status with its
++// tone and sign, the agents' note, the channels' rows, the switch and the mark on the
++// Settings list. Pure texts, driven without a browser.
 +import { describe, expect, test } from "bun:test";
 +import {
 +  aboutMark,
++  agentsNote,
 +  bannerLine,
 +  bannerShort,
++  channelRows,
++  checksDaily,
 +  releaseStatus,
 +  type ViewerUpdate,
 +} from "../../ui/src/update.ts";
@@ -621,6 +687,8 @@ index 0000000..b0e9e7b
 +  reason: null,
 +  mode: "check",
 +  out: false,
++  failed: false,
++  built: true,
 +  line: "not checked yet",
 +  agents: null,
 +  commands: [],
@@ -636,37 +704,47 @@ index 0000000..b0e9e7b
 +  line: "0.9.0 is out (checked 3 h ago); this copy is 0.8.0",
 +  ...over,
 +});
++const staged = out({
++  staged: "0.7.0",
++  line: "0.9.0 is out (checked 3 h ago); the agents run 0.7.0",
++  agents:
++    "agents run 0.7.0 from /data/bin/wizardingcode-mem; this copy is 0.8.0: wizardingcode-mem install moves them to it",
++});
 +
 +describe("the banner's line", () => {
 +  test("names the release and who runs what", () => {
 +    expect(bannerLine(out())).toBe("wizardingcode-mem 0.9.0 is out. This copy is 0.8.0.");
-+    expect(
-+      bannerLine(
-+        out({ staged: "0.7.0", line: "0.9.0 is out (checked 3 h ago); the agents run 0.7.0" }),
-+      ),
-+    ).toBe("wizardingcode-mem 0.9.0 is out. The agents run 0.7.0.");
++    expect(bannerLine(staged)).toBe("wizardingcode-mem 0.9.0 is out. The agents run 0.7.0.");
 +  });
-+});
 +
-+describe("the banner at a phone's width", () => {
-+  test("keeps the one fact that must not be cut: which release is out", () => {
++  test("at a phone's width it keeps the one fact that must not be cut: which release is out", () => {
 +    expect(bannerShort(out())).toBe("0.9.0 is out.");
-+    expect(bannerShort(out({ staged: "0.7.0" }))).toBe("0.9.0 is out.");
++    expect(bannerShort(staged)).toBe("0.9.0 is out.");
 +  });
 +});
 +
 +describe("the About card's status", () => {
-+  const cases: [string, ViewerUpdate, "warn" | "quiet" | "muted"][] = [
++  const cases: [
++    string,
++    ViewerUpdate,
++    string,
++    "warn" | "quiet" | "muted",
++    "out" | "problem" | "ok" | "idle",
++  ][] = [
 +    [
 +      "out with a staged copy",
-+      out({ staged: "0.7.0", line: "0.9.0 is out (checked 3 h ago); the agents run 0.7.0" }),
++      staged,
++      "0.9.0 is out (checked 3 h ago); the agents run 0.7.0",
 +      "warn",
++      "out",
 +    ],
-+    ["out with none", out(), "warn"],
++    ["out with none", out(), "0.9.0 is out (checked 3 h ago); this copy is 0.8.0", "warn", "out"],
 +    [
 +      "latest",
 +      { ...base, latest: "0.8.0", checkedAt: 1, line: "0.8.0 is the latest (checked 3 h ago)" },
++      "0.8.0 is the latest (checked 3 h ago)",
 +      "quiet",
++      "ok",
 +    ],
 +    [
 +      "ahead",
@@ -676,9 +754,17 @@ index 0000000..b0e9e7b
 +        checkedAt: 1,
 +        line: "0.8.0 is ahead of the latest release 0.7.0 (checked 3 h ago)",
 +      },
++      "0.8.0 is ahead of the latest release 0.7.0 (checked 3 h ago)",
 +      "quiet",
++      "ok",
 +    ],
-+    ["off", { ...base, mode: "off", line: "off (WIZARDINGCODE_MEM_UPDATE in /data/env)" }, "muted"],
++    [
++      "off",
++      { ...base, mode: "off", line: "off (WIZARDINGCODE_MEM_UPDATE in /data/env)" },
++      "Off (WIZARDINGCODE_MEM_UPDATE in /data/env)",
++      "muted",
++      "idle",
++    ],
 +    [
 +      "off by the environment",
 +      {
@@ -687,7 +773,9 @@ index 0000000..b0e9e7b
 +        fromEnvironment: true,
 +        line: "off (WIZARDINGCODE_MEM_UPDATE in this command's environment; other processes may not see it)",
 +      },
++      "Off (WIZARDINGCODE_MEM_UPDATE in the environment this viewer was started with)",
 +      "muted",
++      "idle",
 +    ],
 +    [
 +      "off-unknown",
@@ -696,53 +784,143 @@ index 0000000..b0e9e7b
 +        mode: "off-unknown",
 +        line: "off (WIZARDINGCODE_MEM_UPDATE is neither check nor off)",
 +      },
++      "Off (WIZARDINGCODE_MEM_UPDATE is neither check nor off)",
 +      "muted",
++      "idle",
 +    ],
-+    ["not checked in CI", { ...base, mode: "ci", line: "not checked in CI" }, "muted"],
-+    ["not checked yet", base, "muted"],
++    [
++      "not checked in CI",
++      { ...base, mode: "ci", line: "not checked in CI" },
++      "Not checked in CI",
++      "muted",
++      "idle",
++    ],
++    ["not checked yet", base, "Not checked yet", "muted", "idle"],
 +    [
 +      "could not check",
 +      {
 +        ...base,
++        failed: true,
 +        failedAt: 2,
 +        reason: "offline",
 +        line: "could not check (offline, 2 h ago); no release known yet",
 +      },
++      "Could not check (offline, 2 h ago); no release known yet",
 +      "warn",
++      "problem",
 +    ],
 +    [
 +      "a report that could not be built",
-+      { ...base, line: "not checked: EACCES: permission denied" },
++      { ...base, built: false, line: "not checked: EACCES: permission denied" },
++      "Not checked: EACCES: permission denied",
 +      "warn",
++      "problem",
 +    ],
 +  ];
-+  for (const [name, update, tone] of cases) {
-+    test(`${name}: the server's line, capitalised, in the ${tone} tone`, () => {
-+      const status = releaseStatus(update);
-+      expect(status.tone).toBe(tone);
-+      expect(status.text).toBe(update.line.charAt(0).toUpperCase() + update.line.slice(1));
++  for (const [name, update, text, tone, sign] of cases) {
++    test(`${name}: ${tone}, ${sign}`, () => {
++      expect(releaseStatus(update)).toEqual({ text, tone, sign });
 +    });
 +  }
 +
-+  test("a failed check after a good one is still a warning, and a good one after a failure is not", () => {
++  test("a failed check with a release still known is a problem; the server says which, never the wording", () => {
 +    const failedLater = {
 +      ...base,
 +      latest: "0.8.0",
 +      checkedAt: 1,
 +      failedAt: 5,
++      failed: true,
 +      reason: "offline",
 +      line: "could not check (offline, 2 h ago); last known 0.8.0",
 +    };
-+    expect(releaseStatus(failedLater).tone).toBe("warn");
-+    const recovered = {
++    expect(releaseStatus(failedLater)).toMatchObject({ tone: "warn", sign: "problem" });
++    // The same words with `failed` false are a plain fact: the tone follows the field.
++    expect(releaseStatus({ ...failedLater, failed: false })).toMatchObject({
++      tone: "quiet",
++      sign: "ok",
++    });
++    expect(releaseStatus({ ...base, line: "not checked: something" })).toMatchObject({
++      tone: "muted",
++      sign: "idle",
++    });
++  });
++});
++
++describe("the agents' note", () => {
++  test("is left out when the status already says what the agents run, and said otherwise", () => {
++    expect(agentsNote(staged)).toBeNull();
++    expect(agentsNote(base)).toBeNull();
++    const behind = {
 +      ...base,
 +      latest: "0.8.0",
-+      checkedAt: 9,
-+      failedAt: 5,
-+      reason: "offline",
-+      line: "0.8.0 is the latest (checked 3 h ago)",
++      checkedAt: 1,
++      staged: "0.7.0",
++      line: "0.7.0 is the latest (checked 3 h ago)",
++      agents:
++        "agents run 0.7.0 from /data/bin/wizardingcode-mem; this copy is 0.8.0: wizardingcode-mem install moves them to it",
 +    };
-+    expect(releaseStatus(recovered).tone).toBe("quiet");
++    expect(agentsNote(behind)).toBe(
++      "Agents run 0.7.0 from /data/bin/wizardingcode-mem; this copy is 0.8.0: wizardingcode-mem install moves them to it",
++    );
++  });
++});
++
++describe("the channels' rows", () => {
++  test("a name and a sentence each start with a capital; a shell command is left as it is typed", () => {
++    expect(
++      channelRows({
++        ...out(),
++        commands: [
++          {
++            channel: "plugin",
++            command: "update the wizardingcode-mem plugin from your agent's plugin manager",
++            shell: false,
++          },
++          {
++            channel: "Homebrew",
++            command: "brew upgrade wizardingcode-mem && wizardingcode-mem install",
++            shell: true,
++          },
++          {
++            channel: "npm (and Windows)",
++            command: "npx wizardingcode-mem@latest install",
++            shell: true,
++          },
++          {
++            channel: "script",
++            command: "curl -fsSL https://example.test/install.sh | sh",
++            shell: true,
++          },
++        ],
++      }),
++    ).toEqual([
++      {
++        channel: "Plugin",
++        text: "Update the wizardingcode-mem plugin from your agent's plugin manager",
++        shell: false,
++      },
++      {
++        channel: "Homebrew",
++        text: "brew upgrade wizardingcode-mem && wizardingcode-mem install",
++        shell: true,
++      },
++      { channel: "npm (and Windows)", text: "npx wizardingcode-mem@latest install", shell: true },
++      { channel: "Script", text: "curl -fsSL https://example.test/install.sh | sh", shell: true },
++    ]);
++    expect(channelRows(base)).toEqual([]);
++  });
++});
++
++describe("the switch", () => {
++  test("is on only while a check can run, whatever the key holds", () => {
++    expect(checksDaily(base, null)).toBe(true);
++    expect(checksDaily({ ...base, mode: "ci" }, null)).toBe(true);
++    expect(checksDaily({ ...base, mode: "off" }, "off")).toBe(false);
++    // An unknown value turns the check off: the switch must not read on.
++    expect(checksDaily({ ...base, mode: "off-unknown" }, "sometimes")).toBe(false);
++    // Before the report is read, the setting's own value decides.
++    expect(checksDaily(null, "off")).toBe(false);
++    expect(checksDaily(null, null)).toBe(true);
 +  });
 +});
 +
@@ -756,9 +934,18 @@ index 0000000..b0e9e7b
 +  });
 +});
 diff --git a/tests/unit/update-boundary.test.ts b/tests/unit/update-boundary.test.ts
-index 2efb80b..a19da37 100644
+index 2efb80b..586c2f7 100644
 --- a/tests/unit/update-boundary.test.ts
 +++ b/tests/unit/update-boundary.test.ts
+@@ -8,7 +8,7 @@ const ROOT = join(import.meta.dir, "..", "..");
+ const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
+ /** Every module a file names in an import or a re-export, static or dynamic. */
+ const imports = (source: string) =>
+-  [...source.matchAll(/(?:from|import)\s*\(?\s*["']([^"']+)["']/g)].map(
++  [...source.matchAll(/(?:from|import)\s*\(?\s*["'`]([^"'`]+)["'`]/g)].map(
+     (match) => match[1] as string,
+   );
+ /** Only the static ones: what loading the file loads. */
 @@ -46,6 +46,44 @@ describe("the update folder's boundary", () => {
    });
  });
@@ -880,7 +1067,7 @@ index e56c7fc..45f4811 100644
 +  });
  });
 diff --git a/ui/src/App.vue b/ui/src/App.vue
-index 2cb9de4..5067183 100644
+index 2cb9de4..4a72620 100644
 --- a/ui/src/App.vue
 +++ b/ui/src/App.vue
 @@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watchEffect } from "vue";
@@ -891,14 +1078,14 @@ index 2cb9de4..5067183 100644
  import ProjectsView from "./components/ProjectsView.vue";
  import RulesView from "./components/RulesView.vue";
  import MemoryDetail from "./components/MemoryDetail.vue";
-@@ -223,6 +224,7 @@ onMounted(async () => {
-             </template>
-             <span v-else class="flex h-9 items-center gap-2 border-b-2 border-(--ink) pt-0.5 text-[12.5px] font-semibold"><span aria-hidden="true" class="size-2.5 rounded-[3px] bg-[#FFC53D]" />This machine</span>
-           </div>
-+          <UpdateBanner v-if="!failed" @how="openSettings('about')" />
-           <HistoryOffer v-if="state.tab === 'memories' && !failed" @progress="openSettings('history')" />
-           <LinksOffer v-if="state.tab === 'memories' && !failed" @review="tab = $event" />
-           <div v-if="failed" class="m-4 rounded-xl border border-(--danger) bg-(--danger-soft) px-3.5 py-3 text-[13px] text-(--danger)">Could not reach wizardingcode-mem: {{ failed }}</div>
+@@ -157,6 +158,7 @@ onMounted(async () => {
+   <UApp :toaster="{ position: 'bottom-left', duration: 5000 }" :tooltip="{ delayDuration: 400 }">
+     <div class="flex h-full flex-col overflow-hidden">
+       <TopBar @palette="palette = true" />
++      <UpdateBanner v-if="!failed" @how="openSettings('about')" />
+       <div class="flex min-h-0 flex-1">
+         <Rail :tab="state.tab" @go="tab = $event" />
+         <!-- The projects panel folds to nothing (240ms) and keeps its width while it moves. Settings are the
 diff --git a/ui/src/api.ts b/ui/src/api.ts
 index a0dbcd1..c1115ee 100644
 --- a/ui/src/api.ts
@@ -953,15 +1140,17 @@ index 66485f0..dd9f9e1 100644
  ]);
 diff --git a/ui/src/components/UpdateBanner.vue b/ui/src/components/UpdateBanner.vue
 new file mode 100644
-index 0000000..5ba25f4
+index 0000000..2c7f292
 --- /dev/null
 +++ b/ui/src/components/UpdateBanner.vue
-@@ -0,0 +1,37 @@
+@@ -0,0 +1,39 @@
 +<script setup lang="ts">
-+// A newer release is out, as Sales OS's page-level info banner (SystemStates SYS-060), the
-+// History offer's sibling: 36px, the full width of main, blue-soft with blue text, a 16px
-+// icon, one line that truncates, the actions on the right. It stays away for the release it
-+// was dismissed for, and comes back for a later one. Nothing is asked of the network.
++// A newer release is out. The History offer's sibling in look (Sales OS SystemStates SYS-060:
++// 36px, blue-soft with blue text, a 16px icon, one line that truncates, the actions on the
++// right), but it belongs to the whole app, not to a page: it sits under the top bar across
++// the window, so that the projects panel never pushes it off a narrow screen. It stays away
++// for the release it was dismissed for, and comes back for a later one. Nothing is asked of
++// the network.
 +import { computed, onMounted } from "vue";
 +import { api } from "../api";
 +import { bannerLine, bannerShort } from "../update";
@@ -995,7 +1184,7 @@ index 0000000..5ba25f4
 +  </div>
 +</template>
 diff --git a/ui/src/components/settings/About.vue b/ui/src/components/settings/About.vue
-index b8ef614..29f180f 100644
+index b8ef614..43d7292 100644
 --- a/ui/src/components/settings/About.vue
 +++ b/ui/src/components/settings/About.vue
 @@ -1,7 +1,13 @@
@@ -1008,7 +1197,7 @@ index b8ef614..29f180f 100644
 +import { computed, onMounted } from "vue";
 +import { fromEnvironment, saveSettings, valueOf } from "../../settings";
  import { REPO, siteLink } from "../../site";
-+import { agentsNote, releaseStatus } from "../../update";
++import { agentsNote, channelRows, checksDaily, releaseStatus } from "../../update";
 +import { loadUpdate, updateState } from "../../update-state";
 +import { state } from "../../viewer";
  import Card from "./Card.vue";
@@ -1018,21 +1207,19 @@ index b8ef614..29f180f 100644
    { label: "Report an issue", sub: "What broke, and what you expected", href: `${REPO}/issues/new`, icon: "i-lucide-message-square-warning" },
    { label: "Releases", sub: "What changed in each version", href: `${REPO}/releases`, icon: "i-lucide-tag" },
  ];
-+const TONES = {
-+  warn: { text: "text-(--warn)", icon: "i-lucide-circle-arrow-up" },
-+  quiet: { text: "text-(--ink)", icon: "i-lucide-circle-check" },
-+  muted: { text: "text-(--ink-muted)", icon: "i-lucide-circle-dashed" },
-+} as const;
++const TONES = { warn: "text-(--warn)", quiet: "text-(--ink)", muted: "text-(--ink-muted)" } as const;
++// A release to get is not a check that failed: each has its sign.
++const SIGNS = { out: "i-lucide-circle-arrow-up", problem: "i-lucide-triangle-alert", ok: "i-lucide-circle-check", idle: "i-lucide-circle-dashed" } as const;
 +
 +const toast = useToast();
 +const status = computed(() => (updateState.value ? releaseStatus(updateState.value) : null));
 +const agents = computed(() => (updateState.value ? agentsNote(updateState.value) : null));
-+const commands = computed(() => updateState.value?.commands ?? []);
++const commands = computed(() => (updateState.value ? channelRows(updateState.value) : []));
 +
 +onMounted(() => loadUpdate());
 +
 +const daily = computed({
-+  get: () => valueOf("WIZARDINGCODE_MEM_UPDATE") !== "off",
++  get: () => checksDaily(updateState.value, valueOf("WIZARDINGCODE_MEM_UPDATE")),
 +  set: async (on: boolean) => {
 +    if (await saveSettings({ WIZARDINGCODE_MEM_UPDATE: on ? "check" : "off" })) {
 +      toast.add({ title: on ? "Checks once a day" : "No longer checks", description: on ? "After a session's memories are saved." : "wizardingcode-mem update still asks when you type it.", color: "success" });
@@ -1055,21 +1242,23 @@ index b8ef614..29f180f 100644
    <Card id="about" title="About" :description="`wizardingcode-mem ${state.version} · memory for coding agents, by WizardingCode`" flush>
 +    <div class="flex flex-col gap-3 border-b border-(--row-line) px-4 py-3.5">
 +      <div v-if="status" class="flex items-start gap-3">
-+        <UIcon :name="TONES[status.tone].icon" class="mt-px size-4 flex-none" :class="TONES[status.tone].text" />
++        <UIcon :name="SIGNS[status.sign]" class="mt-px size-4 flex-none" :class="TONES[status.tone]" />
 +        <div class="flex min-w-0 flex-1 flex-col gap-0.5">
 +          <span class="wz-label">Release</span>
-+          <p class="m-0 text-[13px] leading-[18px] font-semibold break-words" :class="TONES[status.tone].text">{{ status.text }}</p>
-+          <p v-if="agents" class="m-0 text-xs leading-4 break-words text-(--ink-muted)">{{ agents }}</p>
++          <p class="m-0 text-[13px] leading-[18px] font-semibold [overflow-wrap:anywhere]" :class="TONES[status.tone]">{{ status.text }}</p>
++          <p v-if="agents" class="m-0 text-xs leading-4 [overflow-wrap:anywhere] text-(--ink-muted)">{{ agents }}</p>
 +        </div>
 +      </div>
 +      <ul v-if="commands.length > 0" class="m-0 flex list-none flex-col gap-2 p-0 pl-7" aria-label="How to update, by channel">
-+        <li v-for="c in commands" :key="c.channel" class="flex min-h-7 flex-wrap items-center gap-x-3 gap-y-0.5">
-+          <span class="w-32 flex-none text-xs leading-4 font-semibold text-(--ink)">{{ c.channel }}</span>
-+          <code v-if="c.shell" class="min-w-0 flex-1 basis-48 font-mono text-xs leading-4 break-all text-(--ink)">{{ c.command }}</code>
-+          <span v-else class="min-w-0 flex-1 basis-48 text-xs leading-4 text-(--ink-muted)">{{ c.command }}</span>
-+          <UTooltip v-if="c.shell" :text="`Copy the ${c.channel} command`">
-+            <button type="button" class="wz-icon-btn" :aria-label="`Copy the ${c.channel} command`" @click="copy(c.channel, c.command)"><UIcon name="i-lucide-copy" class="size-3.5" /></button>
-+          </UTooltip>
++        <li v-for="c in commands" :key="c.channel" class="flex min-h-7 flex-wrap items-start gap-x-3 gap-y-0.5">
++          <span class="w-32 flex-none basis-full pt-1.5 text-xs leading-4 font-semibold text-(--ink) sm:basis-32">{{ c.channel }}</span>
++          <div class="flex min-w-0 flex-1 items-start gap-2">
++            <code v-if="c.shell" class="min-w-0 flex-1 pt-1.5 font-mono text-xs leading-4 [overflow-wrap:anywhere] text-(--ink)">{{ c.text }}</code>
++            <span v-else class="min-w-0 flex-1 pt-1.5 text-xs leading-4 text-(--ink-muted)">{{ c.text }}</span>
++            <UTooltip v-if="c.shell" :text="`Copy the ${c.channel} command`">
++              <button type="button" class="wz-icon-btn" :aria-label="`Copy the ${c.channel} command`" @click="copy(c.channel, c.text)"><UIcon name="i-lucide-copy" class="size-3.5" /></button>
++            </UTooltip>
++          </div>
 +        </li>
 +      </ul>
 +      <USwitch v-model="daily" :disabled="fromEnvironment('WIZARDINGCODE_MEM_UPDATE')" label="Check for new releases once a day" :description="fromEnvironment('WIZARDINGCODE_MEM_UPDATE') ? 'Set by WIZARDINGCODE_MEM_UPDATE in the environment this viewer was started with.' : 'After a session\'s memories are saved, github.com is asked which release is the latest. Nothing is downloaded.'" />
@@ -1104,36 +1293,23 @@ index 0000000..38fd3e8
 +}
 diff --git a/ui/src/update.ts b/ui/src/update.ts
 new file mode 100644
-index 0000000..a135bc4
+index 0000000..f04c03f
 --- /dev/null
 +++ b/ui/src/update.ts
-@@ -0,0 +1,68 @@
+@@ -0,0 +1,80 @@
 +// What the viewer says of a release (ADR 0030): the banner's line, the About card's status
-+// with its tone, and the mark on the Settings list. Pure, so the tests drive it without a
-+// browser. No import from api.ts: it reads the page's location, and the tests load this
-+// file without one.
++// with its tone and sign, the agents' note, the channels' rows, the switch and the mark on
++// the Settings list. Pure, so the tests drive it without a browser. No import from api.ts:
++// it reads the page's location, and the tests load this file without one.
++import type { ViewerUpdate } from "../../src/ui/update.ts";
 +
-+/** `GET /api/update`, as src/ui/update.ts answers it; api.ts re-exports the type. */
-+export interface ViewerUpdate {
-+  running: string;
-+  staged: string | null;
-+  latest: string | null;
-+  checkedAt: number | null;
-+  failedAt: number | null;
-+  reason: string | null;
-+  mode: "check" | "off" | "off-unknown" | "ci";
-+  out: boolean;
-+  /** What `wizardingcode-mem status` says of the release, without its label. */
-+  line: string;
-+  /** What the agents run, when it is another copy than this viewer's. */
-+  agents: string | null;
-+  commands: { channel: string; command: string; shell: boolean }[];
-+  fromEnvironment: boolean;
-+  banner: boolean;
-+}
++/** `GET /api/update`: the server's own type, so the page and the route cannot drift apart. */
++export type { ViewerUpdate };
 +
 +/** How loud a status is: a warning, a plain fact, or something that is simply not on. */
 +export type Tone = "warn" | "quiet" | "muted";
++/** What the status is about, for its icon: a release to get, something wrong, all well, nothing running. */
++export type Sign = "out" | "problem" | "ok" | "idle";
 +
 +const capitalised = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 +
@@ -1149,27 +1325,52 @@ index 0000000..a135bc4
 +  return `${update.latest} is out.`;
 +}
 +
-+/** The server's prefix for a report it could not build (src/ui/update.ts). */
-+const NOT_BUILT = "not checked: ";
-+
 +/**
-+ * The card's status: the server's own line, capitalised, with its tone. A release out, a
-+ * last check that failed and a report that could not be built are warnings; a check that is
-+ * off or has not run yet is muted; the rest is a plain fact.
++ * The card's status: the server's line, capitalised, with its tone and its sign. The one
++ * line the page words itself is the setting that comes from the environment: the terminal
++ * speaks of "this command", and here it is the viewer's own environment.
 + */
-+export function releaseStatus(update: ViewerUpdate): { text: string; tone: Tone } {
-+  const text = capitalised(update.line);
-+  if (update.out || update.line.startsWith(NOT_BUILT)) return { text, tone: "warn" };
-+  if (update.mode !== "check") return { text, tone: "muted" };
-+  const failed =
-+    update.failedAt !== null && (update.checkedAt === null || update.failedAt > update.checkedAt);
-+  if (failed) return { text, tone: "warn" };
-+  return { text, tone: update.latest === null ? "muted" : "quiet" };
++export function releaseStatus(update: ViewerUpdate): { text: string; tone: Tone; sign: Sign } {
++  const text =
++    update.mode === "off" && update.fromEnvironment
++      ? "Off (WIZARDINGCODE_MEM_UPDATE in the environment this viewer was started with)"
++      : capitalised(update.line);
++  if (update.out) return { text, tone: "warn", sign: "out" };
++  if (!update.built) return { text, tone: "warn", sign: "problem" };
++  if (update.mode !== "check") return { text, tone: "muted", sign: "idle" };
++  if (update.failed) return { text, tone: "warn", sign: "problem" };
++  return update.latest === null
++    ? { text, tone: "muted", sign: "idle" }
++    : { text, tone: "quiet", sign: "ok" };
 +}
 +
-+/** The agents' line as a sentence of the card. */
++/**
++ * What the agents run, as a sentence of the card; null when the status line already says it
++ * (a release is out and a staged copy exists), so the card does not say it twice.
++ */
 +export function agentsNote(update: ViewerUpdate): string | null {
-+  return update.agents === null ? null : capitalised(update.agents);
++  if (update.agents === null) return null;
++  return update.out && update.staged !== null ? null : capitalised(update.agents);
++}
++
++/** One row per channel: its name and an instruction start with a capital, a shell command is left as typed. */
++export function channelRows(
++  update: ViewerUpdate,
++): { channel: string; text: string; shell: boolean }[] {
++  return update.commands.map(({ channel, command, shell }) => ({
++    channel: /^[a-z]+$/.test(channel) ? capitalised(channel) : channel,
++    text: shell ? command : capitalised(command),
++    shell,
++  }));
++}
++
++/**
++ * Whether the switch reads on: only while a check can run. An unknown value of the key turns
++ * the check off, so the switch is off too. Before the report is read, the key's value decides.
++ */
++export function checksDaily(update: ViewerUpdate | null, value: string | null): boolean {
++  if (update === null) return value !== "off";
++  return update.mode === "check" || update.mode === "ci";
 +}
 +
 +/** The Settings list's mark on About: there while a release is out, banner dismissed or not. */

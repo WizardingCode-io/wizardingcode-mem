@@ -1,7 +1,141 @@
 {
   "dependencies": [],
   "phrases": [],
-  "fingerprint": "sha256:2a3e9c4789b1567de2a4d10ca921cd3f3e9fc87cd8901da92921e6a8b1910eff",
-  "at": "2026-11-12T22:17:38.153Z",
-  "captures": []
+  "fingerprint": "sha256:742340deb79d64109724dd8dc35aeb607f9a378ee06eb48f849c6e7dcf897547",
+  "at": "2026-11-12T22:32:37.630Z",
+  "captures": [
+    {
+      "page": "memories-update",
+      "state": "out",
+      "file": "review/ui/memories-update-out@360-dark.png",
+      "files": [
+        "review/ui/memories-update-out@360-dark.png",
+        "review/ui/memories-update-out@768-dark.png",
+        "review/ui/memories-update-out@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-memories-update-out.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "settings-about",
+      "state": "failed",
+      "file": "review/ui/settings-about-failed@360-dark.png",
+      "files": [
+        "review/ui/settings-about-failed@360-dark.png",
+        "review/ui/settings-about-failed@768-dark.png",
+        "review/ui/settings-about-failed@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-settings-about-failed.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "settings-about",
+      "state": "latest",
+      "file": "review/ui/settings-about-latest@360-dark.png",
+      "files": [
+        "review/ui/settings-about-latest@360-dark.png",
+        "review/ui/settings-about-latest@768-dark.png",
+        "review/ui/settings-about-latest@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-settings-about-latest.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "settings-about",
+      "state": "off",
+      "file": "review/ui/settings-about-off@360-dark.png",
+      "files": [
+        "review/ui/settings-about-off@360-dark.png",
+        "review/ui/settings-about-off@768-dark.png",
+        "review/ui/settings-about-off@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-settings-about-off.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "settings-about",
+      "state": "out",
+      "file": "review/ui/settings-about-out@360-dark.png",
+      "files": [
+        "review/ui/settings-about-out@360-dark.png",
+        "review/ui/settings-about-out@768-dark.png",
+        "review/ui/settings-about-out@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-settings-about-out.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "settings-about",
+      "state": "unchecked",
+      "file": "review/ui/settings-about-unchecked@360-dark.png",
+      "files": [
+        "review/ui/settings-about-unchecked@360-dark.png",
+        "review/ui/settings-about-unchecked@768-dark.png",
+        "review/ui/settings-about-unchecked@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-settings-about-unchecked.json",
+      "meta": null,
+      "by": "session"
+    },
+    {
+      "page": "settings-about-off",
+      "state": "env",
+      "file": "review/ui/settings-about-off-env@360-dark.png",
+      "files": [
+        "review/ui/settings-about-off-env@360-dark.png",
+        "review/ui/settings-about-off-env@768-dark.png",
+        "review/ui/settings-about-off-env@1280-dark.png"
+      ],
+      "widths": [
+        360,
+        768,
+        1280
+      ],
+      "dark": true,
+      "console": "review/ui/console-settings-about-off-env.json",
+      "meta": null,
+      "by": "session"
+    }
+  ]
 }

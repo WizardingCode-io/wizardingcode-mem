@@ -1,16 +1,30 @@
-# code-quality findings for 2026-11-12-008-the-viewer-tells-of-a-newer-release-sett
-reviewer: review-code-quality
-read: 22 files, 31 hunks
 
-## Findings
-- F-1 · advisory · ui/src/update.ts:1116 (diff line; file line 12) · The doc comment says "api.ts re-exports the type", but `ui/src/api.ts` only does `import type { ViewerUpdate } from "./update"` (line 3) and re-exports nothing, unlike its neighbours on lines 13-16. The comment states something the code does not do (Q10/Q11). Either add the re-export or drop the clause.
-- F-2 · advisory · ui/src/update.ts:1162 (diff line; file line 58) · `releaseStatus` picks out a report that could not be built by matching the server's literal prefix `"not checked: "` (`NOT_BUILT`, copied from `src/ui/update.ts:185`). The two files are tied by a string the type does not carry, so rewording the server's line silently changes the tone. A field in `ViewerUpdate` would hold the same fact (Q5/Q6).
-- F-3 · advisory · ui/src/update.ts:1164-1165 (diff lines; file lines 60-61) · The `failed` predicate re-writes `lastFailed` from `src/update/state.ts:49-51` (a file this diff does not touch) in the client. The server already has the report's `lastFailed`, so it could send the fact instead (Q2). The duplicate is one expression, and `state.ts` loads `node:fs`, which keeps the browser from importing it.
-- F-4 · advisory · ui/src/components/settings/About.vue:1035 (diff line) · The switch `daily` reads on whenever the value is not `"off"`. With an unknown value (`mode: "off-unknown"`, the status line says "off") the switch shows "Check for new releases once a day" as on while no check runs. The name and the state it shows disagree in that one case (Q3). Reading `updateState.value?.mode` would make them agree.
-- F-5 · advisory · src/ui/update.ts:134-154 (diff lines) · `ViewerUpdate` is declared twice: on the server here and on the client in `ui/src/update.ts:1117-1133` (diff lines). Nothing keeps the two in step, and the client spells `Mode` out as a literal union instead of importing it from the leaf `src/update/mode.ts`, even though `api.ts` already imports leaves from `../../src/sharing/` (Q2, boilerplate).
 
-## Outside the change
-none
-
-## Not answerable
-none
+## Clarifications
+- Round 2 has no defects and one new advisory. All five round-1 advisories are resolved.
+  
+  # code-quality findings for 2026-11-12-008-the-viewer-tells-of-a-newer-release-sett
+  reviewer: review-code-quality
+  read: 22 files, 35 hunks
+  
+  ## Findings
+  - F-1 · advisory · src/ui/update.ts:226 (diff line 226) · To compute `failed`, the code builds a stand-in `UpdateState` and passes it to `lastFailed`, with an invented `attemptAt: null`. `src/update/report.ts:39` already computes `failed` from the real state, so the report could carry that fact as a field and the viewer would not rebuild a state just to call the predicate (question 5).
+  
+  ## Outside the change
+  none
+  
+  ## Not answerable
+  none
+  
+  How the round-1 advisories were resolved:
+  - **F-1 and F-5:** `ui/src/update.ts:1304-1307` now re-exports the server's `ViewerUpdate` with a type-only import. There is one declaration, and the false comment is gone.
+  - **F-2 and F-3:** the client now reads the server's `built` and `failed` fields. The `"not checked: "` prefix match and the rewritten predicate are gone.
+  - **F-4:** the About switch now reads `checksDaily` (`ui/src/update.ts:1371-1374`), which is off for `off-unknown`.
+  
+  The new code since round 1 raises nothing else:
+  - `releaseStatus`'s `sign`, `agentsNote`'s duplicate check and `channelRows` are fine.
+  - The `UiOptions.updateReport` seam (`src/ui/server.ts:103-104, 120`) is passed by `tests/integration/ui-update.test.ts:248`, so it is not a dead parameter.
+  - The banner's move under the top bar (`ui/src/App.vue:1085`) is fine.
+  - The regex in `tests/unit/update-boundary.test.ts:945` now also matches template-literal imports.
+  
+  The regenerated diff is at /Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/.crew/work/2026-11-12-008-the-viewer-tells-of-a-newer-release-sett/review/diff.patch

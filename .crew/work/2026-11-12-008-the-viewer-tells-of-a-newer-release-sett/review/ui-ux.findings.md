@@ -1,27 +1,37 @@
-# ui-ux findings for 2026-11-12-008-the-viewer-tells-of-a-newer-release-sett
-reviewer: review-ui-ux
-read: 42 images, 17 files, contract: none, audit: not captured
 
-## Findings
-- F-1 · defect · ui/src/App.vue:227 · Memories view, state update-out, at 360 in both schemes: AC-11 says the banner shows over the memories view at all three widths, and the standard does not allow a hidden control at 360. In the capture only the icon and "How to" can be seen. The line "0.9.0 is out." and the Dismiss button are past the right edge, because main sits beside the 216px projects sidebar, which stays open (App.vue:165). The manifest's note says the short line is "uncut beside the two actions", and the capture shows otherwise. (memories-update-out@360-dark.png, memories-update-out@360-light.png)
-- F-2 · defect · .crew/work/2026-11-12-008-the-viewer-tells-of-a-newer-release-sett/spec.md:30 · The screens declare six About states plus update-out. The diff can also reach these branches, and none of them is declared or captured: the warning tone for "a report that could not be built" (ui/src/update.ts:52), the muted tone for off-unknown and ci (ui/src/update.ts:53), the quiet tone for "ahead", and the banner line "This copy is <running>." used when no copy is staged (ui/src/update.ts:33). AC-11 names every one of these states. (review/ui/manifest.json, "declared")
-- F-3 · advisory · ui/src/components/UpdateBanner.vue:33 · Memories, update-out, at 768: the full line is shown from the sm breakpoint (640) up. In a main area about 500px wide it cuts through the staged version and reads "The agents run 0…". The release is still visible, but a version cut to "0…" is misleading. (memories-update-out@768-dark.png, memories-update-out@768-light.png)
-- F-4 · advisory · ui/src/components/settings/About.vue:60 · About, state out, every width: the agents line says "Agents run 0.7.0" again right under a status line that already ends "the agents run 0.7.0". It also prints the staged binary's full temporary path (/var/folders/…/data/bin/wizardingcode-mem), which takes four lines at 360. The text comes from src/update/report.ts:72-74. (settings-about-out@1280-dark.png, settings-about-out@360-light.png)
-- F-5 · advisory · ui/src/components/settings/About.vue:66 · About, state out: `break-all` splits the shell commands in the middle of words even at 1280 ("…/mai|n/scripts"). At 768 and 360 it splits "insta|ll", "githubuserc|ontent" and "install.s|h". The copy button means nothing is lost, but the commands are hard to read. (settings-about-out@1280-dark.png, settings-about-out@768-dark.png, settings-about-out@360-dark.png)
-- F-6 · advisory · ui/src/components/settings/About.vue:20 · About, state failed: the warning tone uses one icon, i-lucide-circle-arrow-up, for both "a release is out" and "Could not check (offline…)". So a failed check shows an upgrade arrow, which is the wrong signal. (settings-about-failed@1280-dark.png, settings-about-failed@1280-light.png)
-- F-7 · advisory · src/update/report.ts:33 · About, state off-env: the status line uses the terminal's wording ("in this command's environment; other processes may not see it"). In the viewer there is no command, and the switch's description right below already says it in the viewer's words. (settings-about-off-env@1280-dark.png, settings-about-off-env@360-light.png)
-- F-8 · advisory · ui/src/components/settings/About.vue:65 · About, state out: the channel names are shown exactly as the terminal writes them. "plugin" and "script" are lowercase next to "Homebrew" and "npm (and Windows)", and the plugin instruction starts with a lowercase letter, unlike the card's other sentences. (settings-about-out@1280-light.png)
-- F-9 · advisory · ui/src/components/settings/About.vue:69 · About, state out, at 360: each copy button wraps onto its own line under its command, aligned left. The four rows become twelve and the switch is pushed below the fold. It still holds together. (settings-about-out@360-dark.png, settings-about-out@360-light.png)
 
-## Outside the change
-- ui/src/App.vue:165 · Memories view at 768 and 360 (existing code): the 216px projects sidebar stays open. At 768 the memory title column shrinks to one letter ("P", "O", "T"); at 360 main runs past the viewport. This is the cause underneath F-1. (memories-update-out@768-dark.png, memories-update-out@360-dark.png)
-- ui/vite.config.ts:60 · In the light scheme, the off track of a USwitch is barely visible on the white card. This affects every switch in Settings, not only the new one. (settings-about-off@1280-light.png, settings-about-off-env@768-light.png)
-
-## Not answerable
-- 3 keyboard and focus · no accessibility snapshot (.aria.yml) and no focus-visible capture for settings-about or memories. The three banner and copy controls are native buttons with text or an aria-label (read in the diff), but no evidence shows the order or that focus is visible.
-- 4 measured accessibility · no axe files in review/ui/. The tone colours in app.css:24 and :50 (--warn #8A6000 light, #FFC53D dark) were read by eye only, not measured.
-- 6 design contract · no DESIGN.md (spec.md:33 says "design: none"). The design lint (review/design-lint.json) has no hits on the four interface files.
-- 8 and 9 motion · the manifest records "motion": "none" and the lint inventory is empty. The diff adds no animation, so there is nothing to sample, and there was no reduced-motion pass.
-- 10 vitals · the manifest has no vitals summary, so CLS cannot be read. All 42 console files have empty "messages" (no errors or warnings).
-- audit · no audit/ folder in review/ui/.
-- manifest · the evidence came with a session-written review/ui/manifest.json ("by": "session"); the engine's review/ui-evidence.json is missing, so there is no captured/missing reckoning per state beyond the declared list.
+## Clarifications
+- # ui-ux findings for 2026-11-12-008-the-viewer-tells-of-a-newer-release-sett
+  reviewer: review-ui-ux
+  read: 72 images, 9 files, contract: none, audit: not captured
+  
+  ## Findings
+  - F-1 · defect · src/ui/update.ts:74 · About, state unbuilt, all three widths in both schemes: rubric question 5 says no raw error may reach the user, but the status line shows the system error itself: "Not checked: EIO: i/o error, read" (warning tone, triangle), drawn at ui/src/components/settings/About.vue:57. spec.md:16 asks for this wording (`not checked: <the error's first line>`), so the judge has to choose between the spec and the rubric. One fix is a plain sentence ("Could not read the release state") with the error kept for the log or `doctor`. (settings-about-unbuilt@1280-dark.png, settings-about-unbuilt@360-light.png)
+  - F-2 · advisory · ui/src/update.ts:74 · About, state unbuilt: when the report cannot be built, the server sends `mode: "check"` and `fromEnvironment: false` (src/ui/update.ts:70 and :77). `checksDaily` then ignores the key's real value, so the switch shows on and enabled even if the env file or the environment says off. The captures show it on; a person with the check turned off would see a false state. (settings-about-unbuilt@1280-dark.png)
+  - F-3 · advisory · ui/src/update.ts:37 · About, state off-env: the new viewer wording is right, but the status line ("Off (WIZARDINGCODE_MEM_UPDATE in the environment this viewer was started with)") and the switch description right under it (About.vue:73, "Set by WIZARDINGCODE_MEM_UPDATE in the environment this viewer was started with.") now say the same thing twice. (settings-about-off-env@1280-dark.png, settings-about-off-env@360-light.png)
+  - F-4 · advisory · ui/src/components/settings/About.vue:57 · About, state off: the status line prints the data directory's full path ("…/var/folders/n3/…/data/env"), which takes five lines at 360. "Off (in the settings file)" would read better, with the path left to Storage. (settings-about-off@360-dark.png, settings-about-off@1280-light.png)
+  
+  Round 1 findings checked against the new evidence, all resolved:
+  - F-1: the banner now sits under the top bar across the window (App.vue:161). At 360 "0.9.0 is out.", "How to update" and "Dismiss" are all visible on the memories view. (memories-update-out@360-dark.png, memories-update-out@360-light.png, memories-update-out-copy@360-dark.png)
+  - F-2: all five states are declared (spec.md:30-31, AC-15) and captured at 3 widths × 2 schemes: settings-about ahead, off-unknown, ci and unbuilt, and memories update-out-copy, whose banner reads "This copy is 0.8.0.".
+  - F-3: at 768 the full banner line is uncut. (memories-update-out@768-dark.png)
+  - F-4: the agents line is gone in the out state.
+  - F-5 and F-9: the commands wrap at slashes and hyphens, with each copy button beside its command at every width. (settings-about-out@360-dark.png, settings-about-out@768-light.png)
+  - F-6: failed and unbuilt show a triangle; out keeps the arrow.
+  - F-7: the off-env line now uses the viewer's own words (see F-3 above for the repetition this created).
+  - F-8: Plugin, Script and the plugin sentence now start with a capital.
+  
+  The "new" mark on About is visible in the out state at 1280 and 768, and at 360 the page selector reads "About (new)". All 72 console files have empty `messages`.
+  
+  ## Outside the change
+  - ui/src/App.vue:165 · Memories view at 768 and 360, existing code, not touched: the 216px projects panel stays open. At 768 the memory title column shrinks to one letter; at 360 main runs past the viewport. The banner no longer depends on it. (memories-update-out@768-dark.png, memories-update-out@360-light.png)
+  - ui/vite.config.ts:60 · In the light scheme the off track of a USwitch is barely visible on the white card. This applies to every switch in Settings, not only this one. (settings-about-off-unknown@1280-light.png, settings-about-off-env@768-light.png)
+  
+  ## Not answerable
+  - 3 keyboard and focus · no accessibility snapshot (.aria.yml) and no focus-visible capture for settings-about or memories
+  - 4 measured accessibility · no axe files in review/ui/
+  - 6 design contract · no DESIGN.md (spec.md:33 "design: none"); review/design-lint.json was not re-read this round (round 1: no hits)
+  - 8 and 9 motion · manifest "motion": "none"; the diff adds no animation and there is no reduced-motion pass
+  - 10 vitals · the manifest has no vitals summary, so CLS cannot be read; the console is clean on all 72 captures
+  - audit · no audit/ folder in review/ui/
+  - manifest · the evidence is the session-written review/ui/manifest.json ("by": "session"); there is no engine-written review/ui-evidence.json
