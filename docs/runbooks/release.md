@@ -25,6 +25,10 @@ If the repository's settings offer immutable releases, turn them on: a release's
 
 ## The first release
 
+Make the first tag a pre-release (`v<version>-rc.1`). A pre-release publishes the two npm packages under `next`, where nobody who did not ask for it gets it, and leaves the tap, the marketplace and `latest` alone: trusted publishing gets its first real test with the smallest audience. The plain tag follows once that worked, and then tests the two pushes and the retag.
+
+That first plain publish also takes every npm user who pinned no version from 0.4.4 to the current version in one step, across every store change since. Say so in the release's notes.
+
 The first tag that carries this procedure is pushed after steps 1 and 2 and before step 3, while the environment does not exist:
 
 1. Push the tag. `release.yml` makes the release; the run of `distribute.yml` it starts stops in `plan` with "the environment release does not exist" and writes nothing.
