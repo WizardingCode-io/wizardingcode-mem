@@ -67,6 +67,7 @@ import { logError } from "../util/log.ts";
 import { brandHome, storeDirOf } from "../util/paths.ts";
 import { spawnDetached } from "../util/self.ts";
 import { clearUiState, writeUiState } from "./state.ts";
+import type { UpdateReport } from "../update/report.ts";
 import { dismissUpdate, viewerUpdate } from "./update.ts";
 import { acceptProposal, rejectProposal, undoUserRule } from "../links/rules.ts";
 import {
@@ -121,6 +122,8 @@ export interface UiOptions {
   openBrowser?: (url: string) => void;
   /** Refuse to start when another viewer is already on record (see `UiClaimedError`). */
   exclusive?: boolean;
+  /** How the release report is built; `updateReport` unless a test or a capture gives its own. */
+  updateReport?: () => UpdateReport;
   /** How a background run is started (`history import`, ...); tests record instead. */
   spawn?: (...args: string[]) => void;
   /** The modules this binary has (`BUILT_IN`); tests add the fixture. */
@@ -839,7 +842,15 @@ export async function startUi(options: UiOptions): Promise<UiServer> {
     }
     // The release notice (ADR 0030): what the daily check kept, read and never asked for here.
     if (path === "/api/update" && request.method === "GET") {
-      return json(viewerUpdate({ db, dataDir: options.dataDir, env, now: now() }));
+      return json(
+        viewerUpdate({
+          db,
+          dataDir: options.dataDir,
+          env,
+          now: now(),
+          ...(options.updateReport === undefined ? {} : { build: options.updateReport }),
+        }),
+      );
     }
     if (path === "/api/update/dismiss" && request.method === "POST") {
       return json({ dismissed: dismissUpdate(db, options.dataDir) });

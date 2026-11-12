@@ -68,7 +68,7 @@ const envFile = join(dataDir, "env");
 const stateFile = join(dataDir, STATE_FILE);
 const staged = join(dataDir, "bin", "wizardingcode-mem");
 /** What the daily check would have left: a state, or none; the setting in the file; a staged copy. */
-function world(input: { state?: Partial<UpdateState> | null; off?: boolean; stagedCopy?: boolean }): void {
+function world(input: { state?: Partial<UpdateState> | null; off?: boolean; setting?: string; stagedCopy?: boolean }): void {
   rmSync(stateFile, { force: true });
   rmSync(envFile, { force: true });
   rmSync(join(dataDir, "bin"), { recursive: true, force: true });
@@ -77,6 +77,7 @@ function world(input: { state?: Partial<UpdateState> | null; off?: boolean; stag
     writeState(dataDir, { latest: NEWER, checkedAt: Date.now() - 3 * HOUR, attemptAt: Date.now() - 3 * HOUR, failedAt: null, reason: null, ...input.state });
   }
   if (input.off === true) writeFileSync(envFile, "WIZARDINGCODE_MEM_UPDATE=off\n");
+  if (input.setting !== undefined) writeFileSync(envFile, `WIZARDINGCODE_MEM_UPDATE=${input.setting}\n`);
   if (input.stagedCopy === true) {
     mkdirSync(join(dataDir, "bin"), { recursive: true });
     writeFileSync(staged, `#!/bin/sh\necho ${OLDER}\n`);
@@ -84,10 +85,27 @@ function world(input: { state?: Partial<UpdateState> | null; off?: boolean; stag
   }
 }
 let viewer: UiServer = await startUi({ dataDir, homeDir: join(base, "brand-home"), port: 0, open: false, env: baseEnv, spawn: () => undefined });
-/** The viewer again, in another environment: the one way a setting comes "from the environment". */
-async function restart(extra: Record<string, string>): Promise<void> {
+/**
+ * The viewer again, in another environment (the one way a setting comes "from the
+ * environment"), or with a report that cannot be built.
+ */
+async function restart(extra: Record<string, string>, broken = false): Promise<void> {
   await viewer.stop();
-  viewer = await startUi({ dataDir, homeDir: join(base, "brand-home"), port: 0, open: false, env: { ...baseEnv, ...extra }, spawn: () => undefined });
+  viewer = await startUi({
+    dataDir,
+    homeDir: join(base, "brand-home"),
+    port: 0,
+    open: false,
+    env: { ...baseEnv, ...extra },
+    spawn: () => undefined,
+    ...(broken
+      ? {
+          updateReport: () => {
+            throw new Error("EIO: i/o error, read");
+          },
+        }
+      : {}),
+  });
 }
 
 // --- Chrome over the DevTools protocol ------------------------------------------------------------
@@ -224,7 +242,7 @@ try {
 
       // The banner over the memories view.
       await open("#memories", has(`${NEWER} is out.`), "the banner over the memories view");
-      await capture("memories", "update-out", `The same data on the memories view: the banner 'wizardingcode-mem ${NEWER} is out. The agents run ${OLDER}.' at the top of main with 'How to update' and 'Dismiss', above the list. At 360 the line is the release alone, '${NEWER} is out.', uncut beside the two actions.`);
+      await capture("memories", "update-out", `The same data on the memories view: the banner 'wizardingcode-mem ${NEWER} is out. The agents run ${OLDER}.' under the top bar, across the window's width, with 'How to update' and 'Dismiss'. At 360 the line is the release alone, '${NEWER} is out.'.`);
 
       // Off: the check turned off in the file.
       world({ state: {}, off: true });
@@ -235,7 +253,7 @@ try {
       world({ state: {} });
       await restart({ WIZARDINGCODE_MEM_UPDATE: "off" });
       await about(has("Set by WIZARDINGCODE_MEM_UPDATE in the environment"), "the off-env state");
-      await capture("settings-about", "off-env", "The viewer started with WIZARDINGCODE_MEM_UPDATE=off in its environment: 'Off (WIZARDINGCODE_MEM_UPDATE in this command's environment; other processes may not see it)' in the muted tone; the switch is off and disabled, and its description says the environment sets it.");
+      await capture("settings-about", "off-env", "The viewer started with WIZARDINGCODE_MEM_UPDATE=off in its environment: 'Off (WIZARDINGCODE_MEM_UPDATE in the environment this viewer was started with)' in the muted tone; the switch is off and disabled, and its description says the environment sets it.");
       await restart({});
 
       // Not checked yet: no update.json.
@@ -246,7 +264,34 @@ try {
       // Failed: the last check could not reach github.com.
       world({ state: { latest: null, checkedAt: null, failedAt: Date.now() - 2 * HOUR, reason: "offline" } });
       await about(has("Could not check (offline"), "the failed state");
-      await capture("settings-about", "failed", "The last check failed and no release is known: 'Could not check (offline, 2 h ago); no release known yet' in the warning tone, the switch on, no commands and no banner.");
+      await capture("settings-about", "failed", "The last check failed and no release is known: 'Could not check (offline, 2 h ago); no release known yet' in the warning tone with the problem sign (a triangle, not the release's arrow), the switch on, no commands and no banner.");
+
+      // Ahead: this copy is newer than the latest release (a build from main).
+      world({ state: { latest: OLDER } });
+      await about(has(`${RUNNING} is ahead of the latest release ${OLDER}`), "the ahead state");
+      await capture("settings-about", "ahead", `update.json names ${OLDER}, older than this copy: '${RUNNING} is ahead of the latest release ${OLDER} (checked 3 h ago)' in the quiet tone with the check sign, no commands, no banner, no mark.`);
+
+      // Off-unknown: the key holds a value that is neither check nor off.
+      world({ state: {}, setting: "sometimes" });
+      await about(has("Off (WIZARDINGCODE_MEM_UPDATE is neither check nor off)"), "the off-unknown state");
+      await capture("settings-about", "off-unknown", "WIZARDINGCODE_MEM_UPDATE=sometimes in the env file: 'Off (WIZARDINGCODE_MEM_UPDATE is neither check nor off)' in the muted tone, and the switch off, since no check runs; turning it on writes check.");
+
+      // CI: the environment says CI, so the daily check never runs.
+      world({ state: null });
+      await restart({ CI: "true" });
+      await about(has("Not checked in CI"), "the ci state");
+      await capture("settings-about", "ci", "The viewer started with CI set and no update.json: 'Not checked in CI' in the muted tone, the switch on (the setting allows the check; the environment holds it).");
+
+      // Unbuilt: the report itself could not be built.
+      await restart({}, true);
+      await about(has("Not checked: EIO: i/o error, read"), "the unbuilt state");
+      await capture("settings-about", "unbuilt", "The report could not be built (the route's builder throws, as a disk error would): 'Not checked: EIO: i/o error, read' in the warning tone with the problem sign, no commands, no banner; the card and its switch stay.");
+      await restart({});
+
+      // The banner when no copy is staged: this copy is the one that runs.
+      world({ state: {} });
+      await open("#memories", has(`${NEWER} is out.`), "the banner with no staged copy");
+      await capture("memories", "update-out-copy", `A newer release and no staged binary: the banner reads 'wizardingcode-mem ${NEWER} is out. This copy is ${RUNNING}.' (the release alone at 360).`);
       void SWITCH;
     }
   }
@@ -266,8 +311,8 @@ const manifest = {
   method:
     "The session ran the viewer (startUi) from source in one Bun process over a seeded data directory (one project with three memories), wrote update.json as the daily check writes it (writeState), the env file and a staged binary that answers an older version, and drove Google Chrome in headless mode over the DevTools protocol (probes/capture-008.ts). Each state was set again for every viewport and scheme; the off-env state restarts the viewer with the setting in its environment. PNG screenshots, viewport-sized, motion none. No request left the machine: the viewer reads update.json and never asks.",
   pages: {
-    "settings-about": { route: "/settings#about", declared: ["latest", "out", "off", "off-env", "unchecked", "failed"] },
-    memories: { route: "/memories", declared: ["update-out"] },
+    "settings-about": { route: "/settings#about", declared: ["latest", "out", "off", "off-env", "unchecked", "failed", "ahead", "off-unknown", "ci", "unbuilt"] },
+    memories: { route: "/memories", declared: ["update-out", "update-out-copy"] },
   },
   viewports: [...WIDTHS],
   schemes: [...SCHEMES],

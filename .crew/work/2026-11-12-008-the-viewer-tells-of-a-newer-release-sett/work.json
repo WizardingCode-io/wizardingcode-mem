@@ -5,10 +5,14 @@
   "type": "feature",
   "route": "standard",
   "routeReasons": [
-    "feature, scope level 1, clear request"
+    "feature, scope level 1, clear request",
+    "personal data in lines not read for risk (test or excluded): phone (tests/unit/ui-update.test.ts)",
+    "the change's lines name personal data: phone (ui/src/components/UpdateBanner.vue) and 1 more"
   ],
-  "riskAreas": [],
-  "phase": "build",
+  "riskAreas": [
+    "personal-data"
+  ],
+  "phase": "gate",
   "awaiting": null,
   "criteria": [
     {
@@ -75,6 +79,33 @@
       "id": "AC-14",
       "kind": "preserve",
       "text": "tests/integration/ui.test.ts, tests/integration/ui-settings.test.ts and the tests tests/unit/update-boundary.test.ts holds today pass as before."
+    },
+    {
+      "id": "AC-15",
+      "kind": "observed",
+      "text": "The other states the page reaches are captured too, at the three widths in both schemes: the running version ahead of the latest release, a value of the key that is neither check nor off, not checked in CI, a report that could not be built, and the banner when no copy is staged.",
+      "screens": [
+        {
+          "page": "settings-about",
+          "state": "ahead"
+        },
+        {
+          "page": "settings-about",
+          "state": "off-unknown"
+        },
+        {
+          "page": "settings-about",
+          "state": "ci"
+        },
+        {
+          "page": "settings-about",
+          "state": "unbuilt"
+        },
+        {
+          "page": "memories",
+          "state": "update-out-copy"
+        }
+      ]
     }
   ],
   "approvals": [
@@ -88,7 +119,7 @@
   "skips": [],
   "baseCommit": "82143cb8d4f255bcff6aad3b541f5e9ca9726554",
   "createdAt": "2026-11-12T21:59:17.551Z",
-  "updatedAt": "2026-11-12T22:04:17.027Z",
+  "updatedAt": "2026-11-12T22:26:23.200Z",
   "kind": "feature",
   "kindFrom": "work_type feature",
   "knowledge": {
@@ -129,6 +160,20 @@
       "reason": "standard route"
     },
     {
+      "role": "review-security",
+      "team": "security",
+      "kind": "gate",
+      "gate": "security",
+      "reason": "risk area personal-data"
+    },
+    {
+      "role": "review-ui-ux",
+      "team": "frontend",
+      "kind": "gate",
+      "gate": "ui-ux",
+      "reason": "interface files: ui/src/App.vue, ui/src/components/Settings.vue, ui/src/components/UpdateBanner.vue, +1 more"
+    },
+    {
       "role": "lead-qa",
       "team": "qa",
       "kind": "lead",
@@ -141,13 +186,19 @@
       "reason": "standard route"
     },
     {
+      "role": "lead-frontend",
+      "team": "frontend",
+      "kind": "lead",
+      "reason": "interface files: ui/src/App.vue, ui/src/components/Settings.vue, ui/src/components/UpdateBanner.vue, +1 more"
+    },
+    {
       "role": "judge",
       "team": null,
       "kind": "debate",
       "reason": "a gate is planned"
     }
   ],
-  "primaryTeam": "backend",
+  "primaryTeam": "frontend",
   "runtimes": [
     "claude"
   ],
@@ -178,7 +229,8 @@
     "specify": "2026-11-12T22:00:16.076Z",
     "conclave": "2026-11-12T22:00:59.495Z",
     "plan": "2026-11-12T22:04:16.897Z",
-    "build": "2026-11-12T22:04:17.026Z"
+    "build": "2026-11-12T22:04:17.026Z",
+    "gate": "2026-11-12T22:17:38.266Z"
   },
   "checklists": [
     {
@@ -243,8 +295,9 @@
     }
   ],
   "rounds": {
-    "judgement": 0,
-    "validation": 2
+    "judgement": 1,
+    "validation": 2,
+    "judgementCode": "sha256:2a3e9c4789b1567de2a4d10ca921cd3f3e9fc87cd8901da92921e6a8b1910eff"
   },
   "removedCriteria": [
     {
@@ -314,6 +367,33 @@
       "kind": "preserve",
       "text": "tests/integration/ui.test.ts, tests/integration/ui-settings.test.ts and tests/unit/update-boundary.test.ts pass as before.",
       "at": "2026-11-12T22:03:31.031Z"
+    }
+  ],
+  "pauses": [
+    {
+      "at": "2026-11-12T22:19:27.320Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-12T22:19:54.713Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-12T22:20:12.478Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-12T22:20:46.650Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-12T22:22:35.291Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
     }
   ]
 }

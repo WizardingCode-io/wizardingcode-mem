@@ -158,6 +158,7 @@ onMounted(async () => {
   <UApp :toaster="{ position: 'bottom-left', duration: 5000 }" :tooltip="{ delayDuration: 400 }">
     <div class="flex h-full flex-col overflow-hidden">
       <TopBar @palette="palette = true" />
+      <UpdateBanner v-if="!failed" @how="openSettings('about')" />
       <div class="flex min-h-0 flex-1">
         <Rail :tab="state.tab" @go="tab = $event" />
         <!-- The projects panel folds to nothing (240ms) and keeps its width while it moves. Settings are the
@@ -224,7 +225,6 @@ onMounted(async () => {
             </template>
             <span v-else class="flex h-9 items-center gap-2 border-b-2 border-(--ink) pt-0.5 text-[12.5px] font-semibold"><span aria-hidden="true" class="size-2.5 rounded-[3px] bg-[#FFC53D]" />This machine</span>
           </div>
-          <UpdateBanner v-if="!failed" @how="openSettings('about')" />
           <HistoryOffer v-if="state.tab === 'memories' && !failed" @progress="openSettings('history')" />
           <LinksOffer v-if="state.tab === 'memories' && !failed" @review="tab = $event" />
           <div v-if="failed" class="m-4 rounded-xl border border-(--danger) bg-(--danger-soft) px-3.5 py-3 text-[13px] text-(--danger)">Could not reach wizardingcode-mem: {{ failed }}</div>

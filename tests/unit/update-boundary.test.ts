@@ -8,7 +8,7 @@ const ROOT = join(import.meta.dir, "..", "..");
 const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
 /** Every module a file names in an import or a re-export, static or dynamic. */
 const imports = (source: string) =>
-  [...source.matchAll(/(?:from|import)\s*\(?\s*["']([^"']+)["']/g)].map(
+  [...source.matchAll(/(?:from|import)\s*\(?\s*["'`]([^"'`]+)["'`]/g)].map(
     (match) => match[1] as string,
   );
 /** Only the static ones: what loading the file loads. */

@@ -1,8 +1,10 @@
 <script setup lang="ts">
-// A newer release is out, as Sales OS's page-level info banner (SystemStates SYS-060), the
-// History offer's sibling: 36px, the full width of main, blue-soft with blue text, a 16px
-// icon, one line that truncates, the actions on the right. It stays away for the release it
-// was dismissed for, and comes back for a later one. Nothing is asked of the network.
+// A newer release is out. The History offer's sibling in look (Sales OS SystemStates SYS-060:
+// 36px, blue-soft with blue text, a 16px icon, one line that truncates, the actions on the
+// right), but it belongs to the whole app, not to a page: it sits under the top bar across
+// the window, so that the projects panel never pushes it off a narrow screen. It stays away
+// for the release it was dismissed for, and comes back for a later one. Nothing is asked of
+// the network.
 import { computed, onMounted } from "vue";
 import { api } from "../api";
 import { bannerLine, bannerShort } from "../update";

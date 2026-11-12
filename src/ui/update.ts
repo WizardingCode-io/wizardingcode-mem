@@ -9,7 +9,7 @@ import { CHANNEL_COMMANDS } from "../update/channels.ts";
 import type { Mode } from "../update/mode.ts";
 import { firstLine } from "../update/reason.ts";
 import { type UpdateReport, updateReport } from "../update/report.ts";
-import { readState } from "../update/state.ts";
+import { lastFailed, readState } from "../update/state.ts";
 
 /** The `meta` key of the release whose banner the person dismissed. */
 export const UPDATE_DISMISSED = "update.dismissed";
@@ -24,6 +24,10 @@ export interface ViewerUpdate {
   mode: Mode;
   /** Whether a release newer than what runs here is known. */
   out: boolean;
+  /** Whether the last check failed, a release still known or not. */
+  failed: boolean;
+  /** False when the report itself could not be built: `line` then says why. */
+  built: boolean;
   /** The report's first line, without its label. */
   line: string;
   /** What the agents run, when it is another copy than this one. */
@@ -65,6 +69,8 @@ export function viewerUpdate(input: ViewerUpdateInput): ViewerUpdate {
       reason: null,
       mode: "check",
       out: false,
+      failed: false,
+      built: false,
       line: `not checked: ${firstLine(error)}`,
       agents: null,
       commands: [],
@@ -82,6 +88,14 @@ export function viewerUpdate(input: ViewerUpdateInput): ViewerUpdate {
     reason: report.reason,
     mode: report.mode,
     out: report.out,
+    failed: lastFailed({
+      latest: report.latest,
+      checkedAt: report.checkedAt,
+      attemptAt: null,
+      failedAt: report.failedAt,
+      reason: report.reason,
+    }),
+    built: true,
     line: first.replace(/^update: /, ""),
     agents: second ?? null,
     commands: report.out

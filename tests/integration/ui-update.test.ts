@@ -90,6 +90,8 @@ describe("GET /api/update", () => {
       reason: null,
       mode: "check",
       out: true,
+      failed: false,
+      built: true,
       line: `${NEWER} is out (checked 3 h ago); this copy is ${RUNNING}`,
       agents: null,
       commands: CHANNEL_COMMANDS.map(({ channel, command, shell }) => ({
@@ -175,6 +177,8 @@ describe("GET /api/update", () => {
       failedAt: NOW - 2 * HOUR,
       reason: "offline",
       out: false,
+      failed: true,
+      built: true,
       line: "could not check (offline, 2 h ago); no release known yet",
       banner: false,
     });
@@ -219,6 +223,8 @@ describe("GET /api/update", () => {
         reason: null,
         mode: "check",
         out: false,
+        failed: false,
+        built: false,
         line: "not checked: EACCES: permission denied, open '/x/update.json'",
         agents: null,
         commands: [],
@@ -228,6 +234,30 @@ describe("GET /api/update", () => {
     } finally {
       db.close();
     }
+  });
+});
+
+describe("a report that cannot be built, through the route", () => {
+  test("answers 200 with the shape and the reason, never a stack", async () => {
+    server = await startUi({
+      dataDir,
+      port: 0,
+      open: false,
+      now: () => NOW,
+      env: {},
+      updateReport: () => {
+        throw new Error("EIO: i/o error, read\n    at readState (state.ts:30)");
+      },
+    });
+    const answer = await call(server, "/api/update");
+    expect(answer.status).toBe(200);
+    expect(await answer.json()).toMatchObject({
+      built: false,
+      out: false,
+      banner: false,
+      commands: [],
+      line: "not checked: EIO: i/o error, read",
+    });
   });
 });
 
@@ -264,26 +294,26 @@ describe("POST /api/update/dismiss", () => {
 });
 
 describe("the viewer asks the network nothing", () => {
-  test("with a check due, neither route makes a request to another host", async () => {
-    // No update.json, and neither the setting nor CI in the environment: a check is due.
-    const s = await start({});
+  test("with a check due, neither starting the viewer nor its two routes make a request to another host", async () => {
     const real = globalThis.fetch;
     const elsewhere: string[] = [];
-    let own = 0;
+    const seen: string[] = [];
     globalThis.fetch = ((input: Parameters<typeof fetch>[0], init?: RequestInit) => {
-      const url = String(input instanceof Request ? input.url : input);
-      if (url.startsWith(s.origin)) own++;
-      else elsewhere.push(url);
+      seen.push(String(input instanceof Request ? input.url : input));
       return real(input, init);
     }) as typeof fetch;
     try {
+      // No update.json, and neither the setting nor CI in the environment: a check is due.
+      const s = await start({});
       expect((await update(s)).mode).toBe("check");
       expect((await dismiss(s)).status).toBe(200);
       expect((await update(s)).line).toBe("not checked yet");
+      for (const url of seen) if (!url.startsWith(s.origin)) elsewhere.push(url);
     } finally {
       globalThis.fetch = real;
     }
-    expect(own).toBe(3);
+    // The test's own three calls, and nothing else.
+    expect(seen.length).toBe(3);
     expect(elsewhere).toEqual([]);
   });
 });

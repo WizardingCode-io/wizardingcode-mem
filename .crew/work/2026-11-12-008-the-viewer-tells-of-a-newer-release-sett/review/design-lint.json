@@ -1,0 +1,14 @@
+{
+  "at": "2026-11-12T22:13:40.098Z",
+  "files": [
+    "ui/src/App.vue",
+    "ui/src/components/Settings.vue",
+    "ui/src/components/UpdateBanner.vue",
+    "ui/src/components/settings/About.vue"
+  ],
+  "skipped": [],
+  "hits": [],
+  "unresolved": [],
+  "inventory": [],
+  "disabled": []
+}
