@@ -9,8 +9,8 @@
 
 ## Not proven
 
-- judgement gate code-quality not proven (4 findings)
-- judgement gate test-quality not proven (3 findings)
+- judgement gate code-quality not run on the current code
+- judgement gate test-quality not run on the current code
 
 ## Analysis
 
@@ -35,32 +35,32 @@
 
 | Id | Kind | Criterion | Test-first |
 | :- | :- | :- | :- |
-| AC-6 | behavior | Every git call of the knowledge store carries maintenance.auto=false, maintenance.autoDetach=false and gc.autoDetach=false; the trace git itself writes of a store write, taken through the stub's traceTo, holds one git maintenance run --auto --quiet command for each commit, started by the runner after the commit, and no git command with --detach; a trace without the maintenance command fails the test. | red then green |
-| AC-7 | behavior | A mirror run that commits: every git call carries the three settings, and git's own trace holds the runner's maintenance command after each commit and no --detach. | red then green |
-| AC-8 | behavior | A maintenance call that fails, and one that passes the timeout, do not fail the write: the entry is written and committed, the tree equals HEAD, and the failure is in the log. | red then green |
-| AC-9 | behavior | The tests' own git reads maintenance.auto as false. | red then green |
-| AC-10 | behavior | ADR 0024 and CLAUDE.md name the three settings and the runner's own maintenance call; ADR 0024 says in both places it speaks of housekeeping that it still runs, started by the runner after a commit in the foreground, and keeps the known limit open: unchecked files inside the folders of objects/, housekeeping that removes and rewrites files there, the sync part to close it. | red then green |
+| AC-6 | behavior | Every git call of the knowledge store carries maintenance.auto=false, maintenance.autoDetach=false and gc.autoDetach=false; the trace git itself writes of a store write, taken through the stub's traceTo, holds one git maintenance run --auto --quiet command for each commit, started by the runner after the commit, and no git command with --detach; a trace without the maintenance command fails the test. | red then green; the green recorded 2 times (the latest decides) |
+| AC-7 | behavior | A mirror run that commits: every git call carries the three settings, and git's own trace holds the runner's maintenance command after each commit and no --detach. | red then green; the green recorded 2 times (the latest decides) |
+| AC-8 | behavior | A maintenance call that fails, and one that passes the timeout, do not fail the write: the entry is written and committed, the tree equals HEAD, and the failure is in the log. | red then green; the green recorded 2 times (the latest decides) |
+| AC-9 | behavior | The tests' own git reads maintenance.auto as false. | red then green; the green recorded 2 times (the latest decides) |
+| AC-10 | behavior | ADR 0024 and CLAUDE.md name the three settings and the runner's own maintenance call; ADR 0024 says in both places it speaks of housekeeping that it still runs, started by the runner after a commit in the foreground, and keeps the known limit open: unchecked files inside the folders of objects/, housekeeping that removes and rewrites files there, the sync part to close it. | red then green; the red recorded 2 times (the latest decides); the green recorded 2 times (the latest decides) |
 | AC-11 | preserve | tests/unit/knowledge-repo.test.ts, tests/unit/knowledge-git-host.test.ts and tests/integration/team-mirror.test.ts pass as before. | passing before and after (105 → 105 pass) |
-| AC-12 | behavior | A lease lost at the maintenance call: in the store, the write returns, the entry is written and committed and the tree equals HEAD; in the mirror, the run stops with its lost-lease error, as at any other git call. | red then green |
-| AC-13 | behavior | With work due (two loose objects in the folder git samples, and gc.auto=1 given by the host), the runner's call after a commit, carrying the three settings, packs the loose objects before commitPaths returns. | red then green |
+| AC-12 | behavior | A lease lost at the maintenance call: in the store, the write returns, the entry is written and committed and the tree equals HEAD; in the mirror, the run stops with its lost-lease error, as at any other git call. | red then green; the green recorded 2 times (the latest decides) |
+| AC-13 | behavior | With work due (two loose objects in the folder git samples, and gc.auto=1 given by the host), the runner's call after a commit, carrying the three settings, packs the loose objects before commitPaths returns. | red then green; the green recorded 2 times (the latest decides) |
 
 ## Gates
 
 | Gate | Target | Status | Command | Duration | Log |
 | :- | :- | :- | :- | -: | :- |
-| secrets | . | pass | `built-in secret scan` | 34 ms |  |
-| prose | . | pass | `built-in prose scan` | 36 ms |  |
-| build | . | pass | `bun run build` | 2665 ms | logs/build-_-1794516410724.txt |
-| test | . | pass | `bun run test` | 209887 ms | logs/test-_-1794516413418.txt |
-| lint | . | pass: 1 untouched file with problems, none of the item's | `bun run lint` | 93 ms | logs/lint-_-1794516623306.txt |
-| typecheck | . | pass | `bun run typecheck` | 372 ms | logs/typecheck-_-1794516623399.txt |
+| secrets | . | pass | `built-in secret scan` | 38 ms |  |
+| prose | . | pass | `built-in prose scan` | 40 ms |  |
+| build | . | pass | `bun run build` | 2562 ms | logs/build-_-1794516891273.txt |
+| test | . | pass | `bun run test` | 210969 ms | logs/test-_-1794516893866.txt |
+| lint | . | pass: 1 untouched file with problems, none of the item's | `bun run lint` | 93 ms | logs/lint-_-1794517104835.txt |
+| typecheck | . | pass | `bun run typecheck` | 378 ms | logs/typecheck-_-1794517104928.txt |
 
 ## Judgement gates
 
 | Gate | Verdict | Reviewer | Findings | Tokens |
 | :- | :- | :- | -: | -: |
-| code-quality | not proven | review-code-quality | 4 | 107410 |
-| test-quality | not proven | review-test-quality | 3 | 118326 |
+| code-quality | not proven (earlier code) | review-code-quality | 4 | 107410 |
+| test-quality | not proven (earlier code) | review-test-quality | 3 | 118326 |
 
 - code-quality: tests/integration/team-mirror-maintenance.test.ts:55 Upheld as a defect under question 2: the diff writes the same logic twice. The `recordArgsTo` parser `callsIn` appears here and again in tests/unit/knowledge-maintenance.test.ts (`callsIn`, beside it). The `GIT_TRACE` line parser is inlined in this file's first test and appears again as `tracedCommands` in knowledge-maintenance.test.ts. The check that each commit is followed by maintenance (`commands.forEach(... index % 2 ...)`) is also written in both new test files. These are multi-line parsers and checks, not boilerplate. The diff adds `traceTo` to tests/helpers/stub-git.ts, which already owns both record formats, so one reader there would replace the copies. (defect, verified by Jev (0.97))
 - code-quality: src/modules/knowledge/repo.ts:958 Kept as an advisory (questions 10 and 11, precision of a new comment; no old fact is dropped). The `maintain` docstring describes 'a lease lost at the call's renewal' as met by the caller at its next call. That holds only for the store's `KnowledgeError`. The mirror's `MirrorLeaseLostError` (src/team/mirror.ts:99, extends Error, thrown from the renew at mirror.ts:395) falls to the `logError` branch and is logged as an error of another kind. The comment should name the two cases separately. (advisory)
@@ -170,4 +170,4 @@
 - O-1 (advisory, raised by gap-round) open: The commit that crosses git's threshold waits for the repack inside the runner's timeout; a repack that exceeded it would report a failure for a commit that landed. Not measured at that size.
 - O-2 (advisory, raised by gap-round) open: The end of the three failures cannot be shown on the author's machine: the evidence is the runner's probe and the suite's later runs there.
 
-Fingerprint: sha256:266f7111b9ee7c23f266542ec0bfa492f139bfe3f6e5a880c34af23bf43aeeba
+Fingerprint: sha256:4e2086ed585d473b5fd5e3b27d1fe9547b6e77957afefe8cd9c546756dbb8505

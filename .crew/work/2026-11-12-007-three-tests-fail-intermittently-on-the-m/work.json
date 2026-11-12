@@ -10,7 +10,7 @@
   ],
   "riskAreas": [],
   "phase": "gate",
-  "awaiting": null,
+  "awaiting": "role",
   "criteria": [
     {
       "id": "AC-6",
@@ -64,7 +64,7 @@
   "skips": [],
   "baseCommit": "e4f859635e6f95949ce6a7b5a21605af66a0fcee",
   "createdAt": "2026-11-12T19:49:20.046Z",
-  "updatedAt": "2026-11-12T20:53:10.011Z",
+  "updatedAt": "2026-11-12T20:58:25.505Z",
   "kind": "issue",
   "kindFrom": "work_type fix",
   "knowledge": {

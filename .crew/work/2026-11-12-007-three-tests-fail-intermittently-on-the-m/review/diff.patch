@@ -12,13 +12,15 @@ index afc9bf9..564020f 100644
  - The sync client (ADR 0027, a draft: part 6 of the journey): `wizardingcode-mem sync --auto | --once | stop` is a detached process, one per data directory by the lease `sync.lease` in `meta` (60 s, renewed every 20 s; a newer version takes over), started by the session-start and prompt hooks (`HookDeps.spawnSync`, wired to `startSync` in `src/sync/spawn.ts`: one statement, one `kill(pid, 0)`, never on a hook path, failing open) and by the viewer; it ticks on `PRAGMA data_version` every 2 s, sweeps what changed at most every 5 s and everything every 60 s, holds one pull per server, and exits after 15 idle minutes; the stop flag `sync.stop` is set by `sync stop`, `backup --restore`, a store move, `compact` and `share server remove`, which wait up to 30 s for the lease (`stopSync` in `src/store/meta.ts`). `src/sync/`: `context.ts` (the context, with a clock and timers tests inject), `run.ts` (the loop), `spawn.ts` (the hooks' call; imports nothing else of the folder), `client.ts` (HTTP, typed failures), `servers.ts` (`sharing_servers`, `sharing_muted_members`, the token file `<data dir>/servers.json` 0600), `join.ts` (`share server add | rejoin | remove | mute | unmute | resume`), `ledger.ts` (every SQL statement over the ledger's seven tables), `outbound.ts` (the sweep: committed files only, `redactForSend`, batches of 200 items and 900 KiB, the withdrawals and D-10's holds), `inbound.ts` and `received.ts` (the pull, the received store under `knowledge/received/<serverId>/`, `knowledge_received`, received memories as `imported` rows with `judge team:<serverId>`), `conflicts.ts` (a teammate's revision applied by the sync writer; the person's text as a proposal outside the quota and a `sharing_conflicts` row), `state.ts` and `report.ts` (what `status`, `doctor` and the viewer read), `naming.ts` (every path component checked), `log.ts`. A project binds to one server; the destination of a level is the server's id (`team` only until one is confirmed); the level `receive` binds without sending; `loadPolicy(…, serverId)` intersects the server's lists with the file's and the environment's. `tests/unit/sync-boundary.test.ts` holds the import and SQL boundaries; `tests/helpers/sync.ts`, `sync-world.ts` and `clock.ts` give the stores, a world with the in-process server, and the fake clock. The viewer: Settings → Servers, the Sharing card's server selector, the dock's bound server and picker, `GET /api/servers`, `GET /api/sync`, `POST /api/sync/run`, `POST /api/servers`, `POST /api/servers/<id>/rejoin|mute|unmute|resume`, `DELETE /api/servers/<id>`; no answer carries a token. `status` has `sync` and `server` lines, `doctor` a `sync` check, `share explain --server` the ledger history. `backup --restore` carries eight sharing tables into the copy before the rename and holds the withdrawals (`share server resume` releases them).
  - Shared names (ADR 0028, a draft): a project with no host-led remote is shared under `name:<slug>`, created once on the server and joined by the others. The identity leaf `src/core/identity.ts` (no imports) is the one rule of what a team knows a project by: `ALIAS_KINDS`, `aliasKind`, `isHostLedAlias` (re-exported by `src/sharing/levels.ts`), `isSharedName`, `isTeamAlias`, `SHARED_SLUG`, `TEAM_ALIAS_SQL` (a prefilter only; every row is judged in code). `src/sharing/names.ts` (`sharedNameOf`, `nameOf`, `noNameMessage`; it imports the knowledge store's `slugCore`) and `src/sharing/format.ts` (`formatChange`, `projectOfChange`, a leaf); `setLevel` takes `as`, `nameId`, `dryRun` and `recreated` and refuses `has-remote`, `renamed`, `name-taken` and `no-name` (which replaced `no-remote`) before `one-server` and `needs-confirm`; `forgetName` removes a name at Nothing. Schemas: core migration 8 (`project_aliases_one_name`), sharing namespace 3 (`sharing_levels.name_id`), team schema 2 (`0002_team_names.sql`: the registry `names`, `entries_project`, `memories_project`, the four `remote_alias` columns renamed `project_alias`; the wire key stays `remoteAlias`). Contract 2 with 1 accepted (`ACCEPTED_CONTRACTS`; `Context.contract` is the test seam): `POST /v1/names`, `GET /v1/names`, `GET /v1/names/:alias` (`requireNames`: the route table's 404 below 2), the `names` bucket (`namesPerHour`, 10 per member), the push reasons `name` and `name-purged`, `nameId` on every feed item, `serve purge name <alias> --yes`, `serve status`'s `names: <n>`. The client: `src/sync/binding.ts` (`prepareBinding`, `commitBinding`, `bindMessage`, `spokenContract`, `listServerNames`; it names no sharing table), the contract spoken `sharing_servers.contract` (`spokenAfterMe` and `CONTRACT_READ_MS` in `servers.ts` are the one rule; `refreshContracts` at the sync's start and at every full sweep while below `CONTRACT`; names held while 1), the three flags `names.missing|recreated|purged:<serverId>:<alias>` in `meta` read by `nameStateOf`; `knowledge_received.remote_alias` keeps its name. `share project <level> [--as <name>] [--create] [--yes]`, `share names`, `share name forget`; the viewer's `POST /api/projects/<id>/sharing/preview`, `DELETE /api/projects/<id>/name`, `GET /api/servers/<id>/names`, every sharing-route refusal in the shape `{ error, reason, …extra }`, the dock's Shared name field (`UInputMenu`). Tests: `tests/helpers/sync-world.ts` (`world(level, { named, server })`), `tests/unit/core-identity.test.ts`, `tests/unit/sharing-names.test.ts`, `tests/integration/team-names.test.ts`, `team-names-push.test.ts`, `sync-contract.test.ts`, `sync-names.test.ts`, `sync-binding.test.ts`, `share-names-cli.test.ts`.
 diff --git a/docs/adr/0024-knowledge-module.md b/docs/adr/0024-knowledge-module.md
-index d6a237a..f63d626 100644
+index d6a237a..c1bb9e7 100644
 --- a/docs/adr/0024-knowledge-module.md
 +++ b/docs/adr/0024-knowledge-module.md
-@@ -84,6 +84,7 @@ Every git call goes through one runner (`runGit`): a synchronous process killed
+@@ -83,7 +83,8 @@ Every git call goes through one runner (`runGit`): a synchronous process killed
+ - git also reads a repository's configuration from the directory a `.git/commondir` file names, and from `.git/config.worktree` when `extensions.worktreeConfig` is set. Both files are refused, so the one file read is the one git reads. A `.git/objects/info/alternates` file, which has git read objects from another repository on the disk, is refused with them.
  - A new repository is created with the object and ref formats the store reads (`init.defaultObjectFormat=sha1`, `init.defaultRefFormat=files`). git writes other formats to `.git/config` as extensions, which the rule above refuses.
  - A folder the store did not make is refused before git runs and before anything is written: a repository folder that is a link, a `.git` that is a file or a link (a gitfile names another repository, and every commit would land there), an `entries` or `proposals` folder that is a link, a link where the store keeps `knowledge.json`, `taxonomy.md` or `.gitignore`, and a `.gitmodules` file.
- - A `.git` that holds anything but regular files and folders is refused. git writes inside it: its commit message and a line of its log in place, objects and branches into its folders. Through a link there, git wrote into a file of the person's, and through linked `refs` and `objects` folders it committed into another repository. Every entry is read with its kind, at every depth, except the files inside the folders of `objects/`, which git reads, replaces whole or, in its own housekeeping, removes (Known limits says what that leaves open). A folder there that cannot be listed is refused as well, since git goes through it by name all the same and what it holds would go unchecked. One thing other than a file or a folder is let through: the socket `fsmonitor--daemon.ipc` at the top of `.git`, which a person's own git leaves there while its file monitor runs, and which the store's git never uses.
+-- A `.git` that holds anything but regular files and folders is refused. git writes inside it: its commit message and a line of its log in place, objects and branches into its folders. Through a link there, git wrote into a file of the person's, and through linked `refs` and `objects` folders it committed into another repository. Every entry is read with its kind, at every depth, except the files inside the folders of `objects/`, which git reads, replaces whole or, in its own housekeeping, removes (Known limits says what that leaves open). A folder there that cannot be listed is refused as well, since git goes through it by name all the same and what it holds would go unchecked. One thing other than a file or a folder is let through: the socket `fsmonitor--daemon.ipc` at the top of `.git`, which a person's own git leaves there while its file monitor runs, and which the store's git never uses.
++- A `.git` that holds anything but regular files and folders is refused. git writes inside it: its commit message and a line of its log in place, objects and branches into its folders. Through a link there, git wrote into a file of the person's, and through linked `refs` and `objects` folders it committed into another repository. Every entry is read with its kind, at every depth, except the files inside the folders of `objects/`, which git reads, replaces whole or, in its own housekeeping, removes. That housekeeping still runs: it is started by the runner after a commit, in the foreground, and never by git detached (the rule below; Known limits says what the unchecked files leave open). A folder there that cannot be listed is refused as well, since git goes through it by name all the same and what it holds would go unchecked. One thing other than a file or a folder is let through: the socket `fsmonitor--daemon.ipc` at the top of `.git`, which a person's own git leaves there while its file monitor runs, and which the store's git never uses.
 +- No git process outlives the call that started it (2026-11-12). A commit ends by starting `git maintenance run --auto --quiet --detach`, which is still writing under `.git/objects` (it takes and removes `maintenance.lock`) after the commit has returned. A recursive removal of the repository that ran meanwhile stopped half way: on GitHub's macOS runner 275 of 300 removals of a freshly committed repository failed, with an error where the caller had not asked for `force` and in silence where it had, as the mirror's rebuild does. Every git call of the runner therefore carries `maintenance.auto=false`, so that no command starts maintenance by itself, with `maintenance.autoDetach=false` and `gc.autoDetach=false` under it. `commitPaths`, the one function that commits, for the store and for the team server's mirror, ends with a call of its own, `git maintenance run --auto --quiet`: git decides by its thresholds whether anything is due, and the call returns when git has stopped writing. Nothing that call throws is the commit's, which landed: a git that fails or passes the timeout is logged, and a lease lost at its renewal is met by the caller at its own next git call, so a slow repack never undoes a write and a lost lease never leaves a landed commit unrecorded. The tests' own git passes `maintenance.auto=false` as well. What a timeout leaves is in Known limits.
  - `knowledge/` and `knowledge/projects/` must be folders themselves. Every repository is listed and created under them, and through a link at either a project's whole repository, with the person's name in it, was created in another folder. Both are checked before anything under them is listed or created. The data directory itself may be a link: that is the way to keep the knowledge on another disk. `WIZARDINGCODE_MEM_DATA_DIR`, which moves this product's data directory, and `WIZARDINGCODE_HOME`, which moves the brand's whole home, do it too, but each must then be set in the environment of every agent, since the settings file cannot hold what locates it (ADR 0010). The store directory of ADR 0010 does not carry the knowledge: only the database follows it, and the repositories stay under the data directory (D-1).
  - Only a name with nothing at it is gone. Where the store decides whether a repository is there, or which entry and proposal files it holds, three things are never read as nothing:
@@ -34,7 +36,7 @@ index d6a237a..f63d626 100644
  - A file that is hard-linked to another is not told from any other file. A hard link to a file outside the repository can only be made by a process of the person's own user on the same disk, which could write that file itself.
  - The two format settings were run with git 2.54.0, where they leave `.git/config` as `git init` writes it by default. With the other formats named, the same git writes `extensions.objectformat` and `extensions.refstorage`. No git that defaults to those formats existed to run them against.
 diff --git a/src/modules/knowledge/repo.ts b/src/modules/knowledge/repo.ts
-index da3509b..54d4c69 100644
+index da3509b..58248af 100644
 --- a/src/modules/knowledge/repo.ts
 +++ b/src/modules/knowledge/repo.ts
 @@ -430,6 +430,13 @@ function configArgs(repo: string | null): string[] {
@@ -51,7 +53,7 @@ index da3509b..54d4c69 100644
    ];
    // Hooks are looked for inside the repository's own configuration file. Nothing can be
    // inside a file, so git finds no hook. Run on macOS; not run on Windows (ADR 0024, known
-@@ -940,6 +947,36 @@ export function commitPaths(
+@@ -940,6 +947,40 @@ export function commitPaths(
      identity,
      ...(committer === undefined ? {} : { committer }),
    });
@@ -62,10 +64,12 @@ index da3509b..54d4c69 100644
 + * git's own housekeeping, run by the runner after a commit and to its end: git decides by
 + * its thresholds whether anything is due, and no process is left writing in the repository
 + * when this returns. Nothing it throws is the commit's, which landed, so nothing it throws
-+ * changes what the caller does next: a git that fails or passes the timeout is logged by
-+ * `runGit`; a lease lost at the call's renewal is raised before git starts, so no git runs
-+ * without the lease, and the caller meets the loss at its own next call, where it already
-+ * handles it. An error of another kind is logged here.
++ * changes what the caller does next:
++ * - a git that fails or passes the timeout is a `KnowledgeError` that `runGit` has logged;
++ * - a lease lost at the call's renewal is raised before git starts, so no git runs without
++ *   the lease. The store's is a `KnowledgeError` (`locked`), dropped here. The mirror's is an
++ *   error of its own class, logged here like any error of another kind. Either way the
++ *   caller meets the loss at its own next git call, where it already handles it.
 + */
 +function maintain(
 +  host: GitHost,
@@ -75,7 +79,9 @@ index da3509b..54d4c69 100644
 +  committer?: Identity,
 +): void {
 +  try {
-+    // The environment of the commit it follows, identity included: one call apart, nothing else.
++    // The commit's identity too, though maintenance writes no commit: the two calls then run
++    // in one environment, and what a test or a log sees of git's environment after a commit
++    // is still the commit's.
 +    runGit(host, repoPath, ["maintenance", "run", "--auto", "--quiet"], {
 +      operation,
 +      identity,
@@ -89,9 +95,15 @@ index da3509b..54d4c69 100644
  
  /**
 diff --git a/tests/helpers/stub-git.ts b/tests/helpers/stub-git.ts
-index 9b5cf9c..31d0a0b 100644
+index 9b5cf9c..4f865f9 100644
 --- a/tests/helpers/stub-git.ts
 +++ b/tests/helpers/stub-git.ts
+@@ -1,4 +1,4 @@
+-import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
++import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+ import { join } from "node:path";
+ 
+ export interface StubBehaviour {
 @@ -17,6 +17,10 @@ export interface StubBehaviour {
    recordArgsTo?: string;
    /** Arguments put ahead of the caller's on every call that reaches the real git. */
@@ -123,11 +135,49 @@ index 9b5cf9c..31d0a0b 100644
    lines.push(`exec ${quoted(REAL_GIT)} ${prepended}"$@"`);
    const script = join(dir, "git");
    writeFileSync(script, `${lines.join("\n")}\n`);
-@@ -81,10 +91,14 @@ export function stubGit(dir: string, behaviour: StubBehaviour): string {
+@@ -81,10 +91,52 @@ export function stubGit(dir: string, behaviour: StubBehaviour): string {
    return dir;
  }
  
 -/** The real git, for a test that inspects a repository itself. Never the stub. */
++/**
++ * The calls a stub recorded with `recordArgsTo`, one argument list per call; none when the
++ * file is not there yet. A record ends with a tab and a newline, since a commit message
++ * spans lines inside its argument.
++ */
++export function recordedCalls(file: string): string[][] {
++  if (!existsSync(file)) return [];
++  return readFileSync(file, "utf8")
++    .split("\t\n")
++    .filter((record) => record !== "" && record !== "\n")
++    .map((record) => record.replace(/^\n/, "").split("\t"));
++}
++
++/** The commands git itself says it ran, in order, from a trace taken with `traceTo`: `commit …`, `maintenance run …`. */
++export function tracedCommands(file: string): string[] {
++  return readFileSync(file, "utf8")
++    .split("\n")
++    .map((line) => /trace: built-in: git (.*)$/.exec(line)?.[1])
++    .filter((command): command is string => command !== undefined);
++}
++
++/**
++ * The commits of a trace, when each is followed by the runner's own maintenance command and
++ * the trace holds no other maintenance and nothing detached; null otherwise, and for a trace
++ * with no commit.
++ */
++export function commitsEachMaintained(file: string): number | null {
++  const commands = tracedCommands(file).filter((command) =>
++    /^(commit|maintenance)\b/.test(command),
++  );
++  const commits = commands.filter((command) => command.startsWith("commit "));
++  const paired = commands.every((command, index) =>
++    index % 2 === 0 ? command.startsWith("commit ") : command === "maintenance run --auto --quiet",
++  );
++  const whole = commits.length > 0 && commands.length === commits.length * 2 && paired;
++  return whole && !readFileSync(file, "utf8").includes("--detach") ? commits.length : null;
++}
++
 +/**
 + * The real git, for a test that inspects a repository itself. Never the stub. A commit made
 + * through it starts no maintenance: a detached one would still be writing in a repository
@@ -142,21 +192,20 @@ index 9b5cf9c..31d0a0b 100644
        PATH: process.env.PATH ?? "",
 diff --git a/tests/integration/team-mirror-maintenance.test.ts b/tests/integration/team-mirror-maintenance.test.ts
 new file mode 100644
-index 0000000..112fda8
+index 0000000..adf677e
 --- /dev/null
 +++ b/tests/integration/team-mirror-maintenance.test.ts
-@@ -0,0 +1,142 @@
+@@ -0,0 +1,128 @@
 +// The mirror commits through the store's runner: no commit of a run starts maintenance by
 +// itself, the runner runs git's own after it, and a lease lost there stops the run.
 +import { afterAll, afterEach, describe, expect, test } from "bun:test";
-+import { existsSync, readFileSync } from "node:fs";
 +import { join } from "node:path";
 +import { teamPaths } from "../../src/team/db.ts";
 +import { MIRROR_LEASE } from "../../src/team/lease.ts";
 +import { createTeamLog } from "../../src/team/log.ts";
 +import { runMirror } from "../../src/team/mirror.ts";
 +import { leaseOf, setMeta } from "../../src/team/store.ts";
-+import { realGit, stubGit } from "../helpers/stub-git.ts";
++import { commitsEachMaintained, realGit, recordedCalls, stubGit } from "../helpers/stub-git.ts";
 +import {
 +  adminOf,
 +  cleanTestDirs,
@@ -200,14 +249,6 @@ index 0000000..112fda8
 +
 +const sharedRepo = (t: TestServer) => join(teamPaths(t.dir).repos, "shared");
 +
-+const callsIn = (file: string): string[][] =>
-+  existsSync(file)
-+    ? readFileSync(file, "utf8")
-+        .split("\t\n")
-+        .filter((record) => record !== "" && record !== "\n")
-+        .map((record) => record.replace(/^\n/, "").split("\t"))
-+    : [];
-+
 +const subjects = (repo: string) => realGit(repo, "log", "--format=%s").trim().split("\n");
 +
 +describe("a mirror run's git", () => {
@@ -222,24 +263,12 @@ index 0000000..112fda8
 +    const run = runMirror(mirrorCtx(t, stub), { rebuild: false });
 +    expect(run).toEqual({ commits: 2, errors: [] });
 +
-+    const calls = callsIn(record);
++    const calls = recordedCalls(record);
 +    expect(calls.length).toBeGreaterThan(4);
 +    for (const args of calls) for (const setting of SETTINGS) expect(args).toContain(setting);
 +
-+    const commands = readFileSync(trace, "utf8")
-+      .split("\n")
-+      .map((line) => /trace: built-in: git (.*)$/.exec(line)?.[1])
-+      .filter((command): command is string => command !== undefined)
-+      .filter((command) => /^(commit|maintenance)\b/.test(command));
-+    const commits = commands.filter((command) => command.startsWith("commit"));
-+    // The repository's first commit, then one per revision.
-+    expect(commits.length).toBe(3);
-+    expect(commands.length).toBe(commits.length * 2);
-+    commands.forEach((command, index) => {
-+      if (index % 2 === 0) expect(command.startsWith("commit ")).toBe(true);
-+      else expect(command).toBe("maintenance run --auto --quiet");
-+    });
-+    expect(readFileSync(trace, "utf8")).not.toContain("--detach");
++    // The repository's first commit, then one per revision, each followed by the runner's call.
++    expect(commitsEachMaintained(trace)).toBe(3);
 +  });
 +
 +  test("a lease lost at the maintenance call: no git runs without it, the landed revision is recorded, the run stops at its next git call, and the next run commits nothing twice", async () => {
@@ -252,13 +281,14 @@ index 0000000..112fda8
 +    // revision's) is the maintenance call's, and it hands the lease to another owner.
 +    let stolen = false;
 +    let callsWhenStolen = -1;
-+    const commitsSoFar = () => callsIn(record).filter((args) => args.includes("commit")).length;
++    const commitsSoFar = () =>
++      recordedCalls(record).filter((args) => args.includes("commit")).length;
 +    const ctx = {
 +      ...mirrorCtx(t, stub),
 +      now: () => {
-+        if (!stolen && commitsSoFar() === 2 && callsIn(record).at(-1)?.includes("commit")) {
++        if (!stolen && commitsSoFar() === 2 && recordedCalls(record).at(-1)?.includes("commit")) {
 +          stolen = true;
-+          callsWhenStolen = callsIn(record).length;
++          callsWhenStolen = recordedCalls(record).length;
 +          setMeta(
 +            t.server.db,
 +            MIRROR_LEASE,
@@ -276,9 +306,15 @@ index 0000000..112fda8
 +    expect(aborted.errors.some((error) => /lease/.test(error.message))).toBe(true);
 +    expect(leaseOf(t.server.db, MIRROR_LEASE)?.owner).toBe("mirror-intruder");
 +    // No git ran after the lease was lost: neither the maintenance nor the next revision's.
-+    expect(callsIn(record).length).toBe(callsWhenStolen);
-+    expect(callsIn(record).at(-1)).toContain("commit");
++    expect(recordedCalls(record).length).toBe(callsWhenStolen);
++    expect(recordedCalls(record).at(-1)).toContain("commit");
 +    expect(subjects(sharedRepo(t)).length).toBe(2);
++    // The loss was met at the maintenance call itself: that call logs it once, under the
++    // mirror's scope, and the run's own git calls log nothing of the kind.
++    const logged = t.lines
++      .map((line) => JSON.parse(line) as { scope?: string; name?: string })
++      .filter((line) => line.name === "MirrorLeaseLostError");
++    expect(logged).toEqual([expect.objectContaining({ scope: "team.mirror" })]);
 +
 +    t.server.db.run("DELETE FROM meta WHERE key = ?", [MIRROR_LEASE]);
 +    const next = runMirror(mirrorCtx(t, stub), { rebuild: false });
@@ -290,10 +326,10 @@ index 0000000..112fda8
 +});
 diff --git a/tests/unit/knowledge-maintenance.test.ts b/tests/unit/knowledge-maintenance.test.ts
 new file mode 100644
-index 0000000..1a80bbc
+index 0000000..dc4ecec
 --- /dev/null
 +++ b/tests/unit/knowledge-maintenance.test.ts
-@@ -0,0 +1,242 @@
+@@ -0,0 +1,223 @@
 +// No git process outlives the call that started it: a commit starts no maintenance by
 +// itself, and the runner runs git's own maintenance after it, in the foreground.
 +import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -306,7 +342,7 @@ index 0000000..1a80bbc
 +import { writeEntry } from "../../src/modules/knowledge/store.ts";
 +import type { EntryChange, KnowledgeStore } from "../../src/modules/knowledge/types.ts";
 +import { type Fixture, knowledgeFixture } from "../helpers/knowledge.ts";
-+import { realGit, stubGit } from "../helpers/stub-git.ts";
++import { commitsEachMaintained, realGit, recordedCalls, stubGit } from "../helpers/stub-git.ts";
 +
 +const WORKSPACE = { scope: "workspace" } as const;
 +const SETTINGS = ["maintenance.auto=false", "maintenance.autoDetach=false", "gc.autoDetach=false"];
@@ -326,20 +362,6 @@ index 0000000..1a80bbc
 +  subject: "discovery call",
 +  body: "Ask about the budget before the timeline.",
 +});
-+
-+/** One recorded call per record, each ended by a tab and a newline; a commit message spans lines. */
-+const callsIn = (file: string): string[][] =>
-+  readFileSync(file, "utf8")
-+    .split("\t\n")
-+    .filter((record) => record !== "" && record !== "\n")
-+    .map((record) => record.replace(/^\n/, "").split("\t"));
-+
-+/** The commands git itself says it ran, in order: `commit …`, `maintenance run …`. */
-+const tracedCommands = (file: string): string[] =>
-+  readFileSync(file, "utf8")
-+    .split("\n")
-+    .map((line) => /trace: built-in: git (.*)$/.exec(line)?.[1])
-+    .filter((command): command is string => command !== undefined);
 +
 +const write = (store: KnowledgeStore, title: string) =>
 +  writeEntry(store, WORKSPACE, change(title), personAuthor(store));
@@ -361,22 +383,13 @@ index 0000000..1a80bbc
 +    expect(write(store, "First entry").kind).toBe("written");
 +    expect(write(store, "Second entry").kind).toBe("written");
 +
-+    const calls = callsIn(record);
++    const calls = recordedCalls(record);
 +    expect(calls.length).toBeGreaterThan(4);
 +    for (const args of calls) for (const setting of SETTINGS) expect(args).toContain(setting);
 +
-+    const commands = tracedCommands(trace).filter((command) =>
-+      /^(commit|maintenance)\b/.test(command),
-+    );
-+    const commits = commands.filter((command) => command.startsWith("commit"));
-+    expect(commits.length).toBeGreaterThanOrEqual(2);
-+    // Each commit is followed by the runner's own call, and that is the only maintenance there is.
-+    expect(commands.length).toBe(commits.length * 2);
-+    commands.forEach((command, index) => {
-+      if (index % 2 === 0) expect(command.startsWith("commit ")).toBe(true);
-+      else expect(command).toBe("maintenance run --auto --quiet");
-+    });
-+    expect(readFileSync(trace, "utf8")).not.toContain("--detach");
++    // Each commit is followed by the runner's own call, the only maintenance there is; a
++    // trace without it, or with anything detached, gives null.
++    expect(commitsEachMaintained(trace)).toBeGreaterThanOrEqual(2);
 +  });
 +});
 +
@@ -428,7 +441,7 @@ index 0000000..1a80bbc
 +    // The renewal that comes right after the commit is the maintenance call's.
 +    let lost = 0;
 +    store.renew = () => {
-+      const last = existsSync(record) ? callsIn(record).at(-1) : undefined;
++      const last = recordedCalls(record).at(-1);
 +      if (lost === 0 && last?.includes("commit") === true) {
 +        lost++;
 +        throw new KnowledgeError("locked", "another write to this repository is in progress");
@@ -443,7 +456,7 @@ index 0000000..1a80bbc
 +    expect(subjects(repo.path)[0]).toContain("written-under-a-lost-lease");
 +    expect(clean(repo.path)).toBe(true);
 +    // No git ran without the lease: the last call recorded is still the commit.
-+    expect(callsIn(record).at(-1)).toContain("commit");
++    expect(recordedCalls(record).at(-1)).toContain("commit");
 +  });
 +
 +  test("an error that is not the store's is logged, and is not the commit's either", () => {
@@ -479,13 +492,13 @@ index 0000000..1a80bbc
 +  test("with work due, the runner's call packs the loose objects before commitPaths returns", () => {
 +    const store = fx.store();
 +    const repo = ensureRepo(store, WORKSPACE);
-+    for (const seed of [1, 2, 3]) {
++    for (const seed of [1, 2]) {
 +      const file = join(fx.dir, `blob-${seed}`);
 +      writeFileSync(file, sampledBlob(seed));
 +      realGit(repo.path, "hash-object", "-w", file);
 +    }
 +    const sampled = join(repo.path, ".git", "objects", "17");
-+    expect(readdirSync(sampled).length).toBe(3);
++    expect(readdirSync(sampled).length).toBe(2);
 +
 +    // The host lowers git's threshold; the runner's own three settings ride on the same call.
 +    const host: GitHost = { ...store, extraConfig: ["-c", "gc.auto=1"] };
@@ -527,11 +540,15 @@ index 0000000..1a80bbc
 +  test("ADR 0024 says the housekeeping still runs, after a commit and in the foreground, and keeps the limit open", () => {
 +    expect(adr).not.toContain("the store does not turn off git's own housekeeping");
 +    const paragraphs = adr.split("\n").filter((line) => line.includes("housekeeping"));
-+    // The paragraph on what `.git` may hold, and Known limits.
-+    expect(paragraphs.length).toBeGreaterThanOrEqual(2);
++    const started = "started by the runner after a commit, in the foreground";
++    // The paragraph on what `.git` may hold says it too.
++    const held = flat(
++      paragraphs.find((line) => line.startsWith("- A `.git` that holds anything")) ?? "",
++    );
++    expect(held).toContain(started);
 +    const limit = flat(paragraphs.find((line) => line.includes("are not checked")) ?? "");
 +    expect(limit).toContain("The files inside the folders of `.git/objects/` are not checked");
-+    expect(limit).toContain("started by the runner after a commit, in the foreground");
++    expect(limit).toContain(started);
 +    expect(limit).toContain("removes and rewrites files below `objects/`");
 +    expect(limit).toContain("The sync part closes both");
 +  });

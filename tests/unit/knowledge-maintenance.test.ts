@@ -166,7 +166,8 @@ describe("git keeps compacting", () => {
       realGit(repo.path, "hash-object", "-w", file);
     }
     const sampled = join(repo.path, ".git", "objects", "17");
-    expect(readdirSync(sampled).length).toBe(2);
+    // At least the two written here: an object of the repository's own may fall there too.
+    expect(readdirSync(sampled).length).toBeGreaterThanOrEqual(2);
 
     // The host lowers git's threshold; the runner's own three settings ride on the same call.
     const host: GitHost = { ...store, extraConfig: ["-c", "gc.auto=1"] };

@@ -1,5 +1,5 @@
 {
-  "fingerprint": "sha256:266f7111b9ee7c23f266542ec0bfa492f139bfe3f6e5a880c34af23bf43aeeba",
+  "fingerprint": "sha256:4e2086ed585d473b5fd5e3b27d1fe9547b6e77957afefe8cd9c546756dbb8505",
   "tdd": [
     {
       "criterion": "AC-11",
@@ -204,10 +204,10 @@
       "green": {
         "command": "./node_modules/.bin/bun test tests/unit/knowledge-maintenance.test.ts -t 'packs the loose objects'",
         "exit": 0,
-        "at": "2026-11-12T20:54:23.786Z",
-        "durationMs": 184,
-        "log": "logs/tdd-AC-13-green-1794516863601.txt",
-        "tail": "bun test v1.4.2 (744846f84)\n\n 1 pass\n 8 filtered out\n 0 fail\n 5 expect() calls\nRan 1 test across 1 file. [176.00ms]",
+        "at": "2026-11-12T20:58:37.010Z",
+        "durationMs": 182,
+        "log": "logs/tdd-AC-13-green-1794517116827.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\n 1 pass\n 8 filtered out\n 0 fail\n 5 expect() calls\nRan 1 test across 1 file. [173.00ms]",
         "timedOut": false,
         "passed": 1
       },
@@ -219,6 +219,16 @@
           "durationMs": 207,
           "log": "logs/tdd-AC-13-green-1794516102237.txt",
           "tail": "bun test v1.4.2 (744846f84)\n\n 1 pass\n 8 filtered out\n 0 fail\n 5 expect() calls\nRan 1 test across 1 file. [199.00ms]",
+          "timedOut": false,
+          "passed": 1
+        },
+        {
+          "command": "./node_modules/.bin/bun test tests/unit/knowledge-maintenance.test.ts -t 'packs the loose objects'",
+          "exit": 0,
+          "at": "2026-11-12T20:54:23.786Z",
+          "durationMs": 184,
+          "log": "logs/tdd-AC-13-green-1794516863601.txt",
+          "tail": "bun test v1.4.2 (744846f84)\n\n 1 pass\n 8 filtered out\n 0 fail\n 5 expect() calls\nRan 1 test across 1 file. [176.00ms]",
           "timedOut": false,
           "passed": 1
         }
@@ -331,11 +341,11 @@
       "confirmed": true,
       "exit": 0,
       "status": "pass",
-      "durationMs": 34,
-      "at": "2026-11-12T20:46:50.654Z",
+      "durationMs": 38,
+      "at": "2026-11-12T20:54:51.195Z",
       "log": null,
       "tail": "no secrets found in the change",
-      "fingerprint": "sha256:266f7111b9ee7c23f266542ec0bfa492f139bfe3f6e5a880c34af23bf43aeeba"
+      "fingerprint": "sha256:4e2086ed585d473b5fd5e3b27d1fe9547b6e77957afefe8cd9c546756dbb8505"
     },
     {
       "gate": "prose",
@@ -345,11 +355,11 @@
       "confirmed": true,
       "exit": 0,
       "status": "pass",
-      "durationMs": 36,
-      "at": "2026-11-12T20:46:50.688Z",
+      "durationMs": 40,
+      "at": "2026-11-12T20:54:51.233Z",
       "log": null,
       "tail": "no chatbot artefacts in the change",
-      "fingerprint": "sha256:266f7111b9ee7c23f266542ec0bfa492f139bfe3f6e5a880c34af23bf43aeeba"
+      "fingerprint": "sha256:4e2086ed585d473b5fd5e3b27d1fe9547b6e77957afefe8cd9c546756dbb8505"
     },
     {
       "gate": "build",
@@ -359,11 +369,11 @@
       "confirmed": true,
       "exit": 0,
       "status": "pass",
-      "durationMs": 2665,
-      "at": "2026-11-12T20:46:50.724Z",
-      "log": "logs/build-_-1794516410724.txt",
-      "tail": "$ bun run ui:build && bun scripts/build.ts\n$ vite build --config ui/vite.config.ts\nvite v8.3.3 building client environment for production...\ntransforming...\n\n/assets/unbounded-variable.woff2 referenced in /assets/unbounded-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/instrument-sans-variable.woff2 referenced in /assets/instrument-sans-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/jetbrains-mono-variable.woff2 referenced in /assets/jetbrains-mono-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n✓ 851 modules transformed.\nrendering chunks...\n[plugin vite:singlefile] \n\n[plugin vite:singlefile] Inlining: index-BdJDDbwQ.js\n[plugin vite:singlefile] Inlining: style-CMyPmnXo.css\nsrc/ui/dist/index.html  1,228.95 kB\n\n✓ built in 726ms\n✓ wizardingcode-mem-darwin-arm64  67.9 MB\n✓ wizardingcode-mem-darwin-x64  74.7 MB\n✓ wizardingcode-mem-linux-x64  86.1 MB\n✓ wizardingcode-mem-linux-arm64  86.0 MB\n✓ wizardingcode-mem-windows-x64.exe  90.6 MB",
-      "fingerprint": "sha256:266f7111b9ee7c23f266542ec0bfa492f139bfe3f6e5a880c34af23bf43aeeba"
+      "durationMs": 2562,
+      "at": "2026-11-12T20:54:51.273Z",
+      "log": "logs/build-_-1794516891273.txt",
+      "tail": "$ bun run ui:build && bun scripts/build.ts\n$ vite build --config ui/vite.config.ts\nvite v8.3.3 building client environment for production...\ntransforming...\n\n/assets/unbounded-variable.woff2 referenced in /assets/unbounded-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/instrument-sans-variable.woff2 referenced in /assets/instrument-sans-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/jetbrains-mono-variable.woff2 referenced in /assets/jetbrains-mono-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n✓ 851 modules transformed.\nrendering chunks...\n[plugin vite:singlefile] \n\n[plugin vite:singlefile] Inlining: index-BdJDDbwQ.js\n[plugin vite:singlefile] Inlining: style-CMyPmnXo.css\nsrc/ui/dist/index.html  1,228.95 kB\n\n✓ built in 744ms\n✓ wizardingcode-mem-darwin-arm64  67.9 MB\n✓ wizardingcode-mem-darwin-x64  74.7 MB\n✓ wizardingcode-mem-linux-x64  86.1 MB\n✓ wizardingcode-mem-linux-arm64  86.0 MB\n✓ wizardingcode-mem-windows-x64.exe  90.6 MB",
+      "fingerprint": "sha256:4e2086ed585d473b5fd5e3b27d1fe9547b6e77957afefe8cd9c546756dbb8505"
     },
     {
       "gate": "test",
@@ -373,11 +383,11 @@
       "confirmed": true,
       "exit": 0,
       "status": "pass",
-      "durationMs": 209887,
-      "at": "2026-11-12T20:46:53.418Z",
-      "log": "logs/test-_-1794516413418.txt",
-      "tail": "heuristic precision 100%  recall 100%  kind 83%\ntypesafe  precision 85%  recall 94%  kind 88%  wrongly kept: en-none-obvious-from-code, en-none-general-knowledge, pt-none-your-turn  missed: en-change-json-flag\n\ntests/golden/search.test.ts:\ntop 5: 35/44 → 39/44; Portuguese of English: 1/8 → 4/8\nsemantic-only results for unrelated queries: 29/43\n\ntests/golden/retrieval.test.ts:\nrecall@5: 19/24 — missed: redact-first, pt-lingua, pt-cursor, ts-extension, hook-runs\nprecision: 19/21 notes given were the expected ones\nfalse injections: 0/23\n\ntests/perf/budgets.test.ts:\nrebuild write transaction, 2000 entries: median 26.5 ms over 5 (26.5, 27.4, 19.1, 28.0, 21.7)\nprompt: p50 66.0 ms, p95 71.1 ms\nsession-start: p50 21.5 ms, p95 22.9 ms\nturn-end: p50 15.1 ms, p95 16.4 ms\nfile-read: p50 16.8 ms, p95 18.0 ms\ntool-failed: p50 23.0 ms, p95 24.7 ms\nqwen prompt: p50 65.3 ms, p95 68.1 ms\nqwen session-start: p50 20.9 ms, p95 22.4 ms\ndroid prompt: p50 65.2 ms, p95 67.7 ms\ndroid session-start: p50 21.6 ms, p95 23.3 ms\ncopilot session-start: p50 20.6 ms, p95 22.1 ms\ncopilot prompt (capture only): p50 14.9 ms, p95 16.5 ms\nantigravity pre-invocation: p50 21.3 ms, p95 25.5 ms\nlinked prompt: p50 30.9 ms, p95 37.5 ms (30 of 30 with a note from outside)\nlinked session-start: p50 22.7 ms, p95 23.9 ms\n\ntests/perf/large-project.test.ts:\nlarge project prompt: p50 18.1 ms, p95 20.5 ms (40 of 40 given notes)\n\ntests/perf/semantic.test.ts:\nsemantic global median: 16.2 ms\n\n 3403 pass\n 4 skip\n 0 fail\n 26 snapshots, 40230 expect() calls\nRan 3407 tests across 218 files. [208.57s]",
-      "fingerprint": "sha256:266f7111b9ee7c23f266542ec0bfa492f139bfe3f6e5a880c34af23bf43aeeba"
+      "durationMs": 210969,
+      "at": "2026-11-12T20:54:53.866Z",
+      "log": "logs/test-_-1794516893866.txt",
+      "tail": "heuristic precision 100%  recall 100%  kind 83%\ntypesafe  precision 85%  recall 94%  kind 88%  wrongly kept: en-none-obvious-from-code, en-none-general-knowledge, pt-none-your-turn  missed: en-change-json-flag\n\ntests/golden/search.test.ts:\ntop 5: 35/44 → 39/44; Portuguese of English: 1/8 → 4/8\nsemantic-only results for unrelated queries: 29/43\n\ntests/golden/retrieval.test.ts:\nrecall@5: 19/24 — missed: redact-first, pt-lingua, pt-cursor, ts-extension, hook-runs\nprecision: 19/21 notes given were the expected ones\nfalse injections: 0/23\n\ntests/perf/budgets.test.ts:\nrebuild write transaction, 2000 entries: median 26.9 ms over 5 (26.9, 27.9, 20.7, 29.6, 23.5)\nprompt: p50 65.5 ms, p95 68.3 ms\nsession-start: p50 21.1 ms, p95 25.1 ms\nturn-end: p50 15.1 ms, p95 16.3 ms\nfile-read: p50 17.7 ms, p95 19.0 ms\ntool-failed: p50 23.5 ms, p95 25.4 ms\nqwen prompt: p50 64.6 ms, p95 69.3 ms\nqwen session-start: p50 19.8 ms, p95 21.0 ms\ndroid prompt: p50 64.0 ms, p95 66.4 ms\ndroid session-start: p50 20.6 ms, p95 21.6 ms\ncopilot session-start: p50 21.2 ms, p95 23.1 ms\ncopilot prompt (capture only): p50 15.6 ms, p95 16.6 ms\nantigravity pre-invocation: p50 21.2 ms, p95 22.2 ms\nlinked prompt: p50 30.8 ms, p95 35.4 ms (30 of 30 with a note from outside)\nlinked session-start: p50 21.4 ms, p95 22.9 ms\n\ntests/perf/large-project.test.ts:\nlarge project prompt: p50 18.5 ms, p95 20.4 ms (40 of 40 given notes)\n\ntests/perf/semantic.test.ts:\nsemantic global median: 16.4 ms\n\n 3403 pass\n 4 skip\n 0 fail\n 26 snapshots, 40214 expect() calls\nRan 3407 tests across 218 files. [209.63s]",
+      "fingerprint": "sha256:4e2086ed585d473b5fd5e3b27d1fe9547b6e77957afefe8cd9c546756dbb8505"
     },
     {
       "gate": "lint",
@@ -388,10 +398,10 @@
       "exit": 1,
       "status": "pass",
       "durationMs": 93,
-      "at": "2026-11-12T20:50:23.305Z",
-      "log": "logs/lint-_-1794516623306.txt",
+      "at": "2026-11-12T20:58:24.835Z",
+      "log": "logs/lint-_-1794517104835.txt",
       "tail": "$ biome check .\nChecked 0 files in 4ms. No fixes applied.\ncheck ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n  × No files were processed in the specified paths.\n  \n  i Check your biome.json or biome.jsonc to ensure the paths are not ignored by the configuration.\n  \n  i These paths were provided but ignored:\n  \n  - .\n  \n\nerror: script \"lint\" exited with code 1",
-      "fingerprint": "sha256:266f7111b9ee7c23f266542ec0bfa492f139bfe3f6e5a880c34af23bf43aeeba",
+      "fingerprint": "sha256:4e2086ed585d473b5fd5e3b27d1fe9547b6e77957afefe8cd9c546756dbb8505",
       "reason": "1 file with problems, none changed by this item (pre-existing)",
       "problems": {
         "touched": [],
@@ -406,17 +416,17 @@
       "confirmed": true,
       "exit": 0,
       "status": "pass",
-      "durationMs": 372,
-      "at": "2026-11-12T20:50:23.399Z",
-      "log": "logs/typecheck-_-1794516623399.txt",
+      "durationMs": 378,
+      "at": "2026-11-12T20:58:24.928Z",
+      "log": "logs/typecheck-_-1794517104928.txt",
       "tail": "$ tsc --noEmit",
-      "fingerprint": "sha256:266f7111b9ee7c23f266542ec0bfa492f139bfe3f6e5a880c34af23bf43aeeba"
+      "fingerprint": "sha256:4e2086ed585d473b5fd5e3b27d1fe9547b6e77957afefe8cd9c546756dbb8505"
     }
   ],
   "verdict": "unproven",
   "unproven": [
-    "judgement gate code-quality not proven (4 findings)",
-    "judgement gate test-quality not proven (3 findings)"
+    "judgement gate code-quality not run on the current code",
+    "judgement gate test-quality not run on the current code"
   ],
   "verifications": [
     {
