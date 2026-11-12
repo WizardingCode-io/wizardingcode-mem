@@ -777,6 +777,26 @@
       "tokensFrom": "transcript",
       "model": "claude-opus-5-5",
       "file": "review/ruling.json"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "aeeae7c5a252b6c2b",
+      "at": "2026-11-12T22:40:06.654Z",
+      "tokens": 190384,
+      "tokensFrom": "transcript",
+      "model": "claude-fable-5-2",
+      "file": "conclave/lead-security.delivery-reply.md",
+      "team": "security"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "ad376a6610d3a717f",
+      "at": "2026-11-12T22:40:09.505Z",
+      "tokens": 209892,
+      "tokensFrom": "transcript",
+      "model": "claude-fable-5-2",
+      "file": "conclave/lead-qa.delivery-reply.md",
+      "team": "qa"
     }
   ],
   "judgement": [
