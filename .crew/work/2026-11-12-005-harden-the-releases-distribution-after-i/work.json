@@ -10,7 +10,7 @@
   "riskAreas": [
     "infra"
   ],
-  "phase": "gate",
+  "phase": "learn",
   "awaiting": null,
   "criteria": [
     {
@@ -70,7 +70,7 @@
   "skips": [],
   "baseCommit": "e4f859635e6f95949ce6a7b5a21605af66a0fcee",
   "createdAt": "2026-11-12T17:10:23.385Z",
-  "updatedAt": "2026-11-12T17:52:17.789Z",
+  "updatedAt": "2026-11-12T17:52:23.727Z",
   "specReview": true,
   "kind": "feature",
   "kindFrom": "work_type feature",
@@ -181,7 +181,9 @@
     "plan": "2026-11-12T17:27:23.307Z",
     "spec-review": "2026-11-12T17:27:27.331Z",
     "build": "2026-11-12T17:35:55.293Z",
-    "gate": "2026-11-12T17:47:45.170Z"
+    "gate": "2026-11-12T17:47:45.170Z",
+    "deliver": "2026-11-12T17:52:18.189Z",
+    "learn": "2026-11-12T17:52:23.553Z"
   },
   "removedCriteria": [
     {
@@ -502,5 +504,12 @@
       "reason": "judgement gate code-quality not run",
       "kind": "role"
     }
-  ]
+  ],
+  "learned": {
+    "at": "2026-11-12T17:52:23.727Z",
+    "entries": [
+      "K-391"
+    ],
+    "confirmed": []
+  }
 }
