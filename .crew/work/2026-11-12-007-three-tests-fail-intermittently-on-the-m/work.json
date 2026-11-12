@@ -10,7 +10,7 @@
   ],
   "riskAreas": [],
   "phase": "gate",
-  "awaiting": "role",
+  "awaiting": null,
   "criteria": [
     {
       "id": "AC-6",
@@ -64,7 +64,7 @@
   "skips": [],
   "baseCommit": "e4f859635e6f95949ce6a7b5a21605af66a0fcee",
   "createdAt": "2026-11-12T19:49:20.046Z",
-  "updatedAt": "2026-11-12T20:58:25.505Z",
+  "updatedAt": "2026-11-12T21:03:21.377Z",
   "kind": "issue",
   "kindFrom": "work_type fix",
   "knowledge": {
@@ -280,9 +280,9 @@
     }
   ],
   "rounds": {
-    "judgement": 1,
+    "judgement": 2,
     "validation": 3,
-    "judgementCode": "sha256:266f7111b9ee7c23f266542ec0bfa492f139bfe3f6e5a880c34af23bf43aeeba"
+    "judgementCode": "sha256:9dc31ec764575a3c7a16b844095728e1a0e2ff9d7d0c3ddd91cc2a24bd7d59cf"
   },
   "continued": [
     {
@@ -313,6 +313,21 @@
     {
       "at": "2026-11-12T20:52:20.682Z",
       "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-12T21:02:28.361Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-12T21:02:55.028Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-12T21:03:01.905Z",
+      "reason": "judgement gate code-quality not run on the current code",
       "kind": "role"
     }
   ]

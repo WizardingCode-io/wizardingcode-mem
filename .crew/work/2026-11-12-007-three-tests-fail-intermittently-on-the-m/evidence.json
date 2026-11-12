@@ -1,5 +1,5 @@
 {
-  "fingerprint": "sha256:4e2086ed585d473b5fd5e3b27d1fe9547b6e77957afefe8cd9c546756dbb8505",
+  "fingerprint": "sha256:9dc31ec764575a3c7a16b844095728e1a0e2ff9d7d0c3ddd91cc2a24bd7d59cf",
   "tdd": [
     {
       "criterion": "AC-11",
@@ -341,11 +341,11 @@
       "confirmed": true,
       "exit": 0,
       "status": "pass",
-      "durationMs": 38,
-      "at": "2026-11-12T20:54:51.195Z",
+      "durationMs": 36,
+      "at": "2026-11-12T20:58:39.981Z",
       "log": null,
       "tail": "no secrets found in the change",
-      "fingerprint": "sha256:4e2086ed585d473b5fd5e3b27d1fe9547b6e77957afefe8cd9c546756dbb8505"
+      "fingerprint": "sha256:9dc31ec764575a3c7a16b844095728e1a0e2ff9d7d0c3ddd91cc2a24bd7d59cf"
     },
     {
       "gate": "prose",
@@ -355,11 +355,11 @@
       "confirmed": true,
       "exit": 0,
       "status": "pass",
-      "durationMs": 40,
-      "at": "2026-11-12T20:54:51.233Z",
+      "durationMs": 39,
+      "at": "2026-11-12T20:58:40.017Z",
       "log": null,
       "tail": "no chatbot artefacts in the change",
-      "fingerprint": "sha256:4e2086ed585d473b5fd5e3b27d1fe9547b6e77957afefe8cd9c546756dbb8505"
+      "fingerprint": "sha256:9dc31ec764575a3c7a16b844095728e1a0e2ff9d7d0c3ddd91cc2a24bd7d59cf"
     },
     {
       "gate": "build",
@@ -369,11 +369,11 @@
       "confirmed": true,
       "exit": 0,
       "status": "pass",
-      "durationMs": 2562,
-      "at": "2026-11-12T20:54:51.273Z",
-      "log": "logs/build-_-1794516891273.txt",
-      "tail": "$ bun run ui:build && bun scripts/build.ts\n$ vite build --config ui/vite.config.ts\nvite v8.3.3 building client environment for production...\ntransforming...\n\n/assets/unbounded-variable.woff2 referenced in /assets/unbounded-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/instrument-sans-variable.woff2 referenced in /assets/instrument-sans-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/jetbrains-mono-variable.woff2 referenced in /assets/jetbrains-mono-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n✓ 851 modules transformed.\nrendering chunks...\n[plugin vite:singlefile] \n\n[plugin vite:singlefile] Inlining: index-BdJDDbwQ.js\n[plugin vite:singlefile] Inlining: style-CMyPmnXo.css\nsrc/ui/dist/index.html  1,228.95 kB\n\n✓ built in 744ms\n✓ wizardingcode-mem-darwin-arm64  67.9 MB\n✓ wizardingcode-mem-darwin-x64  74.7 MB\n✓ wizardingcode-mem-linux-x64  86.1 MB\n✓ wizardingcode-mem-linux-arm64  86.0 MB\n✓ wizardingcode-mem-windows-x64.exe  90.6 MB",
-      "fingerprint": "sha256:4e2086ed585d473b5fd5e3b27d1fe9547b6e77957afefe8cd9c546756dbb8505"
+      "durationMs": 2517,
+      "at": "2026-11-12T20:58:40.056Z",
+      "log": "logs/build-_-1794517120056.txt",
+      "tail": "$ bun run ui:build && bun scripts/build.ts\n$ vite build --config ui/vite.config.ts\nvite v8.3.3 building client environment for production...\ntransforming...\n\n/assets/unbounded-variable.woff2 referenced in /assets/unbounded-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/instrument-sans-variable.woff2 referenced in /assets/instrument-sans-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/jetbrains-mono-variable.woff2 referenced in /assets/jetbrains-mono-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n✓ 851 modules transformed.\nrendering chunks...\n[plugin vite:singlefile] \n\n[plugin vite:singlefile] Inlining: index-BdJDDbwQ.js\n[plugin vite:singlefile] Inlining: style-CMyPmnXo.css\nsrc/ui/dist/index.html  1,228.95 kB\n\n✓ built in 717ms\n✓ wizardingcode-mem-darwin-arm64  67.9 MB\n✓ wizardingcode-mem-darwin-x64  74.7 MB\n✓ wizardingcode-mem-linux-x64  86.1 MB\n✓ wizardingcode-mem-linux-arm64  86.0 MB\n✓ wizardingcode-mem-windows-x64.exe  90.6 MB",
+      "fingerprint": "sha256:9dc31ec764575a3c7a16b844095728e1a0e2ff9d7d0c3ddd91cc2a24bd7d59cf"
     },
     {
       "gate": "test",
@@ -383,11 +383,11 @@
       "confirmed": true,
       "exit": 0,
       "status": "pass",
-      "durationMs": 210969,
-      "at": "2026-11-12T20:54:53.866Z",
-      "log": "logs/test-_-1794516893866.txt",
-      "tail": "heuristic precision 100%  recall 100%  kind 83%\ntypesafe  precision 85%  recall 94%  kind 88%  wrongly kept: en-none-obvious-from-code, en-none-general-knowledge, pt-none-your-turn  missed: en-change-json-flag\n\ntests/golden/search.test.ts:\ntop 5: 35/44 → 39/44; Portuguese of English: 1/8 → 4/8\nsemantic-only results for unrelated queries: 29/43\n\ntests/golden/retrieval.test.ts:\nrecall@5: 19/24 — missed: redact-first, pt-lingua, pt-cursor, ts-extension, hook-runs\nprecision: 19/21 notes given were the expected ones\nfalse injections: 0/23\n\ntests/perf/budgets.test.ts:\nrebuild write transaction, 2000 entries: median 26.9 ms over 5 (26.9, 27.9, 20.7, 29.6, 23.5)\nprompt: p50 65.5 ms, p95 68.3 ms\nsession-start: p50 21.1 ms, p95 25.1 ms\nturn-end: p50 15.1 ms, p95 16.3 ms\nfile-read: p50 17.7 ms, p95 19.0 ms\ntool-failed: p50 23.5 ms, p95 25.4 ms\nqwen prompt: p50 64.6 ms, p95 69.3 ms\nqwen session-start: p50 19.8 ms, p95 21.0 ms\ndroid prompt: p50 64.0 ms, p95 66.4 ms\ndroid session-start: p50 20.6 ms, p95 21.6 ms\ncopilot session-start: p50 21.2 ms, p95 23.1 ms\ncopilot prompt (capture only): p50 15.6 ms, p95 16.6 ms\nantigravity pre-invocation: p50 21.2 ms, p95 22.2 ms\nlinked prompt: p50 30.8 ms, p95 35.4 ms (30 of 30 with a note from outside)\nlinked session-start: p50 21.4 ms, p95 22.9 ms\n\ntests/perf/large-project.test.ts:\nlarge project prompt: p50 18.5 ms, p95 20.4 ms (40 of 40 given notes)\n\ntests/perf/semantic.test.ts:\nsemantic global median: 16.4 ms\n\n 3403 pass\n 4 skip\n 0 fail\n 26 snapshots, 40214 expect() calls\nRan 3407 tests across 218 files. [209.63s]",
-      "fingerprint": "sha256:4e2086ed585d473b5fd5e3b27d1fe9547b6e77957afefe8cd9c546756dbb8505"
+      "durationMs": 212245,
+      "at": "2026-11-12T20:58:42.602Z",
+      "log": "logs/test-_-1794517122602.txt",
+      "tail": "heuristic precision 100%  recall 100%  kind 83%\ntypesafe  precision 85%  recall 94%  kind 88%  wrongly kept: en-none-obvious-from-code, en-none-general-knowledge, pt-none-your-turn  missed: en-change-json-flag\n\ntests/golden/search.test.ts:\ntop 5: 35/44 → 39/44; Portuguese of English: 1/8 → 4/8\nsemantic-only results for unrelated queries: 29/43\n\ntests/golden/retrieval.test.ts:\nrecall@5: 19/24 — missed: redact-first, pt-lingua, pt-cursor, ts-extension, hook-runs\nprecision: 19/21 notes given were the expected ones\nfalse injections: 0/23\n\ntests/perf/budgets.test.ts:\nrebuild write transaction, 2000 entries: median 29.4 ms over 5 (33.1, 29.4, 22.6, 33.5, 24.3)\nprompt: p50 64.7 ms, p95 68.8 ms\nsession-start: p50 20.5 ms, p95 22.7 ms\nturn-end: p50 14.6 ms, p95 16.3 ms\nfile-read: p50 17.5 ms, p95 18.9 ms\ntool-failed: p50 23.4 ms, p95 24.8 ms\nqwen prompt: p50 66.2 ms, p95 68.8 ms\nqwen session-start: p50 21.5 ms, p95 22.9 ms\ndroid prompt: p50 65.3 ms, p95 67.5 ms\ndroid session-start: p50 21.1 ms, p95 23.4 ms\ncopilot session-start: p50 20.6 ms, p95 28.8 ms\ncopilot prompt (capture only): p50 15.1 ms, p95 16.9 ms\nantigravity pre-invocation: p50 20.6 ms, p95 22.6 ms\nlinked prompt: p50 30.6 ms, p95 37.8 ms (30 of 30 with a note from outside)\nlinked session-start: p50 21.8 ms, p95 23.7 ms\n\ntests/perf/large-project.test.ts:\nlarge project prompt: p50 17.9 ms, p95 20.3 ms (40 of 40 given notes)\n\ntests/perf/semantic.test.ts:\nsemantic global median: 16.1 ms\n\n 3403 pass\n 4 skip\n 0 fail\n 26 snapshots, 40214 expect() calls\nRan 3407 tests across 218 files. [210.94s]",
+      "fingerprint": "sha256:9dc31ec764575a3c7a16b844095728e1a0e2ff9d7d0c3ddd91cc2a24bd7d59cf"
     },
     {
       "gate": "lint",
@@ -397,11 +397,11 @@
       "confirmed": true,
       "exit": 1,
       "status": "pass",
-      "durationMs": 93,
-      "at": "2026-11-12T20:58:24.835Z",
-      "log": "logs/lint-_-1794517104835.txt",
+      "durationMs": 91,
+      "at": "2026-11-12T21:02:14.847Z",
+      "log": "logs/lint-_-1794517334848.txt",
       "tail": "$ biome check .\nChecked 0 files in 4ms. No fixes applied.\ncheck ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n  × No files were processed in the specified paths.\n  \n  i Check your biome.json or biome.jsonc to ensure the paths are not ignored by the configuration.\n  \n  i These paths were provided but ignored:\n  \n  - .\n  \n\nerror: script \"lint\" exited with code 1",
-      "fingerprint": "sha256:4e2086ed585d473b5fd5e3b27d1fe9547b6e77957afefe8cd9c546756dbb8505",
+      "fingerprint": "sha256:9dc31ec764575a3c7a16b844095728e1a0e2ff9d7d0c3ddd91cc2a24bd7d59cf",
       "reason": "1 file with problems, none changed by this item (pre-existing)",
       "problems": {
         "touched": [],
@@ -416,18 +416,15 @@
       "confirmed": true,
       "exit": 0,
       "status": "pass",
-      "durationMs": 378,
-      "at": "2026-11-12T20:58:24.928Z",
-      "log": "logs/typecheck-_-1794517104928.txt",
+      "durationMs": 355,
+      "at": "2026-11-12T21:02:14.940Z",
+      "log": "logs/typecheck-_-1794517334940.txt",
       "tail": "$ tsc --noEmit",
-      "fingerprint": "sha256:4e2086ed585d473b5fd5e3b27d1fe9547b6e77957afefe8cd9c546756dbb8505"
+      "fingerprint": "sha256:9dc31ec764575a3c7a16b844095728e1a0e2ff9d7d0c3ddd91cc2a24bd7d59cf"
     }
   ],
-  "verdict": "unproven",
-  "unproven": [
-    "judgement gate code-quality not run on the current code",
-    "judgement gate test-quality not run on the current code"
-  ],
+  "verdict": "proven",
+  "unproven": [],
   "verifications": [
     {
       "what": "knowledge",
@@ -827,81 +824,72 @@
       "tokensFrom": "transcript",
       "model": "claude-opus-5-5",
       "file": "review/ruling.json"
+    },
+    {
+      "agent": "review-code-quality",
+      "agentId": "a087bd04f1dac37bf",
+      "at": "2026-11-12T21:02:38.767Z",
+      "tokens": 160070,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/code-quality.findings.md",
+      "team": "backend"
+    },
+    {
+      "agent": "review-test-quality",
+      "agentId": "a2e432affd7208b39",
+      "at": "2026-11-12T21:02:54.959Z",
+      "tokens": 180470,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/test-quality.findings.md",
+      "team": "qa"
+    },
+    {
+      "agent": "judge",
+      "agentId": "a004f00845a054807",
+      "at": "2026-11-12T21:03:15.298Z",
+      "tokens": 141748,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/ruling.json"
     }
   ],
   "judgement": [
     {
       "gate": "code-quality",
-      "verdict": "not-proven",
+      "verdict": "proven",
       "reviewer": "review-code-quality",
       "judge": "judge",
       "findings": [
         {
-          "file": "tests/integration/team-mirror-maintenance.test.ts",
-          "line": 55,
-          "text": "Upheld as a defect under question 2: the diff writes the same logic twice. The `recordArgsTo` parser `callsIn` appears here and again in tests/unit/knowledge-maintenance.test.ts (`callsIn`, beside it). The `GIT_TRACE` line parser is inlined in this file's first test and appears again as `tracedCommands` in knowledge-maintenance.test.ts. The check that each commit is followed by maintenance (`commands.forEach(... index % 2 ...)`) is also written in both new test files. These are multi-line parsers and checks, not boilerplate. The diff adds `traceTo` to tests/helpers/stub-git.ts, which already owns both record formats, so one reader there would replace the copies.",
-          "severity": "defect",
-          "verification": {
-            "status": "verified",
-            "confidence": 0.97
-          }
-        },
-        {
-          "file": "src/modules/knowledge/repo.ts",
-          "line": 958,
-          "text": "Kept as an advisory (questions 10 and 11, precision of a new comment; no old fact is dropped). The `maintain` docstring describes 'a lease lost at the call's renewal' as met by the caller at its next call. That holds only for the store's `KnowledgeError`. The mirror's `MirrorLeaseLostError` (src/team/mirror.ts:99, extends Error, thrown from the renew at mirror.ts:395) falls to the `logError` branch and is logged as an error of another kind. The comment should name the two cases separately.",
-          "severity": "advisory"
-        },
-        {
-          "file": "src/modules/knowledge/repo.ts",
-          "line": 970,
-          "text": "Kept as an advisory (question 10): the comment 'one call apart, nothing else' does not say why the maintenance call carries the commit's identity, when `maintenance run` writes no commit. One clause giving the reason would read better.",
-          "severity": "advisory"
-        },
-        {
           "file": "tests/integration/team-mirror.test.ts",
           "line": 522,
-          "text": "Lowered to an advisory as debt outside the change: the same record parser (`.split(\"\\t\\n\")`) is already inlined here and at line 570, on lines this diff did not write. The single reader suggested for the defect at team-mirror-maintenance.test.ts:55 would absorb it too.",
+          "text": "Lowered to an advisory as debt outside the change. This older test parses the stub's `recordArgsTo` file inline here and again at line 570, on lines this diff did not write. `recordedCalls` in tests/helpers/stub-git.ts now does the same parsing. The round 1 duplication defect is resolved: in the regenerated diff, both new test files import `recordedCalls`, `tracedCommands` and `commitsEachMaintained` from tests/helpers/stub-git.ts (diff.patch lines 148-175, 208, 345). The reviewer raised no finding in round 2.",
           "severity": "advisory",
           "outside": true
         }
       ],
-      "tokens": 107410,
-      "at": "2026-11-12T20:53:09.748Z",
-      "fingerprint": "sha256:266f7111b9ee7c23f266542ec0bfa492f139bfe3f6e5a880c34af23bf43aeeba"
+      "tokens": 230944,
+      "at": "2026-11-12T21:03:21.301Z",
+      "fingerprint": "sha256:9dc31ec764575a3c7a16b844095728e1a0e2ff9d7d0c3ddd91cc2a24bd7d59cf"
     },
     {
       "gate": "test-quality",
-      "verdict": "not-proven",
+      "verdict": "proven",
       "reviewer": "review-test-quality",
       "judge": "judge",
       "findings": [
         {
           "file": "tests/unit/knowledge-maintenance.test.ts",
-          "line": 233,
-          "text": "Upheld as a defect under question 1. The reviewer cited line 529, a line of diff.patch; the file's own line is 233 (`const paragraphs = adr.split(\"\\n\").filter(...)`). AC-10 is a behavior criterion and requires the ADR's paragraph on what `.git` may hold to say that the housekeeping still runs, started by the runner after a commit and in the foreground. The test checks only that `paragraphs.length >= 2`, which was already true before the change. Only the Known-limits paragraph is checked for 'started by the runner after a commit, in the foreground'. The `.git` paragraph (diff.patch line 21, which the diff does not change) still says only 'in its own housekeeping, removes'. No assertion fails when that clause of AC-10 is reverted or missing.",
-          "severity": "defect",
-          "verification": {
-            "status": "verified",
-            "confidence": 0.96
-          }
-        },
-        {
-          "file": "tests/integration/team-mirror-maintenance.test.ts",
-          "line": 251,
-          "text": "Kept as an advisory (questions 1 and 5). The steal is triggered by the next `now()` read after the second commit. Without the maintenance call, the same steal would happen at the next revision's renewal and the assertions would still pass. The test does fail if the swallowing of the lease error is reverted (commits would be 0, not 1), so AC-12's 'recorded' clause is proven. That the call exists is held by AC-7's trace test.",
-          "severity": "advisory"
-        },
-        {
-          "file": "tests/unit/knowledge-maintenance.test.ts",
-          "line": 479,
-          "text": "Kept as an advisory. AC-13's red under a whole revert is a race: the commit's own detached maintenance may pack before the assertions run. The test does fail every time when the runner's call is removed and the settings are kept. Writing three loose objects where the spec says two is harmless for the `gc.auto=1` threshold.",
+          "line": 492,
+          "text": "Kept as an advisory. Under a whole revert, AC-13's red is a race: the commit's own detached maintenance may pack the objects before the assertions run. The test fails every time when only the runner's call is removed, so a test does fail on reversion of the behaviour. The round 1 AC-10 defect is resolved: the test now finds the paragraph that starts '- A `.git` that holds anything' and asserts it contains 'started by the runner after a commit, in the foreground' (diff.patch lines 544-549). The ADR's lines carrying that phrase are in the diff.",
           "severity": "advisory"
         }
       ],
-      "tokens": 118326,
-      "at": "2026-11-12T20:53:09.748Z",
-      "fingerprint": "sha256:266f7111b9ee7c23f266542ec0bfa492f139bfe3f6e5a880c34af23bf43aeeba"
+      "tokens": 251344,
+      "at": "2026-11-12T21:03:21.301Z",
+      "fingerprint": "sha256:9dc31ec764575a3c7a16b844095728e1a0e2ff9d7d0c3ddd91cc2a24bd7d59cf"
     }
   ]
 }

@@ -169,8 +169,13 @@ describe("git keeps compacting", () => {
     // At least the two written here: an object of the repository's own may fall there too.
     expect(readdirSync(sampled).length).toBeGreaterThanOrEqual(2);
 
-    // The host lowers git's threshold; the runner's own three settings ride on the same call.
-    const host: GitHost = { ...store, extraConfig: ["-c", "gc.auto=1"] };
+    // The host lowers git's thresholds, so that git itself finds work due: `gc.auto` for the
+    // gc task, and the geometric repack's own for the strategy git 2.54 and later use by
+    // default. The runner's three settings ride on the same call.
+    const host: GitHost = {
+      ...store,
+      extraConfig: ["-c", "gc.auto=1", "-c", "maintenance.geometric-repack.auto=1"],
+    };
     writeFileSync(join(repo.path, "entries", "a.md"), "one\n");
     runGit(host, repo.path, ["add", "--", "entries/a.md"], { operation: "test" });
     commitPaths(host, repo, ["entries/a.md"], "test: a", author, "test");

@@ -326,10 +326,10 @@ index 0000000..adf677e
 +});
 diff --git a/tests/unit/knowledge-maintenance.test.ts b/tests/unit/knowledge-maintenance.test.ts
 new file mode 100644
-index 0000000..dc4ecec
+index 0000000..2926254
 --- /dev/null
 +++ b/tests/unit/knowledge-maintenance.test.ts
-@@ -0,0 +1,223 @@
+@@ -0,0 +1,224 @@
 +// No git process outlives the call that started it: a commit starts no maintenance by
 +// itself, and the runner runs git's own maintenance after it, in the foreground.
 +import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -498,7 +498,8 @@ index 0000000..dc4ecec
 +      realGit(repo.path, "hash-object", "-w", file);
 +    }
 +    const sampled = join(repo.path, ".git", "objects", "17");
-+    expect(readdirSync(sampled).length).toBe(2);
++    // At least the two written here: an object of the repository's own may fall there too.
++    expect(readdirSync(sampled).length).toBeGreaterThanOrEqual(2);
 +
 +    // The host lowers git's threshold; the runner's own three settings ride on the same call.
 +    const host: GitHost = { ...store, extraConfig: ["-c", "gc.auto=1"] };
