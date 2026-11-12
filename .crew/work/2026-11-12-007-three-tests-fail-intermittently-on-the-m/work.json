@@ -9,7 +9,7 @@
     "personal data in lines not read for risk (test or excluded): email (tests/unit/knowledge-maintenance.test.ts)"
   ],
   "riskAreas": [],
-  "phase": "gate",
+  "phase": "learn",
   "awaiting": null,
   "criteria": [
     {
@@ -64,7 +64,7 @@
   "skips": [],
   "baseCommit": "e4f859635e6f95949ce6a7b5a21605af66a0fcee",
   "createdAt": "2026-11-12T19:49:20.046Z",
-  "updatedAt": "2026-11-12T21:18:07.466Z",
+  "updatedAt": "2026-11-12T21:19:41.548Z",
   "kind": "issue",
   "kindFrom": "work_type fix",
   "knowledge": {
@@ -134,7 +134,9 @@
     "conclave": "2026-11-12T20:27:06.017Z",
     "plan": "2026-11-12T20:33:32.982Z",
     "build": "2026-11-12T20:33:40.955Z",
-    "gate": "2026-11-12T20:46:25.166Z"
+    "gate": "2026-11-12T20:46:25.166Z",
+    "deliver": "2026-11-12T21:19:41.225Z",
+    "learn": "2026-11-12T21:19:41.350Z"
   },
   "decisions": [
     {
@@ -277,6 +279,28 @@
       "hash": "sha256:cabdfc17929ba39a02f596356dfe55828cd6b60a97283286ae7b3f1e5b25e6e4",
       "fileHash": "sha256:dba80e202a888213709b937ce48efc7efde89dd9c2a447cbaac9fec2afaf01dc",
       "at": "2026-11-12T20:43:00.280Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-qa",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-qa.delivery-reply.md",
+      "hash": "sha256:ff520c9cf236b2a328e5e5a3a2cd9f0dffa42665c3e253d5ba62a72a2405bc80",
+      "fileHash": "sha256:ab8bce9e1de099f9769e546c12e2b8383b9c74710c2abc295927e5fcadcb8d5e",
+      "at": "2026-11-12T21:19:41.038Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-security",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-security.delivery-reply.md",
+      "hash": "sha256:ff520c9cf236b2a328e5e5a3a2cd9f0dffa42665c3e253d5ba62a72a2405bc80",
+      "fileHash": "sha256:7c13e602522f2c9e22f586304203b0483f998489c00cffc1ed72de34f58ae55a",
+      "at": "2026-11-12T21:19:41.096Z"
     }
   ],
   "rounds": {
@@ -353,5 +377,13 @@
       "reason": "judgement gate code-quality not run on the current code",
       "kind": "role"
     }
-  ]
+  ],
+  "learned": {
+    "at": "2026-11-12T21:19:41.548Z",
+    "entries": [
+      "K-398",
+      "K-399"
+    ],
+    "confirmed": []
+  }
 }
