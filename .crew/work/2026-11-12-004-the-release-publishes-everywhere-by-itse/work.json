@@ -1,0 +1,1019 @@
+{
+  "id": "2026-11-12-004-the-release-publishes-everywhere-by-itse",
+  "title": "The release publishes everywhere by itself, and <data dir>/bin has one owner tha",
+  "input": "The release publishes everywhere by itself, and <data dir>/bin has one owner that never moves back (piece 1 of 3 of 2026-11-11-004, its concepts_brief.md goals 1 and 2, decisions D-1 to D-10). The release workflow, after it creates the GitHub release, runs separate jobs, each idempotent ('already at X' is success) and re-runnable for an existing tag: it publishes the npm shim wizardingcode-mem and the OpenCode package wizardingcode-mem-opencode to npm by trusted publishing (the version from the tag, the dist-tag next for a pre-release); it renders the Homebrew formula from a template in this repository with the release's checksums and writes it into the tap homebrew-wizardingcode (the tap holds the only rendered formula); it bumps the two manifests of the marketplace wizardingcode-plugins; and it moves the image's latest tag last, after every other target succeeded. A pre-release moves none of them. The writes to the two other repositories use the fine-grained token MARKETPLACE_TOKEN, whose expiry the workflow checks and warns of a month ahead (D-9). A release that raises the team server's contract does not move the image's latest: the client side ships first and latest follows one release later, checked by the workflow (D-10). The npm shim only moves the staged binary forward (today it re-downloads whenever the versions differ, which downgrades), and wizardingcode-mem install from a channel copy never replaces a newer staged binary with an older one. A new ADR records it; the README and the release notes of the procedure follow.",
+  "type": "feature",
+  "route": "full",
+  "routeReasons": [
+    "risk areas: infra",
+    "personal data in lines not read for risk (test or excluded): email (tests/integration/release-commands.test.ts), email (tests/integration/release-push.test.ts)",
+    "the change's lines name personal data: password (.github/workflows/distribute.yml) and 1 more"
+  ],
+  "riskAreas": [
+    "infra",
+    "personal-data"
+  ],
+  "phase": "learn",
+  "awaiting": null,
+  "criteria": [
+    {
+      "id": "AC-57",
+      "kind": "behavior",
+      "text": "Every pair of tests/fixtures/version-order.ts gets the same answer from olderThan (src/util/version.ts), from the generated JavaScript older() and from the shell older(); 0.9.0-rc.9 is older than 0.9.0-rc.10, and a have that is not a version is older, in all three."
+    },
+    {
+      "id": "AC-58",
+      "kind": "behavior",
+      "text": "The older() in npm/bin/wizardingcode-mem.js equals OLDER_JS byte for byte, and the older() block of scripts/install.sh equals the one in scripts/templates/wizardingcode-mem.sh byte for byte."
+    },
+    {
+      "id": "AC-59",
+      "kind": "behavior",
+      "text": "The npm shim, with a newer binary staged, downloads nothing, runs the staged binary with the arguments and exit code passed through, and prints the one line on standard error; with an older binary staged it downloads the package's version."
+    },
+    {
+      "id": "AC-60",
+      "kind": "behavior",
+      "text": "stageBinary keeps a staged binary of a higher version and returns it as kept; it replaces a staged binary of an equal or lower version, one that cannot be run, one that exits non-zero on --version, one whose --version output is not a version, and, with force, one of a higher version."
+    },
+    {
+      "id": "AC-61",
+      "kind": "behavior",
+      "text": "wizardingcode-mem install with two agents found and a newer binary staged prints the \"newer … is already in\" line once and hands the install over to the staged binary, which is run once with the same arguments and whose exit code is returned; with --force the staged binary is replaced by the running one, the line is absent, and both agents' hooks point at the staged path."
+    },
+    {
+      "id": "AC-62",
+      "kind": "behavior",
+      "text": "scripts/install.sh --download-only with a newer binary staged leaves it in place and says so; --force anywhere among the arguments replaces it; a staged file that answers something other than a version is replaced."
+    },
+    {
+      "id": "AC-63",
+      "kind": "behavior",
+      "text": "The formula rendered from the template with a version and a checksums.txt holds that version in every URL and each of the four checksums under its platform's block, and no mark; a checksums.txt lacking one of the four names fails, naming it."
+    },
+    {
+      "id": "AC-64",
+      "kind": "behavior",
+      "text": "The marketplace edit changes, in each manifest's text, only the wizardingcode-mem entry's version and ref values and leaves every other byte equal; when either manifest's entry is at a higher version it writes neither and reports it; it fails for an entry whose ref is not a version tag or that is missing."
+    },
+    {
+      "id": "AC-65",
+      "kind": "behavior",
+      "text": "The plan's decision refuses, each with its sentence: a ref other than refs/heads/main; a malformed tag; a tag that does not exist; a tag whose commit is not on main; a tag whose version is not its commit's package.json version; a tag whose tree lacks distribute.yml; a plain tag that is not the highest plain tag, and a pre-release tag that is not the highest tag; a release that does not exist; a draft release; a release that lacks an asset (the sentence names it); an environment release that is missing, and one whose rule is not exactly the branch main. It accepts a plain v0.9.1 while a v0.10.0-rc.1 tag exists, and for an accepted tag gives the version, the tag's commit and whether it is a pre-release. The tag list it is given holds only tags merged into main that are version tags: a v99.0.0 on a branch commit and a vnext tag change no decision."
+    },
+    {
+      "id": "AC-66",
+      "kind": "behavior",
+      "text": "The hold decision is \"held\" when the tag's lowest accepted contract is above the previous plain release's CONTRACT; \"not held\" when it is not, when there is no previous plain release and when the file is missing at it; \"held\", naming the read that failed, when the constants cannot be read at the tag and when the file is present but unreadable at the previous plain release; and \"not held\", marked as released by hand, when it would be held and release_hold is true. The parser's reading of the real src/team/contract.ts equals the CONTRACT and ACCEPTED_CONTRACTS the file exports."
+    },
+    {
+      "id": "AC-67",
+      "kind": "behavior",
+      "text": "The npm decision exits 1 for a package whose version differs from the tag's; reads a non-empty npm view answer as published, an empty answer or E404 as not published and any other failure as an error; builds npm publish --access public --ignore-scripts, with --tag next for a pre-release and without it for a plain release, and with --dry-run on a dry run; reads a publish refused because the version exists as already published; and adds the trusted-publisher sentence to an authentication failure."
+    },
+    {
+      "id": "AC-68",
+      "kind": "behavior",
+      "text": "The token decision maps no token, 401, 403, 404 and a 200 whose push permission is false each to its failure sentence, 200 with fewer than 30 days left to a warning, and 200 with no expiry header to an \"expiry unknown\" warning and a pass."
+    },
+    {
+      "id": "AC-69",
+      "kind": "behavior",
+      "text": "release.yml: docker's tags carry no latest; publish checks out with fetch-depth: 0; a job distribute needs publish, has actions: write, runs gh workflow run distribute.yml --ref main with the tag, and its run: holds no ${{."
+    },
+    {
+      "id": "AC-70",
+      "kind": "behavior",
+      "text": "distribute.yml: the only trigger is workflow_dispatch with tag, dry_run and release_hold; top-level permissions is empty; one concurrency group, not cancelled; every job runs on ubuntu-latest with timeout-minutes: 15; npm, tap and marketplace name the environment release and plan and latest name none; only npm has id-token: write and only latest has packages: write; the run is named distribute <tag>; latest needs plan, npm, tap and marketplace; tap, marketplace and latest are conditioned on a plain release, latest on no hold and on not being cancelled, with a first step that fails when a needed job did not succeed, and latest's retag step on no dry run; npm's checkout of the release's tree takes its ref from plan's sha output, and no checkout takes inputs.tag."
+    },
+    {
+      "id": "AC-71",
+      "kind": "behavior",
+      "text": "In distribute.yml, no run: script contains ${{; every uses: is pinned to a 40-character commit SHA; every actions/checkout has persist-credentials: false; and secrets.MARKETPLACE_TOKEN appears exactly four times, each in the env: of a step of the jobs tap and marketplace."
+    },
+    {
+      "id": "AC-72",
+      "kind": "behavior",
+      "text": "The writer to another repository, run against a local bare repository: an unchanged tree makes no commit and reports \"already at\"; a changed tree makes one commit wizardingcode-mem <version> and pushes it; a push refused as not fast-forward succeeds after one rebase; a dry run leaves the remote as it was; the git commands and remote URL it builds carry no token, which travels only in the child's environment; and, given a commit the tag no longer names, it refuses before any write, for a lightweight and for an annotated tag."
+    },
+    {
+      "id": "AC-73",
+      "kind": "behavior",
+      "text": "summaryLine gives, for each target and outcome of the summary table, exactly that text, the token's three lines, a failed target's line, the plan's refusal and the \"not moved\" line included; plan writes the three \"skipped: pre-release\" lines for a pre-release, the \"held\" line for a hold and its refusal line when it refuses."
+    },
+    {
+      "id": "AC-74",
+      "kind": "observed",
+      "text": "docs/runbooks/release.md holds the one-time setup in its order (the ruleset on main checked, with one approval to require once a second person has write access; the ruleset on v* tags; the environment's rule before the secret and any secret found there removed; the token with its date noted; the two trusted publishers), the first release's order (the refused automatic run, the dry run and what it does not prove, the real dispatch), what a run shows, the repeat, the repairs (a release that lacks an asset; a tag whose release failed, which blocks the repeat of the release before it; each of the four external writes' failure message), the way back (install --force; a bad release is fixed by a higher version; do not re-run a run whose write was reverted by hand), the release of a hold, and the limits (a third dispatch replaces a pending one; the dist-tag next; shims already published; the release's assets are not tied to the judged commit, with making releases immutable where the repository's settings offer it; latest can be moved outside the workflow)."
+    },
+    {
+      "id": "AC-75",
+      "kind": "observed",
+      "text": "docs/runbooks/team-server.md says latest moves last and may be held, and cites the release runbook.",
+      "supersededBy": {
+        "id": "AC-78",
+        "at": "2026-11-12T16:27:26.529Z"
+      }
+    },
+    {
+      "id": "AC-76",
+      "kind": "observed",
+      "text": "docs/adr/0029-release-distribution.md records the decisions D-1 to D-5 and those carried from 2026-11-11-004, the alternatives and the limits, including that a staged file answering a very high version is replaced only by --force, and that it supersedes the Homebrew row of ADR 0008."
+    },
+    {
+      "id": "AC-77",
+      "kind": "observed",
+      "text": "CLAUDE.md names the two workflows, the scripts under scripts/release/, the environment, the forward-only rule with install --force, the runbook and the ADR.",
+      "supersededBy": {
+        "id": "AC-78",
+        "at": "2026-11-12T16:27:26.592Z"
+      }
+    },
+    {
+      "id": "AC-78",
+      "kind": "behavior",
+      "text": "tests/unit/release-docs.test.ts holds the release's documents to the code: the team runbook and CLAUDE.md cite docs/runbooks/release.md; CLAUDE.md names the two workflows, scripts/release/lib.ts, ADR 0029, install --force and the environment release; every wizardingcode-mem command the release runbook cites is one the CLI knows, with a flag its module names; every repository file it cites exists; and the lines of its 'What a run shows' section are exactly the lines summaryLine can write, none left out."
+    }
+  ],
+  "approvals": [
+    {
+      "what": "spec",
+      "at": "2026-11-12T14:40:27.420Z",
+      "by": "user",
+      "relayed": true
+    }
+  ],
+  "skips": [],
+  "baseCommit": "7b4fbe6a17af158aba92241134bcbc84df2b81da",
+  "createdAt": "2026-11-12T14:20:02.359Z",
+  "updatedAt": "2026-11-12T16:52:37.873Z",
+  "specReview": true,
+  "kind": "feature",
+  "kindFrom": "work_type feature",
+  "knowledge": {
+    "readAt": "2026-11-12T14:20:02.373Z",
+    "listed": [
+      "K-363",
+      "K-383",
+      "K-376",
+      "K-371",
+      "K-319",
+      "K-375",
+      "K-335",
+      "K-382",
+      "K-381",
+      "K-372"
+    ]
+  },
+  "priority": "high",
+  "seats": [
+    {
+      "role": "researcher",
+      "team": "researchers",
+      "kind": "debate",
+      "reason": "full route"
+    },
+    {
+      "role": "review-code-quality",
+      "team": "backend",
+      "kind": "gate",
+      "gate": "code-quality",
+      "reason": "full route"
+    },
+    {
+      "role": "review-test-quality",
+      "team": "qa",
+      "kind": "gate",
+      "gate": "test-quality",
+      "reason": "full route"
+    },
+    {
+      "role": "review-security",
+      "team": "security",
+      "kind": "gate",
+      "gate": "security",
+      "reason": "full route"
+    },
+    {
+      "role": "review-risk",
+      "team": "architects",
+      "kind": "gate",
+      "gate": "risk",
+      "reason": "full route"
+    },
+    {
+      "role": "review-architecture",
+      "team": "architects",
+      "kind": "gate",
+      "gate": "architecture",
+      "reason": "full route"
+    },
+    {
+      "role": "review-infra",
+      "team": "devops",
+      "kind": "gate",
+      "gate": "infra",
+      "reason": "risk area infra"
+    },
+    {
+      "role": "lead-qa",
+      "team": "qa",
+      "kind": "lead",
+      "reason": "full route"
+    },
+    {
+      "role": "lead-security",
+      "team": "security",
+      "kind": "lead",
+      "reason": "full route"
+    },
+    {
+      "role": "lead-architects",
+      "team": "architects",
+      "kind": "lead",
+      "reason": "full route"
+    },
+    {
+      "role": "lead-devops",
+      "team": "devops",
+      "kind": "lead",
+      "reason": "risk area infra"
+    },
+    {
+      "role": "judge",
+      "team": null,
+      "kind": "debate",
+      "reason": "a gate is planned"
+    }
+  ],
+  "primaryTeam": "backend",
+  "runtimes": [
+    "claude"
+  ],
+  "phaseAt": {
+    "understand": "2026-11-12T14:20:46.685Z",
+    "specify": "2026-11-12T14:27:30.336Z",
+    "conclave": "2026-11-12T14:40:27.537Z",
+    "plan": "2026-11-12T14:40:33.373Z",
+    "spec-review": "2026-11-12T14:43:18.542Z",
+    "build": "2026-11-12T15:49:15.710Z",
+    "gate": "2026-11-12T16:11:29.302Z",
+    "deliver": "2026-11-12T16:52:37.583Z",
+    "learn": "2026-11-12T16:52:37.704Z"
+  },
+  "decisions": [
+    {
+      "id": "D-1",
+      "question": "The workflow's shape: one release.yml with a plan job and a workflow_dispatch repeat, or release.yml as it is starting a separate dispatch-only distribute.yml (npm, tap, marketplace, latest) whose token and npm publish sit under a GitHub environment 'release' restricted to main?",
+      "default": "The separate distribute.yml under the environment 'release': no skip conditions that fail green, and a dispatch from an edited branch cannot reach the token or the npm publish.",
+      "answer": "The separate distribute.yml: release.yml as it is, starting a dispatch-only distribute.yml with the tag; the token and the npm publish under a GitHub environment 'release' restricted to main. (the person, 2026-11-12: chose 'distribute.yml separado e protegido', the default)",
+      "at": "2026-11-12T14:27:30.148Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-2",
+      "question": "Where the contract rule for the image's latest lives and what it tests: in piece 3 with the server's upgrader; in this piece corrected (latest held when the release's lowest accepted contract is above the previous plain release's CONTRACT, with a dispatch input that releases the hold); or in this piece as D-10 of 2026-11-11-004 worded it (held on any rise of CONTRACT until the next release)?",
+      "default": "In piece 3, with the upgrader that reads latest; this piece only moves latest last and never lower.",
+      "answer": "In this piece, corrected: latest is held when the release's lowest accepted contract is above the previous plain release's CONTRACT, with a dispatch input that releases the hold. (the person, 2026-11-12: chose 'Já na peça 1, corrigida', against the default)",
+      "at": "2026-11-12T14:27:30.206Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-3",
+      "question": "The weekly scheduled check of the token (token.yml, door.ts): keep it with its limits written, or remove it and leave the check on the release run (a named failure, a warning under 30 days) with GitHub's own expiry email and the date noted at creation as the advance notice?",
+      "default": "Keep the weekly check, with its limits written (D-9 of 2026-11-11-004 asked for a warning a month ahead).",
+      "answer": "Remove the weekly check: the release run's check stays (a named failure, a warning under 30 days); the advance notice is GitHub's expiry email and the date noted when the token is created. (the person, 2026-11-12: chose 'Retirar a verificação semanal', against the default)",
+      "at": "2026-11-12T14:56:28.617Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-4",
+      "question": "A ruleset that reserves creating, updating and deleting v* tags to admins: a mandatory step of the one-time setup, or an optional suggestion in the runbook?",
+      "default": "Mandatory: it is the second barrier behind the workflow's own checks, and the only one for the image's latest.",
+      "answer": "Mandatory in the one-time setup; the workflow still checks that the tag is on main and counts only tags on main. (the person, 2026-11-12: chose 'Obrigatório', the default)",
+      "at": "2026-11-12T14:56:28.678Z",
+      "by": "user",
+      "relayed": true
+    },
+    {
+      "id": "D-5",
+      "question": "The ruleset on main requires a pull request and three status checks but zero approvals (read 2026-11-12): write that limit into the spec and the runbook (the barrier is a pull request with green checks; require one approval when a second person has write access), or require one approval now as a setup step?",
+      "default": "Write the limit; require an approval when a second person has write access.",
+      "answer": "Write the limit: the barrier is a pull request with green checks, which stops access from a branch or a tag, not someone who can merge to main; the runbook says to require one approval when a second person has write access. (the person, 2026-11-12: chose 'Escrever o limite', the default)",
+      "at": "2026-11-12T15:46:58.208Z",
+      "by": "user",
+      "relayed": true
+    }
+  ],
+  "checklists": [
+    {
+      "kind": "sync",
+      "paths": [
+        "/Users/andreagroferreira/.local/share/wizardingcode-developer-crew/skills/crew/checklists/sync.md"
+      ],
+      "at": "2026-11-12T14:30:58.092Z"
+    },
+    {
+      "kind": "auth",
+      "paths": [
+        "/Users/andreagroferreira/.local/share/wizardingcode-developer-crew/skills/crew/checklists/auth.md"
+      ],
+      "at": "2026-11-12T14:30:58.148Z"
+    }
+  ],
+  "knowledgeFiles": [],
+  "knowledgeLabels": [],
+  "validations": [
+    {
+      "what": "spec",
+      "by": "lead-qa",
+      "verdict": "returned",
+      "returns": 7,
+      "round": 1,
+      "file": "conclave/lead-qa.md",
+      "hash": "sha256:2133f685406eff1b5ea70893d5c8d3c9ff299301181313bf6a9f7b3de25712fb",
+      "fileHash": "sha256:52ecb4313fc392fba7529e792325441b8888960040dd42aa8043de1e1ef109ff",
+      "at": "2026-11-12T14:34:30.345Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-security",
+      "verdict": "returned",
+      "returns": 5,
+      "round": 1,
+      "file": "conclave/lead-security.md",
+      "hash": "sha256:2133f685406eff1b5ea70893d5c8d3c9ff299301181313bf6a9f7b3de25712fb",
+      "fileHash": "sha256:dcafebffff9c5cace2c38b48cb208e30bbcf3759a51ddfe303438b51e0e930ae",
+      "at": "2026-11-12T14:34:30.403Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-architects",
+      "verdict": "returned",
+      "returns": 2,
+      "round": 1,
+      "file": "conclave/lead-architects.md",
+      "hash": "sha256:2133f685406eff1b5ea70893d5c8d3c9ff299301181313bf6a9f7b3de25712fb",
+      "fileHash": "sha256:a3fcc78d99a437d41b7aed1c4fea783d787958896b10eb7242ad347bd6598c09",
+      "at": "2026-11-12T14:34:30.460Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-devops",
+      "verdict": "returned",
+      "returns": 5,
+      "round": 1,
+      "file": "conclave/lead-devops.md",
+      "hash": "sha256:2133f685406eff1b5ea70893d5c8d3c9ff299301181313bf6a9f7b3de25712fb",
+      "fileHash": "sha256:2e1384fd2e3642e0ed89e90aef55b848fa03bd6f5b8cdbca63fbfe356b3775cd",
+      "at": "2026-11-12T14:34:30.518Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-qa",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 2,
+      "file": "conclave/lead-qa-reply.md",
+      "hash": "sha256:819171cd442883ff338624ab87e98873360c27e4bcda2fd0e8f8398e5414f31a",
+      "fileHash": "sha256:e6a975ccd6a5e5ef32952b4f90dfc7be7f92d31489fe3405958674adbaa11d37",
+      "at": "2026-11-12T14:37:57.273Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-devops",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 2,
+      "file": "conclave/lead-devops-reply.md",
+      "hash": "sha256:819171cd442883ff338624ab87e98873360c27e4bcda2fd0e8f8398e5414f31a",
+      "fileHash": "sha256:2c988fa18b497e9469c8862e304f1151efb82b6dc9b6b08c973ebcb6b4c15820",
+      "at": "2026-11-12T14:37:57.327Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-architects",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 2,
+      "file": "conclave/lead-architects-reply.md",
+      "hash": "sha256:819171cd442883ff338624ab87e98873360c27e4bcda2fd0e8f8398e5414f31a",
+      "fileHash": "sha256:0ae20d9a3c24ab9e0dff9645cd7a777ee2680ef7f14342bee77d7fa883c5b981",
+      "at": "2026-11-12T14:38:04.137Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-security",
+      "verdict": "returned",
+      "returns": 1,
+      "round": 2,
+      "file": "conclave/lead-security-reply.md",
+      "hash": "sha256:819171cd442883ff338624ab87e98873360c27e4bcda2fd0e8f8398e5414f31a",
+      "fileHash": "sha256:58ab78c35b860763342eaa528b02565da04781f33f44a96d977b304707530b85",
+      "at": "2026-11-12T14:38:22.330Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-security",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 3,
+      "file": "conclave/lead-security-reply.md",
+      "hash": "sha256:8b1fa7cbb658015b9b775c4406b26f72fe60928494588135b91f9e029eeb8fd4",
+      "fileHash": "sha256:a1680c25fefe603071bab05e3303e6803df1e2a4295eda132d78e91fa7020005",
+      "at": "2026-11-12T14:40:19.562Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-qa",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 3,
+      "file": "conclave/lead-qa-reply.md",
+      "hash": "sha256:8b1fa7cbb658015b9b775c4406b26f72fe60928494588135b91f9e029eeb8fd4",
+      "fileHash": "sha256:9ff53e8c9e10ff7705429c98ba2f4ffdd74f1b1b592635529debaa18f289a1b1",
+      "at": "2026-11-12T14:40:19.615Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-devops",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 3,
+      "file": "conclave/lead-devops-reply.md",
+      "hash": "sha256:8b1fa7cbb658015b9b775c4406b26f72fe60928494588135b91f9e029eeb8fd4",
+      "fileHash": "sha256:654ea17f5dab029bbae72e7d84462f4508911b646603adee7d7b3592694eb815",
+      "at": "2026-11-12T14:40:19.670Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-architects",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 3,
+      "file": "conclave/lead-architects-reply.md",
+      "hash": "sha256:8b1fa7cbb658015b9b775c4406b26f72fe60928494588135b91f9e029eeb8fd4",
+      "fileHash": "sha256:57bb417e23be4f6492b582981f455143c61f2990320a7a418ca105909be7ff1e",
+      "at": "2026-11-12T14:40:27.365Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-security",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-security.delivery.md",
+      "hash": "sha256:f84f2d0d929ec571f71dc68054444eefd259511b586b72de031afa51f06ff035",
+      "fileHash": "sha256:823d62f0aad3c1f141cce17fa054f3af6e6db78aa58be4ddc7f51ef9b8d22278",
+      "at": "2026-11-12T16:40:04.793Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-qa",
+      "verdict": "returned",
+      "returns": 1,
+      "round": 1,
+      "file": "conclave/lead-qa.delivery.md",
+      "hash": "sha256:f84f2d0d929ec571f71dc68054444eefd259511b586b72de031afa51f06ff035",
+      "fileHash": "sha256:195031a06d6b0d04e657432a8c6b68dd51bf487228ff0b6b2087144cf9a97f16",
+      "at": "2026-11-12T16:40:04.850Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-architects",
+      "verdict": "returned",
+      "returns": 2,
+      "round": 1,
+      "file": "conclave/lead-architects.delivery.md",
+      "hash": "sha256:f84f2d0d929ec571f71dc68054444eefd259511b586b72de031afa51f06ff035",
+      "fileHash": "sha256:9a7b2c0dd256ce542420e0f11425bb40c9742731f33de24db96dad936e2670b8",
+      "at": "2026-11-12T16:40:04.908Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-devops",
+      "verdict": "returned",
+      "returns": 3,
+      "round": 1,
+      "file": "conclave/lead-devops.delivery.md",
+      "hash": "sha256:f84f2d0d929ec571f71dc68054444eefd259511b586b72de031afa51f06ff035",
+      "fileHash": "sha256:e8aaafdfd864f88a6ee3dca02d30e106719fb64ddca397d514b9bfecaa173cee",
+      "at": "2026-11-12T16:40:04.966Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-architects",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 2,
+      "file": "conclave/lead-architects.delivery-reply.md",
+      "hash": "sha256:86f7ad96ab943b005d1fbf41ae3c5c4f5d454b65f5a89668cb620155cd5cd3cb",
+      "fileHash": "sha256:b055ec57cc043a7d7a2abfb8c7fb7a1e09bfcbddde4aac6ff3fd32382958c895",
+      "at": "2026-11-12T16:52:17.098Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-security",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 2,
+      "file": "conclave/lead-security.delivery-reply.md",
+      "hash": "sha256:86f7ad96ab943b005d1fbf41ae3c5c4f5d454b65f5a89668cb620155cd5cd3cb",
+      "fileHash": "sha256:54ab229dce66ba72ed740223c440857944e2fda6d1e02fd4914d94a7d966c2a6",
+      "at": "2026-11-12T16:52:17.150Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-devops",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 2,
+      "file": "conclave/lead-devops.delivery-reply.md",
+      "hash": "sha256:86f7ad96ab943b005d1fbf41ae3c5c4f5d454b65f5a89668cb620155cd5cd3cb",
+      "fileHash": "sha256:9a571519c662d4f005d04051c6524eec7b1e600589701ee7215ec04e6ae5531b",
+      "at": "2026-11-12T16:52:17.204Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-qa",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 2,
+      "file": "conclave/lead-qa.delivery-reply.md",
+      "hash": "sha256:86f7ad96ab943b005d1fbf41ae3c5c4f5d454b65f5a89668cb620155cd5cd3cb",
+      "fileHash": "sha256:717ca7ef468ef84eb0ac0f9cefbd03463d6374d294f5b0f5e096f8f33ad84945",
+      "at": "2026-11-12T16:52:29.625Z"
+    }
+  ],
+  "rounds": {
+    "judgement": 4,
+    "validation": 3,
+    "judgementCode": "sha256:86f7ad96ab943b005d1fbf41ae3c5c4f5d454b65f5a89668cb620155cd5cd3cb"
+  },
+  "removedCriteria": [
+    {
+      "id": "AC-16",
+      "kind": "observed",
+      "text": "docs/runbooks/release.md holds the one-time setup, what a run shows, the repeat, the repair of a release that lacks an asset, the way back and the release of a hold; docs/runbooks/team-server.md says latest moves last and may be held; ADR 0029 records the decisions; CLAUDE.md names the two workflows and the scripts.",
+      "at": "2026-11-12T14:36:48.725Z"
+    },
+    {
+      "id": "AC-15",
+      "kind": "behavior",
+      "text": "token.yml runs on a weekly schedule and on dispatch, in the environment release, with --fail-under 30.",
+      "at": "2026-11-12T14:36:48.783Z"
+    },
+    {
+      "id": "AC-14",
+      "kind": "behavior",
+      "text": "distribute.yml: the only trigger is workflow_dispatch with tag, dry_run and release_hold; top-level permissions is empty; one concurrency group, not cancelled; npm, tap and marketplace name the environment release and plan and latest name none; only npm has id-token: write and only latest has packages: write; latest needs plan, npm, tap and marketplace; tap, marketplace and latest are conditioned on a plain release and latest on no hold; no run: script contains an inputs interpolation.",
+      "at": "2026-11-12T14:36:48.841Z"
+    },
+    {
+      "id": "AC-13",
+      "kind": "behavior",
+      "text": "release.yml: docker's tags carry no latest; publish checks out with fetch-depth 0; a job distribute needs publish, has actions: write and runs gh workflow run distribute.yml --ref main with the tag.",
+      "at": "2026-11-12T14:36:48.899Z"
+    },
+    {
+      "id": "AC-12",
+      "kind": "behavior",
+      "text": "The token decision maps no token, 401, 403 and 404 each to its failure sentence, 200 with fewer than 30 days left to a warning (a failure with --fail-under 30), and 200 with no expiry header to 'expiry unknown' and a pass.",
+      "at": "2026-11-12T14:36:48.956Z"
+    },
+    {
+      "id": "AC-11",
+      "kind": "behavior",
+      "text": "The npm decision reads a non-empty npm view answer as published, an empty answer or E404 as not published and any other failure as an error; it publishes a pre-release with --tag next and a plain release without it, and adds the trusted-publisher sentence to an authentication failure.",
+      "at": "2026-11-12T14:36:49.012Z"
+    },
+    {
+      "id": "AC-10",
+      "kind": "behavior",
+      "text": "The hold decision is held when the tag's lowest accepted contract is above the previous plain release's CONTRACT, not held when it is not, when there is no previous plain release or when the file is missing at it, and held with the failed read named when the constants cannot be read at the tag; the parser reads the real src/team/contract.ts as CONTRACT 2 and accepted 1 and 2.",
+      "at": "2026-11-12T14:36:49.068Z"
+    },
+    {
+      "id": "AC-9",
+      "kind": "behavior",
+      "text": "The plan's decision refuses, each with its sentence: a ref other than refs/heads/main, a malformed tag, a tag that is not the highest, a tag whose tree lacks distribute.yml, and a release that lacks an asset (the sentence names it); for an accepted tag it gives the version and whether it is a pre-release.",
+      "at": "2026-11-12T14:36:49.122Z"
+    },
+    {
+      "id": "AC-8",
+      "kind": "behavior",
+      "text": "The marketplace edit changes, in each manifest's text, only the wizardingcode-mem entry's version and ref values, leaves every other byte equal, leaves an entry at a higher version alone and reports it, and fails for an entry whose ref is not a version tag or that is missing.",
+      "at": "2026-11-12T14:36:49.178Z"
+    },
+    {
+      "id": "AC-7",
+      "kind": "behavior",
+      "text": "The formula rendered from the template with a version and a checksums.txt holds that version in every URL and each of the four checksums under its platform's block, and no mark; a checksums.txt lacking one of the four names fails, naming it.",
+      "at": "2026-11-12T14:36:49.234Z"
+    },
+    {
+      "id": "AC-6",
+      "kind": "behavior",
+      "text": "scripts/install.sh --download-only with a newer binary staged leaves it in place and says so; with --force it replaces it.",
+      "at": "2026-11-12T14:36:49.288Z"
+    },
+    {
+      "id": "AC-5",
+      "kind": "behavior",
+      "text": "wizardingcode-mem install with two agents found and a newer binary staged prints the 'newer … is already in' line once, and both agents' hooks point at the staged path; with --force the staged binary is the running one and the line is absent.",
+      "at": "2026-11-12T14:36:49.341Z"
+    },
+    {
+      "id": "AC-4",
+      "kind": "behavior",
+      "text": "stageBinary keeps a staged binary of a higher version and returns it as kept; it replaces a staged binary of an equal or lower version, one that exits non-zero on --version, and, with force, one of a higher version.",
+      "at": "2026-11-12T14:36:49.395Z"
+    },
+    {
+      "id": "AC-3",
+      "kind": "behavior",
+      "text": "The npm shim, with a newer binary staged, downloads nothing, runs the staged binary with the arguments and exit code passed through, and prints the one line on standard error; with an older binary staged it downloads the package's version.",
+      "at": "2026-11-12T14:36:49.449Z"
+    },
+    {
+      "id": "AC-2",
+      "kind": "behavior",
+      "text": "The older() in npm/bin/wizardingcode-mem.js equals OLDER_JS byte for byte, and the older() block of scripts/install.sh equals the one in scripts/templates/wizardingcode-mem.sh byte for byte.",
+      "at": "2026-11-12T14:36:49.507Z"
+    },
+    {
+      "id": "AC-1",
+      "kind": "behavior",
+      "text": "Every pair of tests/fixtures/version-order.ts gets the same answer from olderThan (src/util/version.ts), from the generated JavaScript older() and from the shell older(); 0.9.0-rc.9 is older than 0.9.0-rc.10 in all three.",
+      "at": "2026-11-12T14:36:49.566Z"
+    },
+    {
+      "id": "AC-25",
+      "kind": "behavior",
+      "text": "The plan's decision refuses, each with its sentence: a ref other than refs/heads/main; a malformed tag; a tag that does not exist; a tag whose commit is not on main; a tag whose tree lacks distribute.yml; a plain tag that is not the highest plain tag, and a pre-release tag that is not the highest tag; a release that does not exist; a draft release; a release that lacks an asset (the sentence names it); an environment release that is missing, and one whose rule is not exactly the branch main. It accepts a plain v0.9.1 while a v0.10.0-rc.1 tag exists, and for an accepted tag gives the version and whether it is a pre-release.",
+      "at": "2026-11-12T14:38:43.328Z"
+    },
+    {
+      "id": "AC-30",
+      "kind": "behavior",
+      "text": "distribute.yml: the only trigger is workflow_dispatch with tag, dry_run and release_hold; top-level permissions is empty; one concurrency group, not cancelled; every job runs on ubuntu-latest; npm, tap and marketplace name the environment release and plan and latest name none; only npm has id-token: write and only latest has packages: write; latest needs plan, npm, tap and marketplace; tap, marketplace and latest are conditioned on a plain release, latest on no hold, and latest's retag step on no dry run.",
+      "at": "2026-11-12T14:38:43.439Z"
+    },
+    {
+      "id": "AC-34",
+      "kind": "behavior",
+      "text": "The writer to another repository, run against a local bare repository: an unchanged tree makes no commit and reports \"already at\"; a changed tree makes one commit wizardingcode-mem <version> and pushes it; a push refused as not fast-forward succeeds after one rebase; a dry run leaves the remote as it was; and the git commands and remote URL it builds carry no token, which travels only in the child's environment.",
+      "at": "2026-11-12T14:38:43.549Z"
+    },
+    {
+      "id": "AC-38",
+      "kind": "behavior",
+      "text": "The writer to another repository, run against a local bare repository: an unchanged tree makes no commit and reports \"already at\"; a changed tree makes one commit wizardingcode-mem <version> and pushes it; a push refused as not fast-forward succeeds after one rebase; a dry run leaves the remote as it was; the git commands and remote URL it builds carry no token, which travels only in the child's environment; and, given a commit the tag no longer names, it refuses before any write.",
+      "at": "2026-11-12T15:02:25.056Z"
+    },
+    {
+      "id": "AC-37",
+      "kind": "behavior",
+      "text": "distribute.yml: the only trigger is workflow_dispatch with tag, dry_run and release_hold; top-level permissions is empty; one concurrency group, not cancelled; every job runs on ubuntu-latest; npm, tap and marketplace name the environment release and plan and latest name none; only npm has id-token: write and only latest has packages: write; latest needs plan, npm, tap and marketplace; tap, marketplace and latest are conditioned on a plain release, latest on no hold, and latest's retag step on no dry run; npm's checkout of the release's tree takes its ref from plan's sha output, and no checkout takes inputs.tag.",
+      "at": "2026-11-12T15:02:25.113Z"
+    },
+    {
+      "id": "AC-36",
+      "kind": "behavior",
+      "text": "The plan's decision refuses, each with its sentence: a ref other than refs/heads/main; a malformed tag; a tag that does not exist; a tag whose commit is not on main; a tag whose tree lacks distribute.yml; a plain tag that is not the highest plain tag, and a pre-release tag that is not the highest tag; a release that does not exist; a draft release; a release that lacks an asset (the sentence names it); an environment release that is missing, and one whose rule is not exactly the branch main. It accepts a plain v0.9.1 while a v0.10.0-rc.1 tag exists, and for an accepted tag gives the version, the tag's commit and whether it is a pre-release.",
+      "at": "2026-11-12T15:02:25.173Z"
+    },
+    {
+      "id": "AC-35",
+      "kind": "behavior",
+      "text": "summaryLine gives, for each target and outcome of the Design's table, exactly that text; plan writes the three \"skipped: pre-release\" lines for a pre-release and the \"held\" line for a hold.",
+      "at": "2026-11-12T15:02:25.231Z"
+    },
+    {
+      "id": "AC-33",
+      "kind": "behavior",
+      "text": "In distribute.yml and token.yml, no run: script contains ${{; every uses: is pinned to a 40-character commit SHA; every actions/checkout has persist-credentials: false; and secrets.MARKETPLACE_TOKEN appears only in the env: of steps of the jobs tap, marketplace and check.",
+      "at": "2026-11-12T15:02:25.290Z"
+    },
+    {
+      "id": "AC-32",
+      "kind": "observed",
+      "text": "docs/runbooks/release.md holds the one-time setup in its order (the ruleset checked, the environment's rule before the secret, the token with its date noted, the two trusted publishers), the first release's order (the refused automatic run, the dry run, the real dispatch), what a run shows, the repeat, the repair of a release that lacks an asset, the way back (install --force; a bad release is fixed by a higher version; do not re-run a run whose write was reverted by hand), the release of a hold, that a third dispatch replaces a pending one, and that a scheduled workflow may be disabled after 60 days without activity; docs/runbooks/team-server.md says latest moves last and may be held; ADR 0029 records the decisions, the limits and that a staged file answering a very high version is replaced only by --force; CLAUDE.md names the two workflows and the scripts.",
+      "at": "2026-11-12T15:02:25.349Z"
+    },
+    {
+      "id": "AC-31",
+      "kind": "behavior",
+      "text": "token.yml runs on a weekly schedule and on dispatch; its check job names the environment release, runs token.ts with --fail-under 30, and runs only when the door job, which names no environment, says the environment is ready.",
+      "at": "2026-11-12T15:02:25.407Z"
+    },
+    {
+      "id": "AC-29",
+      "kind": "behavior",
+      "text": "release.yml: docker's tags carry no latest; publish checks out with fetch-depth: 0; a job distribute needs publish, has actions: write and runs gh workflow run distribute.yml --ref main with the tag.",
+      "at": "2026-11-12T15:02:25.468Z"
+    },
+    {
+      "id": "AC-28",
+      "kind": "behavior",
+      "text": "The token decision maps no token, 401, 403 and 404 each to its failure sentence, 200 with fewer than 30 days left to a warning (a failure with --fail-under 30), and 200 with no expiry header to an \"expiry unknown\" warning and a pass.",
+      "at": "2026-11-12T15:02:25.526Z"
+    },
+    {
+      "id": "AC-27",
+      "kind": "behavior",
+      "text": "The npm decision exits 1 for a package whose version differs from the tag's; reads a non-empty npm view answer as published, an empty answer or E404 as not published and any other failure as an error; builds npm publish --access public --ignore-scripts, with --tag next for a pre-release and without it for a plain release, and with --dry-run on a dry run; and adds the trusted-publisher sentence to an authentication failure.",
+      "at": "2026-11-12T15:02:25.584Z"
+    },
+    {
+      "id": "AC-26",
+      "kind": "behavior",
+      "text": "The hold decision is \"held\" when the tag's lowest accepted contract is above the previous plain release's CONTRACT; \"not held\" when it is not, when there is no previous plain release and when the file is missing at it; \"held\", naming the read that failed, when the constants cannot be read at the tag and when the file is present but unreadable at the previous plain release; and \"not held\", marked as released by hand, when it would be held and release_hold is true. The parser's reading of the real src/team/contract.ts equals the CONTRACT and ACCEPTED_CONTRACTS the file exports.",
+      "at": "2026-11-12T15:02:25.643Z"
+    },
+    {
+      "id": "AC-24",
+      "kind": "behavior",
+      "text": "The marketplace edit changes, in each manifest's text, only the wizardingcode-mem entry's version and ref values, leaves every other byte equal, leaves an entry at a higher version alone and reports it, and fails for an entry whose ref is not a version tag or that is missing.",
+      "at": "2026-11-12T15:02:25.702Z"
+    },
+    {
+      "id": "AC-23",
+      "kind": "behavior",
+      "text": "The formula rendered from the template with a version and a checksums.txt holds that version in every URL and each of the four checksums under its platform's block, and no mark; a checksums.txt lacking one of the four names fails, naming it.",
+      "at": "2026-11-12T15:02:25.762Z"
+    },
+    {
+      "id": "AC-22",
+      "kind": "behavior",
+      "text": "scripts/install.sh --download-only with a newer binary staged leaves it in place and says so; --download-only --force replaces it.",
+      "at": "2026-11-12T15:02:25.822Z"
+    },
+    {
+      "id": "AC-21",
+      "kind": "behavior",
+      "text": "wizardingcode-mem install with two agents found and a newer binary staged prints the \"newer … is already in\" line once, and both agents' hooks point at the staged path; with --force the staged binary is the running one and the line is absent.",
+      "at": "2026-11-12T15:02:25.882Z"
+    },
+    {
+      "id": "AC-20",
+      "kind": "behavior",
+      "text": "stageBinary keeps a staged binary of a higher version and returns it as kept; it replaces a staged binary of an equal or lower version, one that exits non-zero on --version, one whose --version output is not a version, and, with force, one of a higher version.",
+      "at": "2026-11-12T15:02:25.941Z"
+    },
+    {
+      "id": "AC-19",
+      "kind": "behavior",
+      "text": "The npm shim, with a newer binary staged, downloads nothing, runs the staged binary with the arguments and exit code passed through, and prints the one line on standard error; with an older binary staged it downloads the package's version.",
+      "at": "2026-11-12T15:02:26.001Z"
+    },
+    {
+      "id": "AC-18",
+      "kind": "behavior",
+      "text": "The older() in npm/bin/wizardingcode-mem.js equals OLDER_JS byte for byte, and the older() block of scripts/install.sh equals the one in scripts/templates/wizardingcode-mem.sh byte for byte.",
+      "at": "2026-11-12T15:02:26.062Z"
+    },
+    {
+      "id": "AC-17",
+      "kind": "behavior",
+      "text": "Every pair of tests/fixtures/version-order.ts gets the same answer from olderThan (src/util/version.ts), from the generated JavaScript older() and from the shell older(); 0.9.0-rc.9 is older than 0.9.0-rc.10 in all three.",
+      "at": "2026-11-12T15:02:26.121Z"
+    },
+    {
+      "id": "AC-56",
+      "kind": "observed",
+      "text": "docs/runbooks/release.md holds the one-time setup in its order (the ruleset on main checked, the ruleset on v* tags, the environment's rule before the secret and any secret found there removed, the token with its date noted and the push check, the two trusted publishers), the first release's order (the refused automatic run, the dry run, the real dispatch), what a run shows, the repeat, the repair of a release that lacks an asset, the way back (install --force; a bad release is fixed by a higher version; do not re-run a run whose write was reverted by hand), the release of a hold, and the limits (a third dispatch replaces a pending one; the dist-tag next; shims already published; the release's assets are not tied to the judged commit, with making releases immutable where the repository's plan offers it); docs/runbooks/team-server.md says latest moves last and may be held, citing the release runbook; ADR 0029 records the decisions and the limits, including that a staged file answering a very high version is replaced only by --force; CLAUDE.md names the two workflows and the scripts.",
+      "at": "2026-11-12T15:48:33.667Z"
+    },
+    {
+      "id": "AC-55",
+      "kind": "behavior",
+      "text": "summaryLine gives, for each target and outcome of the summary table, exactly that text; plan writes the three \"skipped: pre-release\" lines for a pre-release and the \"held\" line for a hold.",
+      "at": "2026-11-12T15:48:33.718Z"
+    },
+    {
+      "id": "AC-54",
+      "kind": "behavior",
+      "text": "The writer to another repository, run against a local bare repository: an unchanged tree makes no commit and reports \"already at\"; a changed tree makes one commit wizardingcode-mem <version> and pushes it; a push refused as not fast-forward succeeds after one rebase; a dry run leaves the remote as it was; the git commands and remote URL it builds carry no token, which travels only in the child's environment; and, given a commit the tag no longer names, it refuses before any write, for a lightweight and for an annotated tag.",
+      "at": "2026-11-12T15:48:33.769Z"
+    },
+    {
+      "id": "AC-53",
+      "kind": "behavior",
+      "text": "In distribute.yml, no run: script contains ${{; every uses: is pinned to a 40-character commit SHA; every actions/checkout has persist-credentials: false; and secrets.MARKETPLACE_TOKEN appears exactly four times, each in the env: of a step of the jobs tap and marketplace.",
+      "at": "2026-11-12T15:48:33.820Z"
+    },
+    {
+      "id": "AC-52",
+      "kind": "behavior",
+      "text": "distribute.yml: the only trigger is workflow_dispatch with tag, dry_run and release_hold; top-level permissions is empty; one concurrency group, not cancelled; every job runs on ubuntu-latest with timeout-minutes: 15; npm, tap and marketplace name the environment release and plan and latest name none; only npm has id-token: write and only latest has packages: write; latest needs plan, npm, tap and marketplace; tap, marketplace and latest are conditioned on a plain release, latest on no hold, and latest's retag step on no dry run; npm's checkout of the release's tree takes its ref from plan's sha output, and no checkout takes inputs.tag.",
+      "at": "2026-11-12T15:48:33.874Z"
+    },
+    {
+      "id": "AC-51",
+      "kind": "behavior",
+      "text": "release.yml: docker's tags carry no latest; publish checks out with fetch-depth: 0; a job distribute needs publish, has actions: write, runs gh workflow run distribute.yml --ref main with the tag, and its run: holds no ${{.",
+      "at": "2026-11-12T15:48:33.927Z"
+    },
+    {
+      "id": "AC-50",
+      "kind": "behavior",
+      "text": "The token decision maps no token, 401, 403, 404 and a 200 without the push permission each to its failure sentence, 200 with fewer than 30 days left to a warning, and 200 with no expiry header to an \"expiry unknown\" warning and a pass.",
+      "at": "2026-11-12T15:48:33.980Z"
+    },
+    {
+      "id": "AC-49",
+      "kind": "behavior",
+      "text": "The npm decision exits 1 for a package whose version differs from the tag's; reads a non-empty npm view answer as published, an empty answer or E404 as not published and any other failure as an error; builds npm publish --access public --ignore-scripts, with --tag next for a pre-release and without it for a plain release, and with --dry-run on a dry run; reads a publish refused because the version exists as already published; and adds the trusted-publisher sentence to an authentication failure.",
+      "at": "2026-11-12T15:48:34.036Z"
+    },
+    {
+      "id": "AC-48",
+      "kind": "behavior",
+      "text": "The hold decision is \"held\" when the tag's lowest accepted contract is above the previous plain release's CONTRACT; \"not held\" when it is not, when there is no previous plain release and when the file is missing at it; \"held\", naming the read that failed, when the constants cannot be read at the tag and when the file is present but unreadable at the previous plain release; and \"not held\", marked as released by hand, when it would be held and release_hold is true. The parser's reading of the real src/team/contract.ts equals the CONTRACT and ACCEPTED_CONTRACTS the file exports.",
+      "at": "2026-11-12T15:48:34.088Z"
+    },
+    {
+      "id": "AC-47",
+      "kind": "behavior",
+      "text": "The plan's decision refuses, each with its sentence: a ref other than refs/heads/main; a malformed tag; a tag that does not exist; a tag whose commit is not on main; a tag whose tree lacks distribute.yml; a plain tag that is not the highest plain tag, and a pre-release tag that is not the highest tag; a release that does not exist; a draft release; a release that lacks an asset (the sentence names it); an environment release that is missing, and one whose rule is not exactly the branch main. It accepts a plain v0.9.1 while a v0.10.0-rc.1 tag exists, and for an accepted tag gives the version, the tag's commit and whether it is a pre-release. The tag list it is given holds only tags merged into main that are version tags: a v99.0.0 on a branch commit and a vnext tag change no decision.",
+      "at": "2026-11-12T15:48:34.140Z"
+    },
+    {
+      "id": "AC-46",
+      "kind": "behavior",
+      "text": "The marketplace edit changes, in each manifest's text, only the wizardingcode-mem entry's version and ref values and leaves every other byte equal; when either manifest's entry is at a higher version it writes neither and reports it; it fails for an entry whose ref is not a version tag or that is missing.",
+      "at": "2026-11-12T15:48:34.191Z"
+    },
+    {
+      "id": "AC-45",
+      "kind": "behavior",
+      "text": "The formula rendered from the template with a version and a checksums.txt holds that version in every URL and each of the four checksums under its platform's block, and no mark; a checksums.txt lacking one of the four names fails, naming it.",
+      "at": "2026-11-12T15:48:34.243Z"
+    },
+    {
+      "id": "AC-44",
+      "kind": "behavior",
+      "text": "scripts/install.sh --download-only with a newer binary staged leaves it in place and says so; --download-only --force replaces it; a staged file that answers something other than a version is replaced.",
+      "at": "2026-11-12T15:48:34.295Z"
+    },
+    {
+      "id": "AC-43",
+      "kind": "behavior",
+      "text": "wizardingcode-mem install with two agents found and a newer binary staged prints the \"newer … is already in\" line once, and both agents' hooks point at the staged path; with --force the staged binary is the running one and the line is absent.",
+      "at": "2026-11-12T15:48:34.347Z"
+    },
+    {
+      "id": "AC-42",
+      "kind": "behavior",
+      "text": "stageBinary keeps a staged binary of a higher version and returns it as kept; it replaces a staged binary of an equal or lower version, one that cannot be run, one that exits non-zero on --version, one whose --version output is not a version, and, with force, one of a higher version.",
+      "at": "2026-11-12T15:48:34.398Z"
+    },
+    {
+      "id": "AC-41",
+      "kind": "behavior",
+      "text": "The npm shim, with a newer binary staged, downloads nothing, runs the staged binary with the arguments and exit code passed through, and prints the one line on standard error; with an older binary staged it downloads the package's version.",
+      "at": "2026-11-12T15:48:34.448Z"
+    },
+    {
+      "id": "AC-40",
+      "kind": "behavior",
+      "text": "The older() in npm/bin/wizardingcode-mem.js equals OLDER_JS byte for byte, and the older() block of scripts/install.sh equals the one in scripts/templates/wizardingcode-mem.sh byte for byte.",
+      "at": "2026-11-12T15:48:34.498Z"
+    },
+    {
+      "id": "AC-39",
+      "kind": "behavior",
+      "text": "Every pair of tests/fixtures/version-order.ts gets the same answer from olderThan (src/util/version.ts), from the generated JavaScript older() and from the shell older(); 0.9.0-rc.9 is older than 0.9.0-rc.10, and a have that is not a version is older, in all three.",
+      "at": "2026-11-12T15:48:34.550Z"
+    }
+  ],
+  "continued": [
+    {
+      "what": "validation",
+      "by": {
+        "by": "user",
+        "relayed": true
+      },
+      "at": "2026-11-12T14:39:36.113Z"
+    },
+    {
+      "what": "judgement",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-12T16:37:16.976Z",
+      "standing": true
+    },
+    {
+      "what": "judgement",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-12T16:51:06.514Z",
+      "standing": true
+    }
+  ],
+  "pauses": [
+    {
+      "at": "2026-11-12T16:12:21.341Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-12T16:13:40.260Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-12T16:14:05.229Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-12T16:14:29.224Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-12T16:15:03.382Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-12T16:22:34.674Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-12T16:24:02.419Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-12T16:24:29.464Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-12T16:25:16.839Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-12T16:33:28.249Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-12T16:34:57.617Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-12T16:35:23.342Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-12T16:36:01.282Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-12T16:36:30.544Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-12T16:46:43.071Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-12T16:48:14.547Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-12T16:48:38.241Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-12T16:50:30.076Z",
+      "reason": "judgement gate code-quality not run on the current code",
+      "kind": "role"
+    }
+  ],
+  "learned": {
+    "at": "2026-11-12T16:52:37.873Z",
+    "entries": [
+      "K-390"
+    ],
+    "confirmed": []
+  }
+}

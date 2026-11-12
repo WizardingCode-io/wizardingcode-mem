@@ -1,0 +1,75 @@
+# Concept brief: the release publishes everywhere, and `<data dir>/bin` only moves forward
+
+## Overview
+
+Piece 1 of 3 of `2026-11-11-004-updated-everywhere-on-release-whenever-a` (the cut is that item's D-8, confirmed by the author on 2026-11-12). The author tags a release; today the workflow stops at the GitHub release and the image, and the Homebrew tap, the marketplace's two manifests, the release notes and npm are hand steps (npm holds 0.4.4 of both packages; the repository is at 0.8.0). Separately, every channel stages the binary the agents run at `<data dir>/bin/wizardingcode-mem`, and three of its writers move it back: the npm shim (any version difference), `wizardingcode-mem install` (always copies) and `scripts/install.sh` (always moves).
+
+The hypothesis put to the six lenses (`probes/concept.md`) was one `release.yml` with a `plan` job, four idempotent distribution jobs repeatable by `workflow_dispatch`, a `latest` job gated on a rise of `CONTRACT`, and a forward-only rule copied into the shim and `stageBinary`. The lenses confirmed every claim about the code and found the shape wrong in four places: the single file, the repeat path's safety, the contract test, and "forward-only" with no way back and a version order that is not one rule. The author answered the two that were theirs on 2026-11-12: a separate, protected `distribute.yml`; the contract rule stays in this piece, corrected, with a manual release of the hold.
+
+## Analysis
+
+What the six lenses found, one account, duplicates merged.
+
+**One file with skip conditions is the wrong shape (zoom-out, structural, design, codebase, comprehension).** A job that `needs` a skipped job is skipped unless its `if:` carries a status function; a plain `needs: publish` would make a repeat skip npm, the tap, the marketplace and `latest` with the run green, and the shape test reads conditions as strings and cannot tell. A dispatch runs on a branch: `GITHUB_REF_NAME`, every checkout, the version check and the image's semver tag would see the branch, so a repeat would build the branch's head under the tag's name. A separate `distribute.yml` with only a dispatch trigger, started by `release.yml` at its end, removes the "release exists" probe and the skip propagation; a repeat is one dispatch.
+
+**The repeat path is a supply-chain door unless it is closed (design).** npm's trusted publishing checks the workflow's file name, not the ref; a dispatch runs the file from whatever branch was picked. Anyone with write access could push a branch with an edited workflow, dispatch it and get an npm publish and `MARKETPLACE_TOKEN`, which writes the marketplace every WizardingCode plugin's `ref` lives in. The tag input is free text: interpolated into a `run:` it is script injection. What closes it: a GitHub environment restricted to `main` that holds the secret and is named in the npm trusted publisher; the tag validated by a pattern and passed only through `env:`; least-privilege permissions per job.
+
+**Idempotent is not forward-only (design, readiness).** Only the marketplace had a never-back rule. `npm publish` with no `--tag` moves npm's `latest` dist-tag to whatever it publishes, even a lower version; the tap would be rewritten with an older formula; a repeat of a tag cut before this item publishes the old shim, which spreads the downgrade defect this item removes. One rule covers all of it: distribution is refused for a tag that is not the highest version among the repository's tags, and for a version below the first one that carries the forward-only shim.
+
+**A release that exists is not a release that is whole (comprehension, design, readiness, codebase).** `gh release create` creates the release, then uploads; a failed upload leaves a release without every binary or without `checksums.txt`, and every repeat would fail on the download. The distribution checks the six assets by name first and says which are missing; the repair (upload the missing assets, or delete the release and tag again) is the author's and is written down.
+
+**Checks that run too late (comprehension).** "The package's version equals the tag" ran after the GitHub release existed, where no repeat can fix it. It belongs in `build`, before anything is published, for `package.json`, `npm/package.json` and `plugins/opencode/package.json`.
+
+**Races (structural, design, readiness, codebase).** A tag push and a dispatch, or two tags close together, read and write the same files and the same image tag. One `concurrency` group for the distribution, queued, never cancelled; a write to another repository is a clone, an edit, a commit only when the tree changed, a push, and one retry on a non-fast-forward, which also gives "identical content is success" without the contents API's sha and base64 by hand.
+
+**The contract rule tested the wrong thing and had no lever (design, zoom-out, structural, comprehension, readiness, codebase).** The server accepts the current contract and the one before (`ACCEPTED_CONTRACTS`, `src/team/contract.ts:55`) and the client handles an older server, so a rise of `CONTRACT` alone strands nobody. What refuses members who have not updated is a release whose lowest accepted contract is above what the previous release's clients speak. A held `latest` could only be released by cutting another release; a repeat compares the same two values. Nothing in the repository reads `latest` today (`compose.yml` requires the version from `.env`); its consumer is piece 3. The author's answer: keep the rule here, corrected (hold when the release's lowest accepted contract is above the previous plain release's `CONTRACT`), with a dispatch input that releases the hold. Reading the constants is parsing source text: it fails closed (unreadable at the tag: held, and said), and a test pins the parser to the real file. The runbook's line that `latest` moves with every plain release (`docs/runbooks/team-server.md:9`) and the test that pins the `latest` line in `docker` (`tests/unit/deploy-files.test.ts:166`) both change.
+
+**A green run says nothing (codebase, comprehension, structural).** Every target ends green whether it published, found the version there, was skipped for a pre-release or held `latest`. Each target writes one line to the run's summary with its outcome and the reason; the run is named after the tag. The first run's likeliest failures get named messages: the missing secret, a token the organisation has not approved (a 403 or 404 on the other repository), an npm publish refused because the trusted publisher is not registered.
+
+**The token's warning never fires in a quiet month (structural, readiness, codebase).** A warning on a release run only is no warning when no release happens in the last thirty days. A weekly scheduled check that fails when fewer than thirty days are left makes it real (a failed scheduled run notifies the author); a token with no expiry header says "expiry unknown" and passes.
+
+**Forward-only has four writers, not three, and no way back (zoom-out, comprehension, design, readiness, structural).** `scripts/install.sh` (`mv -f` at line 64) is a writer the concept missed. With every channel refusing to move back, a bad release that still answers `--version` stays on every machine until a higher version ships: the fix for a bad release is a higher version, and a person's way back is one stated command. `stageBinary` did not say whose versions it compares, what equal versions do (a local build at the same version must still replace, as today), or how long it waits for a staged file that hangs. `install` with no agent stages once per agent, so a notice there would print several times.
+
+**"Newer" is not one rule today (zoom-out, structural, design, codebase).** `older()` exists in shell and in JavaScript and orders two pre-releases of one version as strings, so `0.9.0-rc.10` is older than `0.9.0-rc.9`; `src/store/meta.ts:158` orders by `Bun.semver.order`. Adding hand copies to the shim, `stageBinary`, `install.sh` and the release scripts without holding them equal would hand the binary back and forth between two writers. One order (semver's, numeric pre-release identifiers included), the TypeScript side through `Bun.semver.order`, and one table of version pairs that every copy is run against.
+
+**What a person sees (comprehension, codebase).** A shim pinned at 0.7.0 that runs a staged 0.8.0 prints the newer version with no explanation: one line on standard error when it defers. A Homebrew user's shell runs the Cellar's binary while the agents run the staged one; after `brew upgrade` the staged copy follows only when `install` runs again. The second is piece 2's (the CLI re-staging itself), named here as a limit. Shims already published (0.4.4) keep the old rule on the machines that have them: a limit this item cannot remove.
+
+**What cannot be tried before a real tag (readiness, structural).** Trusted publishing, the writes with the token, the expiry header and the retag are first exercised on the production channels. A `dry_run` input runs every step up to the write and prints what it would do (`npm publish --dry-run`, the diff of each other repository, the `latest` decision).
+
+**Ready-made (zoom-out).** The formula bumper actions do not fit a formula with four `on_*` blocks; a rendered template is right. A GitHub App would remove the token's expiry; the author kept the token (D-9 of 2026-11-11-004).
+
+**The shape for a second product (structural).** The scripts are parameterised by the plugin's name and the formula's file; a second product copies the workflow file and passes its own names. Moving the edit into the marketplace and tap repositories (a reusable workflow there) is the next step when a second product releases; not now.
+
+## Goals vs. Non-Goals
+
+Goals:
+
+1. **A tagged release reaches npm, the tap and the marketplace without a hand, in order, and `latest` moves last.** `release.yml` checks the three package versions against the tag before anything is published, pushes the image's version tag only, writes the Changes list from the full history, and starts `distribute.yml` with the tag. `distribute.yml` (dispatch only, environment `release`, one queued concurrency group, the tag validated, every checkout at the tag for content and at `main` for the scripts) checks the release's six assets, refuses a tag that is not the highest or is below the first forward-only version, then: the two npm packages by trusted publishing (`next` for a pre-release, "already published" read from a non-empty `npm view` answer); for a plain release, the formula rendered from a template into the tap and the plugin's entry in the two manifests, each a clone, an edit, a commit only on a change, a push; `latest` retagged last, never to a lower version, held by the corrected contract rule unless the dispatch releases the hold. Each target writes its outcome to the run's summary. A `dry_run` input writes nothing.
+2. **`<data dir>/bin` never moves back by itself.** The npm shim, `stageBinary` and `scripts/install.sh` replace a staged binary only with a newer or equal version, by one version order held equal across every copy by one table; the shim says when it runs a newer staged binary; `install` says once that a newer version is staged; `wizardingcode-mem install --force` is the person's way back, and the ADR says a bad release is fixed by a higher version.
+3. **The token cannot expire unannounced.** A weekly scheduled check fails with fewer than thirty days left.
+
+Non-goals of this item: the client's daily check and the staged binary replacing itself, and the CLI re-staging after `brew upgrade` (piece 2); the server's upgrader and any reader of `latest` (piece 3); a GitHub App; a signature scheme; recording which channel staged the binary (piece 2, where `doctor` shows it); backfilling npm with versions before this item; changing shims already published.
+
+## Alternatives Weighed
+
+- **One `release.yml` with a `plan` job and a dispatch trigger** (the hypothesis). Rejected: skip propagation that fails green, a dispatch that builds a branch, more conditions than jobs. The author chose the separate file on 2026-11-12.
+- **`distribute.yml` on the `release: published` event.** Rejected: a release created with the workflow's own token starts no other workflow; a dispatch from `release.yml`'s last job (`actions: write`) does.
+- **The contents API for the other repositories** (the hand procedure's way). Rejected for the workflow: the sha, the base64 and the no-change comparison by hand, and a 409 on a stale read; a clone and a push give the same result with git's own conflict rule.
+- **The contract rule moved to piece 3** (zoom-out's proposal, the one recommended to the author). Not taken: the author kept it in this piece, corrected, with the manual release.
+- **The contract rule as D-10 worded it** (hold on any rise of `CONTRACT`). Rejected by the author: it holds where nobody is refused and releases only with another release.
+- **No `latest` at all until piece 3.** Rejected: D-1 of 2026-11-11-004 keeps `latest`, and moving it last is what stops a failed release from reaching a host that follows it.
+- **A hand copy of `older()` in each writer with its own tests.** Rejected: six copies in four languages with a pre-release order that already disagrees with semver. One order, one table.
+- **No way back at all** (a bad release fixed only by a higher version). Rejected as the whole answer: a person debugging needs one command; `install --force` is that command, and automatic channels still never move back.
+- **A warning annotation on the release run for the token** (D-9's wording). Kept, and not enough alone: the weekly check is added.
+- **Per-target forward-only rules** (compare with npm's dist-tag, the tap's version, each manifest). Rejected: four comparisons where one guard at the door (the highest tag, and not below the first forward-only version) covers every target; the marketplace keeps its own check because another person may bump it by hand.
+
+## Key Decisions
+
+Carried from `2026-11-11-004` (the author, 2026-11-11 and 2026-11-12): D-1 `latest` is the tag a server follows; D-3 and D-9 a fine-grained token `MARKETPLACE_TOKEN` with an expiry check a month ahead; D-4 npm trusted publishing; D-8 three items; D-10 the client-first rule.
+
+Taken on this concept (the author, 2026-11-12):
+
+- **The workflow's shape**: `release.yml` as it is, starting a separate `distribute.yml`; the token and the npm publish under a GitHub environment `release` restricted to `main`. One more step for the author: create the environment and put the secret there.
+- **The contract rule**: in this piece, corrected: `latest` is held when the release's lowest accepted contract is above the previous plain release's `CONTRACT`; a dispatch input releases the hold.
+
+Left to the spec, with the answer this brief proposes: the first version allowed onto npm is the release that carries this item; equal versions replace; `install --force` is the way back; the weekly token check lives in its own small workflow.

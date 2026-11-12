@@ -1,0 +1,15 @@
+# structural findings for 2026-11-12-004-the-release-publishes-everywhere-by-itse
+reviewer: goldfish-structural
+read: /Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/.crew/work/2026-11-12-004-the-release-publishes-everywhere-by-itse/spec.md (lines 1-279, whole file); /Users/andreagroferreira/.claude/plugins/cache/wizardingcode-plugins/wizardingcode-developer-crew/0.23.3/skills/crew/rubrics/spec-feature.md; /Users/andreagroferreira/.claude/plugins/cache/wizardingcode-plugins/wizardingcode-developer-crew/0.23.3/skills/crew/rubrics/spec-heilmeier.md
+
+## Findings
+- F-1 · Major · Design > The summary (table, line 134-143) against `token.ts` (line 172) and AC-55 · Line 134 says `summaryLine` gives "every line the run's summary carries" and AC-55 tests only the outcomes in the summary table, but the table has no row for the token's outcomes that line 172 writes to the summary ("a summary line with the date" for fewer than 30 days left, and "expiry unknown"). It also has no `latest` outcome for a run where `npm`, `tap` or `marketplace` failed and `latest` was skipped with no line, which leaves Goal 4 ("what each target did and why") without a line for that case. A builder would hard-code the token's summary text in `token.ts`, outside the one function, and no AC would catch it. The run where `latest` silently gets no line would also ship untested.
+- F-2 · Nit · `### Alternatives` (line 213, under `## Design`) · The rubric lists "Alternatives considered" as its own section. Here it is a third-level heading inside Design, named "Alternatives", and placed after the rollout subsections "What the author does once" and "The first release". It should be a second-level section, after Design or after Acceptance criteria, matching the rubric's order: architecture, alternatives, risks.
+- F-3 · Nit · `## Design` (line 74) · The rubric's section is "Proposed architecture". "Design" covers it, but the name does not match.
+- F-4 · Nit · `## Cost and duration` (line 276-278) · Heilmeier question 7 ("How long will it take?") is not answered. The section lists six phases and the author's setup work but gives no length of time for the build or the setup. Questions 6 and 8 are answered.
+- F-5 · Nit · second-level headings (lines 38, 52, 56, 271 against 233, 256, 276) · The heading case is inconsistent. "Non-Goals", "Open Questions", "Critical User Journeys" and "Non-Functional Requirements" use Title Case, while "Acceptance criteria", "Risks and rollback" and "Cost and duration" use sentence case.
+- F-6 · Nit · AC-56 (line 254) · This one bullet bundles about fifteen separate checks across four documents (the release runbook's sections and limits, team-server.md, ADR 0029, CLAUDE.md). That makes it hard to tick off or to report partly met. Splitting it per document would match how AC-39 to AC-55 are cut.
+- F-7 · Nit · Non-Goals, last bullet (line 50) · It cites "ADR 0029 supersedes its Homebrew row" before the document introduces ADR 0029. It is first described in AC-56.
+
+## Not answerable
+- none

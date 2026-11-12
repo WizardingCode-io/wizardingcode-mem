@@ -1,0 +1,20 @@
+# infra findings for 2026-11-12-004-the-release-publishes-everywhere-by-itse
+reviewer: review-infra
+read: 13 files (rubric, profile, files.txt, diff.patch, .github/workflows/distribute.yml, .github/workflows/release.yml, scripts/release/plan.ts, push.ts, npm.ts, token.ts, lib.ts, scripts/build.ts, scripts/install.sh), the pipeline and deployment files read
+
+## Findings
+- F-1 · advisory · .github/workflows/release.yml:152 · The new `distribute` job (its only step is `gh workflow run`) has no `timeout-minutes`, while every job in distribute.yml sets 15. A stalled dispatch call holds the release run for the runner's default of 6 hours (rubric Q6 reproducibility/consistency; the older jobs in release.yml have the same gap).
+
+No defects. These are the checks I ran against the rubric:
+- Q1 gates before deploy: release.yml runs `bun run check` (typecheck, lint, test) and `bun run build` in `build`. `docker` and `publish` follow it, and `distribute` needs `publish`. In distribute.yml, `latest` (the deploy-like step) runs last, only after npm, tap and marketplace all report `success`. `npm publish` runs with `--ignore-scripts` on the commit `plan` judged. Every tool used (gh, git, docker buildx, npm, bun from `.bun-version`) exists on ubuntu-latest or comes from a pinned setup action. lib.ts imports only built-ins and `scripts/build.ts`, whose build is guarded by `import.meta.main`, so no `bun install` is needed. The gap where a hand dispatch can distribute a release completed by hand is already deferred in docs/real-use/findings.md.
+- Q2 secrets: there is no credential in a file, default or comment. MARKETPLACE_TOKEN reaches git only through `GIT_CONFIG_*` env as an extraheader (push.ts:33-45), and reaches gh only through `GH_TOKEN` env (token.ts:44). The dry run logs only `git status` and `git diff` of the formula and manifests.
+- Q3 permissions: distribute.yml has workflow-level `permissions: {}`. Each job is narrowed: `plan` has contents read and actions read; `npm` has contents read and id-token write under the environment `release`; `tap` and `marketplace` have contents read under `release`; `latest` has packages write. In release.yml, `distribute` replaces the workflow-level `contents: write` with `actions: write` alone. The `latest` job holding `packages: write` outside the environment is already deferred to piece 3.
+- Q4 rollback: docs/runbooks/release.md "A bad release" says how each target is undone. The tap and marketplace are reverted with a commit there. `latest` is moved back by hand with the exact `imagetools` command. npm cannot be undone: the runbook says a higher version fixes it.
+- Q5 hosts: the paths are runner-relative (`$RUNNER_TEMP`, mkdtemp). The repositories named are the project's own. In install.sh, `tmp` is created under the bin dir (`mktemp "$bin/..."`), so the new `version_of "$tmp"` call does not depend on `/tmp` being executable.
+- Q6 reproducibility: all five actions in distribute.yml are pinned by commit, and Bun comes from `.bun-version`. The floating `node-version: 24` is already deferred, and it is guarded by the npm ≥ 11.5.1 check at distribute.yml:97-99.
+
+## Outside the change
+- .github/workflows/release.yml:20 · The jobs this diff did not add still reference actions by moving tag (`actions/checkout@v7`, `docker/*@v3`, and others). Their checkouts keep credentials under the workflow-level `contents: write` (release.yml:13-14), and that output now travels on by itself to the tap and to `latest`. This is debt already recorded as deferred in docs/real-use/findings.md (row "every reviewer (rounds 1-3), outside the change").
+
+## Not answerable
+- Q1 (can the pipeline run the job) for the npm job's first real `npm view` and OIDC publish: nothing in the repository shows how npm 11 handles the placeholder `NODE_AUTH_TOKEN` that `actions/setup-node` writes when `registry-url` is set. A dry run exercises `npm view` but not the OIDC publish. The ADR already accepts this under "Limits" (the first real run is the first test of the four outside writes).

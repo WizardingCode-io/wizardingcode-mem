@@ -1,0 +1,18 @@
+{
+  "objections": [
+    {
+      "id": "O-1",
+      "raisedBy": "gap-round",
+      "severity": "advisory",
+      "text": "Whether a fine-grained token returns the header github-authentication-token-expiration is not settled by GitHub's documentation (a 2021 changelog only); without it the weekly check says 'expiry unknown' and passes, so the announcement D-9 wants may never fire. The runbook must tell the author to note the expiry date at creation.",
+      "raisedAt": "2026-11-12T14:31:34.620Z"
+    },
+    {
+      "id": "O-2",
+      "raisedBy": "gap-round",
+      "severity": "advisory",
+      "text": "The documentation does not say whether a job naming an environment from a branch its rule excludes fails or is skipped; the design must not depend on which (plan refuses a ref other than main first).",
+      "raisedAt": "2026-11-12T14:31:34.675Z"
+    }
+  ]
+}
