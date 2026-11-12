@@ -1,0 +1,1660 @@
+{
+  "fingerprint": "sha256:e30bab5b9627aa38319283314d767f6cd89b1631fc2d10af4d6213218c25d195",
+  "tdd": [
+    {
+      "criterion": "AC-9",
+      "red": {
+        "command": "./node_modules/.bin/bun test tests/integration/release-push.test.ts",
+        "exit": 1,
+        "at": "2026-11-12T17:37:37.323Z",
+        "durationMs": 33,
+        "log": "logs/tdd-AC-9-red-1794505057289.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\ntests/integration/release-push.test.ts:\n\n# Unhandled error between tests\n-------------------------------\nSyntaxError: Export named 'editMarketplace' not found in module '/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/scripts/release/push.ts'.\n-------------------------------\n\n\n 0 pass\n 1 fail\n 1 error\nRan 1 test across 1 file. [26.00ms]",
+        "timedOut": false,
+        "passed": 0,
+        "changedTests": [
+          "tests/integration/release-push.test.ts"
+        ]
+      },
+      "green": {
+        "command": "./node_modules/.bin/bun test tests/integration/release-push.test.ts",
+        "exit": 0,
+        "at": "2026-11-12T17:38:22.021Z",
+        "durationMs": 8660,
+        "log": "logs/tdd-AC-9-green-1794505093359.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\n 24 pass\n 0 fail\n 143 expect() calls\nRan 24 tests across 1 file. [8.65s]",
+        "timedOut": false,
+        "passed": 24
+      }
+    },
+    {
+      "criterion": "AC-12",
+      "red": {
+        "command": "./node_modules/.bin/bun test tests/integration/release-push.test.ts",
+        "exit": 1,
+        "at": "2026-11-12T17:37:37.420Z",
+        "durationMs": 14,
+        "log": "logs/tdd-AC-12-red-1794505057406.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\ntests/integration/release-push.test.ts:\n\n# Unhandled error between tests\n-------------------------------\nSyntaxError: Export named 'editMarketplace' not found in module '/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/scripts/release/push.ts'.\n-------------------------------\n\n\n 0 pass\n 1 fail\n 1 error\nRan 1 test across 1 file. [7.00ms]",
+        "timedOut": false,
+        "passed": 0,
+        "changedTests": [
+          "tests/integration/release-push.test.ts"
+        ]
+      },
+      "green": {
+        "command": "./node_modules/.bin/bun test tests/integration/release-push.test.ts",
+        "exit": 0,
+        "at": "2026-11-12T17:38:31.196Z",
+        "durationMs": 9108,
+        "log": "logs/tdd-AC-12-green-1794505102087.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\n 24 pass\n 0 fail\n 143 expect() calls\nRan 24 tests across 1 file. [9.10s]",
+        "timedOut": false,
+        "passed": 24
+      }
+    },
+    {
+      "criterion": "AC-11",
+      "red": {
+        "command": "./node_modules/.bin/bun test tests/integration/release-commands.test.ts -t 'asks git for'",
+        "exit": 1,
+        "at": "2026-11-12T17:39:36.489Z",
+        "durationMs": 949,
+        "log": "logs/tdd-AC-11-red-1794505175539.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\ntests/integration/release-commands.test.ts:\n458 |       [\"--target\", target],\n459 |       env({ PUSH_REMOTE: elsewhere, PUSH_ORIGIN: elsewhere, ...runner }),\n460 |     );\n461 |     expect(result.exitCode).toBe(0);\n462 |     const asked = log(\"git\");\n463 |     expect(asked).toContain(\"ls-remote --tags https://github.com/o/r.git refs/tags/v9.9.9\");\n                        ^\nerror: expect(received).toContain(expected)\n\nExpected to contain: \"ls-remote --tags https://github.com/o/r.git refs/tags/v9.9.9\"\nReceived: \"ls-remote --tags /private/var/folders/n3/_83g89qj03g8gdw9f8hzz4s80000gn/T/wizardingcode-mem-release-r4p2wN/elsewhere.git refs/tags/v9.9.9 refs/tags/v9.9.9^{}\\nclone --quiet /private/var/folders/n3/_83g89qj03g8gdw9f8hzz4s80000gn/T/wizardingcode-mem-release-r4p2wN/elsewhere.git .\\nconfig user.name github-actions[bot]\\nconfig user.email 41898282+github-actions[bot]@users.noreply.github.com\\nstatus --porcelain\\nadd -A\\ncommit --quiet -m wizardingcode-mem 9.9.9\\npush --quiet origin HEAD\\n\"\n\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/tests/integration/release-commands.test.ts:463:19)\n(fail) push.ts > --target tap asks git for https://github.com/WizardingCode-io/homebrew-wizardingcode.git only, off a runner [227.14ms]\n458 |       [\"--target\", target],\n459 |       env({ PUSH_REMOTE: elsewhere, PUSH_ORIGIN: elsewhere, ...runner }),\n460 |     );\n461 |     expect(result.exitCode).toBe(0);\n462 |     const asked = log(\"git\");\n463 |     expect(asked).toContain(\"ls-remote --tags https://github.com/o/r.git refs/tags/v9.9.9\");\n                        ^\nerror: expect(received).toContain(expected)\n\nExpected to contain: \"ls-remote --tags https://github.com/o/r.git refs/tags/v9.9.9\"\nReceived: \"ls-remote --tags /private/var/folders/n3/_83g89qj03g8gdw9f8hzz4s80000gn/T/wizardingcode-mem-release-lhroZr/elsewhere.git refs/tags/v9.9.9 refs/tags/v9.9.9^{}\\nclone --quiet /private/var/folders/n3/_83g89qj03g8gdw9f8hzz4s80000gn/T/wizardingcode-mem-release-lhroZr/elsewhere.git .\\nconfig user.name github-actions[bot]\\nconfig user.email 41898282+github-actions[bot]@users.noreply.github.com\\nstatus --porcelain\\nadd -A\\ncommit --quiet -m wizardingcode-mem 9.9.9\\npush --quiet origin HEAD\\n\"\n\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/tests/integration/release-commands.test.ts:463:19)\n(fail) push.ts > --target marketplace asks git for https://github.com/WizardingCode-io/wizardingcode-plugins.git only, off a runner [225.80ms]\n\n 2 pass\n 25 filtered out\n 2 fail\n 12 expect() calls\nRan 4 tests across 1 file. [941.00ms]",
+        "timedOut": false,
+        "passed": 2,
+        "changedTests": [
+          "tests/integration/release-commands.test.ts",
+          "tests/integration/release-push.test.ts"
+        ]
+      },
+      "green": {
+        "command": "./node_modules/.bin/bun test tests/integration/release-commands.test.ts -t 'asks git for'",
+        "exit": 0,
+        "at": "2026-11-12T17:39:38.203Z",
+        "durationMs": 1030,
+        "log": "logs/tdd-AC-11-green-1794505177172.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\n 4 pass\n 25 filtered out\n 0 fail\n 16 expect() calls\nRan 4 tests across 1 file. [1023.00ms]",
+        "timedOut": false,
+        "passed": 4
+      }
+    },
+    {
+      "criterion": "AC-19",
+      "red": {
+        "command": "./node_modules/.bin/bun test tests/integration/release-commands.test.ts -t 'quotes its authorization header'",
+        "exit": 1,
+        "at": "2026-11-12T17:39:37.047Z",
+        "durationMs": 463,
+        "log": "logs/tdd-AC-19-red-1794505176583.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\ntests/integration/release-commands.test.ts:\n477 |         \"push.ts\",\n478 |         [\"--target\", \"tap\"],\n479 |         env({ MARKETPLACE_TOKEN: token }),\n480 |       );\n481 |       expect(result.exitCode).toBe(1);\n482 |       expect(result.stderr).toContain(\"Authorization: Basic ***\");\n                                  ^\nerror: expect(received).toContain(expected)\n\nExpected to contain: \"Authorization: Basic ***\"\nReceived: \"release: git clone failed in https://github.com/WizardingCode-io/homebrew-wizardingcode.git: fatal: unable to access: Authorization: Basic eC1hY2Nlc3MtdG9rZW46YT4/\\n\"\n\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/tests/integration/release-commands.test.ts:482:29)\n(fail) push.ts > with a token, when git quotes its authorization header > a failure is said without the credential, in every place it is said [201.52ms]\n493 |         [\"--target\", \"tap\"],\n494 |         env({ MARKETPLACE_TOKEN: token, DRY_RUN: \"true\" }),\n495 |       );\n496 |       expect(result.exitCode).toBe(0);\n497 |       expect(result.stdout).toContain(\"+two\");\n498 |       expect(result.stdout.match(/Authorization: Basic \\*\\*\\*/g)).toHaveLength(2);\n                                                                        ^\nerror: Received value does not have a length property: null\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/tests/integration/release-commands.test.ts:498:67)\n(fail) push.ts > with a token, when git quotes its authorization header > a dry run prints git's lines without it [245.44ms]\n\n 0 pass\n 27 filtered out\n 2 fail\n 6 expect() calls\nRan 2 tests across 1 file. [455.00ms]",
+        "timedOut": false,
+        "passed": 0,
+        "changedTests": [
+          "tests/integration/release-commands.test.ts",
+          "tests/integration/release-push.test.ts"
+        ]
+      },
+      "green": {
+        "command": "./node_modules/.bin/bun test tests/integration/release-commands.test.ts -t 'quotes its authorization header'",
+        "exit": 0,
+        "at": "2026-11-12T17:39:38.732Z",
+        "durationMs": 468,
+        "log": "logs/tdd-AC-19-green-1794505178263.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\n 2 pass\n 27 filtered out\n 0 fail\n 15 expect() calls\nRan 2 tests across 1 file. [460.00ms]",
+        "timedOut": false,
+        "passed": 2
+      }
+    },
+    {
+      "criterion": "AC-17",
+      "before": {
+        "command": "./node_modules/.bin/bun test tests/integration/release-commands.test.ts -t 'tap writes the formula|marketplace edits the two|tag moved since'",
+        "exit": 0,
+        "at": "2026-11-12T17:39:49.764Z",
+        "durationMs": 703,
+        "log": "logs/tdd-AC-17-before-1794505189060.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\n 3 pass\n 26 filtered out\n 0 fail\n 11 expect() calls\nRan 3 tests across 1 file. [694.00ms]",
+        "timedOut": false,
+        "passed": 3
+      },
+      "after": {
+        "command": "./node_modules/.bin/bun test tests/integration/release-commands.test.ts -t 'tap writes the formula|marketplace edits the two|tag moved since'",
+        "exit": 0,
+        "at": "2026-11-12T17:39:50.500Z",
+        "durationMs": 651,
+        "log": "logs/tdd-AC-17-after-1794505189849.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\n 3 pass\n 26 filtered out\n 0 fail\n 11 expect() calls\nRan 3 tests across 1 file. [643.00ms]",
+        "timedOut": false,
+        "passed": 3
+      }
+    },
+    {
+      "criterion": "AC-6",
+      "red": {
+        "command": "./node_modules/.bin/bun test tests/unit/deploy-files.test.ts -t release.yml",
+        "exit": 1,
+        "at": "2026-11-12T17:43:04.809Z",
+        "durationMs": 16,
+        "log": "logs/tdd-AC-6-red-1794505384792.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\ntests/unit/deploy-files.test.ts:\n198 |     expect(distribute?.needs).toBe(\"publish\");\n199 |     expect(distribute?.[\"runs-on\"]).toBe(\"ubuntu-latest\");\n200 |     expect(distribute?.permissions).toEqual({ actions: \"write\" });\n201 |     // It only starts another workflow: a call that stalls is cut, not left to the runner's\n202 |     // default of six hours.\n203 |     expect(distribute?.[\"timeout-minutes\"]).toBe(5);\n                                                  ^\nerror: expect(received).toBe(expected)\n\nExpected: 5\nReceived: undefined\n\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/tests/unit/deploy-files.test.ts:203:45)\n(fail) the workflows > release.yml: docker pushes the version tag only, publish reads the full history, and distribute starts distribute.yml [0.56ms]\n\n 0 pass\n 16 filtered out\n 1 fail\n 19 expect() calls\nRan 1 test across 1 file. [9.00ms]",
+        "timedOut": false,
+        "passed": 0,
+        "changedTests": [
+          "tests/integration/release-commands.test.ts",
+          "tests/integration/release-push.test.ts",
+          "tests/unit/deploy-files.test.ts",
+          "tests/unit/release-docs.test.ts"
+        ]
+      },
+      "green": {
+        "command": "./node_modules/.bin/bun test tests/unit/deploy-files.test.ts -t release.yml",
+        "exit": 0,
+        "at": "2026-11-12T17:43:53.055Z",
+        "durationMs": 15,
+        "log": "logs/tdd-AC-6-green-1794505433040.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\n 1 pass\n 16 filtered out\n 0 fail\n 24 expect() calls\nRan 1 test across 1 file. [7.00ms]",
+        "timedOut": false,
+        "passed": 1
+      }
+    },
+    {
+      "criterion": "AC-20",
+      "red": {
+        "command": "./node_modules/.bin/bun test tests/unit/release-docs.test.ts -t 'starts the distribution is cut'",
+        "exit": 1,
+        "at": "2026-11-12T17:43:20.904Z",
+        "durationMs": 13,
+        "log": "logs/tdd-AC-20-red-1794505400891.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\ntests/unit/release-docs.test.ts:\n112 |     const start = runbook.indexOf(\"## Repeating a target\");\n113 |     const section = runbook.slice(start, runbook.indexOf(\"\\n## \", start + 1));\n114 |     const paragraphs = section\n115 |       .split(\"\\n\\n\")\n116 |       .filter((paragraph) => paragraph.includes(\"`gh run list --workflow distribute.yml`\"));\n117 |     expect(paragraphs).toHaveLength(1);\n                             ^\nerror: expect(received).toHaveLength(expected)\n\nExpected length: 1\nReceived length: 0\n\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/tests/unit/release-docs.test.ts:117:24)\n(fail) the release's documents > the runbook says what to do when the job that starts the distribution is cut [0.14ms]\n\n 0 pass\n 7 filtered out\n 1 fail\n 1 expect() calls\nRan 1 test across 1 file. [6.00ms]",
+        "timedOut": false,
+        "passed": 0,
+        "changedTests": [
+          "tests/integration/release-commands.test.ts",
+          "tests/integration/release-push.test.ts",
+          "tests/unit/deploy-files.test.ts",
+          "tests/unit/release-docs.test.ts"
+        ]
+      },
+      "reds": [
+        {
+          "command": "./node_modules/.bin/bun test tests/unit/release-docs.test.ts -t 'starts the distribution is cut'",
+          "exit": 1,
+          "at": "2026-11-12T17:43:04.906Z",
+          "durationMs": 14,
+          "log": "logs/tdd-AC-20-red-1794505384892.txt",
+          "tail": "bun test v1.4.2 (744846f84)\n\ntests/unit/release-docs.test.ts:\n\n# Unhandled error between tests\n-------------------------------\nerror: Cannot find package 'yaml' from '/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/tests/unit/release-docs.test.ts'\n-------------------------------\n\n\n 0 pass\n 1 fail\n 1 error\nRan 1 test across 1 file. [7.00ms]",
+          "timedOut": false,
+          "passed": 0,
+          "changedTests": [
+            "tests/integration/release-commands.test.ts",
+            "tests/integration/release-push.test.ts",
+            "tests/unit/deploy-files.test.ts",
+            "tests/unit/release-docs.test.ts"
+          ]
+        }
+      ],
+      "green": {
+        "command": "./node_modules/.bin/bun test tests/unit/release-docs.test.ts -t 'starts the distribution is cut'",
+        "exit": 0,
+        "at": "2026-11-12T17:43:53.127Z",
+        "durationMs": 14,
+        "log": "logs/tdd-AC-20-green-1794505433112.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\n 1 pass\n 7 filtered out\n 0 fail\n 7 expect() calls\nRan 1 test across 1 file. [7.00ms]",
+        "timedOut": false,
+        "passed": 1
+      }
+    },
+    {
+      "criterion": "AC-21",
+      "red": {
+        "command": "./node_modules/.bin/bun test tests/unit/release-docs.test.ts -t 'findings say'",
+        "exit": 1,
+        "at": "2026-11-12T17:43:20.999Z",
+        "durationMs": 14,
+        "log": "logs/tdd-AC-21-red-1794505400985.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\ntests/unit/release-docs.test.ts:\n137 |         const cells = line.split(\" | \");\n138 |         return { line, outcome: (cells.at(-1) ?? \"\").replace(/\\s*\\|\\s*$/, \"\") };\n139 |       });\n140 |     // The rows the item answers cite it, say what was done, and are no longer deferred.\n141 |     const answered = rows.filter((row) => row.outcome.includes(\"2026-11-12-005\"));\n142 |     expect(answered.some((row) => row.line.includes(\"redact\"))).toBe(true);\n                                                                      ^\nerror: expect(received).toBe(expected)\n\nExpected: true\nReceived: false\n\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/tests/unit/release-docs.test.ts:142:65)\n(fail) the release's documents > the findings say what the hardening item did and what it left open [0.28ms]\n\n 0 pass\n 7 filtered out\n 1 fail\n 1 expect() calls\nRan 1 test across 1 file. [7.00ms]",
+        "timedOut": false,
+        "passed": 0,
+        "changedTests": [
+          "tests/integration/release-commands.test.ts",
+          "tests/integration/release-push.test.ts",
+          "tests/unit/deploy-files.test.ts",
+          "tests/unit/release-docs.test.ts"
+        ]
+      },
+      "reds": [
+        {
+          "command": "./node_modules/.bin/bun test tests/unit/release-docs.test.ts -t 'findings say'",
+          "exit": 1,
+          "at": "2026-11-12T17:43:05.004Z",
+          "durationMs": 13,
+          "log": "logs/tdd-AC-21-red-1794505384990.txt",
+          "tail": "bun test v1.4.2 (744846f84)\n\ntests/unit/release-docs.test.ts:\n\n# Unhandled error between tests\n-------------------------------\nerror: Cannot find package 'yaml' from '/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/tests/unit/release-docs.test.ts'\n-------------------------------\n\n\n 0 pass\n 1 fail\n 1 error\nRan 1 test across 1 file. [6.00ms]",
+          "timedOut": false,
+          "passed": 0,
+          "changedTests": [
+            "tests/integration/release-commands.test.ts",
+            "tests/integration/release-push.test.ts",
+            "tests/unit/deploy-files.test.ts",
+            "tests/unit/release-docs.test.ts"
+          ]
+        }
+      ],
+      "green": {
+        "command": "./node_modules/.bin/bun test tests/unit/release-docs.test.ts -t 'findings say'",
+        "exit": 0,
+        "at": "2026-11-12T17:43:53.201Z",
+        "durationMs": 14,
+        "log": "logs/tdd-AC-21-green-1794505433186.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\n 1 pass\n 7 filtered out\n 0 fail\n 9 expect() calls\nRan 1 test across 1 file. [7.00ms]",
+        "timedOut": false,
+        "passed": 1
+      }
+    },
+    {
+      "criterion": "AC-22",
+      "red": {
+        "command": "./node_modules/.bin/bun test tests/unit/release-docs.test.ts -t 'carry the two rules'",
+        "exit": 1,
+        "at": "2026-11-12T17:43:21.095Z",
+        "durationMs": 13,
+        "log": "logs/tdd-AC-22-red-1794505401081.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\ntests/unit/release-docs.test.ts:\n163 |       \"redacts the encoded credential by exact match\",\n164 |       \"no destination from its environment\",\n165 |       \"`commitAndPush`\",\n166 |       \"`::add-mask::`\",\n167 |     ])\n168 |       expect({ said, found: adr.includes(said) }).toEqual({ said, found: true });\n                                                        ^\nerror: expect(received).toEqual(expected)\n\n@@ -1,3 +1,3 @@\n  {\n-   \"found\": true,\n+   \"found\": false,\n    \"said\": \"redacts the encoded credential by exact match\",\n\n- Expected  - 1\n+ Received  + 1\n\n      at <anonymous> (/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/tests/unit/release-docs.test.ts:168:51)\n(fail) the release's documents > ADR 0029 and CLAUDE.md carry the two rules of the writer to another repository [0.21ms]\n\n 0 pass\n 7 filtered out\n 1 fail\n 1 expect() calls\nRan 1 test across 1 file. [7.00ms]",
+        "timedOut": false,
+        "passed": 0,
+        "changedTests": [
+          "tests/integration/release-commands.test.ts",
+          "tests/integration/release-push.test.ts",
+          "tests/unit/deploy-files.test.ts",
+          "tests/unit/release-docs.test.ts"
+        ]
+      },
+      "reds": [
+        {
+          "command": "./node_modules/.bin/bun test tests/unit/release-docs.test.ts -t 'carry the two rules'",
+          "exit": 1,
+          "at": "2026-11-12T17:43:05.105Z",
+          "durationMs": 14,
+          "log": "logs/tdd-AC-22-red-1794505385091.txt",
+          "tail": "bun test v1.4.2 (744846f84)\n\ntests/unit/release-docs.test.ts:\n\n# Unhandled error between tests\n-------------------------------\nerror: Cannot find package 'yaml' from '/Users/andreagroferreira/AIProjects/ai-mem/.crew/worktrees/ai-mem-2026-11-08-001-j-knowledge-base-and-team-collab/tests/unit/release-docs.test.ts'\n-------------------------------\n\n\n 0 pass\n 1 fail\n 1 error\nRan 1 test across 1 file. [6.00ms]",
+          "timedOut": false,
+          "passed": 0,
+          "changedTests": [
+            "tests/integration/release-commands.test.ts",
+            "tests/integration/release-push.test.ts",
+            "tests/unit/deploy-files.test.ts",
+            "tests/unit/release-docs.test.ts"
+          ]
+        }
+      ],
+      "green": {
+        "command": "./node_modules/.bin/bun test tests/unit/release-docs.test.ts -t 'carry the two rules'",
+        "exit": 0,
+        "at": "2026-11-12T17:43:53.275Z",
+        "durationMs": 14,
+        "log": "logs/tdd-AC-22-green-1794505433261.txt",
+        "tail": "bun test v1.4.2 (744846f84)\n\n 1 pass\n 7 filtered out\n 0 fail\n 7 expect() calls\nRan 1 test across 1 file. [7.00ms]",
+        "timedOut": false,
+        "passed": 1
+      }
+    }
+  ],
+  "runs": [
+    {
+      "gate": "secrets",
+      "target": ".",
+      "command": "built-in secret scan",
+      "commandSource": null,
+      "confirmed": true,
+      "exit": 0,
+      "status": "pass",
+      "durationMs": 30,
+      "at": "2026-11-12T17:44:13.130Z",
+      "log": null,
+      "tail": "no secrets found in the change",
+      "fingerprint": "sha256:e30bab5b9627aa38319283314d767f6cd89b1631fc2d10af4d6213218c25d195"
+    },
+    {
+      "gate": "prose",
+      "target": ".",
+      "command": "built-in prose scan",
+      "commandSource": null,
+      "confirmed": true,
+      "exit": 0,
+      "status": "pass",
+      "durationMs": 32,
+      "at": "2026-11-12T17:44:13.160Z",
+      "log": null,
+      "tail": "no chatbot artefacts in the change",
+      "fingerprint": "sha256:e30bab5b9627aa38319283314d767f6cd89b1631fc2d10af4d6213218c25d195"
+    },
+    {
+      "gate": "build",
+      "target": ".",
+      "command": "bun run build",
+      "commandSource": "detected",
+      "confirmed": true,
+      "exit": 0,
+      "status": "pass",
+      "durationMs": 2673,
+      "at": "2026-11-12T17:44:13.192Z",
+      "log": "logs/build-_-1794505453192.txt",
+      "tail": "$ bun run ui:build && bun scripts/build.ts\n$ vite build --config ui/vite.config.ts\nvite v8.3.3 building client environment for production...\ntransforming...\n\n/assets/unbounded-variable.woff2 referenced in /assets/unbounded-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/instrument-sans-variable.woff2 referenced in /assets/instrument-sans-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n\n/assets/jetbrains-mono-variable.woff2 referenced in /assets/jetbrains-mono-variable.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime\n✓ 851 modules transformed.\nrendering chunks...\n[plugin vite:singlefile] \n\n[plugin vite:singlefile] Inlining: index-BdJDDbwQ.js\n[plugin vite:singlefile] Inlining: style-CMyPmnXo.css\nsrc/ui/dist/index.html  1,228.95 kB\n\n✓ built in 734ms\n✓ wizardingcode-mem-darwin-arm64  67.9 MB\n✓ wizardingcode-mem-darwin-x64  74.7 MB\n✓ wizardingcode-mem-linux-x64  86.1 MB\n✓ wizardingcode-mem-linux-arm64  86.0 MB\n✓ wizardingcode-mem-windows-x64.exe  90.6 MB",
+      "fingerprint": "sha256:e30bab5b9627aa38319283314d767f6cd89b1631fc2d10af4d6213218c25d195"
+    },
+    {
+      "gate": "test",
+      "target": ".",
+      "command": "bun run test",
+      "commandSource": "detected",
+      "confirmed": true,
+      "exit": 0,
+      "status": "pass",
+      "durationMs": 208657,
+      "at": "2026-11-12T17:44:15.891Z",
+      "log": "logs/test-_-1794505455891.txt",
+      "tail": "heuristic precision 100%  recall 100%  kind 83%\ntypesafe  precision 85%  recall 94%  kind 88%  wrongly kept: en-none-obvious-from-code, en-none-general-knowledge, pt-none-your-turn  missed: en-change-json-flag\n\ntests/golden/search.test.ts:\ntop 5: 35/44 → 39/44; Portuguese of English: 1/8 → 4/8\nsemantic-only results for unrelated queries: 29/43\n\ntests/golden/retrieval.test.ts:\nrecall@5: 19/24 — missed: redact-first, pt-lingua, pt-cursor, ts-extension, hook-runs\nprecision: 19/21 notes given were the expected ones\nfalse injections: 0/23\n\ntests/perf/budgets.test.ts:\nrebuild write transaction, 2000 entries: median 31.0 ms over 5 (31.0, 45.8, 23.7, 42.1, 27.3)\nprompt: p50 61.5 ms, p95 65.8 ms\nsession-start: p50 18.9 ms, p95 20.2 ms\nturn-end: p50 13.7 ms, p95 15.8 ms\nfile-read: p50 15.9 ms, p95 16.3 ms\ntool-failed: p50 21.5 ms, p95 22.2 ms\nqwen prompt: p50 61.3 ms, p95 62.4 ms\nqwen session-start: p50 19.2 ms, p95 20.6 ms\ndroid prompt: p50 63.6 ms, p95 66.8 ms\ndroid session-start: p50 21.8 ms, p95 23.1 ms\ncopilot session-start: p50 21.5 ms, p95 23.8 ms\ncopilot prompt (capture only): p50 14.3 ms, p95 14.7 ms\nantigravity pre-invocation: p50 19.8 ms, p95 20.2 ms\nlinked prompt: p50 29.3 ms, p95 37.8 ms (30 of 30 with a note from outside)\nlinked session-start: p50 19.7 ms, p95 21.0 ms\n\ntests/perf/large-project.test.ts:\nlarge project prompt: p50 17.6 ms, p95 20.1 ms (40 of 40 given notes)\n\ntests/perf/semantic.test.ts:\nsemantic global median: 15.8 ms\n\n 3410 pass\n 4 skip\n 0 fail\n 26 snapshots, 40155 expect() calls\nRan 3414 tests across 216 files. [207.38s]",
+      "fingerprint": "sha256:e30bab5b9627aa38319283314d767f6cd89b1631fc2d10af4d6213218c25d195"
+    },
+    {
+      "gate": "lint",
+      "target": ".",
+      "command": "bun run lint",
+      "commandSource": "detected",
+      "confirmed": true,
+      "exit": 1,
+      "status": "pass",
+      "durationMs": 95,
+      "at": "2026-11-12T17:47:44.548Z",
+      "log": "logs/lint-_-1794505664548.txt",
+      "tail": "$ biome check .\nChecked 0 files in 4ms. No fixes applied.\ncheck ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n  × No files were processed in the specified paths.\n  \n  i Check your biome.json or biome.jsonc to ensure the paths are not ignored by the configuration.\n  \n  i These paths were provided but ignored:\n  \n  - .\n  \n\nerror: script \"lint\" exited with code 1",
+      "fingerprint": "sha256:e30bab5b9627aa38319283314d767f6cd89b1631fc2d10af4d6213218c25d195",
+      "reason": "1 file with problems, none changed by this item (pre-existing)",
+      "problems": {
+        "touched": [],
+        "untouched": 1
+      }
+    },
+    {
+      "gate": "typecheck",
+      "target": ".",
+      "command": "bun run typecheck",
+      "commandSource": "detected",
+      "confirmed": true,
+      "exit": 0,
+      "status": "pass",
+      "durationMs": 358,
+      "at": "2026-11-12T17:47:44.643Z",
+      "log": "logs/typecheck-_-1794505664643.txt",
+      "tail": "$ tsc --noEmit",
+      "fingerprint": "sha256:e30bab5b9627aa38319283314d767f6cd89b1631fc2d10af4d6213218c25d195"
+    }
+  ],
+  "verdict": "proven",
+  "unproven": [],
+  "verifications": [
+    {
+      "what": "knowledge",
+      "ref": "K-390",
+      "question": "Does the entry `entries.k1` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.75
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T17:10:23.721Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-363",
+      "question": "Does the entry `entries.k2` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.27
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T17:10:23.721Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-335",
+      "question": "Does the entry `entries.k3` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.15
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T17:10:23.721Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-383",
+      "question": "Does the entry `entries.k4` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.83
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T17:10:23.721Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-381",
+      "question": "Does the entry `entries.k5` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.22
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T17:10:23.721Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-376",
+      "question": "Does the entry `entries.k6` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.74
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T17:10:23.721Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-375",
+      "question": "Does the entry `entries.k7` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.49
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T17:10:23.721Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-372",
+      "question": "Does the entry `entries.k8` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.31
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T17:10:23.721Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-371",
+      "question": "Does the entry `entries.k9` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.22
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T17:10:23.721Z"
+    },
+    {
+      "what": "knowledge",
+      "ref": "K-346",
+      "question": "Does the entry `entries.k10` bear on the request `request`: would a developer doing the request need to read it before designing?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.47
+      },
+      "confidence": null,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T17:10:23.721Z"
+    },
+    {
+      "what": "validator",
+      "ref": "complete-gap-round v1",
+      "question": "Is every decision listed in `conclave` under the heading 'Decisions only the user can make' present in `decisions` with an answer or a stated default?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.36
+      },
+      "confidence": 0.36,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T17:26:39.024Z"
+    },
+    {
+      "what": "validator",
+      "ref": "complete-gap-round v2",
+      "question": "Is every warning listed in `conclave` under 'Warnings' that names a security, data or payment risk present in `objections`?",
+      "answer": {
+        "type": "noul",
+        "noul": 0.58
+      },
+      "confidence": 0.58,
+      "model": "jev-1.14.0",
+      "at": "2026-11-12T17:26:39.025Z"
+    }
+  ],
+  "roles": [
+    {
+      "agent": "goldfish-structural",
+      "agentId": "a0eed9478a4aa20f2",
+      "at": "2026-11-12T17:12:53.497Z",
+      "tokens": 43722,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/brainstorm-goldfish-structural.md"
+    },
+    {
+      "agent": "goldfish-comprehension",
+      "agentId": "a3ea73bcf5bd6df07",
+      "at": "2026-11-12T17:12:58.840Z",
+      "tokens": 39166,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/brainstorm-goldfish-comprehension.md"
+    },
+    {
+      "agent": "goldfish-zoom-out",
+      "agentId": "ad84ba711fa42de50",
+      "at": "2026-11-12T17:13:04.811Z",
+      "tokens": 62828,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/brainstorm-goldfish-zoom-out.md"
+    },
+    {
+      "agent": "goldfish-codebase",
+      "agentId": "a11ee9019c2b26475",
+      "at": "2026-11-12T17:13:49.447Z",
+      "tokens": 77144,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/brainstorm-goldfish-codebase.md"
+    },
+    {
+      "agent": "goldfish-readiness",
+      "agentId": "abc3a076916d17b0e",
+      "at": "2026-11-12T17:14:26.760Z",
+      "tokens": 82453,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/brainstorm-goldfish-readiness.md"
+    },
+    {
+      "agent": "goldfish-design",
+      "agentId": "a9375083429d0f76e",
+      "at": "2026-11-12T17:14:29.551Z",
+      "tokens": 71069,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/brainstorm-goldfish-design.md"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "aefadf3c42b7369b0",
+      "at": "2026-11-12T17:20:59.532Z",
+      "tokens": 79092,
+      "tokensFrom": "transcript",
+      "model": "claude-fable-5-2",
+      "file": "conclave/lead-devops.md",
+      "team": "devops"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "ab97daed09b610278",
+      "at": "2026-11-12T17:21:04.638Z",
+      "tokens": 85366,
+      "tokensFrom": "transcript",
+      "model": "claude-fable-5-2",
+      "file": "conclave/lead-architects.md",
+      "team": "architects"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "a66366a8d9fdba0fa",
+      "at": "2026-11-12T17:21:21.976Z",
+      "tokens": 87448,
+      "tokensFrom": "transcript",
+      "model": "claude-fable-5-2",
+      "file": "conclave/lead-security.md",
+      "team": "security"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "a2a64db66b2f54c7c",
+      "at": "2026-11-12T17:21:29.995Z",
+      "tokens": 87888,
+      "tokensFrom": "transcript",
+      "model": "claude-fable-5-2",
+      "file": "conclave/lead-qa.md",
+      "team": "qa"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "a66366a8d9fdba0fa",
+      "at": "2026-11-12T17:24:17.082Z",
+      "tokens": 100240,
+      "tokensFrom": "transcript",
+      "model": "claude-fable-5-2",
+      "file": "conclave/lead-security-reply.round2.md",
+      "team": "security"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "ab97daed09b610278",
+      "at": "2026-11-12T17:24:18.625Z",
+      "tokens": 98749,
+      "tokensFrom": "transcript",
+      "model": "claude-fable-5-2",
+      "file": "conclave/lead-architects-reply.round2.md",
+      "team": "architects"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "aefadf3c42b7369b0",
+      "at": "2026-11-12T17:24:18.811Z",
+      "tokens": 91981,
+      "tokensFrom": "transcript",
+      "model": "claude-fable-5-2",
+      "file": "conclave/lead-devops-reply.round2.md",
+      "team": "devops"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "a2a64db66b2f54c7c",
+      "at": "2026-11-12T17:24:48.229Z",
+      "tokens": 118563,
+      "tokensFrom": "transcript",
+      "model": "claude-fable-5-2",
+      "file": "conclave/lead-qa-reply.round2.md",
+      "team": "qa"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "a2a64db66b2f54c7c",
+      "at": "2026-11-12T17:26:23.580Z",
+      "tokens": 130702,
+      "tokensFrom": "transcript",
+      "model": "claude-fable-5-2",
+      "file": "conclave/lead-qa-reply.md",
+      "team": "qa"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "a66366a8d9fdba0fa",
+      "at": "2026-11-12T17:27:03.493Z",
+      "tokens": 106414,
+      "tokensFrom": "transcript",
+      "model": "claude-fable-5-2",
+      "file": "conclave/lead-security-reply.round3.md",
+      "team": "security"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "ab97daed09b610278",
+      "at": "2026-11-12T17:27:05.534Z",
+      "tokens": 104902,
+      "tokensFrom": "transcript",
+      "model": "claude-fable-5-2",
+      "file": "conclave/lead-architects-reply.md",
+      "team": "architects"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "aefadf3c42b7369b0",
+      "at": "2026-11-12T17:27:06.536Z",
+      "tokens": 100215,
+      "tokensFrom": "transcript",
+      "model": "claude-fable-5-2",
+      "file": "conclave/lead-devops-reply.md",
+      "team": "devops"
+    },
+    {
+      "agent": "goldfish-zoom-out",
+      "agentId": "a2ac693ed4d12b9cb",
+      "at": "2026-11-12T17:28:31.928Z",
+      "tokens": 48505,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-zoom-out.md"
+    },
+    {
+      "agent": "goldfish-structural",
+      "agentId": "acd1197d6b72c36b0",
+      "at": "2026-11-12T17:29:26.924Z",
+      "tokens": 29701,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-structural.md"
+    },
+    {
+      "agent": "goldfish-style",
+      "agentId": "ae88f4410f0849a19",
+      "at": "2026-11-12T17:29:31.401Z",
+      "tokens": 31979,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-style.md"
+    },
+    {
+      "agent": "goldfish-design",
+      "agentId": "a7feb832b2508fc29",
+      "at": "2026-11-12T17:30:54.253Z",
+      "tokens": 60797,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-design.md"
+    },
+    {
+      "agent": "goldfish-codebase",
+      "agentId": "acc9af2926d526a99",
+      "at": "2026-11-12T17:33:28.382Z",
+      "tokens": 108033,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-codebase.md"
+    },
+    {
+      "agent": "goldfish-readiness",
+      "agentId": "ac16c90c8d54416a9",
+      "at": "2026-11-12T17:33:35.626Z",
+      "tokens": 91414,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "spec-review/goldfish-readiness.md"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "a66366a8d9fdba0fa",
+      "at": "2026-11-12T17:37:16.508Z",
+      "tokens": 212493,
+      "tokensFrom": "transcript",
+      "model": "claude-fable-5-2",
+      "file": "conclave/lead-security-reply.md",
+      "team": "security"
+    },
+    {
+      "agent": "review-architecture",
+      "agentId": "a8728e1d7c22f92ce",
+      "at": "2026-11-12T17:49:22.781Z",
+      "tokens": 70355,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/architecture.findings.md",
+      "team": "architects"
+    },
+    {
+      "agent": "review-infra",
+      "agentId": "ad163b2eb4043bb20",
+      "at": "2026-11-12T17:49:30.578Z",
+      "tokens": 63835,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/infra.findings.md",
+      "team": "devops"
+    },
+    {
+      "agent": "review-code-quality",
+      "agentId": "a697296b781108227",
+      "at": "2026-11-12T17:49:30.637Z",
+      "tokens": 68470,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/code-quality.findings.md",
+      "team": "backend"
+    },
+    {
+      "agent": "review-security",
+      "agentId": "aa6f44c6acfc220f4",
+      "at": "2026-11-12T17:49:30.671Z",
+      "tokens": 66136,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/security.findings.md",
+      "team": "security"
+    },
+    {
+      "agent": "review-risk",
+      "agentId": "aad25f513bed4502b",
+      "at": "2026-11-12T17:49:32.506Z",
+      "tokens": 75350,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/risk.findings.md"
+    },
+    {
+      "agent": "review-test-quality",
+      "agentId": "aadbf3a1ac985dc08",
+      "at": "2026-11-12T17:49:42.946Z",
+      "tokens": 64707,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/test-quality.findings.md",
+      "team": "qa"
+    },
+    {
+      "agent": "judge",
+      "agentId": "a4b5b67526c4fa0c8",
+      "at": "2026-11-12T17:50:26.581Z",
+      "tokens": 62543,
+      "tokensFrom": "transcript",
+      "model": "claude-opus-5-5",
+      "file": "review/ruling.json"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "a66366a8d9fdba0fa",
+      "at": "2026-11-12T17:51:31.056Z",
+      "tokens": 359423,
+      "tokensFrom": "transcript",
+      "model": "claude-fable-5-2",
+      "file": "conclave/lead-security.delivery-reply.md",
+      "team": "security"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "ab97daed09b610278",
+      "at": "2026-11-12T17:51:31.644Z",
+      "tokens": 247165,
+      "tokensFrom": "transcript",
+      "model": "claude-fable-5-2",
+      "file": "conclave/lead-architects.delivery-reply.md",
+      "team": "architects"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "aefadf3c42b7369b0",
+      "at": "2026-11-12T17:51:31.764Z",
+      "tokens": 225853,
+      "tokensFrom": "transcript",
+      "model": "claude-fable-5-2",
+      "file": "conclave/lead-devops.delivery-reply.md",
+      "team": "devops"
+    },
+    {
+      "agent": "tech-lead",
+      "agentId": "a2a64db66b2f54c7c",
+      "at": "2026-11-12T17:52:05.040Z",
+      "tokens": 308337,
+      "tokensFrom": "transcript",
+      "model": "claude-fable-5-2",
+      "file": "conclave/lead-qa.delivery-reply.md",
+      "team": "qa"
+    }
+  ],
+  "specReview": {
+    "rounds": [
+      {
+        "n": 1,
+        "hash": "0bf16323ecc827c613bb5fdc0489312764996bfbf143cd59bd16b2519167bcc5",
+        "openedAt": "2026-11-12T17:27:27.380Z",
+        "stages": [
+          {
+            "stage": 5,
+            "reviewers": {
+              "goldfish-zoom-out": "completed"
+            }
+          },
+          {
+            "stage": 7,
+            "reviewers": {
+              "goldfish-design": "completed",
+              "goldfish-structural": "completed",
+              "goldfish-style": "completed"
+            }
+          },
+          {
+            "stage": 9,
+            "reviewers": {
+              "goldfish-readiness": "completed",
+              "goldfish-codebase": "completed"
+            }
+          }
+        ],
+        "findings": [
+          {
+            "id": "zoom-out-1.5-1",
+            "reviewer": "goldfish-zoom-out",
+            "round": 1,
+            "stage": 5,
+            "severity": "Major",
+            "scope": "spec AC-18 / plan Phase 4 \"AC-18\"",
+            "text": "Nothing in the repository tests docs/real-use/findings.md today: the existing release-docs.test.ts cases hold documents to code (commands, files, summary lines), not to a status log. AC-18 adds a test that says which findings rows must still be `deferred` (the GIT_CONFIG_GLOBAL/time-limit/MARKETPLACE_TOKEN row, the decideHold/deploy-files row) and which must cite piece 2. A competent reader would build a test that breaks when the next item fixes one of those advisories and updates its row, so the follow-up items would also have to edit this item's test. Simpler: keep the findings rows as prose and check them in review, or check only that the rows cite 2026-11-12-005 and are no longer deferred, not which other rows stay open.",
+            "disposition": "propose-fix",
+            "reason": "Right that a test fixing which rows stay deferred breaks when a later item answers one. The criterion keeps the test (the security lead's return asked for a record held by a test) but narrows it: the answered rows cite 2026-11-12-005 and are not deferred; the open advisories are named in the file (GIT_CONFIG_GLOBAL, MARKETPLACE_TOKEN, the time limit) with no assertion on their status, and no assertion on the untouched advisories."
+          },
+          {
+            "id": "zoom-out-1.5-2",
+            "reviewer": "goldfish-zoom-out",
+            "round": 1,
+            "stage": 5,
+            "severity": "Nit",
+            "scope": "spec Design 1, last bullet; AC-10(b)(c); AC-16; plan Phase 2 step 4",
+            "text": "Even the spec calls the mask line defence in depth. No other step in the job holds the encoded value, and all of git's output is captured and redacted, so the mask covers no path that the redaction misses. It still costs a fixed ordering (\"first statement, before need(VERSION)\"), the GITHUB_ACTIONS gating, AC-10(c) (the VERSION-unset case, where no token can leak) and three AC-16 cases. Keeping `::add-mask::` as the platform's standard tool is defensible, but the ordering requirement and AC-10(c) protect nothing and could go."
+          },
+          {
+            "id": "zoom-out-1.5-3",
+            "reviewer": "goldfish-zoom-out",
+            "round": 1,
+            "stage": 5,
+            "severity": "Nit",
+            "scope": "spec Design 1 (the `commitAndPush` and `redact` bullets)",
+            "text": "The architecture section holds code-level detail: the five throw sites listed one by one, the use of `process.stdout.write`, and the literal-string-versus-regex choice. The plan already carries this detail. In the spec, the one rule is enough: every git output is redacted where the runner is wrapped, and that rule is the guarantee."
+          },
+          {
+            "id": "zoom-out-1.5-4",
+            "reviewer": "goldfish-zoom-out",
+            "round": 1,
+            "stage": 5,
+            "severity": "Nit",
+            "scope": "spec J-4",
+            "text": "The user journey holds the whole runbook paragraph: what a second run answers per target (`already published`, `already at`, `latest: moved to`) and the \"A bad release\" exception. Design 3 then says to copy J-4 \"in the words of J-4\". A journey should state the outcome (the job is cut, and the person can tell whether distribution started and how to restart it safely); the per-target answers belong in the runbook text and AC-13."
+          },
+          {
+            "id": "zoom-out-1.5-5",
+            "reviewer": "goldfish-zoom-out",
+            "round": 1,
+            "stage": 5,
+            "severity": "Nit",
+            "scope": "spec AC-15 / plan Phase 4 \"AC-15\"",
+            "text": "The test looks for exact phrases (\"exact match\", \"no destination from its environment\") in ADR 0029 and in CLAUDE.md's Releasing line. That holds wording, not facts that code can check, and any later rewording of either document will break it, even when the meaning is unchanged."
+          },
+          {
+            "id": "zoom-out-1.5-6",
+            "reviewer": "goldfish-zoom-out",
+            "round": 1,
+            "stage": 5,
+            "severity": "Nit",
+            "scope": "spec AC-11 / plan Verification",
+            "text": "After the reads are deleted, the AC-11 case keeps setting `PUSH_REMOTE` and `PUSH_ORIGIN`, on and off a runner, to prove that a name nothing reads is ignored. The verification grep already shows that scripts/ never reads the names. The `clone`/`ls-remote` target assertion alone covers the requirement."
+          },
+          {
+            "id": "design-1.7-1",
+            "reviewer": "goldfish-design",
+            "round": 1,
+            "stage": 7,
+            "severity": "Major",
+            "scope": "Problem, item 1",
+            "text": "The spec says as fact that Actions \"does not know this encoded form\" but gives no source, and the actions/runner secret masker registers base64 value encoders, including shifted alignments; because \"x-access-token:\" is 15 bytes (a multiple of 3), the token's own base64 appears aligned inside the header's base64, so the runner may already mask most of it; the premise needs a check against the runner's masker or a real run, because it decides whether the mask line (Design 1) is new protection or just a new place where the full credential is printed.",
+            "disposition": "propose-fix",
+            "reason": "Right, checked on 2026-11-12 against actions/runner src/Sdk/DTLogging/Logging/ValueEncoders.cs: the runner registers base64 of each secret at three byte alignments, and the prefix x-access-token: is 15 bytes, so the base64 of the token sits whole inside the header and the runner already masks it in the log. The Problem is corrected to say so, and the mask line is removed from the design: the redaction inside the script stays, for the step summary (not shown to be masked) and for runs off a runner."
+          },
+          {
+            "id": "design-1.7-2",
+            "reviewer": "goldfish-design",
+            "round": 1,
+            "stage": 7,
+            "severity": "Major",
+            "scope": "Design 1, the mask line / Risks",
+            "text": "On a runner the design adds a line that prints the whole encoded credential to standard output on purpose, and it is hidden only if the runner treats it as a command; the spec names step debug but not the other ways that line can reach the log as plain text: a later `::stop-commands::`, a workflow change that pipes or captures the step's stdout (`| tee`, `$(...)`), or a re-run with \"Enable debug logging\"; a reader would not see that G-1's one allowed exception is itself an exposure that the redaction does not cover, and no AC or rule in the documents (AC-15) tells a later change to keep push.ts's stdout uncaptured on a runner.",
+            "disposition": "propose-fix",
+            "reason": "Right: the mask line prints the whole encoded credential on purpose and is safe only while the runner reads that output as a command. With design-1.7-1 it adds no protection, so it is removed, with its ordering rule, the GITHUB_ACTIONS gate and the criteria that held them (AC-10 mask parts, AC-16)."
+          },
+          {
+            "id": "design-1.7-3",
+            "reviewer": "goldfish-design",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "Non-goals vs Design 1 and Design 2",
+            "text": "\"Any change to `gitEnv`\" is a non-goal and Design 2 says \"`gitEnv` is not changed\", but Design 1 has `gitEnv` build its header from `encodedCredential`; that is a change to gitEnv (even if it gives the same output), so the text contradicts itself and should say \"no change to its output\"."
+          },
+          {
+            "id": "design-1.7-4",
+            "reviewer": "goldfish-design",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "J-4",
+            "text": "J-4 says a second run for the same tag writes nothing new and only names the \"A bad release\" exception; it leaves out the runbook's other refusal (\"Only the highest release can be repeated: an older tag is refused\"), so a hand start after a later tag has been cut is refused, not idempotent; separately, \"look again after a minute\" has no backing for why one minute is enough to show a late-accepted dispatch."
+          },
+          {
+            "id": "design-1.7-5",
+            "reviewer": "goldfish-design",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "G-3",
+            "text": "\"ends within five minutes\" overstates `timeout-minutes`, which counts only from when the job starts on a runner, not while it waits in the queue; the goal should say \"runs for at most five minutes\"."
+          },
+          {
+            "id": "design-1.7-6",
+            "reviewer": "goldfish-design",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "Acceptance criteria, AC-18",
+            "text": "\"names piece 2\" uses a term the spec never defines (Design 4 says \"points to the next item\"), so the check a test would make on the findings row is unclear."
+          },
+          {
+            "id": "design-1.7-7",
+            "reviewer": "goldfish-design",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "Acceptance criteria",
+            "text": "The ids run out of order (AC-9..12, AC-6, AC-13, AC-18, AC-15, AC-16, AC-17) and the spec explains the retired ids; this makes it harder to map criteria to Design sections."
+          },
+          {
+            "id": "design-1.7-8",
+            "reviewer": "goldfish-design",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "Heilmeier 6 and 7",
+            "text": "The spec states no cost or duration (effort, review rounds, and that the change is proved only by the next real tag), and no midway check apart from the ACs; the risks say runner behaviour \"is seen only in a real run\" but name no point at which someone will look at that run's log and summary for the encoded value."
+          },
+          {
+            "id": "structural-1.7-1",
+            "reviewer": "goldfish-structural",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "## Design (line 39)",
+            "text": "the rubric's \"Proposed architecture\" section is titled \"Design\" and is a list of changes per file, with no named components or data flow (token -> encodedCredential -> gitEnv / redact / tokenMask -> stdout and summary)"
+          },
+          {
+            "id": "structural-1.7-2",
+            "reviewer": "goldfish-structural",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "### Alternatives (line 77)",
+            "text": "the rubric's \"Alternatives considered\" is not a section of its own: it is an unnumbered third-level heading under Design, beside the numbered subsections 1-4"
+          },
+          {
+            "id": "structural-1.7-3",
+            "reviewer": "goldfish-structural",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "## Risks and rollback (line 102)",
+            "text": "named differently from the rubric's \"Risks and mitigations\", and the rollback text belongs under the rubric's non-functional \"rollout and rollback\", which says only \"None beyond the above\""
+          },
+          {
+            "id": "structural-1.7-4",
+            "reviewer": "goldfish-structural",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "headings throughout",
+            "text": "capitalisation is mixed: \"Goals and Non-Goals\", \"Open Questions\", \"Critical User Journeys\", \"Non-Functional Requirements\" are title case, while \"Acceptance criteria\", \"Risks and rollback\", \"Out of scope\" are sentence case"
+          },
+          {
+            "id": "structural-1.7-5",
+            "reviewer": "goldfish-structural",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "## Open Questions (line 30)",
+            "text": "says \"None.\" and then states something unresolved (whether `::add-mask::` reaches the step summary); Risks (line 106) says the same thing again"
+          },
+          {
+            "id": "structural-1.7-6",
+            "reviewer": "goldfish-structural",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "## Out of scope (line 115) vs Non-goals (lines 22-26)",
+            "text": "two lists of what is excluded, which overlap (the staged binary's version rule) and differ (only Out of scope lists `plan`'s ruleset check, the older jobs and the `latest` job), so neither one is complete"
+          },
+          {
+            "id": "structural-1.7-7",
+            "reviewer": "goldfish-structural",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "## Acceptance criteria (lines 89-98)",
+            "text": "the ids are out of order (AC-9, 10, 11, 12, then AC-6, 13, 18, 15, 16, 17), and no AC names the goal (G-1 to G-4) it covers"
+          },
+          {
+            "id": "structural-1.7-8",
+            "reviewer": "goldfish-structural",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "### 2 (line 65) vs AC-17 (line 98)",
+            "text": "the moved-tag summary ends with \"…\" in Design but with no ellipsis in AC-17, so it is unclear which text the test should match"
+          },
+          {
+            "id": "structural-1.7-9",
+            "reviewer": "goldfish-structural",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "## Critical User Journeys J-4 (line 37)",
+            "text": "one bullet holds a given/when/then plus the full runbook procedure and its exception, and Design 3 uses it as the runbook text. J-3 (line 36) packs two givens with separate thens into one journey"
+          },
+          {
+            "id": "structural-1.7-10",
+            "reviewer": "goldfish-structural",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "whole document vs spec-heilmeier.md",
+            "text": "questions 6 (cost) and 7 (how long) have no answer, and no midway check is stated for question 8"
+          },
+          {
+            "id": "style-1.7-1",
+            "reviewer": "goldfish-style",
+            "round": 1,
+            "stage": 7,
+            "severity": "Major",
+            "scope": "Design 1, fourth bullet (line 48)",
+            "text": "\"none can carry the value. This is the guarantee, and it holds wherever the script runs\" claims more than an exact literal match can deliver: git text that splits, wraps or truncates the base64 value gets through `redact`. A reader who takes \"guarantee\" at its word will not test or fix those cases. The exact-match limit is only stated one bullet later and only about other credential forms.",
+            "disposition": "propose-fix",
+            "reason": "Right: the redaction is by exact match, so a git text that splits, wraps or truncates the value passes. Design 1 states the limit in the same sentence and no longer calls it a guarantee; ADR 0029 carries the same limit."
+          },
+          {
+            "id": "style-1.7-2",
+            "reviewer": "goldfish-style",
+            "round": 1,
+            "stage": 7,
+            "severity": "Major",
+            "scope": "AC-18 (line 95)",
+            "text": "\"a row that names piece 2\" uses a term the spec never defines. Design 4 says \"points to the next item\" and Non-goals says \"the next item of the parent concept\", so a writer of the findings row or of its doc test cannot tell what text \"piece 2\" requires.",
+            "disposition": "propose-fix",
+            "reason": "Right: piece 2 is undefined in the spec. The criterion and Design 4 name the item by what it is (the next item of the parent concept: the client learns of a release and replaces its staged binary) and the row's status text is given: deferred, to the client update item."
+          },
+          {
+            "id": "style-1.7-3",
+            "reviewer": "goldfish-style",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "Alternatives, last bullet (line 83)",
+            "text": "\"Rejected here: those jobs are the backlog's debt point\" is jargon that hides the reason. A reader cannot tell why a timeout on the other jobs was turned down, and the feature rubric asks for a stated reason."
+          },
+          {
+            "id": "style-1.7-4",
+            "reviewer": "goldfish-style",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "Acceptance criteria intro (line 87)",
+            "text": "\"retired when the leads' returns changed their texts\" is process jargon. It tells a fresh reader nothing about the feature and could be cut or reduced to \"AC-1 to AC-5, AC-7, AC-8 and AC-14 are retired\"."
+          },
+          {
+            "id": "style-1.7-5",
+            "reviewer": "goldfish-style",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "Design 4, first bullet (line 74)",
+            "text": "\"with what the lenses found\" and \"the security lead's advisory\" point to sources the reader cannot find. Neither names a file or finding id."
+          },
+          {
+            "id": "style-1.7-6",
+            "reviewer": "goldfish-style",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "AC-18 (line 95)",
+            "text": "\"the old row\" is not defined anywhere in the spec. Which row of `docs/real-use/findings.md` is meant has to be guessed."
+          },
+          {
+            "id": "style-1.7-7",
+            "reviewer": "goldfish-style",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "Design 2, third paragraph (line 59)",
+            "text": "\"What the deletion buys is stated exactly:\" is filler before the fact. The sentence can start at \"No named test knob is left in the command.\""
+          },
+          {
+            "id": "style-1.7-8",
+            "reviewer": "goldfish-style",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "Problem, item 1 (line 9)",
+            "text": "\"which is as good as the token\" is informal. \"which authenticates as the token does\" states the fact."
+          },
+          {
+            "id": "style-1.7-9",
+            "reviewer": "goldfish-style",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "Problem, intro (line 7)",
+            "text": "\"Three of them are small\" is a subjective size judgement with no measure, and item 1 goes on to describe a leaked write credential."
+          },
+          {
+            "id": "style-1.7-10",
+            "reviewer": "goldfish-style",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "Open Questions (line 30)",
+            "text": "\"None.\" is followed at once by something the spec says is not known. Either list it as an open question that nothing here depends on, or move it to Risks, where line 106 already covers it."
+          },
+          {
+            "id": "style-1.7-11",
+            "reviewer": "goldfish-style",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "Non-goals, Design 4, AC-18, Out of scope (lines 24, 74, 95, 115)",
+            "text": "One deferred topic has three names: \"One rule for reading a staged binary's version\", \"the version rule of a staged binary\" and \"The version rule for a staged binary\". Use one."
+          },
+          {
+            "id": "style-1.7-12",
+            "reviewer": "goldfish-style",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "Design 1, second bullet (line 46)",
+            "text": "\"Unchanged when `token` is null, and byte for byte when the value does not occur\" leaves out the word that \"byte for byte\" modifies. It should say \"returned byte for byte unchanged\"."
+          },
+          {
+            "id": "style-1.7-13",
+            "reviewer": "goldfish-style",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "throughout (lines 10, 18, 49, 55, 61, 91, 96)",
+            "text": "\"the command of `push.ts`\" is a stiff construction used again and again. \"`push.ts`'s command\" or a name defined once would read more easily."
+          },
+          {
+            "id": "style-1.7-14",
+            "reviewer": "goldfish-style",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "Critical User Journeys, J-4 (line 37)",
+            "text": "One paragraph holds the given/when/then and then the whole runbook procedure, including how each target behaves on a second run. Splitting the then from the runbook text would make the journey easier to check."
+          },
+          {
+            "id": "style-1.7-15",
+            "reviewer": "goldfish-style",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "Acceptance criteria (line 93)",
+            "text": "AC-6 sits between AC-12 and AC-13 while the other ids run in order, so a reader scanning by id misses it."
+          },
+          {
+            "id": "style-1.7-16",
+            "reviewer": "goldfish-style",
+            "round": 1,
+            "stage": 7,
+            "severity": "Nit",
+            "scope": "Risks and rollback, second bullet (line 105)",
+            "text": "\"on a slow day\" is informal. \"under GitHub API latency we have not measured\" says what is not known."
+          },
+          {
+            "id": "readiness-1.9-1",
+            "reviewer": "goldfish-readiness",
+            "round": 1,
+            "stage": 9,
+            "severity": "Major",
+            "scope": "Phase 1, AC-9 first bullet",
+            "text": "The helper is defined as a runner that \"delegates to `run` except for one named git subcommand\". That cannot build two of the five cases. The `pull` case needs the first `push` faked as `[rejected]` and then `pull` failing with the header. The second-push case needs the first `push` faked as `[rejected]`, a real `pull`, and only the second `push` failing. A reader who builds the helper as written cannot express either case, and must design a per-call sequence (which call, which answer) that the plan never states.",
+            "disposition": "propose-fix",
+            "reason": "Right: the runner fake is specified as a sequence: a list of (subcommand, nth call, answer) entries, with every other call delegated to run; the rebase case answers push#1 with [rejected] and pull#1 with the header and code 1; the second-push case answers push#1 with [rejected], lets pull run for real and answers push#2 with the header and code 1."
+          },
+          {
+            "id": "readiness-1.9-2",
+            "reviewer": "goldfish-readiness",
+            "round": 1,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Phase 1, AC-12",
+            "text": "`options()` in release-push.test.ts types `edit` as `(dir: string) => null`, but `editTap` and `editMarketplace` return `PushOptions[\"edit\"]` (`Outcome | null`). Passing them fails `bun run typecheck`, which the plan requires after every phase. The plan does not say to widen the helper's type."
+          },
+          {
+            "id": "readiness-1.9-3",
+            "reviewer": "goldfish-readiness",
+            "round": 1,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Phase 1, AC-12",
+            "text": "The plan does not say whether the tap and marketplace cases create new bare repositories through the reworked `repository(name, files)` helper or write to the `beforeEach` `other`. It also does not say that `beforeEach`'s two calls change to the record form."
+          },
+          {
+            "id": "readiness-1.9-4",
+            "reviewer": "goldfish-readiness",
+            "round": 1,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Phase 2, gitStub",
+            "text": "The clone failure prints `Authorization: Basic $ENCODED`, but the plan does not say where `ENCODED` comes from: interpolated by the test into the stub's text, set in the command's environment, or `$GIT_CONFIG_VALUE_0`, which the stub receives. The shape of `gitStub(options)` (moved-tag sha, clone fragment, the commit override that copies the manifest for AC-17) is also left to the reader."
+          },
+          {
+            "id": "readiness-1.9-5",
+            "reviewer": "goldfish-readiness",
+            "round": 1,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Phase 2 step 3(d) and Phase 1 last AC-9 sentence",
+            "text": "Step 3(d), \"a passing run\", does not name its target (tap or marketplace). The `token: null` complement does not name which git call's runner quotes the header."
+          },
+          {
+            "id": "readiness-1.9-6",
+            "reviewer": "goldfish-readiness",
+            "round": 1,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Phase 2 step 5 / Files row for release-commands.test.ts",
+            "text": "The deletion list names the `repository`, `tagged`, `env` and `git` helpers but not the `IDENTITY` constant or the `run` import, which become unused once those cases go. Lint catches both."
+          },
+          {
+            "id": "readiness-1.9-7",
+            "reviewer": "goldfish-readiness",
+            "round": 1,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Phase 4, AC-13",
+            "text": "The test requires the number read from `release.yml` followed by \" minutes\" (\"5 minutes\"). The plan also says to write the paragraph \"in the words of the spec's J-4\", and J-4 says \"five minutes\". A paragraph copied from J-4 fails its own test."
+          },
+          {
+            "id": "readiness-1.9-8",
+            "reviewer": "goldfish-readiness",
+            "round": 1,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Phase 4, AC-15 and documents",
+            "text": "\"the two rules, in the Decision paragraph on the token and in Limits\" does not say which rule goes where. \"The ADR also says writes are tested through `commitAndPush`\" does not say whether the test asserts it, or with what string."
+          },
+          {
+            "id": "readiness-1.9-9",
+            "reviewer": "goldfish-readiness",
+            "round": 1,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Phase 4, findings rows",
+            "text": "The plan gives no status text for the piece 2 row, only that it must contain \"piece 2\", for example `deferred, to piece 2` as row 66 does. It also gives no source for \"what the lenses found\" (brief.md line 9 and concepts_brief.md hold it), so the reader writes that row's content without a reference."
+          },
+          {
+            "id": "codebase-1.9-1",
+            "reviewer": "goldfish-codebase",
+            "round": 1,
+            "stage": 9,
+            "severity": "Major",
+            "scope": "Phase 1, AC-12",
+            "text": "The plan calls `commitAndPush(options(editTap(...), …))` and `options(editMarketplace(...))`, but the `options` helper in tests/integration/release-push.test.ts:70-71 types `edit` as `(dir: string) => null`, while both edits return `PushOptions[\"edit\"]`, which is `(dir) => Outcome | null`. tsconfig.json includes `tests`, so `bun run typecheck` fails the phase unless the helper is widened, and the plan does not say to widen it (today's left-alone case gets around it with `as never`, line 150).",
+            "disposition": "propose-fix",
+            "reason": "Right: the options helper's edit parameter is widened to PushOptions[edit] in the plan, and the as never of the left-alone case goes."
+          },
+          {
+            "id": "codebase-1.9-2",
+            "reviewer": "goldfish-codebase",
+            "round": 1,
+            "stage": 9,
+            "severity": "Major",
+            "scope": "Phase 1, AC-9",
+            "text": "The helper is specified as \"delegates to `run` except for one named git subcommand, for which it returns code 1\", but two of the five sites cannot be reached that way. The rebase site needs the first `push` faked as `[rejected]` and `pull` faked as failing, which is two subcommands. The second-push site needs the first `push` to answer `[rejected]` and the second `push` to fail with the header, which is the same subcommand answered differently by call count. The implementer has to design the fake for these two cases.",
+            "disposition": "propose-fix",
+            "reason": "Right, same as readiness-1.9-1: the plan specifies the fake by subcommand and call count."
+          },
+          {
+            "id": "codebase-1.9-3",
+            "reviewer": "goldfish-codebase",
+            "round": 1,
+            "stage": 9,
+            "severity": "Major",
+            "scope": "Phase 2, AC-10 (a)",
+            "text": "The stub's clone prints `Authorization: Basic $ENCODED`, but nothing says where `ENCODED` comes from. The `stub` helper (release-commands.test.ts:36-43) writes a shell script, and push.ts passes the stub only `process.env` plus the gitEnv keys. If `$ENCODED` is left as an unset shell variable, the clone's error carries no value: the post-change case then passes without testing redaction, and stays red before the change only because the mask line is missing. The plan must say to interpolate the computed value into the stub's text in JavaScript, or to read it from `$GIT_CONFIG_VALUE_0`.",
+            "disposition": "propose-fix",
+            "reason": "Right: the stub echoes its own environment, Authorization: Basic followed by the value after the last space of GIT_CONFIG_VALUE_0, so the value is the one push.ts built; the test computes the same value in JavaScript for its assertions and asserts first that the unredacted run would contain it (the stub's log records it)."
+          },
+          {
+            "id": "codebase-1.9-4",
+            "reviewer": "goldfish-codebase",
+            "round": 1,
+            "stage": 9,
+            "severity": "Major",
+            "scope": "Phase 2, gitStub and AC-10 (b)",
+            "text": "The stub's cases list `status --porcelain` but not `status --short` or `diff`, which the dry-run path calls through `must` (push.ts:117-119). With \"the same stub\", the stub's fallback answers `unexpected git …` with exit 64, so the dry-run case ends in `tap: failed: git status failed…` with exit 1. The case asserts only that the mask line comes first, so it passes while the command's dry run (J-2) is never exercised.",
+            "disposition": "propose-fix",
+            "reason": "Right: the stub gains status --short and diff cases, and the dry-run case of the command asserts the summary tap: would write and exit 0, so the path is exercised."
+          },
+          {
+            "id": "codebase-1.9-5",
+            "reviewer": "goldfish-codebase",
+            "round": 1,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Phase 2 step 5",
+            "text": "Deleting the three local-repository cases and the `repository`, `tagged`, `env` and `git` helpers also leaves the `IDENTITY` constant and the `run` import (release-commands.test.ts:14, 361-368) used by nothing, and the plan does not name them for removal. biome flags the unused import and variable."
+          },
+          {
+            "id": "codebase-1.9-6",
+            "reviewer": "goldfish-codebase",
+            "round": 1,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Phase 2 step 4",
+            "text": "The step says to print the mask as the \"first statement\" of the command's body and also to read `token` \"once before `need(\"VERSION\")`\", but it never states how the token is read. The existing expression `process.env.MARKETPLACE_TOKEN || null` (push.ts:227), which turns an empty secret into no token, should be named as the one kept."
+          },
+          {
+            "id": "codebase-1.9-7",
+            "reviewer": "goldfish-codebase",
+            "round": 1,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "Phase 4, AC-15",
+            "text": "\"The ADR also says writes are tested through `commitAndPush`\" gives no exact string for the test to assert, unlike the other AC-15 checks, so the implementer has to choose one."
+          },
+          {
+            "id": "codebase-1.9-8",
+            "reviewer": "goldfish-codebase",
+            "round": 1,
+            "stage": 9,
+            "severity": "Nit",
+            "scope": "spec.md Design 2",
+            "text": "\"every call when no token is set, runs with the environment as inherited\" is not exact. With no token, the clone and push still get `gitEnv(null, …)`, which adds `GIT_TERMINAL_PROMPT: \"0\"` (push.ts:37-38, 98)."
+          }
+        ],
+        "clean": true,
+        "closedAt": "2026-11-12T17:34:02.375Z"
+      }
+    ],
+    "agentIds": [
+      "a9375083429d0f76e",
+      "a11ee9019c2b26475",
+      "ad84ba711fa42de50",
+      "a3ea73bcf5bd6df07",
+      "abc3a076916d17b0e",
+      "a0eed9478a4aa20f2",
+      "a2ac693ed4d12b9cb",
+      "a7feb832b2508fc29",
+      "acd1197d6b72c36b0",
+      "ae88f4410f0849a19",
+      "ac16c90c8d54416a9",
+      "acc9af2926d526a99"
+    ],
+    "brief": {
+      "hash": "b1dcef9c966c9bae72a3050e5ff211c7a93b30cef912c8976d9c10a7b735a5bb",
+      "agents": {
+        "goldfish-design": "a9375083429d0f76e",
+        "goldfish-codebase": "a11ee9019c2b26475",
+        "goldfish-zoom-out": "ad84ba711fa42de50",
+        "goldfish-comprehension": "a3ea73bcf5bd6df07",
+        "goldfish-readiness": "abc3a076916d17b0e",
+        "goldfish-structural": "a0eed9478a4aa20f2"
+      },
+      "at": "2026-11-12T17:17:04.858Z"
+    }
+  },
+  "judgement": [
+    {
+      "gate": "code-quality",
+      "verdict": "proven",
+      "reviewer": "review-code-quality",
+      "judge": "judge",
+      "findings": [
+        {
+          "file": "tests/unit/release-docs.test.ts",
+          "line": 10,
+          "text": "Upheld as advisory. `parseYaml` is copied word for word from tests/unit/deploy-files.test.ts:10. Duplicated test boilerplate falls under question 2, which the rubric treats as advisory.",
+          "severity": "advisory"
+        },
+        {
+          "file": "tests/integration/release-push.test.ts",
+          "line": 397,
+          "text": "Upheld as advisory. The fake checksums file (REQUIRED_ASSETS without checksums.txt, mapped to repeat(64) digests) is also built by the new `checksums()` helper in tests/integration/release-commands.test.ts. This is test fixture logic written twice (question 2).",
+          "severity": "advisory"
+        },
+        {
+          "file": "tests/integration/release-commands.test.ts",
+          "line": 381,
+          "text": "Upheld as advisory. `gitStub`'s option `quote?: \"clone\"` can take only one value, so it is a boolean written as a literal type. Its name also does not say that it makes the clone fail (questions 3 and 5). Naming in a test helper does not make the code wrong.",
+          "severity": "advisory"
+        },
+        {
+          "file": "docs/real-use/findings.md",
+          "line": 56,
+          "text": "Upheld as advisory. The rewritten security row drops the old row's claim that Actions masks the raw secret only, and does not say that this claim was corrected (question 11). The row is closed, and ADR 0029 now gives the source (ValueEncoders.cs), so the record is not left wrong.",
+          "severity": "advisory",
+          "outside": true
+        }
+      ],
+      "tokens": 78894,
+      "at": "2026-11-12T17:50:31.214Z",
+      "fingerprint": "sha256:e30bab5b9627aa38319283314d767f6cd89b1631fc2d10af4d6213218c25d195"
+    },
+    {
+      "gate": "test-quality",
+      "verdict": "proven",
+      "reviewer": "review-test-quality",
+      "judge": "judge",
+      "findings": [
+        {
+          "file": "tests/unit/release-docs.test.ts",
+          "line": 166,
+          "text": "Upheld as advisory. AC-22's ADR test checks only for the bare token \"`::add-mask::`\". It does not check that the ADR says the runner masks a secret's base64 itself, or why no such line is printed. The test still fails when the change is reverted, so this is partial coverage under question 1, not a missing test.",
+          "severity": "advisory"
+        },
+        {
+          "file": "tests/unit/release-docs.test.ts",
+          "line": 145,
+          "text": "Upheld as advisory. The findings-row test checks \"`PUSH_REMOTE`\" and \"`timeout-minutes`\" but not \"`PUSH_ORIGIN`\". It checks the open time-limit item only by the loose phrase \"time limit\". This is partial coverage under question 1. The test fails on revert.",
+          "severity": "advisory"
+        }
+      ],
+      "tokens": 75131,
+      "at": "2026-11-12T17:50:31.214Z",
+      "fingerprint": "sha256:e30bab5b9627aa38319283314d767f6cd89b1631fc2d10af4d6213218c25d195"
+    },
+    {
+      "gate": "security",
+      "verdict": "proven",
+      "reviewer": "review-security",
+      "judge": "judge",
+      "findings": [
+        {
+          "file": "scripts/release/push.ts",
+          "line": 39,
+          "text": "Upheld as advisory. `redact` covers only the base64 header form, not the raw MARKETPLACE_TOKEN. No path in the diff prints the raw token: git is never handed it, and the runner masks it as a registered secret. ADR 0029 states the exact-match limit, so this is hardening only.",
+          "severity": "advisory"
+        },
+        {
+          "file": "scripts/release/push.ts",
+          "line": 117,
+          "text": "Lowered to advisory as debt outside the change. `gitEnv(token, process.env)` passes the inherited environment to the token's git calls, and only the inherited GIT_CONFIG_KEY_n is overwritten. A home .gitconfig, GIT_CONFIG_GLOBAL or system configuration can still steer that git. The diff does not add this, and docs/real-use/findings.md records it as deferred.",
+          "severity": "advisory"
+        },
+        {
+          "file": "scripts/release/push.ts",
+          "line": 101,
+          "text": "Lowered to advisory as debt outside the change. The git calls that carry no header still inherit MARKETPLACE_TOKEN. This is recorded as deferred in docs/real-use/findings.md.",
+          "severity": "advisory"
+        },
+        {
+          "file": ".github/workflows/distribute.yml",
+          "line": 140,
+          "text": "Lowered to advisory as debt outside the change. The file is not in the diff. The git calls of push.ts have no time limit of their own beyond the job's. This is recorded as deferred.",
+          "severity": "advisory",
+          "outside": true
+        }
+      ],
+      "tokens": 76560,
+      "at": "2026-11-12T17:50:31.214Z",
+      "fingerprint": "sha256:e30bab5b9627aa38319283314d767f6cd89b1631fc2d10af4d6213218c25d195"
+    },
+    {
+      "gate": "risk",
+      "verdict": "proven",
+      "reviewer": "review-risk",
+      "judge": "judge",
+      "findings": [
+        {
+          "file": "docs/runbooks/release.md",
+          "line": 64,
+          "text": "Upheld as advisory. The cut-job paragraph rests on two values nobody has measured: that the dispatch finishes within 5 minutes, and that a late-accepted run appears within a minute. The harm is bounded, because a second run writes nothing the first already wrote. A cut is visible as a red release.yml. spec.md states the rollback as a revert on main. No rollback or dependency is missing from the spec or plan, so there is no defect.",
+          "severity": "advisory",
+          "outside": true
+        },
+        {
+          "file": ".github/workflows/distribute.yml",
+          "line": 128,
+          "text": "Lowered to advisory as debt outside the change. The file is not in the diff. The headerless git calls inherit MARKETPLACE_TOKEN and the global and system git configuration, and they have no time limit of their own. The item records all three as deferred in docs/real-use/findings.md, and the diff does not widen them.",
+          "severity": "advisory",
+          "outside": true
+        },
+        {
+          "file": "docs/real-use/findings.md",
+          "line": 73,
+          "text": "Dropped as a finding and noted as advisory. Line 73 is not a line of the diff (the hunk ends at line 60), and the note states a known unknown that the item itself records as deferred: whether the runner masks a secret's base64 in the step summary. It names no rubric failure in the change.",
+          "severity": "advisory",
+          "outside": true
+        }
+      ],
+      "tokens": 85774,
+      "at": "2026-11-12T17:50:31.214Z",
+      "fingerprint": "sha256:e30bab5b9627aa38319283314d767f6cd89b1631fc2d10af4d6213218c25d195"
+    },
+    {
+      "gate": "architecture",
+      "verdict": "proven",
+      "reviewer": "review-architecture",
+      "judge": "judge",
+      "findings": [],
+      "tokens": 80779,
+      "at": "2026-11-12T17:50:31.214Z",
+      "fingerprint": "sha256:e30bab5b9627aa38319283314d767f6cd89b1631fc2d10af4d6213218c25d195"
+    },
+    {
+      "gate": "infra",
+      "verdict": "proven",
+      "reviewer": "review-infra",
+      "judge": "judge",
+      "findings": [
+        {
+          "file": ".github/workflows/release.yml",
+          "line": 156,
+          "text": "Upheld as advisory. Nobody has measured whether `timeout-minutes: 5` on the dispatch-only job is enough, so a slow API day may show a false red. The rollback is stated, and the runbook gives the recovery steps (docs/runbooks/release.md, the new paragraph). This is the reviewer's own advisory under Q4.",
+          "severity": "advisory"
+        },
+        {
+          "file": "scripts/release/push.ts",
+          "line": 91,
+          "text": "Upheld as advisory. `redact` matches only the exact base64 of the credential, not the raw token. git is never handed the raw value, and ADR 0029 states the limit (Q2). This is the same point as security F-1.",
+          "severity": "advisory"
+        },
+        {
+          "file": ".github/workflows/release.yml",
+          "line": 1,
+          "text": "Lowered to advisory as debt outside the change. release.yml still references its actions by moving tag, and its checkouts keep credentials under a workflow-level contents: write. The diff does not touch these lines, and docs/real-use/findings.md already records them as deferred.",
+          "severity": "advisory"
+        },
+        {
+          "file": "scripts/release/push.ts",
+          "line": 117,
+          "text": "Lowered to advisory as debt outside the change. The calls without the header inherit MARKETPLACE_TOKEN, the token's git is not isolated from global and system configuration, and the git calls have no time limit of their own. The item names all three as deferred.",
+          "severity": "advisory"
+        }
+      ],
+      "tokens": 74259,
+      "at": "2026-11-12T17:50:31.214Z",
+      "fingerprint": "sha256:e30bab5b9627aa38319283314d767f6cd89b1631fc2d10af4d6213218c25d195"
+    }
+  ]
+}

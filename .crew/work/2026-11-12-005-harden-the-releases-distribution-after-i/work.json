@@ -1,0 +1,515 @@
+{
+  "id": "2026-11-12-005-harden-the-releases-distribution-after-i",
+  "title": "Harden the release's distribution after its first review (follow-up of 2026-11-1",
+  "input": "Harden the release's distribution after its first review (follow-up of 2026-11-12-004, the rows of 2026-11-12 in docs/real-use/findings.md). Four changes, no change to what is distributed. (1) scripts/release/push.ts registers the base64 form of the token's authorization header with the runner's ::add-mask:: before the first git call, so a git trace or a debug re-run cannot print a write credential in a public log. (2) The command of scripts/release/push.ts no longer reads PUSH_REMOTE and PUSH_ORIGIN at all: its test reaches local repositories another way. (3) The distribute job of .github/workflows/release.yml gets timeout-minutes, as every job of distribute.yml has. (4) scripts/install.sh and stageBinary (src/install/binary.ts) read a staged binary's version by one rule: exit status 0 and an answer that is a version and nothing else.",
+  "type": "feature",
+  "route": "full",
+  "routeReasons": [
+    "risk areas: infra"
+  ],
+  "riskAreas": [
+    "infra"
+  ],
+  "phase": "learn",
+  "awaiting": null,
+  "criteria": [
+    {
+      "id": "AC-6",
+      "kind": "behavior",
+      "text": "The distribute job of release.yml has timeout-minutes: 5."
+    },
+    {
+      "id": "AC-9",
+      "kind": "behavior",
+      "text": "commitAndPush, given a token, replaces the encoded credential with *** in every text git answers: the sentence of a failed tag read, clone, push, rebase and second push, and the lines of a dry run. A text without the value comes back byte for byte, and with no token nothing is replaced."
+    },
+    {
+      "id": "AC-11",
+      "kind": "behavior",
+      "text": "The push.ts command asks git for the github.com repositories only: for each target the log of git shows ls-remote --tags of https://github.com/<GITHUB_REPOSITORY>.git and clone --quiet of the github.com repository of the target, and the path given in PUSH_REMOTE or PUSH_ORIGIN nowhere, on and off a runner."
+    },
+    {
+      "id": "AC-12",
+      "kind": "behavior",
+      "text": "editTap and editMarketplace are exported, and commitAndPush with them writes the formula and both manifests to a local repository; a second run for the tap answers already-at with no second commit, and a manifest at a higher version is left alone."
+    },
+    {
+      "id": "AC-17",
+      "kind": "preserve",
+      "text": "On a stub git the push.ts command keeps its wiring: --target tap ends with exit 0, empty standard error and the summary tap: written, 9.9.9; --target marketplace runs the marketplace edit and writes marketplace: written, 9.9.9; a moved tag ends with exit 1 and the summary tap: failed: v9.9.9 no longer names the commit that was judged."
+    },
+    {
+      "id": "AC-19",
+      "kind": "behavior",
+      "text": "The push.ts command, given a token, lets the encoded credential into none of its output: when git fails quoting the header, standard output, standard error and the summary file carry *** in its place and the summary says tap: failed; on a dry run whose git output quotes the header, the printed lines carry *** and the summary says tap: would write 9.9.9 (dry run)."
+    },
+    {
+      "id": "AC-20",
+      "kind": "behavior",
+      "text": "The release runbook says what to do when the dispatch job is cut: one paragraph under Repeating a target names the minutes release.yml sets, cites gh run list --workflow distribute.yml, and says what a second run for the same tag does at each target (already published, already at, latest moved again) and the exception after a write was reverted by hand."
+    },
+    {
+      "id": "AC-21",
+      "kind": "behavior",
+      "text": "In docs/real-use/findings.md the rows of 2026-11-12 that this item answers cite item 2026-11-12-005, say what was done (the redaction; PUSH_REMOTE and PUSH_ORIGIN removed; timeout-minutes) and no longer have the status deferred; the file names what stays open: the reading of a staged binary version moved to the client update item, GIT_CONFIG_GLOBAL not isolated for the git of the token, no time limit on the git calls of push.ts, MARKETPLACE_TOKEN inherited by the calls without the header."
+    },
+    {
+      "id": "AC-22",
+      "kind": "behavior",
+      "text": "ADR 0029 and the Releasing line of CLAUDE.md say that push.ts redacts the encoded credential by exact match from every text git answers, and that the push.ts command takes no destination from its environment; the ADR also says the runner masks the base64 of a secret itself and why no ::add-mask:: line is printed."
+    }
+  ],
+  "approvals": [
+    {
+      "what": "spec",
+      "at": "2026-11-12T17:26:39.027Z",
+      "by": "validator",
+      "rule": "complete-gap-round"
+    }
+  ],
+  "skips": [],
+  "baseCommit": "e4f859635e6f95949ce6a7b5a21605af66a0fcee",
+  "createdAt": "2026-11-12T17:10:23.385Z",
+  "updatedAt": "2026-11-12T17:55:04.947Z",
+  "specReview": true,
+  "kind": "feature",
+  "kindFrom": "work_type feature",
+  "knowledge": {
+    "readAt": "2026-11-12T17:10:23.396Z",
+    "listed": [
+      "K-383",
+      "K-390",
+      "K-363",
+      "K-335",
+      "K-381",
+      "K-376",
+      "K-375",
+      "K-372",
+      "K-371",
+      "K-346"
+    ]
+  },
+  "priority": "high",
+  "seats": [
+    {
+      "role": "researcher",
+      "team": "researchers",
+      "kind": "debate",
+      "reason": "full route"
+    },
+    {
+      "role": "review-code-quality",
+      "team": "backend",
+      "kind": "gate",
+      "gate": "code-quality",
+      "reason": "full route"
+    },
+    {
+      "role": "review-test-quality",
+      "team": "qa",
+      "kind": "gate",
+      "gate": "test-quality",
+      "reason": "full route"
+    },
+    {
+      "role": "review-security",
+      "team": "security",
+      "kind": "gate",
+      "gate": "security",
+      "reason": "full route"
+    },
+    {
+      "role": "review-risk",
+      "team": "architects",
+      "kind": "gate",
+      "gate": "risk",
+      "reason": "full route"
+    },
+    {
+      "role": "review-architecture",
+      "team": "architects",
+      "kind": "gate",
+      "gate": "architecture",
+      "reason": "full route"
+    },
+    {
+      "role": "review-infra",
+      "team": "devops",
+      "kind": "gate",
+      "gate": "infra",
+      "reason": "risk area infra"
+    },
+    {
+      "role": "lead-qa",
+      "team": "qa",
+      "kind": "lead",
+      "reason": "full route"
+    },
+    {
+      "role": "lead-security",
+      "team": "security",
+      "kind": "lead",
+      "reason": "full route"
+    },
+    {
+      "role": "lead-architects",
+      "team": "architects",
+      "kind": "lead",
+      "reason": "full route"
+    },
+    {
+      "role": "lead-devops",
+      "team": "devops",
+      "kind": "lead",
+      "reason": "risk area infra"
+    },
+    {
+      "role": "judge",
+      "team": null,
+      "kind": "debate",
+      "reason": "a gate is planned"
+    }
+  ],
+  "primaryTeam": "backend",
+  "runtimes": [
+    "claude"
+  ],
+  "phaseAt": {
+    "understand": "2026-11-12T17:11:15.090Z",
+    "specify": "2026-11-12T17:17:13.542Z",
+    "conclave": "2026-11-12T17:18:14.620Z",
+    "plan": "2026-11-12T17:27:23.307Z",
+    "spec-review": "2026-11-12T17:27:27.331Z",
+    "build": "2026-11-12T17:35:55.293Z",
+    "gate": "2026-11-12T17:47:45.170Z",
+    "deliver": "2026-11-12T17:52:18.189Z",
+    "learn": "2026-11-12T17:52:23.553Z"
+  },
+  "removedCriteria": [
+    {
+      "id": "AC-3",
+      "kind": "behavior",
+      "text": "Off a runner, or with no token, the push.ts command prints no ::add-mask:: line.",
+      "at": "2026-11-12T17:18:30.516Z"
+    },
+    {
+      "id": "AC-1",
+      "kind": "behavior",
+      "text": "commitAndPush, given a token, replaces the encoded credential with *** in every text git answers: a failure sentence and the lines of a dry run carry no encoded value.",
+      "at": "2026-11-12T17:22:38.158Z"
+    },
+    {
+      "id": "AC-2",
+      "kind": "behavior",
+      "text": "On a runner with a token, the first line of standard output of the push.ts command is ::add-mask:: followed by the encoded credential, on a dry run too; when git fails quoting the header, neither standard error nor the summary file carries the encoded value.",
+      "at": "2026-11-12T17:22:38.215Z"
+    },
+    {
+      "id": "AC-4",
+      "kind": "behavior",
+      "text": "The push.ts command asks git for the github.com repositories only, with PUSH_REMOTE and PUSH_ORIGIN set in its environment, on and off a runner.",
+      "at": "2026-11-12T17:22:38.272Z"
+    },
+    {
+      "id": "AC-5",
+      "kind": "behavior",
+      "text": "editTap and editMarketplace are exported, and commitAndPush with them writes the formula and the two manifests to a local repository; a manifest at a higher version is left alone.",
+      "at": "2026-11-12T17:22:38.327Z"
+    },
+    {
+      "id": "AC-7",
+      "kind": "behavior",
+      "text": "The release runbook says what to do when the dispatch job is cut: it names the five minutes, cites gh run list --workflow distribute.yml, and says a second run for the same tag changes nothing.",
+      "at": "2026-11-12T17:22:38.383Z"
+    },
+    {
+      "id": "AC-8",
+      "kind": "preserve",
+      "text": "Off a runner, or with no token, the push.ts command prints no ::add-mask:: line and the encoded credential is in none of its output.",
+      "at": "2026-11-12T17:22:38.438Z"
+    },
+    {
+      "id": "AC-14",
+      "kind": "behavior",
+      "text": "docs/real-use/findings.md says what this item did (the mask and the redaction, PUSH_REMOTE and PUSH_ORIGIN removed, timeout-minutes), points the version rule of a staged binary to the next item, and has an open row naming the git of the token not isolated from global and system configuration and no time limit on the git calls of push.ts.",
+      "at": "2026-11-12T17:25:49.771Z"
+    },
+    {
+      "id": "AC-10",
+      "kind": "behavior",
+      "text": "On a runner with a token, the first line of standard output of the push.ts command is ::add-mask:: followed by the encoded credential: on a dry run too, and when VERSION is not set. When git fails quoting the header, the encoded value is in standard output once (that line), and in neither standard error nor the summary file; the summary file never carries the ::add-mask:: line.",
+      "at": "2026-11-12T17:34:16.309Z"
+    },
+    {
+      "id": "AC-16",
+      "kind": "preserve",
+      "text": "With no header quoted by git, the push.ts command prints no line starting ::add-mask:: in three cases: off a runner with a token, on a runner with no token, and neither.",
+      "at": "2026-11-12T17:34:16.357Z"
+    },
+    {
+      "id": "AC-18",
+      "kind": "behavior",
+      "text": "In docs/real-use/findings.md the rows of 2026-11-12 that this item answers no longer have the status deferred: each cites item 2026-11-12-005 and says what was done (the redaction and the mask; PUSH_REMOTE and PUSH_ORIGIN removed; timeout-minutes). The version rule of a staged binary is a row that names piece 2. A row with the status deferred names GIT_CONFIG_GLOBAL, the missing time limit on the git calls of push.ts and MARKETPLACE_TOKEN inherited by the calls without the header. The two advisories of the old row this item does not touch stay deferred.",
+      "at": "2026-11-12T17:34:16.407Z"
+    },
+    {
+      "id": "AC-15",
+      "kind": "behavior",
+      "text": "ADR 0029 and the Releasing line of CLAUDE.md say that the encoded credential is redacted and masked by exact match, so another form of the credential needs its own, and that the push.ts command takes no destination from its environment.",
+      "at": "2026-11-12T17:34:16.456Z"
+    },
+    {
+      "id": "AC-13",
+      "kind": "behavior",
+      "text": "The release runbook says what to do when the dispatch job is cut: it names the minutes release.yml sets, cites gh run list --workflow distribute.yml, and says what a second run for the same tag does at each target (already published, already at, latest moved again) and the exception after a write was reverted by hand.",
+      "at": "2026-11-12T17:34:16.505Z"
+    }
+  ],
+  "checklists": [
+    {
+      "kind": "auth",
+      "paths": [
+        "/Users/andreagroferreira/.local/share/wizardingcode-developer-crew/skills/crew/checklists/auth.md"
+      ],
+      "at": "2026-11-12T17:18:30.669Z"
+    }
+  ],
+  "validations": [
+    {
+      "what": "spec",
+      "by": "lead-devops",
+      "verdict": "returned",
+      "returns": 1,
+      "round": 1,
+      "file": "conclave/lead-devops.md",
+      "hash": "sha256:12c1da26bf655e59a30ae21a3aa140ce61153dc7aefa0efaea52647d4bd5efd6",
+      "fileHash": "sha256:b86d7281d1ccb8475b9d3bd9b2c53b63df26c080ac9096f72ee6d79cc0ee2744",
+      "at": "2026-11-12T17:21:38.071Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-architects",
+      "verdict": "returned",
+      "returns": 2,
+      "round": 1,
+      "file": "conclave/lead-architects.md",
+      "hash": "sha256:12c1da26bf655e59a30ae21a3aa140ce61153dc7aefa0efaea52647d4bd5efd6",
+      "fileHash": "sha256:d3301b8fce09ca8143c1e7716ca0160502ca159fa59d29d6700e2830ab6c01c1",
+      "at": "2026-11-12T17:21:38.122Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-security",
+      "verdict": "returned",
+      "returns": 2,
+      "round": 1,
+      "file": "conclave/lead-security.md",
+      "hash": "sha256:12c1da26bf655e59a30ae21a3aa140ce61153dc7aefa0efaea52647d4bd5efd6",
+      "fileHash": "sha256:c850007145adad850f522cab6992dac08843c60fb6a8f6ab4c7a83b30d850373",
+      "at": "2026-11-12T17:22:38.039Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-qa",
+      "verdict": "returned",
+      "returns": 4,
+      "round": 1,
+      "file": "conclave/lead-qa.md",
+      "hash": "sha256:12c1da26bf655e59a30ae21a3aa140ce61153dc7aefa0efaea52647d4bd5efd6",
+      "fileHash": "sha256:510b6204eef6d96229ea54cbc5dfa567530f525bcd212ed9c7b672b3ba10598a",
+      "at": "2026-11-12T17:22:38.098Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-security",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 2,
+      "file": "conclave/lead-security-reply.md",
+      "hash": "sha256:7117811c41f33dbe217cdbfc4500bd50ae976ae2409b01731539616db06ddfe5",
+      "fileHash": "sha256:d1a14ffd4c239a8be4d25588b47a5942679090fd0e61e5a5d1559b823b8fb994",
+      "at": "2026-11-12T17:25:18.197Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-architects",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 2,
+      "file": "conclave/lead-architects-reply.md",
+      "hash": "sha256:7117811c41f33dbe217cdbfc4500bd50ae976ae2409b01731539616db06ddfe5",
+      "fileHash": "sha256:6f69d1618218687f2acd58fd692a1b83a8dc4b44e8295e66fc753761e77b78f8",
+      "at": "2026-11-12T17:25:18.247Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-devops",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 2,
+      "file": "conclave/lead-devops-reply.md",
+      "hash": "sha256:7117811c41f33dbe217cdbfc4500bd50ae976ae2409b01731539616db06ddfe5",
+      "fileHash": "sha256:389e8305db0a19d932437c550a932bcad685e8e8a73f064042e7ee8d216477a4",
+      "at": "2026-11-12T17:25:18.299Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-qa",
+      "verdict": "returned",
+      "returns": 1,
+      "round": 2,
+      "file": "conclave/lead-qa-reply.md",
+      "hash": "sha256:7117811c41f33dbe217cdbfc4500bd50ae976ae2409b01731539616db06ddfe5",
+      "fileHash": "sha256:d0c5cb409872bc3772bc0f030e7a7c50e0ff927cf067083932c45060a1bbff36",
+      "at": "2026-11-12T17:25:49.715Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-qa",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 3,
+      "file": "conclave/lead-qa-reply.round2.md",
+      "hash": "sha256:32b4cf1fc93e119f178ac55d427b0d82675f2eb0b92f55c0c5cbb90f5302b637",
+      "fileHash": "sha256:e4e8f14535752a7cddef74418bfa4cc9ed535a029db99aeab92922810eae890b",
+      "at": "2026-11-12T17:26:38.724Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-security",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 3,
+      "file": "conclave/lead-security-reply.md",
+      "hash": "sha256:32b4cf1fc93e119f178ac55d427b0d82675f2eb0b92f55c0c5cbb90f5302b637",
+      "fileHash": "sha256:400a19f52f336afea6bd52d79c67d4350bb704249dba1fe30b925c09a64b219e",
+      "at": "2026-11-12T17:27:15.332Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-architects",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 3,
+      "file": "conclave/lead-architects-reply.md",
+      "hash": "sha256:32b4cf1fc93e119f178ac55d427b0d82675f2eb0b92f55c0c5cbb90f5302b637",
+      "fileHash": "sha256:932fb07f5f572d283e779500650a6a00c7c69fb81b9c9aef6388b09514135728",
+      "at": "2026-11-12T17:27:23.132Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-devops",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 3,
+      "file": "conclave/lead-devops-reply.md",
+      "hash": "sha256:32b4cf1fc93e119f178ac55d427b0d82675f2eb0b92f55c0c5cbb90f5302b637",
+      "fileHash": "sha256:b669c50da82f0bad435aabd34fc381e23a4fc8dd95a9d955821c129f059b9a1d",
+      "at": "2026-11-12T17:27:23.182Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-security",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 4,
+      "file": "conclave/lead-security-reply.md",
+      "hash": "sha256:3d2c9934abb5fce69784809df03ed83f98fdcb73f6df5124b4bae6f4ff7b5c68",
+      "fileHash": "sha256:c60c18c85521c10614b04a4fa8c3897a65c5f02ad9bbbed94d2b8434fcca0043",
+      "at": "2026-11-12T17:37:37.213Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-security",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-security.delivery-reply.md",
+      "hash": "sha256:e30bab5b9627aa38319283314d767f6cd89b1631fc2d10af4d6213218c25d195",
+      "fileHash": "sha256:a18b4a408e08cf0ae9af93a2606fa0fd92c3d1c57758cce627bb003d423d89ef",
+      "at": "2026-11-12T17:51:41.143Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-architects",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-architects.delivery-reply.md",
+      "hash": "sha256:e30bab5b9627aa38319283314d767f6cd89b1631fc2d10af4d6213218c25d195",
+      "fileHash": "sha256:1ac8f39f090b8b028cc1c5af6fbea96542dee97eeb84cebcdd15c7cc4ad8fc5b",
+      "at": "2026-11-12T17:51:41.196Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-devops",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-devops.delivery-reply.md",
+      "hash": "sha256:e30bab5b9627aa38319283314d767f6cd89b1631fc2d10af4d6213218c25d195",
+      "fileHash": "sha256:ca16519228cd953711879d19979d3f056983c93480ed3a828ee95a582ca894ad",
+      "at": "2026-11-12T17:51:41.248Z"
+    },
+    {
+      "what": "delivery",
+      "by": "lead-qa",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 1,
+      "file": "conclave/lead-qa.delivery-reply.md",
+      "hash": "sha256:e30bab5b9627aa38319283314d767f6cd89b1631fc2d10af4d6213218c25d195",
+      "fileHash": "sha256:aa2bb270ee63f3ef46b18c25d984a2a7486ac03f46e36ecfc451fea3150f8ed9",
+      "at": "2026-11-12T17:52:17.789Z"
+    }
+  ],
+  "rounds": {
+    "judgement": 1,
+    "validation": 4,
+    "judgementCode": "sha256:e30bab5b9627aa38319283314d767f6cd89b1631fc2d10af4d6213218c25d195"
+  },
+  "continued": [
+    {
+      "what": "validation",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-12T17:26:38.721Z",
+      "standing": true
+    },
+    {
+      "what": "validation",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-12T17:37:37.209Z",
+      "standing": true
+    }
+  ],
+  "knowledgeFiles": [],
+  "knowledgeLabels": [],
+  "pauses": [
+    {
+      "at": "2026-11-12T17:48:59.851Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-12T17:49:37.566Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    },
+    {
+      "at": "2026-11-12T17:50:01.003Z",
+      "reason": "judgement gate code-quality not run",
+      "kind": "role"
+    }
+  ],
+  "learned": {
+    "at": "2026-11-12T17:52:23.727Z",
+    "entries": [
+      "K-391"
+    ],
+    "confirmed": []
+  }
+}

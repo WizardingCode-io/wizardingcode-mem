@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "messages": [
+    {
+      "at": "2026-11-12T17:52:23.741Z",
+      "from": {
+        "workspace": "_alone",
+        "project": "ai-mem",
+        "item": "2026-11-12-005-harden-the-releases-distribution-after-i",
+        "agent": "session"
+      },
+      "hops": 0,
+      "opened": null,
+      "id": "M-2026-11-12-005-ai-mem",
+      "to": {
+        "workspace": "_alone",
+        "project": "ai-mem",
+        "item": null,
+        "agent": null
+      },
+      "type": "notice",
+      "priority": "normal",
+      "subject": "Lane fix/release-hardening (2026-11-12-005-harden-the-releases-distribution-a...",
+      "body": "Lane fix/release-hardening (2026-11-12-005-harden-the-releases-distribution-after-i, proven) is proven: commit it, then merge it from the main checkout.",
+      "replyTo": null,
+      "status": "sent"
+    }
+  ]
+}

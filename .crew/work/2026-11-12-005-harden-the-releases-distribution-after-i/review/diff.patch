@@ -1,0 +1,818 @@
+diff --git a/.github/workflows/release.yml b/.github/workflows/release.yml
+index d266aed..47b4225 100644
+--- a/.github/workflows/release.yml
++++ b/.github/workflows/release.yml
+@@ -152,6 +152,8 @@ jobs:
+   distribute:
+     needs: publish
+     runs-on: ubuntu-latest
++    # It only starts the other workflow; docs/runbooks/release.md says what to do when it is cut.
++    timeout-minutes: 5
+     permissions:
+       actions: write
+     steps:
+diff --git a/CLAUDE.md b/CLAUDE.md
+index afc9bf9..a5a33db 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -26,7 +26,7 @@ Brand conventions: products, plugins and skills are called `wizardingcode-<thing
+ - `bun run build` — compiles the five binaries into `dist/`
+ - `bun run format` — formats and fixes lint
+ - `bun run plugins` — rewrites what each agent installs (manifests, hooks, `wizardingcode-mem.sh`, the OpenCode package) from `scripts/plugins.ts`; run it after changing the version or the events
+-- Releasing (ADR 0029, `docs/runbooks/release.md`): a tag `v<version>` runs `.github/workflows/release.yml` (build, sign, the image by its version, the GitHub release), which starts `.github/workflows/distribute.yml` from `main`: `plan` (what may be distributed, `decidePlan`'s refusals in a fixed order; the hold of the image's `latest` by the contract rule), `npm` (both packages, trusted publishing, from the commit `plan` judged), `tap` and `marketplace` (the formula from `packaging/homebrew/wizardingcode-mem.rb.template`, the plugin's entry in the marketplace's two manifests), `latest` (the image's tag, last). The decisions are pure functions in `scripts/release/lib.ts` (which also holds what the commands share: `run`, `summary`, `output`, `command`), with the commands `plan.ts`, `npm.ts`, `token.ts` and `push.ts` beside it (Bun's and Node's built-ins only; no `bun install` runs in that workflow). The marketplace token and the publish right sit behind the GitHub environment `release` (branch `main` only), which `plan` checks. In `distribute.yml` no `run:` interpolates an expression, every action is pinned by commit and no checkout keeps credentials; `tests/unit/deploy-files.test.ts` holds both workflows' shape. The tap holds the only rendered formula.
++- Releasing (ADR 0029, `docs/runbooks/release.md`): a tag `v<version>` runs `.github/workflows/release.yml` (build, sign, the image by its version, the GitHub release), which starts `.github/workflows/distribute.yml` from `main`: `plan` (what may be distributed, `decidePlan`'s refusals in a fixed order; the hold of the image's `latest` by the contract rule), `npm` (both packages, trusted publishing, from the commit `plan` judged), `tap` and `marketplace` (the formula from `packaging/homebrew/wizardingcode-mem.rb.template`, the plugin's entry in the marketplace's two manifests), `latest` (the image's tag, last). The decisions are pure functions in `scripts/release/lib.ts` (which also holds what the commands share: `run`, `summary`, `output`, `command`), with the commands `plan.ts`, `npm.ts`, `token.ts` and `push.ts` beside it (Bun's and Node's built-ins only; no `bun install` runs in that workflow). The marketplace token and the publish right sit behind the GitHub environment `release` (branch `main` only), which `plan` checks. In `distribute.yml` no `run:` interpolates an expression, every action is pinned by commit and no checkout keeps credentials; `tests/unit/deploy-files.test.ts` holds both workflows' shape. `push.ts` redacts the token's encoded credential by exact match from every text git answers (`redact`; another form of the credential needs its own), and its command takes no destination from its environment: writes are tested through `commitAndPush`. The tap holds the only rendered formula.
+ - The staged binary (`<data dir>/bin`) only moves forward: the plugins' script, the OpenCode package, the npm shim (`npm/bin/wizardingcode-mem.js`), `stageBinary` (`src/install/binary.ts`) and `scripts/install.sh` each replace only an older or equal version, by one order (semantic versioning's; `src/util/version.ts`, `OLDER_JS` in `scripts/plugins.ts`, the shell `older()`), held equal by `tests/fixtures/version-order.ts`. A copy of `older()` is never edited alone: change `OLDER_JS` or the template and regenerate. `install` stages once per run and hands over to a newer staged binary; `install --force` replaces it.
+ - `wizardingcode-mem install [claude-code|claude-desktop|codex|cursor|opencode|qwen|droid|copilot|antigravity]` installs for one agent (Claude Desktop: its chat gets the MCP server with `--global`, across every project; Cowork gets the plugin; ADR 0012); with no agent, for every one it finds. In Claude Code it imports claude-mem's memories and retires it (with confirmation); `wizardingcode-mem import claude-mem` only imports. claude-mem's database is only read, never changed. Qwen Code, Droid, Copilot and Antigravity install directly (hooks file and MCP server, no plugin; ADR 0016). Gemini CLI is no longer supported: `install gemini` points to Antigravity, `uninstall gemini` removes an old install (`src/install/gemini-leftover.ts`; never touches Antigravity's `~/.gemini/config`).
+ - Adapters in `src/adapters/<agent>/`; installers in `src/install/`. The design per agent, and what was or was not confirmed in real sessions, is in ADR 0006 (Claude Code, Codex, Cursor, OpenCode) and ADR 0016 (Qwen Code, Droid, Copilot, Antigravity).
+diff --git a/docs/adr/0029-release-distribution.md b/docs/adr/0029-release-distribution.md
+index 374febe..b46d8c8 100644
+--- a/docs/adr/0029-release-distribution.md
++++ b/docs/adr/0029-release-distribution.md
+@@ -12,7 +12,7 @@ Every channel stages the binary the agents run at `<data dir>/bin/wizardingcode-
+ 
+ **Two workflows.** `release.yml` keeps building and publishing the GitHub release; it no longer tags the image `latest`, and it ends by starting `distribute.yml` from `main` with the tag. `distribute.yml` is dispatch-only and has five jobs: `plan` decides whether the tag may be distributed; `npm` publishes both packages by trusted publishing; `tap` writes the formula, rendered from a template with the release's checksums; `marketplace` writes the plugin's entry in the two manifests; `latest` retags the image last. The decisions are pure functions in `scripts/release/lib.ts`, which also carries what the commands share (the one runner of other programs, the summary and output writers); the workflow's shape is held by `tests/unit/deploy-files.test.ts`.
+ 
+-**What the token and the publish right rest on.** They sit behind the GitHub environment `release`, whose rule allows the branch `main` alone, and the npm trusted publishers name that environment and the file `distribute.yml`. `plan` reads the environment through the API and refuses to go on when it is missing or its rule is anything else, because a job that names a missing environment makes GitHub create it with no rule. `plan` also refuses a run that is not on `main`, a tag whose commit is not on `main`, and a tag whose version is not its commit's `package.json` version; `npm` checks out the commit `plan` judged, never the tag by name; the writer to the other repositories refuses when the tag no longer names that commit.
++**What the token and the publish right rest on.** They sit behind the GitHub environment `release`, whose rule allows the branch `main` alone, and the npm trusted publishers name that environment and the file `distribute.yml`. `plan` reads the environment through the API and refuses to go on when it is missing or its rule is anything else, because a job that names a missing environment makes GitHub create it with no rule. `plan` also refuses a run that is not on `main`, a tag whose commit is not on `main`, and a tag whose version is not its commit's `package.json` version; `npm` checks out the commit `plan` judged, never the tag by name; the writer to the other repositories refuses when the tag no longer names that commit. That writer (`scripts/release/push.ts`) hands git the token as a basic authorization header in the child's environment, and redacts the encoded credential by exact match from every text git answers before a failure's sentence or a dry run's line is built from it, so what it prints and appends to the run's summary never carries it. The match is exact: a text that splits or re-encodes the value is not covered, and a change that builds another form of the credential must add its own redaction. No `::add-mask::` line is printed for the encoded form: the runner registers the base64 of every secret at three byte alignments (`ValueEncoders.cs` in `actions/runner`, read on 2026-11-12; not tested here), which covers the token inside the header in the log, and such a line would itself print the whole credential to standard output.
+ 
+ **Never lower.** Only the highest release is distributed: a plain tag must be the highest plain tag merged into `main`, a pre-release the highest of all. Repeating is therefore safe: each target first looks at what is there.
+ 
+@@ -63,4 +63,5 @@ Taken by the author (2026-11-11 on the parent item, 2026-11-12 on this one):
+ - The formula's template and the scripts are read from `main`, not from the commit `plan` judged; only the highest tag is distributed, so `main` is never behind it, but a template changed on `main` after the tag is the one used.
+ - The tap has no check of its own against a lower version: the highest-tag rule is what keeps it from moving back.
+ - `plan` checks the environment's rule on every run but not the ruleset on `v*` tags, which stays a step of the setup.
++- The command of `push.ts` takes no destination from its environment: the two repositories come from its code and `GITHUB_REPOSITORY`, and writes are tested through `commitAndPush` against local repositories. This removes a named knob, not the reach of whoever controls the step's environment, who holds the token and can still configure git through `GIT_CONFIG_GLOBAL` or a home `.gitconfig`; the token's git is not isolated from global and system configuration, and its calls have no time limit of their own beyond the job's.
+ - The token is one person's.
+diff --git a/docs/real-use/findings.md b/docs/real-use/findings.md
+index d95dea3..3482afc 100644
+--- a/docs/real-use/findings.md
++++ b/docs/real-use/findings.md
+@@ -67,5 +67,8 @@ One row per finding left open: where it was found, what it is, and its outcome.
+ | 2026-11-12 | release distribution, infra and risk (rounds 2-3) | The formula's template and the scripts come from `main`, not from the commit `plan` judged; the tap has no forward-only check of its own; a third dispatch silently replaces the pending run; `release.yml` is green once the distribution is started, and whether GitHub notifies anyone of a failed dispatched run is not established. | deferred |
+ | 2026-11-12 | release distribution, code-quality and test-quality (round 3) | `passingFacts` ties `plan.ts`'s read order to `decidePlan`'s refusal order (a new refusal means three edits); `resolveBinary` (`src/cli/commands/install.ts`) also stages; the npm version check in `distribute.yml` is inline `bun -e`, outside `lib.ts` and a unit test; `node-version: 24` floats; `tests/unit/release-docs.test.ts` types the summary lines by hand instead of reading `OUTCOMES`, matches a flag anywhere in a command's module, and does not hold ADR 0029's citations (D-1 to D-5, `--force`, ADR 0008); no test names the `v99.0.0`-on-a-branch case of AC-65 by its outcome. | deferred |
+ | 2026-11-12 | release distribution, every reviewer (rounds 1-3), outside the change | `release.yml` still references its actions by moving tag and its checkouts keep credentials, under a workflow-level `contents: write` that also covers `build`; its output now travels by itself to the tap and to `latest`. `src/store/meta.ts:158` orders versions with `Bun.semver.order` directly, not through `src/util/version.ts`. | deferred |
+-| 2026-11-12 | release distribution, security (round 4) | `gitEnv` (`scripts/release/push.ts`) puts the base64 form of the token's header into the child's environment without registering it with `::add-mask::`; Actions masks the raw secret only. No path prints it today; a git trace or a debug re-run would. | deferred, first of the follow-up |
+-| 2026-11-12 | release distribution, code-quality, test-quality and infra (round 4) | `version_of` (`scripts/install.sh`) and `stagedVersion` (`src/install/binary.ts`) read a staged binary's version by different rules (first line and any exit code; the whole answer and exit 0). `PUSH_REMOTE` and `PUSH_ORIGIN` are still read by the command off a runner. `release.yml`'s `distribute` job has no `timeout-minutes`. `decideHold`'s `previous === null` branch has no case of its own; a test of `deploy-files.test.ts` leaves three temporary folders per run. | deferred |
++| 2026-11-12 | release distribution, security (round 4) | `gitEnv` (`scripts/release/push.ts`) puts the base64 form of the token's header into the child's environment, and nothing kept it out of what the script prints or writes to the run's summary when git quotes it. | item 2026-11-12-005: `commitAndPush` passes every text git answers through `redact` (exact match). No `::add-mask::` line: the runner already masks the base64 of a secret in the log, and the line would print the credential |
++| 2026-11-12 | release distribution, code-quality and infra (round 4) | `PUSH_REMOTE` and `PUSH_ORIGIN` were read by the command of `push.ts` off a runner. `release.yml`'s `distribute` job had no `timeout-minutes`. | item 2026-11-12-005: both variables removed, the command's writes tested through `commitAndPush`; `timeout-minutes: 5`, with the runbook's paragraph for a cut job |
++| 2026-11-12 | release distribution, code-quality and test-quality (round 4) | `version_of` (`scripts/install.sh`) and `stagedVersion` (`src/install/binary.ts`) read a staged binary's version by different rules (first line and any exit code; the whole answer and exit 0). Six readers of item 2026-11-12-005's concept found it wider than those two: "trimmed" differs between JavaScript and shell (a carriage return, leading blanks); two of the five readers stop waiting after 10 seconds and three wait for ever; the OpenCode package's `ensureBinary` has no test harness; `version_of` also judges the downloaded binary; nothing tells the person when a binary "with no version" is replaced. It needs one table of answers run against the five readers. | deferred, to the client update item |
++| 2026-11-12 | release distribution, test-quality (round 4) | `decideHold`'s `previous === null` branch has no case of its own; a test of `deploy-files.test.ts` leaves three temporary folders per run. | deferred |
++| 2026-11-12 | release distribution, item 2026-11-12-005 (spec and its leads) | The token's git is not isolated from global and system configuration (`GIT_CONFIG_GLOBAL`, a home `.gitconfig`): only the calls that carry the header discard inherited `GIT_CONFIG_KEY_n`. The git calls of `push.ts` have no time limit of their own, only the job's 15 minutes. The calls that do not carry the header still inherit `MARKETPLACE_TOKEN` in their environment. That the runner's masking of a secret's base64 reaches the step summary is not established; the script's redaction is what covers it. | deferred |
+diff --git a/docs/runbooks/release.md b/docs/runbooks/release.md
+index cd38deb..705714e 100644
+--- a/docs/runbooks/release.md
++++ b/docs/runbooks/release.md
+@@ -61,6 +61,8 @@ Start `distribute.yml` from `main` with the same tag. Every target checks what i
+ 
+ Wait for a run to end before starting another. The workflow runs one at a time and keeps one waiting; a third started meanwhile replaces the one that waits.
+ 
++The job of `release.yml` that starts the distribution is cut after 5 minutes, and GitHub then shows it as cancelled or failed. The distribution may have started all the same. Look for the tag's run with `gh run list --workflow distribute.yml` (it is named `distribute <tag>`), and look again after a minute, since a dispatch accepted just before the cut appears late. If the run is there, the distribution is under way and nothing is to be started. If it is not, re-run the failed job of `release.yml`, or start `distribute.yml` from `main` with the tag. A second run for the same tag writes nothing the first already wrote, and writes what the first had not reached: npm answers `already published`, the tap and the marketplace answer `already at <version>`, and `latest` is tagged again onto the same version's image and answers `latest: moved to <version>` again. The one exception is in "A bad release": after a tap or marketplace write was reverted by hand, or `latest` was moved back by hand, a second run writes it again.
++
+ ## Repairs
+ 
+ - **`distribute: refused: the GitHub release <tag> lacks: …`** The release was created and an upload failed. Upload the missing files with `gh release upload <tag> <files>` if you still have the run's artifacts, or delete the release and the tag (an admin's act) and tag again.
+diff --git a/scripts/release/push.ts b/scripts/release/push.ts
+index e61011c..96f617c 100644
+--- a/scripts/release/push.ts
++++ b/scripts/release/push.ts
+@@ -26,6 +26,19 @@ const BOT = {
+   email: "41898282+github-actions[bot]@users.noreply.github.com",
+ };
+ 
++/** The token as git's basic credential: the one derived form of it this file builds. */
++export function encodedCredential(token: string): string {
++  return Buffer.from(`x-access-token:${token}`).toString("base64");
++}
++
++/**
++ * A text of git's without the encoded credential. The match is exact: a text that splits or
++ * re-encodes the value is not covered, and another form of the credential needs its own.
++ */
++export function redact(text: string, token: string | null): string {
++  return token === null ? text : text.replaceAll(encodedCredential(token), "***");
++}
++
+ /**
+  * The environment of a git call to github.com: the token as an authorization header, so it is
+  * never in a remote's URL, in an argument or in a file of the clone.
+@@ -40,7 +53,7 @@ export function gitEnv(
+     ...env,
+     GIT_CONFIG_COUNT: "1",
+     GIT_CONFIG_KEY_0: "http.https://github.com/.extraheader",
+-    GIT_CONFIG_VALUE_0: `Authorization: Basic ${Buffer.from(`x-access-token:${token}`).toString("base64")}`,
++    GIT_CONFIG_VALUE_0: `Authorization: Basic ${encodedCredential(token)}`,
+   };
+ }
+ 
+@@ -76,7 +89,13 @@ export interface PushOptions {
+ /** Writes the edit to the other repository's default branch, or says why nothing was written. */
+ export function commitAndPush(options: PushOptions): Outcome {
+   const { remote, origin, tag, sha, version, token } = options;
+-  const exec = options.runner ?? run;
++  // Every text git answers is redacted here, before a sentence or a dry run's line is built
++  // from it: what this script prints and writes to the summary never carries the credential.
++  const inner = options.runner ?? run;
++  const exec: Runner = (cmd, more) => {
++    const out = inner(cmd, more);
++    return { code: out.code, stdout: redact(out.stdout, token), stderr: redact(out.stderr, token) };
++  };
+   // The values written name the tag: a tag moved since plan judged it stops here. This reads
+   // this repository, so it never carries the other repositories' token.
+   const refs = exec([
+@@ -165,7 +184,7 @@ const MANIFESTS = {
+ };
+ 
+ /** The formula for this release, rendered from the template beside this script's repository. */
+-function editTap(version: string, checksumsPath: string): PushOptions["edit"] {
++export function editTap(version: string, checksumsPath: string): PushOptions["edit"] {
+   return (dir) => {
+     const root = new URL("../../", import.meta.url).pathname;
+     const template = readFileSync(
+@@ -180,7 +199,7 @@ function editTap(version: string, checksumsPath: string): PushOptions["edit"] {
+ }
+ 
+ /** The plugin's entry in the two manifests; neither is written when either is at a higher version. */
+-function editMarketplace(version: string): PushOptions["edit"] {
++export function editMarketplace(version: string): PushOptions["edit"] {
+   return (dir) => {
+     const claude = join(dir, MANIFESTS.claude);
+     const agents = join(dir, MANIFESTS.agents);
+@@ -212,14 +231,11 @@ if (import.meta.main) {
+   }
+   command(target, () => {
+     const version = need("VERSION");
+-    const onRunner = process.env.GITHUB_ACTIONS === "true";
+     const outcome = commitAndPush({
+-      // The two overrides exist for the command's test, which writes to local repositories;
+-      // on a runner they are never read, so the token's writer goes only where it is meant to.
+-      remote: (onRunner ? undefined : process.env.PUSH_REMOTE) || REMOTES[target],
+-      origin:
+-        (onRunner ? undefined : process.env.PUSH_ORIGIN) ||
+-        `https://github.com/${need("GITHUB_REPOSITORY")}.git`,
++      // Where the token's writer goes is in this file and in the run's own repository: no
++      // variable of the environment names a destination.
++      remote: REMOTES[target],
++      origin: `https://github.com/${need("GITHUB_REPOSITORY")}.git`,
+       tag: need("TAG"),
+       sha: need("SHA"),
+       version,
+diff --git a/tests/integration/release-commands.test.ts b/tests/integration/release-commands.test.ts
+index f134d4e..737c5af 100644
+--- a/tests/integration/release-commands.test.ts
++++ b/tests/integration/release-commands.test.ts
+@@ -11,7 +11,7 @@ import {
+ } from "node:fs";
+ import { tmpdir } from "node:os";
+ import { join } from "node:path";
+-import { REQUIRED_ASSETS, run } from "../../scripts/release/lib.ts";
++import { REQUIRED_ASSETS } from "../../scripts/release/lib.ts";
+ 
+ // The release's command files, run the way the workflow runs them, with stand-ins for git,
+ // gh and npm first on PATH: each answers fixed texts by its arguments and logs how it was called.
+@@ -358,151 +358,146 @@ describe("token.ts", () => {
+ });
+ 
+ describe("push.ts", () => {
+-  const IDENTITY = {
+-    GIT_AUTHOR_NAME: "Test",
+-    GIT_AUTHOR_EMAIL: "test@example.invalid",
+-    GIT_COMMITTER_NAME: "Test",
+-    GIT_COMMITTER_EMAIL: "test@example.invalid",
+-    GIT_CONFIG_GLOBAL: "/dev/null",
+-    GIT_CONFIG_NOSYSTEM: "1",
+-  };
+-  const git = (cwd: string, ...args: string[]) => {
+-    const out = run(["git", ...args], { cwd, env: { ...process.env, ...IDENTITY } });
+-    if (out.code !== 0) throw new Error(`git ${args.join(" ")}: ${out.stderr}`);
+-    return out.stdout.trim();
+-  };
+-  /** A bare repository holding these files, and the commit of its main. */
+-  function repository(
+-    name: string,
+-    files: Record<string, string>,
+-  ): { bare: string; sha: string; work: string } {
+-    const bare = join(base, `${name}.git`);
+-    const work = join(base, `${name}-work`);
+-    mkdirSync(bare);
+-    git(bare, "init", "--quiet", "--bare", "-b", "main");
+-    git(base, "clone", "--quiet", bare, work);
+-    for (const [path, content] of Object.entries(files)) {
+-      mkdirSync(join(work, path, ".."), { recursive: true });
+-      writeFileSync(join(work, path), content);
+-    }
+-    git(work, "add", "-A");
+-    git(work, "commit", "--quiet", "-m", "first");
+-    git(work, "push", "--quiet", "origin", "HEAD:main");
+-    return { bare, sha: git(work, "rev-parse", "HEAD"), work };
++  const TAP = "https://github.com/WizardingCode-io/homebrew-wizardingcode.git";
++  const MARKET = "https://github.com/WizardingCode-io/wizardingcode-plugins.git";
++  const fixtures = join(ROOT, "tests/fixtures/release");
++  /** What the marketplace's clone holds: the two manifests, as the real repository has them. */
++  const MANIFESTS = [
++    "mkdir -p .claude-plugin .agents/plugins",
++    `cp "${fixtures}/marketplace.claude.json" .claude-plugin/marketplace.json`,
++    `cp "${fixtures}/marketplace.agents.json" .agents/plugins/marketplace.json`,
++  ].join(" && ");
++  // The header as a git that quotes it would print it. The clone carries it in its own
++  // environment, so the value printed there is the one push.ts built.
++  // (The shell reads the expansion, not JavaScript: the value after the header's last space.)
++  const HEADER = `Authorization: Basic $${"{GIT_CONFIG_VALUE_0##* }"}`;
++
++  /**
++   * A git that reaches nothing: it answers the tag read with `sha`, runs `clone` in the clone
++   * folder, says the tree changed, and keeps what was committed where the test can read it.
++   * `quote` makes the clone fail quoting its header; `leak` is a line the status and the diff
++   * of a dry run also print (those calls carry no header of their own).
++   */
++  function gitStub(options: { sha?: string; clone?: string; quote?: "clone"; leak?: string } = {}) {
++    const quoted = options.leak === undefined ? "" : `; echo "${options.leak}"`;
++    stub(
++      "git",
++      [
++        `  "ls-remote "*) printf '%s\\trefs/tags/v9.9.9\\n' "${options.sha ?? SHA}" ;;`,
++        options.quote === "clone"
++          ? `  "clone "*) echo "fatal: unable to access: ${HEADER}" >&2; exit 128 ;;`
++          : `  "clone "*) ${options.clone ?? ":"} ;;`,
++        '  "config "*|"add "*|"push "*) : ;;',
++        '  "status --porcelain") echo " M x" ;;',
++        `  "status --short") echo " M x"${quoted} ;;`,
++        `  "diff") echo "+two"${quoted} ;;`,
++        `  "commit "*) if [ -f .agents/plugins/marketplace.json ]; then cp .agents/plugins/marketplace.json "${base}/committed.json"; fi ;;`,
++      ].join("\n"),
++    );
+   }
+-  const env = (
+-    origin: { bare: string; sha: string },
+-    remote: string,
+-    more: Record<string, string> = {},
+-  ) => ({
+-    ...IDENTITY,
++  const env = (more: Record<string, string> = {}) => ({
+     TAG: "v9.9.9",
+-    SHA: origin.sha,
++    SHA,
+     VERSION: "9.9.9",
+     DRY_RUN: "false",
+     GITHUB_REPOSITORY: "o/r",
+-    PUSH_ORIGIN: origin.bare,
+-    PUSH_REMOTE: remote,
++    CHECKSUMS: checksums(),
+     ...more,
+   });
+-  function tagged(): { bare: string; sha: string } {
+-    const origin = repository("origin", { "package.json": "{}" });
+-    git(origin.work, "tag", "v9.9.9");
+-    git(origin.work, "push", "--quiet", "origin", "v9.9.9");
+-    return origin;
+-  }
+-
+-  test("the tap gets the formula rendered from the template and the release's checksums", async () => {
+-    const origin = tagged();
+-    const tap = repository("tap", { "README.md": "the tap\n" });
+-    const checksums = join(base, "checksums.txt");
++  function checksums(): string {
++    const file = join(base, "checksums.txt");
+     writeFileSync(
+-      checksums,
++      file,
+       REQUIRED_ASSETS.filter((name) => name !== "checksums.txt")
+         .map((name, index) => `${String(index + 1).repeat(64)}  ${name}`)
+         .join("\n"),
+     );
+-    const result = await script(
+-      "push.ts",
+-      ["--target", "tap"],
+-      env(origin, tap.bare, { CHECKSUMS: checksums }),
+-    );
++    return file;
++  }
++
++  test("--target tap writes the formula into the clone and says so in the summary", async () => {
++    gitStub();
++    const result = await script("push.ts", ["--target", "tap"], env());
+     expect(result.stderr).toBe("");
++    expect(result.exitCode).toBe(0);
+     expect(result.summary).toBe("tap: written, 9.9.9\n");
+-    const formula = git(tap.bare, "show", "main:Formula/wizardingcode-mem.rb");
+-    expect(formula).toContain('version "9.9.9"');
+-    expect(formula).not.toMatch(/@[A-Z0-9_]+@/);
+-    const again = await script(
+-      "push.ts",
+-      ["--target", "tap"],
+-      env(origin, tap.bare, { CHECKSUMS: checksums }),
+-    );
+-    expect(again.summary).toBe("tap: written, 9.9.9\ntap: already at 9.9.9\n");
+-    expect(git(tap.bare, "log", "--format=%s", "main").split("\n")).toEqual([
+-      "wizardingcode-mem 9.9.9",
+-      "first",
+-    ]);
++    expect(log("git")).toContain("commit --quiet -m wizardingcode-mem 9.9.9");
+   });
+ 
+-  test("the marketplace gets the plugin's entry, and a manifest at a higher version is left alone", async () => {
+-    const origin = tagged();
+-    const manifests = {
+-      ".claude-plugin/marketplace.json": readFileSync(
+-        join(ROOT, "tests/fixtures/release/marketplace.claude.json"),
+-        "utf8",
+-      ),
+-      ".agents/plugins/marketplace.json": readFileSync(
+-        join(ROOT, "tests/fixtures/release/marketplace.agents.json"),
+-        "utf8",
+-      ),
+-    };
+-    const market = repository("market", manifests);
+-    const written = await script("push.ts", ["--target", "marketplace"], env(origin, market.bare));
+-    expect(written.stderr).toBe("");
+-    expect(written.summary).toBe("marketplace: written, 9.9.9\n");
+-    expect(git(market.bare, "show", "main:.agents/plugins/marketplace.json")).toContain(
+-      '"ref": "v9.9.9"',
+-    );
+-    rmSync(join(base, "summary"));
+-    const lower = await script(
+-      "push.ts",
+-      ["--target", "marketplace"],
+-      env(origin, market.bare, { VERSION: "9.9.8" }),
+-    );
+-    expect(lower.exitCode).toBe(0);
+-    expect(lower.summary).toBe("marketplace: left alone, the manifest names 9.9.9\n");
++  test("--target marketplace edits the two manifests of the clone", async () => {
++    gitStub({ clone: MANIFESTS });
++    const result = await script("push.ts", ["--target", "marketplace"], env());
++    expect(result.stderr).toBe("");
++    expect(result.exitCode).toBe(0);
++    expect(result.summary).toBe("marketplace: written, 9.9.9\n");
++    expect(readFileSync(join(base, "committed.json"), "utf8")).toContain('"ref": "v9.9.9"');
+   });
+ 
+-  test("on a runner the two test overrides are ignored: the command writes only where it is meant to", async () => {
+-    // A git that reaches nothing and records what it was asked.
+-    stub("git", "");
+-    const result = await script("push.ts", ["--target", "marketplace"], {
+-      TAG: "v9.9.9",
+-      SHA: "a".repeat(40),
+-      VERSION: "9.9.9",
+-      DRY_RUN: "false",
+-      GITHUB_REPOSITORY: "o/r",
+-      GITHUB_ACTIONS: "true",
+-      PUSH_ORIGIN: join(base, "elsewhere.git"),
+-      PUSH_REMOTE: join(base, "elsewhere.git"),
+-    });
++  test("a tag moved since it was judged stops the write, and the summary says so", async () => {
++    gitStub({ sha: OLD });
++    const result = await script("push.ts", ["--target", "tap"], env());
+     expect(result.exitCode).toBe(1);
+-    expect(log("git")).toContain("ls-remote --tags https://github.com/o/r.git");
+-    expect(log("git")).not.toContain("elsewhere.git");
++    expect(result.summary).toStartWith(
++      "tap: failed: v9.9.9 no longer names the commit that was judged",
++    );
++    expect(log("git")).not.toContain("clone");
+   });
+ 
+-  test("a tag moved since it was judged stops the write, and the summary says so", async () => {
+-    const origin = tagged();
+-    const tap = repository("tap", { "README.md": "the tap\n" });
++  // No variable of the environment names where the token's writer goes.
++  test.each([
++    ["tap", TAP, "off a runner", {}],
++    ["tap", TAP, "on a runner", { GITHUB_ACTIONS: "true" }],
++    ["marketplace", MARKET, "off a runner", {}],
++    ["marketplace", MARKET, "on a runner", { GITHUB_ACTIONS: "true" }],
++  ] as const)("--target %s asks git for %s only, %s", async (target, remote, _where, runner) => {
++    gitStub({ clone: target === "marketplace" ? MANIFESTS : ":" });
++    const elsewhere = join(base, "elsewhere.git");
+     const result = await script(
+       "push.ts",
+-      ["--target", "tap"],
+-      env({ ...origin, sha: "0".repeat(40) }, tap.bare, { CHECKSUMS: join(base, "none") }),
++      ["--target", target],
++      env({ PUSH_REMOTE: elsewhere, PUSH_ORIGIN: elsewhere, ...runner }),
+     );
+-    expect(result.exitCode).toBe(1);
+-    expect(result.summary).toStartWith(
+-      "tap: failed: v9.9.9 no longer names the commit that was judged",
+-    );
+-    expect(git(tap.bare, "log", "--format=%s", "main")).toBe("first");
++    expect(result.exitCode).toBe(0);
++    const asked = log("git");
++    expect(asked).toContain("ls-remote --tags https://github.com/o/r.git refs/tags/v9.9.9");
++    expect(asked).toContain(`clone --quiet ${remote} .`);
++    expect(asked).not.toContain("elsewhere.git");
++  });
++
++  describe("with a token, when git quotes its authorization header", () => {
++    // A token whose encoding holds a "/", which a pattern would not match literally.
++    const token = "a>?";
++    const encoded = Buffer.from(`x-access-token:${token}`).toString("base64");
++
++    test("a failure is said without the credential, in every place it is said", async () => {
++      expect(encoded).toContain("/");
++      gitStub({ quote: "clone" });
++      const result = await script(
++        "push.ts",
++        ["--target", "tap"],
++        env({ MARKETPLACE_TOKEN: token }),
++      );
++      expect(result.exitCode).toBe(1);
++      expect(result.stderr).toContain("Authorization: Basic ***");
++      expect(result.summary).toStartWith("tap: failed: git clone failed in");
++      expect(result.summary).toContain("Authorization: Basic ***");
++      for (const text of [result.stdout, result.stderr, result.summary])
++        expect(text).not.toContain(encoded);
++    });
++
++    test("a dry run prints git's lines without it", async () => {
++      gitStub({ leak: `Authorization: Basic ${encoded}` });
++      const result = await script(
++        "push.ts",
++        ["--target", "tap"],
++        env({ MARKETPLACE_TOKEN: token, DRY_RUN: "true" }),
++      );
++      expect(result.exitCode).toBe(0);
++      expect(result.stdout).toContain("+two");
++      expect(result.stdout.match(/Authorization: Basic \*\*\*/g)).toHaveLength(2);
++      expect(result.summary).toBe("tap: would write 9.9.9 (dry run)\n");
++      for (const text of [result.stdout, result.stderr, result.summary])
++        expect(text).not.toContain(encoded);
++    });
+   });
+ });
+diff --git a/tests/integration/release-push.test.ts b/tests/integration/release-push.test.ts
+index 1a605b3..db885cf 100644
+--- a/tests/integration/release-push.test.ts
++++ b/tests/integration/release-push.test.ts
+@@ -1,9 +1,26 @@
+ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
+-import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
++import {
++  chmodSync,
++  mkdirSync,
++  mkdtempSync,
++  readFileSync,
++  realpathSync,
++  rmSync,
++  writeFileSync,
++} from "node:fs";
+ import { tmpdir } from "node:os";
+-import { join } from "node:path";
+-import { type Runner, run } from "../../scripts/release/lib.ts";
+-import { commitAndPush, gitEnv, tagNames } from "../../scripts/release/push.ts";
++import { dirname, join } from "node:path";
++import { REQUIRED_ASSETS, type Runner, type RunResult, run } from "../../scripts/release/lib.ts";
++import {
++  commitAndPush,
++  editMarketplace,
++  editTap,
++  encodedCredential,
++  gitEnv,
++  type PushOptions,
++  redact,
++  tagNames,
++} from "../../scripts/release/push.ts";
+ 
+ // The one writer to another repository (the tap, the marketplace), against local bare
+ // repositories: "other" is the repository written to, "origin" the one whose tag was judged.
+@@ -37,14 +54,17 @@ function git(cwd: string, ...args: string[]): string {
+   if (out.code !== 0) throw new Error(`git ${args.join(" ")}: ${out.stderr}`);
+   return out.stdout.trim();
+ }
+-/** A bare repository with one commit holding `file`, and a clone of it to work in. */
+-function repository(name: string, file: string): { bare: string; work: string } {
++/** A bare repository with one commit holding these files, and a clone of it to work in. */
++function repository(name: string, files: Record<string, string>): { bare: string; work: string } {
+   const bare = join(base, `${name}.git`);
+   const work = join(base, `${name}-work`);
+   mkdirSync(bare);
+   git(bare, "init", "--quiet", "--bare", "-b", "main");
+   git(base, "clone", "--quiet", bare, work);
+-  writeFileSync(join(work, file), "one\n");
++  for (const [path, content] of Object.entries(files)) {
++    mkdirSync(dirname(join(work, path)), { recursive: true });
++    writeFileSync(join(work, path), content);
++  }
+   git(work, "add", "-A");
+   git(work, "commit", "--quiet", "-m", "first");
+   git(work, "push", "--quiet", "origin", "HEAD:main");
+@@ -55,8 +75,8 @@ const messages = (bare: string) => git(bare, "log", "--format=%s", "main").split
+ 
+ beforeEach(() => {
+   base = realpathSync(mkdtempSync(join(tmpdir(), "wizardingcode-mem-push-")));
+-  other = repository("other", "a.txt").bare;
+-  const judged = repository("origin", "package.json");
++  other = repository("other", { "a.txt": "one\n" }).bare;
++  const judged = repository("origin", { "package.json": "one\n" });
+   origin = judged.bare;
+   sha = git(judged.work, "rev-parse", "HEAD");
+   git(judged.work, "tag", "v1.0.0");
+@@ -68,7 +88,7 @@ afterEach(() => {
+ });
+ 
+ const options = (
+-  edit: (dir: string) => null,
++  edit: PushOptions["edit"],
+   more: Partial<Parameters<typeof commitAndPush>[0]> = {},
+ ) => ({
+   remote: other,
+@@ -87,6 +107,36 @@ const change = (dir: string) => {
+   return null;
+ };
+ 
++const ENCODED = encodedCredential("secret");
++/** What a git that quotes its authorization header would say. */
++const QUOTED = `fatal: unable to access: Authorization: Basic ${ENCODED}`;
++type Step = { on: string; nth: number } & (
++  | { answer: Partial<RunResult> }
++  | { add: { stdout?: string; stderr?: string } }
++);
++/**
++ * A runner that follows a script: the nth call of a git subcommand is answered without running
++ * git, or runs and has text added to what git said. Every other call is git's own.
++ */
++function scripted(steps: Step[]): Runner {
++  const seen = new Map<string, number>();
++  return (cmd, more) => {
++    const name = cmd[1] ?? "";
++    const nth = (seen.get(name) ?? 0) + 1;
++    seen.set(name, nth);
++    const step = steps.find((entry) => entry.on === name && entry.nth === nth);
++    if (step === undefined) return run(cmd, more);
++    if ("answer" in step) return { code: 1, stdout: "", stderr: "", ...step.answer };
++    const real = run(cmd, more);
++    return {
++      code: real.code,
++      stdout: real.stdout + (step.add.stdout ?? ""),
++      stderr: real.stderr + (step.add.stderr ?? ""),
++    };
++  };
++}
++const REJECTED = " ! [rejected]        HEAD -> main (fetch first)";
++
+ describe("the writer to another repository", () => {
+   test("an unchanged tree makes no commit and says the repository is already there", () => {
+     const before = head(other);
+@@ -146,9 +196,7 @@ describe("the writer to another repository", () => {
+ 
+   test("an edit that leaves the repository alone is passed through, and nothing is written", () => {
+     const before = head(other);
+-    const outcome = commitAndPush(
+-      options(() => ({ kind: "left-alone", higher: "9.9.9" }) as never),
+-    );
++    const outcome = commitAndPush(options(() => ({ kind: "left-alone", higher: "9.9.9" })));
+     expect(outcome).toEqual({ kind: "left-alone", higher: "9.9.9" });
+     expect(head(other)).toBe(before);
+   });
+@@ -228,6 +276,89 @@ describe("the writer to another repository", () => {
+     expect(calls.filter((cmd) => cmd[1] === "push")).toHaveLength(1);
+   });
+ 
++  // git's texts reach a failure's sentence and a dry run's lines: none may carry the header's
++  // encoded credential, whichever call quoted it.
++  test.each<[string, Step[]]>([
++    ["the tag read", [{ on: "ls-remote", nth: 1, answer: { stderr: QUOTED } }]],
++    ["the clone", [{ on: "clone", nth: 1, answer: { code: 128, stderr: QUOTED } }]],
++    ["the push", [{ on: "push", nth: 1, answer: { stderr: QUOTED } }]],
++    [
++      "the rebase",
++      [
++        { on: "push", nth: 1, answer: { stderr: REJECTED } },
++        { on: "pull", nth: 1, answer: { stderr: QUOTED } },
++      ],
++    ],
++    [
++      "the second push",
++      [
++        { on: "push", nth: 1, answer: { stderr: REJECTED } },
++        { on: "push", nth: 2, answer: { stderr: QUOTED } },
++      ],
++    ],
++  ])("a failure of %s that quotes the header is said without the credential", (_site, steps) => {
++    let message = "";
++    try {
++      commitAndPush(options(change, { token: "secret", runner: scripted(steps) }));
++    } catch (error) {
++      message = (error as Error).message;
++    }
++    expect(message).toContain("Authorization: Basic ***");
++    expect(message).not.toContain(ENCODED);
++  });
++
++  test("a dry run's lines carry no credential either", () => {
++    const logged: string[] = [];
++    const outcome = commitAndPush(
++      options(change, {
++        token: "secret",
++        dryRun: true,
++        log: (line) => logged.push(line),
++        runner: scripted([
++          { on: "status", nth: 2, add: { stdout: `${QUOTED}\n` } },
++          { on: "diff", nth: 1, add: { stdout: `${QUOTED}\n` } },
++        ]),
++      }),
++    );
++    expect(outcome.kind).toBe("would-write");
++    const lines = logged.join("\n");
++    expect(lines).toContain("+two");
++    expect(lines.match(/Authorization: Basic \*\*\*/g)).toHaveLength(2);
++    expect(lines).not.toContain(ENCODED);
++  });
++
++  test("a text without the credential is said byte for byte, and with no token nothing is replaced", () => {
++    // What git really says when the repository is gone, with a token set.
++    let said = "";
++    const recording: Runner = (cmd, more) => {
++      const out = run(cmd, more);
++      if (cmd[1] === "push") said = out.stderr.trim();
++      return out;
++    };
++    let message = "";
++    try {
++      commitAndPush(
++        options(
++          (dir) => {
++            change(dir);
++            rmSync(other, { recursive: true, force: true });
++            return null;
++          },
++          { token: "secret", runner: recording },
++        ),
++      );
++    } catch (error) {
++      message = (error as Error).message;
++    }
++    expect(said).not.toBe("");
++    expect(message).toBe(`the push to ${other} failed: ${said}`);
++
++    const steps: Step[] = [{ on: "clone", nth: 1, answer: { code: 128, stderr: QUOTED } }];
++    expect(() => commitAndPush(options(change, { token: null, runner: scripted(steps) }))).toThrow(
++      `git clone failed in ${other}: ${QUOTED}`,
++    );
++  });
++
+   test("the token travels in the child's environment only: never in an argument or a URL", () => {
+     const calls: Array<{ cmd: string[]; env: Record<string, string | undefined> | undefined }> = [];
+     const runner: Runner = (cmd, more) => {
+@@ -254,7 +385,62 @@ describe("the writer to another repository", () => {
+   });
+ });
+ 
++describe("the two edits", () => {
++  const show = (bare: string, path: string) => git(bare, "show", `main:${path}`);
++
++  test("the tap gets the formula rendered from the template and the release's checksums, once", () => {
++    const tap = repository("tap", { "README.md": "the tap\n" }).bare;
++    const checksums = join(base, "checksums.txt");
++    writeFileSync(
++      checksums,
++      REQUIRED_ASSETS.filter((name) => name !== "checksums.txt")
++        .map((name, index) => `${String(index + 1).repeat(64)}  ${name}`)
++        .join("\n"),
++    );
++    const write = () =>
++      commitAndPush(options(editTap("9.9.9", checksums), { remote: tap, version: "9.9.9" }));
++    expect(write()).toEqual({ kind: "written", version: "9.9.9" });
++    const formula = show(tap, "Formula/wizardingcode-mem.rb");
++    expect(formula).toContain('version "9.9.9"');
++    expect(formula).not.toMatch(/@[A-Z0-9_]+@/);
++    expect(write()).toEqual({ kind: "already-at", version: "9.9.9" });
++    expect(messages(tap)).toEqual(["wizardingcode-mem 9.9.9", "first"]);
++  });
++
++  test("the marketplace gets the plugin's entry in both manifests, and a higher version is left alone", () => {
++    const fixture = (name: string) =>
++      readFileSync(new URL(`../fixtures/release/${name}`, import.meta.url), "utf8");
++    const market = repository("market", {
++      ".claude-plugin/marketplace.json": fixture("marketplace.claude.json"),
++      ".agents/plugins/marketplace.json": fixture("marketplace.agents.json"),
++    }).bare;
++    expect(
++      commitAndPush(options(editMarketplace("9.9.9"), { remote: market, version: "9.9.9" })),
++    ).toEqual({ kind: "written", version: "9.9.9" });
++    expect(show(market, ".claude-plugin/marketplace.json")).toContain("9.9.9");
++    expect(show(market, ".agents/plugins/marketplace.json")).toContain('"ref": "v9.9.9"');
++    const before = head(market);
++    expect(
++      commitAndPush(options(editMarketplace("9.9.8"), { remote: market, version: "9.9.8" })),
++    ).toEqual({ kind: "left-alone", higher: "9.9.9" });
++    expect(head(market)).toBe(before);
++  });
++});
++
+ describe("gitEnv and tagNames", () => {
++  test("the credential is replaced wherever it occurs, by its exact text", () => {
++    // A token whose encoding holds a character a pattern would read as an operator.
++    const token = ["a>?", "~~~", "x?>y"].find((candidate) =>
++      /[+/]/.test(encodedCredential(candidate)),
++    ) as string;
++    const encoded = encodedCredential(token);
++    expect(encoded).toMatch(/[+/]/);
++    expect(encoded).toBe(Buffer.from(`x-access-token:${token}`).toString("base64"));
++    expect(redact(`a ${encoded} b ${encoded}`, token)).toBe("a *** b ***");
++    expect(redact("nothing here\n", token)).toBe("nothing here\n");
++    expect(redact(`a ${encoded}`, null)).toBe(`a ${encoded}`);
++  });
++
+   test("the header is set for github.com only, and prompts are off", () => {
+     const env = gitEnv("secret", { PATH: "/bin" });
+     expect(env).toEqual({
+diff --git a/tests/unit/deploy-files.test.ts b/tests/unit/deploy-files.test.ts
+index 254b0a3..3e0396e 100644
+--- a/tests/unit/deploy-files.test.ts
++++ b/tests/unit/deploy-files.test.ts
+@@ -198,6 +198,9 @@ describe("the workflows", () => {
+     expect(distribute?.needs).toBe("publish");
+     expect(distribute?.["runs-on"]).toBe("ubuntu-latest");
+     expect(distribute?.permissions).toEqual({ actions: "write" });
++    // It only starts another workflow: a call that stalls is cut, not left to the runner's
++    // default of six hours.
++    expect(distribute?.["timeout-minutes"]).toBe(5);
+     expect(distribute?.steps).toHaveLength(1);
+     const start = distribute?.steps[0];
+     expect(start?.uses).toBeUndefined();
+diff --git a/tests/unit/release-docs.test.ts b/tests/unit/release-docs.test.ts
+index 4f74912..b5837e9 100644
+--- a/tests/unit/release-docs.test.ts
++++ b/tests/unit/release-docs.test.ts
+@@ -7,6 +7,8 @@ import { type Outcome, summaryLine, type Target } from "../../scripts/release/li
+ 
+ const ROOT = join(import.meta.dir, "..", "..");
+ const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
++const parseYaml = (text: string): unknown =>
++  (Bun as unknown as { YAML: { parse(text: string): unknown } }).YAML.parse(text);
+ 
+ const RUNBOOK = "docs/runbooks/release.md";
+ const runbook = read(RUNBOOK);
+@@ -105,4 +107,73 @@ describe("the release's documents", () => {
+     for (const line of possible)
+       expect({ line, shown: shown.includes(line) }).toEqual({ line, shown: true });
+   });
++
++  test("the runbook says what to do when the job that starts the distribution is cut", () => {
++    const start = runbook.indexOf("## Repeating a target");
++    const section = runbook.slice(start, runbook.indexOf("\n## ", start + 1));
++    const paragraphs = section
++      .split("\n\n")
++      .filter((paragraph) => paragraph.includes("`gh run list --workflow distribute.yml`"));
++    expect(paragraphs).toHaveLength(1);
++    const paragraph = paragraphs[0] as string;
++    // The limit is the workflow's own number, so the two cannot drift.
++    const release = parseYaml(read(".github/workflows/release.yml")) as {
++      jobs: Record<string, { "timeout-minutes"?: number }>;
++    };
++    const minutes = release.jobs.distribute?.["timeout-minutes"];
++    expect(minutes).toBeNumber();
++    expect(paragraph).toContain(`${minutes} minutes`);
++    // What a second run for the same tag does at each target, and the one exception.
++    for (const said of ["already published", "already at", "moved to", "A bad release"])
++      expect({ said, found: paragraph.includes(said) }).toEqual({ said, found: true });
++  });
++
++  test("the findings say what the hardening item did and what it left open", () => {
++    const findings = read("docs/real-use/findings.md");
++    const rows = findings
++      .split("\n")
++      .filter((line) => line.startsWith("| 2026-11-12 | release distribution"))
++      .map((line) => {
++        const cells = line.split(" | ");
++        return { line, outcome: (cells.at(-1) ?? "").replace(/\s*\|\s*$/, "") };
++      });
++    // The rows the item answers cite it, say what was done, and are no longer deferred.
++    const answered = rows.filter((row) => row.outcome.includes("2026-11-12-005"));
++    expect(answered.some((row) => row.line.includes("redact"))).toBe(true);
++    expect(
++      answered.some(
++        (row) => row.line.includes("`PUSH_REMOTE`") && row.line.includes("`timeout-minutes`"),
++      ),
++    ).toBe(true);
++    for (const row of answered) expect(row.outcome.startsWith("deferred")).toBe(false);
++    expect(rows.some((row) => row.outcome === "deferred, first of the follow-up")).toBe(false);
++    // The version rule went to the next item; the rest of what stays open is named.
++    const version = rows.filter((row) => row.line.includes("`version_of`"));
++    expect(version.map((row) => row.outcome)).toEqual(["deferred, to the client update item"]);
++    for (const open of ["`GIT_CONFIG_GLOBAL`", "time limit", "`MARKETPLACE_TOKEN`"])
++      expect({ open, named: rows.some((row) => row.line.includes(open)) }).toEqual({
++        open,
++        named: true,
++      });
++  });
++
++  test("ADR 0029 and CLAUDE.md carry the two rules of the writer to another repository", () => {
++    const adr = read("docs/adr/0029-release-distribution.md");
++    for (const said of [
++      "redacts the encoded credential by exact match",
++      "no destination from its environment",
++      "`commitAndPush`",
++      "`::add-mask::`",
++    ])
++      expect({ said, found: adr.includes(said) }).toEqual({ said, found: true });
++    const releasing = read("CLAUDE.md")
++      .split("\n")
++      .filter((line) => line.startsWith("- Releasing (ADR 0029"));
++    expect(releasing).toHaveLength(1);
++    for (const said of ["by exact match", "no destination from its environment"])
++      expect({ said, found: (releasing[0] as string).includes(said) }).toEqual({
++        said,
++        found: true,
++      });
++  });
+ });

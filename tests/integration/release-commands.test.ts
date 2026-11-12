@@ -11,7 +11,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { REQUIRED_ASSETS, run } from "../../scripts/release/lib.ts";
+import { REQUIRED_ASSETS } from "../../scripts/release/lib.ts";
 
 // The release's command files, run the way the workflow runs them, with stand-ins for git,
 // gh and npm first on PATH: each answers fixed texts by its arguments and logs how it was called.
@@ -358,151 +358,146 @@ describe("token.ts", () => {
 });
 
 describe("push.ts", () => {
-  const IDENTITY = {
-    GIT_AUTHOR_NAME: "Test",
-    GIT_AUTHOR_EMAIL: "test@example.invalid",
-    GIT_COMMITTER_NAME: "Test",
-    GIT_COMMITTER_EMAIL: "test@example.invalid",
-    GIT_CONFIG_GLOBAL: "/dev/null",
-    GIT_CONFIG_NOSYSTEM: "1",
-  };
-  const git = (cwd: string, ...args: string[]) => {
-    const out = run(["git", ...args], { cwd, env: { ...process.env, ...IDENTITY } });
-    if (out.code !== 0) throw new Error(`git ${args.join(" ")}: ${out.stderr}`);
-    return out.stdout.trim();
-  };
-  /** A bare repository holding these files, and the commit of its main. */
-  function repository(
-    name: string,
-    files: Record<string, string>,
-  ): { bare: string; sha: string; work: string } {
-    const bare = join(base, `${name}.git`);
-    const work = join(base, `${name}-work`);
-    mkdirSync(bare);
-    git(bare, "init", "--quiet", "--bare", "-b", "main");
-    git(base, "clone", "--quiet", bare, work);
-    for (const [path, content] of Object.entries(files)) {
-      mkdirSync(join(work, path, ".."), { recursive: true });
-      writeFileSync(join(work, path), content);
-    }
-    git(work, "add", "-A");
-    git(work, "commit", "--quiet", "-m", "first");
-    git(work, "push", "--quiet", "origin", "HEAD:main");
-    return { bare, sha: git(work, "rev-parse", "HEAD"), work };
+  const TAP = "https://github.com/WizardingCode-io/homebrew-wizardingcode.git";
+  const MARKET = "https://github.com/WizardingCode-io/wizardingcode-plugins.git";
+  const fixtures = join(ROOT, "tests/fixtures/release");
+  /** What the marketplace's clone holds: the two manifests, as the real repository has them. */
+  const MANIFESTS = [
+    "mkdir -p .claude-plugin .agents/plugins",
+    `cp "${fixtures}/marketplace.claude.json" .claude-plugin/marketplace.json`,
+    `cp "${fixtures}/marketplace.agents.json" .agents/plugins/marketplace.json`,
+  ].join(" && ");
+  // The header as a git that quotes it would print it. The clone carries it in its own
+  // environment, so the value printed there is the one push.ts built.
+  // (The shell reads the expansion, not JavaScript: the value after the header's last space.)
+  const HEADER = `Authorization: Basic $${"{GIT_CONFIG_VALUE_0##* }"}`;
+
+  /**
+   * A git that reaches nothing: it answers the tag read with `sha`, runs `clone` in the clone
+   * folder, says the tree changed, and keeps what was committed where the test can read it.
+   * `quote` makes the clone fail quoting its header; `leak` is a line the status and the diff
+   * of a dry run also print (those calls carry no header of their own).
+   */
+  function gitStub(options: { sha?: string; clone?: string; quote?: "clone"; leak?: string } = {}) {
+    const quoted = options.leak === undefined ? "" : `; echo "${options.leak}"`;
+    stub(
+      "git",
+      [
+        `  "ls-remote "*) printf '%s\\trefs/tags/v9.9.9\\n' "${options.sha ?? SHA}" ;;`,
+        options.quote === "clone"
+          ? `  "clone "*) echo "fatal: unable to access: ${HEADER}" >&2; exit 128 ;;`
+          : `  "clone "*) ${options.clone ?? ":"} ;;`,
+        '  "config "*|"add "*|"push "*) : ;;',
+        '  "status --porcelain") echo " M x" ;;',
+        `  "status --short") echo " M x"${quoted} ;;`,
+        `  "diff") echo "+two"${quoted} ;;`,
+        `  "commit "*) if [ -f .agents/plugins/marketplace.json ]; then cp .agents/plugins/marketplace.json "${base}/committed.json"; fi ;;`,
+      ].join("\n"),
+    );
   }
-  const env = (
-    origin: { bare: string; sha: string },
-    remote: string,
-    more: Record<string, string> = {},
-  ) => ({
-    ...IDENTITY,
+  const env = (more: Record<string, string> = {}) => ({
     TAG: "v9.9.9",
-    SHA: origin.sha,
+    SHA,
     VERSION: "9.9.9",
     DRY_RUN: "false",
     GITHUB_REPOSITORY: "o/r",
-    PUSH_ORIGIN: origin.bare,
-    PUSH_REMOTE: remote,
+    CHECKSUMS: checksums(),
     ...more,
   });
-  function tagged(): { bare: string; sha: string } {
-    const origin = repository("origin", { "package.json": "{}" });
-    git(origin.work, "tag", "v9.9.9");
-    git(origin.work, "push", "--quiet", "origin", "v9.9.9");
-    return origin;
-  }
-
-  test("the tap gets the formula rendered from the template and the release's checksums", async () => {
-    const origin = tagged();
-    const tap = repository("tap", { "README.md": "the tap\n" });
-    const checksums = join(base, "checksums.txt");
+  function checksums(): string {
+    const file = join(base, "checksums.txt");
     writeFileSync(
-      checksums,
+      file,
       REQUIRED_ASSETS.filter((name) => name !== "checksums.txt")
         .map((name, index) => `${String(index + 1).repeat(64)}  ${name}`)
         .join("\n"),
     );
-    const result = await script(
-      "push.ts",
-      ["--target", "tap"],
-      env(origin, tap.bare, { CHECKSUMS: checksums }),
-    );
+    return file;
+  }
+
+  test("--target tap writes the formula into the clone and says so in the summary", async () => {
+    gitStub();
+    const result = await script("push.ts", ["--target", "tap"], env());
     expect(result.stderr).toBe("");
+    expect(result.exitCode).toBe(0);
     expect(result.summary).toBe("tap: written, 9.9.9\n");
-    const formula = git(tap.bare, "show", "main:Formula/wizardingcode-mem.rb");
-    expect(formula).toContain('version "9.9.9"');
-    expect(formula).not.toMatch(/@[A-Z0-9_]+@/);
-    const again = await script(
-      "push.ts",
-      ["--target", "tap"],
-      env(origin, tap.bare, { CHECKSUMS: checksums }),
-    );
-    expect(again.summary).toBe("tap: written, 9.9.9\ntap: already at 9.9.9\n");
-    expect(git(tap.bare, "log", "--format=%s", "main").split("\n")).toEqual([
-      "wizardingcode-mem 9.9.9",
-      "first",
-    ]);
+    expect(log("git")).toContain("commit --quiet -m wizardingcode-mem 9.9.9");
   });
 
-  test("the marketplace gets the plugin's entry, and a manifest at a higher version is left alone", async () => {
-    const origin = tagged();
-    const manifests = {
-      ".claude-plugin/marketplace.json": readFileSync(
-        join(ROOT, "tests/fixtures/release/marketplace.claude.json"),
-        "utf8",
-      ),
-      ".agents/plugins/marketplace.json": readFileSync(
-        join(ROOT, "tests/fixtures/release/marketplace.agents.json"),
-        "utf8",
-      ),
-    };
-    const market = repository("market", manifests);
-    const written = await script("push.ts", ["--target", "marketplace"], env(origin, market.bare));
-    expect(written.stderr).toBe("");
-    expect(written.summary).toBe("marketplace: written, 9.9.9\n");
-    expect(git(market.bare, "show", "main:.agents/plugins/marketplace.json")).toContain(
-      '"ref": "v9.9.9"',
-    );
-    rmSync(join(base, "summary"));
-    const lower = await script(
-      "push.ts",
-      ["--target", "marketplace"],
-      env(origin, market.bare, { VERSION: "9.9.8" }),
-    );
-    expect(lower.exitCode).toBe(0);
-    expect(lower.summary).toBe("marketplace: left alone, the manifest names 9.9.9\n");
-  });
-
-  test("on a runner the two test overrides are ignored: the command writes only where it is meant to", async () => {
-    // A git that reaches nothing and records what it was asked.
-    stub("git", "");
-    const result = await script("push.ts", ["--target", "marketplace"], {
-      TAG: "v9.9.9",
-      SHA: "a".repeat(40),
-      VERSION: "9.9.9",
-      DRY_RUN: "false",
-      GITHUB_REPOSITORY: "o/r",
-      GITHUB_ACTIONS: "true",
-      PUSH_ORIGIN: join(base, "elsewhere.git"),
-      PUSH_REMOTE: join(base, "elsewhere.git"),
-    });
-    expect(result.exitCode).toBe(1);
-    expect(log("git")).toContain("ls-remote --tags https://github.com/o/r.git");
-    expect(log("git")).not.toContain("elsewhere.git");
+  test("--target marketplace edits the two manifests of the clone", async () => {
+    gitStub({ clone: MANIFESTS });
+    const result = await script("push.ts", ["--target", "marketplace"], env());
+    expect(result.stderr).toBe("");
+    expect(result.exitCode).toBe(0);
+    expect(result.summary).toBe("marketplace: written, 9.9.9\n");
+    expect(readFileSync(join(base, "committed.json"), "utf8")).toContain('"ref": "v9.9.9"');
   });
 
   test("a tag moved since it was judged stops the write, and the summary says so", async () => {
-    const origin = tagged();
-    const tap = repository("tap", { "README.md": "the tap\n" });
-    const result = await script(
-      "push.ts",
-      ["--target", "tap"],
-      env({ ...origin, sha: "0".repeat(40) }, tap.bare, { CHECKSUMS: join(base, "none") }),
-    );
+    gitStub({ sha: OLD });
+    const result = await script("push.ts", ["--target", "tap"], env());
     expect(result.exitCode).toBe(1);
     expect(result.summary).toStartWith(
       "tap: failed: v9.9.9 no longer names the commit that was judged",
     );
-    expect(git(tap.bare, "log", "--format=%s", "main")).toBe("first");
+    expect(log("git")).not.toContain("clone");
+  });
+
+  // No variable of the environment names where the token's writer goes.
+  test.each([
+    ["tap", TAP, "off a runner", {}],
+    ["tap", TAP, "on a runner", { GITHUB_ACTIONS: "true" }],
+    ["marketplace", MARKET, "off a runner", {}],
+    ["marketplace", MARKET, "on a runner", { GITHUB_ACTIONS: "true" }],
+  ] as const)("--target %s asks git for %s only, %s", async (target, remote, _where, runner) => {
+    gitStub({ clone: target === "marketplace" ? MANIFESTS : ":" });
+    const elsewhere = join(base, "elsewhere.git");
+    const result = await script(
+      "push.ts",
+      ["--target", target],
+      env({ PUSH_REMOTE: elsewhere, PUSH_ORIGIN: elsewhere, ...runner }),
+    );
+    expect(result.exitCode).toBe(0);
+    const asked = log("git");
+    expect(asked).toContain("ls-remote --tags https://github.com/o/r.git refs/tags/v9.9.9");
+    expect(asked).toContain(`clone --quiet ${remote} .`);
+    expect(asked).not.toContain("elsewhere.git");
+  });
+
+  describe("with a token, when git quotes its authorization header", () => {
+    // A token whose encoding holds a "/", which a pattern would not match literally.
+    const token = "a>?";
+    const encoded = Buffer.from(`x-access-token:${token}`).toString("base64");
+
+    test("a failure is said without the credential, in every place it is said", async () => {
+      expect(encoded).toContain("/");
+      gitStub({ quote: "clone" });
+      const result = await script(
+        "push.ts",
+        ["--target", "tap"],
+        env({ MARKETPLACE_TOKEN: token }),
+      );
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain("Authorization: Basic ***");
+      expect(result.summary).toStartWith("tap: failed: git clone failed in");
+      expect(result.summary).toContain("Authorization: Basic ***");
+      for (const text of [result.stdout, result.stderr, result.summary])
+        expect(text).not.toContain(encoded);
+    });
+
+    test("a dry run prints git's lines without it", async () => {
+      gitStub({ leak: `Authorization: Basic ${encoded}` });
+      const result = await script(
+        "push.ts",
+        ["--target", "tap"],
+        env({ MARKETPLACE_TOKEN: token, DRY_RUN: "true" }),
+      );
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("+two");
+      expect(result.stdout.match(/Authorization: Basic \*\*\*/g)).toHaveLength(2);
+      expect(result.summary).toBe("tap: would write 9.9.9 (dry run)\n");
+      for (const text of [result.stdout, result.stderr, result.summary])
+        expect(text).not.toContain(encoded);
+    });
   });
 });

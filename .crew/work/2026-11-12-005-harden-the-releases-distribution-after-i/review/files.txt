@@ -1,0 +1,10 @@
+.github/workflows/release.yml
+CLAUDE.md
+docs/adr/0029-release-distribution.md
+docs/real-use/findings.md
+docs/runbooks/release.md
+scripts/release/push.ts
+tests/integration/release-commands.test.ts
+tests/integration/release-push.test.ts
+tests/unit/deploy-files.test.ts
+tests/unit/release-docs.test.ts

@@ -7,6 +7,8 @@ import { type Outcome, summaryLine, type Target } from "../../scripts/release/li
 
 const ROOT = join(import.meta.dir, "..", "..");
 const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
+const parseYaml = (text: string): unknown =>
+  (Bun as unknown as { YAML: { parse(text: string): unknown } }).YAML.parse(text);
 
 const RUNBOOK = "docs/runbooks/release.md";
 const runbook = read(RUNBOOK);
@@ -104,5 +106,74 @@ describe("the release's documents", () => {
     // And the table leaves none out.
     for (const line of possible)
       expect({ line, shown: shown.includes(line) }).toEqual({ line, shown: true });
+  });
+
+  test("the runbook says what to do when the job that starts the distribution is cut", () => {
+    const start = runbook.indexOf("## Repeating a target");
+    const section = runbook.slice(start, runbook.indexOf("\n## ", start + 1));
+    const paragraphs = section
+      .split("\n\n")
+      .filter((paragraph) => paragraph.includes("`gh run list --workflow distribute.yml`"));
+    expect(paragraphs).toHaveLength(1);
+    const paragraph = paragraphs[0] as string;
+    // The limit is the workflow's own number, so the two cannot drift.
+    const release = parseYaml(read(".github/workflows/release.yml")) as {
+      jobs: Record<string, { "timeout-minutes"?: number }>;
+    };
+    const minutes = release.jobs.distribute?.["timeout-minutes"];
+    expect(minutes).toBeNumber();
+    expect(paragraph).toContain(`${minutes} minutes`);
+    // What a second run for the same tag does at each target, and the one exception.
+    for (const said of ["already published", "already at", "moved to", "A bad release"])
+      expect({ said, found: paragraph.includes(said) }).toEqual({ said, found: true });
+  });
+
+  test("the findings say what the hardening item did and what it left open", () => {
+    const findings = read("docs/real-use/findings.md");
+    const rows = findings
+      .split("\n")
+      .filter((line) => line.startsWith("| 2026-11-12 | release distribution"))
+      .map((line) => {
+        const cells = line.split(" | ");
+        return { line, outcome: (cells.at(-1) ?? "").replace(/\s*\|\s*$/, "") };
+      });
+    // The rows the item answers cite it, say what was done, and are no longer deferred.
+    const answered = rows.filter((row) => row.outcome.includes("2026-11-12-005"));
+    expect(answered.some((row) => row.line.includes("redact"))).toBe(true);
+    expect(
+      answered.some(
+        (row) => row.line.includes("`PUSH_REMOTE`") && row.line.includes("`timeout-minutes`"),
+      ),
+    ).toBe(true);
+    for (const row of answered) expect(row.outcome.startsWith("deferred")).toBe(false);
+    expect(rows.some((row) => row.outcome === "deferred, first of the follow-up")).toBe(false);
+    // The version rule went to the next item; the rest of what stays open is named.
+    const version = rows.filter((row) => row.line.includes("`version_of`"));
+    expect(version.map((row) => row.outcome)).toEqual(["deferred, to the client update item"]);
+    for (const open of ["`GIT_CONFIG_GLOBAL`", "time limit", "`MARKETPLACE_TOKEN`"])
+      expect({ open, named: rows.some((row) => row.line.includes(open)) }).toEqual({
+        open,
+        named: true,
+      });
+  });
+
+  test("ADR 0029 and CLAUDE.md carry the two rules of the writer to another repository", () => {
+    const adr = read("docs/adr/0029-release-distribution.md");
+    for (const said of [
+      "redacts the encoded credential by exact match",
+      "no destination from its environment",
+      "`commitAndPush`",
+      "`::add-mask::`",
+    ])
+      expect({ said, found: adr.includes(said) }).toEqual({ said, found: true });
+    const releasing = read("CLAUDE.md")
+      .split("\n")
+      .filter((line) => line.startsWith("- Releasing (ADR 0029"));
+    expect(releasing).toHaveLength(1);
+    for (const said of ["by exact match", "no destination from its environment"])
+      expect({ said, found: (releasing[0] as string).includes(said) }).toEqual({
+        said,
+        found: true,
+      });
   });
 });

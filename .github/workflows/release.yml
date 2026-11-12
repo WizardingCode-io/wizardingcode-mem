@@ -152,6 +152,8 @@ jobs:
   distribute:
     needs: publish
     runs-on: ubuntu-latest
+    # It only starts the other workflow; docs/runbooks/release.md says what to do when it is cut.
+    timeout-minutes: 5
     permissions:
       actions: write
     steps:
