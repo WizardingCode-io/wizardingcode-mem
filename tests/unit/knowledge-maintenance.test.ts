@@ -222,6 +222,10 @@ describe("the documents", () => {
       for (const setting of SETTINGS) expect(text).toContain(setting);
       expect(text).toContain("git maintenance run --auto --quiet");
     }
+    // The sentence beside it, on the hooks path, is whole.
+    expect(claude).toContain(
+      "the repository's own `.git/config` (a file) as its hooks path, and no template. No git process outlives the call that started it",
+    );
   });
 
   test("ADR 0024 says the housekeeping still runs, after a commit and in the foreground, and keeps the limit open", () => {

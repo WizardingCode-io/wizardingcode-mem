@@ -5,10 +5,11 @@
   "type": "fix",
   "route": "standard",
   "routeReasons": [
-    "fix, scope level 1, clear request"
+    "fix, scope level 1, clear request",
+    "personal data in lines not read for risk (test or excluded): email (tests/unit/knowledge-maintenance.test.ts)"
   ],
   "riskAreas": [],
-  "phase": "build",
+  "phase": "gate",
   "awaiting": null,
   "criteria": [
     {
@@ -63,7 +64,7 @@
   "skips": [],
   "baseCommit": "e4f859635e6f95949ce6a7b5a21605af66a0fcee",
   "createdAt": "2026-11-12T19:49:20.046Z",
-  "updatedAt": "2026-11-12T20:33:40.955Z",
+  "updatedAt": "2026-11-12T20:46:25.227Z",
   "kind": "issue",
   "kindFrom": "work_type fix",
   "knowledge": {
@@ -132,7 +133,8 @@
     "specify": "2026-11-12T20:25:28.071Z",
     "conclave": "2026-11-12T20:27:06.017Z",
     "plan": "2026-11-12T20:33:32.982Z",
-    "build": "2026-11-12T20:33:40.955Z"
+    "build": "2026-11-12T20:33:40.955Z",
+    "gate": "2026-11-12T20:46:25.166Z"
   },
   "decisions": [
     {
@@ -253,10 +255,49 @@
       "hash": "sha256:bed53291b660fc115f40356d5a82332354f6fdd850eab0f41098ee719d7d0c4e",
       "fileHash": "sha256:e49b485d64da44296f277de136daa7cea9a0cb41328f37dfce2c00fece840a94",
       "at": "2026-11-12T20:33:32.533Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-qa",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 3,
+      "file": "conclave/lead-qa-reply.md",
+      "hash": "sha256:cabdfc17929ba39a02f596356dfe55828cd6b60a97283286ae7b3f1e5b25e6e4",
+      "fileHash": "sha256:9b35e8bc052ea0f0d8874bbe05dbf3d340af55749a5c5388f5dba443f96442ca",
+      "at": "2026-11-12T20:43:00.223Z"
+    },
+    {
+      "what": "spec",
+      "by": "lead-security",
+      "verdict": "validated",
+      "returns": 0,
+      "round": 3,
+      "file": "conclave/lead-security-reply.md",
+      "hash": "sha256:cabdfc17929ba39a02f596356dfe55828cd6b60a97283286ae7b3f1e5b25e6e4",
+      "fileHash": "sha256:dba80e202a888213709b937ce48efc7efde89dd9c2a447cbaac9fec2afaf01dc",
+      "at": "2026-11-12T20:43:00.280Z"
     }
   ],
   "rounds": {
     "judgement": 0,
-    "validation": 2
-  }
+    "validation": 3
+  },
+  "continued": [
+    {
+      "what": "validation",
+      "by": {
+        "by": "user"
+      },
+      "at": "2026-11-12T20:43:00.220Z",
+      "standing": true
+    }
+  ],
+  "pauses": [
+    {
+      "at": "2026-11-12T20:43:04.662Z",
+      "reason": "gates have not run",
+      "kind": "role"
+    }
+  ]
 }
