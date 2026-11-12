@@ -1,5 +1,14 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -64,6 +73,16 @@ async function run(base: string, ...args: string[]) {
   return { stdout, stderr, exitCode };
 }
 
+const BIN = () => join(home, ".wizardingcode", "mem", "bin", "wizardingcode-mem");
+/** A binary already in place that answers this for --version. */
+function stage(answer: string): void {
+  mkdirSync(join(home, ".wizardingcode", "mem", "bin"), { recursive: true });
+  writeFileSync(BIN(), `#!/bin/sh\nif [ "$1" = "--version" ]; then echo "${answer}"; exit 0; fi\n`);
+  chmodSync(BIN(), 0o755);
+}
+const answers = () =>
+  Bun.spawnSync([BIN(), "--version"], { stdout: "pipe" }).stdout.toString().trim();
+
 describe("scripts/install.sh", () => {
   test("downloads this platform's binary, checks it, puts it in place and runs install with the arguments given", async () => {
     const result = await run(release(), "claude-code", "--yes");
@@ -102,5 +121,44 @@ describe("scripts/install.sh", () => {
     const result = await run(base.replace(/:\d+\//, `:${server.port}/`));
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain("not in the release's checksums");
+  });
+  test("a newer binary already in place stays", async () => {
+    stage("10.0.0");
+    const result = await run(release(), "--download-only");
+    expect(result.exitCode).toBe(0);
+    expect(answers()).toBe("10.0.0");
+    expect(result.stdout).toContain(`wizardingcode-mem: 10.0.0 is already in ${BIN()}`);
+    expect(result.stdout).toContain(
+      "the older 9.9.9 was not put in its place (--force replaces it)",
+    );
+    expect(result.stdout).not.toContain("installed 9.9.9");
+  });
+
+  test("--force replaces a newer binary, and reaches install", async () => {
+    stage("10.0.0");
+    const result = await run(release(), "claude-code", "--force");
+    expect(result.exitCode).toBe(0);
+    expect(answers()).toBe("9.9.9");
+    expect(readFileSync(join(home, ".wizardingcode", "mem", "bin", "called.txt"), "utf8")).toBe(
+      "called: install claude-code --force\n",
+    );
+  });
+
+  test("--force after --download-only replaces a newer binary", async () => {
+    stage("10.0.0");
+    await run(release(), "--download-only", "--force");
+    expect(answers()).toBe("9.9.9");
+  });
+
+  test("an older binary in place is replaced", async () => {
+    stage("1.0.0");
+    await run(release(), "--download-only");
+    expect(answers()).toBe("9.9.9");
+  });
+
+  test("a staged file that does not answer a version is replaced", async () => {
+    stage("hello");
+    await run(release(), "--download-only");
+    expect(answers()).toBe("9.9.9");
   });
 });

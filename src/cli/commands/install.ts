@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
+import pkg from "../../../package.json" with { type: "json" };
 import { doctorContext } from "../../doctor/context.ts";
 import { antigravityContext, installAntigravity } from "../../install/antigravity.ts";
 import { stageBinary } from "../../install/binary.ts";
@@ -65,11 +66,12 @@ export const AGENT_NAMES: Record<string, string> = {
   antigravity: "Antigravity",
 };
 
-const USAGE = `Usage: wizardingcode-mem install [<agent>] [--binary <path>] [--yes] [--keep-claude-mem] [--no-import] [--import-history | --no-import-history] [--semantic | --no-semantic]
+const USAGE = `Usage: wizardingcode-mem install [<agent>] [--binary <path>] [--yes] [--force] [--keep-claude-mem] [--no-import] [--import-history | --no-import-history] [--semantic | --no-semantic]
 
   <agent>             claude-code | claude-desktop | codex | cursor | opencode | qwen | droid | copilot | antigravity; none installs for every one found
   --binary <path>     The wizardingcode-mem binary the hooks will run (needed when running from source)
   --yes               Retire claude-mem, shibaox-mem and an old Gemini CLI install without asking
+  --force             Put this binary in place even when a newer one is already staged
   --keep-claude-mem   Leave claude-mem installed and running
   --no-import         Do not import claude-mem's memories
   --import-history    Learn from past Claude Code and Codex sessions without asking
@@ -169,16 +171,20 @@ export function run(argv: string[]): number {
     });
     // Claude Desktop is no agent with hooks, but its chat should share the same memory.
     if (hasClaudeDesktop(claudeDesktopConfigPath())) found.push("claude-desktop");
-    const gemini = cleanUpGemini(rest);
     if (found.length === 0) {
+      const gemini = cleanUpGemini(rest);
       if (gemini.length > 0) process.stdout.write(`${gemini.join("\n")}\n`);
       process.stderr.write(
         "wizardingcode-mem install: No supported agent found on this machine. Name one: wizardingcode-mem install <agent>\n",
       );
       return 1;
     }
+    // Before anything of the install runs here: a newer staged binary does all of it.
+    const binary = binaryOrHandOver(argv, rest);
+    if ("code" in binary) return binary.code;
+    const gemini = cleanUpGemini(rest);
     let code = 0;
-    for (const each of found) code = Math.max(code, installOne(each, rest, false));
+    for (const each of found) code = Math.max(code, installOne(each, rest, binary.path, false));
     if (gemini.length > 0) process.stdout.write(`${gemini.join("\n")}\n`);
     // Once per run, not once per agent, and only when an agent whose transcripts are read was installed.
     if (code === 0 && (found.includes("claude-code") || found.includes("codex")))
@@ -191,9 +197,63 @@ export function run(argv: string[]): number {
       process.stdout.write(`Not found on this machine: ${missing.join(", ")}\n`);
     return code;
   }
-  const code = installOne(agent, rest);
+  const binary = binaryOrHandOver(argv, rest);
+  if ("code" in binary) return binary.code;
+  const code = installOne(agent, rest, binary.path);
   if (code === 0) offerSemantic(rest);
   return code;
+}
+
+/** The binary the hooks will run: the one named with --binary, or this one staged in the data directory. */
+function resolveBinary(rest: string[]): { path: string; kept: string | null } | { error: string } {
+  const flag = rest.indexOf("--binary");
+  const explicit = flag === -1 ? undefined : rest[flag + 1];
+  if (explicit !== undefined) {
+    const path = resolve(explicit);
+    return existsSync(path)
+      ? { path, kept: null }
+      : { error: `wizardingcode-mem install: ${path} does not exist\n` };
+  }
+  if (!isCompiled()) {
+    return {
+      error:
+        "wizardingcode-mem install: running from source. Build a binary with `bun run build` and pass it with --binary <path>.\n",
+    };
+  }
+  return stageBinary(process.execPath, defaultDataDir(), {
+    version: pkg.version,
+    force: rest.includes("--force"),
+  });
+}
+
+/**
+ * Resolves the binary once per run, whatever the number of agents. A newer binary already
+ * staged is not replaced: this one says so and hands the whole install over to it, since an
+ * older binary may meet a store the newer one has already migrated.
+ */
+function binaryOrHandOver(argv: string[], rest: string[]): { path: string } | { code: number } {
+  const binary = resolveBinary(rest);
+  if ("error" in binary) {
+    process.stderr.write(binary.error);
+    return { code: 1 };
+  }
+  if (binary.kept === null) return { path: binary.path };
+  process.stdout.write(
+    `A newer wizardingcode-mem (${binary.kept}) is already in ${binary.path}; this one is ${pkg.version} and was not put in its place. wizardingcode-mem install --force replaces it.\n`,
+  );
+  try {
+    const handed = Bun.spawnSync([binary.path, "install", ...argv], {
+      stdin: "inherit",
+      stdout: "inherit",
+      stderr: "inherit",
+    });
+    return { code: handed.exitCode ?? 1 };
+  } catch (error) {
+    process.stderr.write(
+      `wizardingcode-mem install: could not run ${binary.path}: ${error instanceof Error ? error.message : String(error)}\n`,
+    );
+    return { code: 1 };
+  }
 }
 
 /** An old Gemini CLI install of ours: offered for removal, once per run. */
@@ -225,25 +285,7 @@ function offerSemantic(rest: string[]): void {
   }
 }
 
-function installOne(agent: string, rest: string[], offer = true): number {
-  const flag = rest.indexOf("--binary");
-  const explicit = flag === -1 ? undefined : rest[flag + 1];
-  let binaryPath: string;
-  if (explicit !== undefined) {
-    binaryPath = resolve(explicit);
-    if (!existsSync(binaryPath)) {
-      process.stderr.write(`wizardingcode-mem install: ${binaryPath} does not exist\n`);
-      return 1;
-    }
-  } else if (isCompiled()) {
-    binaryPath = stageBinary(process.execPath, defaultDataDir());
-  } else {
-    process.stderr.write(
-      "wizardingcode-mem install: running from source. Build a binary with `bun run build` and pass it with --binary <path>.\n",
-    );
-    return 1;
-  }
-
+function installOne(agent: string, rest: string[], binaryPath: string, offer = true): number {
   const lines: string[] = retireLegacy(agent, rest);
   try {
     if (agent === "claude-desktop") {

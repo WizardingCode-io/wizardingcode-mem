@@ -6,7 +6,7 @@ The team server ([ADR 0026](../adr/0026-team-server.md)) is one container on a h
 
 ### Before the first start, once
 
-- **The image.** `ghcr.io/wizardingcode-io/wizardingcode-mem`, pushed by the release with the version as its tag (`0.7.0`, say) and `latest` for a plain release. The package on the GitHub container registry starts private: make it public once in the organisation's package settings, or run `docker login ghcr.io` on the host with a token that reads packages before the first `docker compose pull`.
+- **The image.** `ghcr.io/wizardingcode-io/wizardingcode-mem`, pushed by the release with the version as its tag (`0.7.0`, say). `latest` is moved last by the release's distribution, after npm, the Homebrew tap and the marketplace succeeded, and stays on the previous release when the new one would refuse that release's clients (`docs/runbooks/release.md`). The package on the GitHub container registry starts private: make it public once in the organisation's package settings, or run `docker login ghcr.io` on the host with a token that reads packages before the first `docker compose pull`.
 - **The host.** DNS for the team's domain pointing at it, ports 80 and 443 open. Nothing else is published: Caddy is the only way in, and the server's own port (8787) stays inside the compose network.
 - **The files.** Copy `compose.yml`, `Caddyfile` and `.env.example` from the repository to one folder on the host; copy `.env.example` to `.env` and set `SERVER_DOMAIN` and `WIZARDINGCODE_MEM_VERSION` (the tag, without its `v`).
 

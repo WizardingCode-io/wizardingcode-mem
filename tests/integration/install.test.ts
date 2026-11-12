@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
+  chmodSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -378,27 +379,71 @@ describe("install and uninstall, over time", () => {
 });
 
 describe("stageBinary", () => {
+  const unix = process.platform !== "win32";
+  const fake = (version: string) =>
+    `#!/bin/sh\nif [ "$1" = "--version" ]; then echo ${version}; exit 0; fi\nexit 3\n`;
+  const target = () => join(dataDir, "bin", unix ? "wizardingcode-mem" : "wizardingcode-mem.exe");
+  /** A staged file with this content, and a source of other content to stage over it. */
+  const staged = (content: string, mode = 0o755): string => {
+    mkdirSync(join(dataDir, "bin"), { recursive: true });
+    writeFileSync(target(), content);
+    chmodSync(target(), mode);
+    const source = join(home, "downloaded-wizardingcode-mem");
+    writeFileSync(source, "the source");
+    return source;
+  };
+
   test("copies the binary to a stable, executable place inside the data directory", () => {
     const source = join(home, "downloaded-wizardingcode-mem");
     writeFileSync(source, "#!/bin/sh\necho hi\n");
-    const staged = stageBinary(source, dataDir);
-    expect(staged).toBe(
-      join(
-        dataDir,
-        "bin",
-        process.platform === "win32" ? "wizardingcode-mem.exe" : "wizardingcode-mem",
-      ),
-    );
-    expect(readFileSync(staged, "utf8")).toBe("#!/bin/sh\necho hi\n");
-    if (process.platform !== "win32") expect(statSync(staged).mode & 0o111).not.toBe(0);
+    const result = stageBinary(source, dataDir, { version: "1.0.0", force: false });
+    expect(result).toEqual({ path: target(), kept: null });
+    expect(readFileSync(result.path, "utf8")).toBe("#!/bin/sh\necho hi\n");
+    if (unix) expect(statSync(result.path).mode & 0o111).not.toBe(0);
   });
 
   test("a binary already in place is left alone", () => {
     const source = join(home, "downloaded-wizardingcode-mem");
     writeFileSync(source, "v1");
-    const staged = stageBinary(source, dataDir);
-    expect(stageBinary(staged, dataDir)).toBe(staged);
-    expect(readFileSync(staged, "utf8")).toBe("v1");
+    const first = stageBinary(source, dataDir, { version: "1.0.0", force: false }).path;
+    expect(stageBinary(first, dataDir, { version: "1.0.0", force: false })).toEqual({
+      path: first,
+      kept: null,
+    });
+    expect(readFileSync(first, "utf8")).toBe("v1");
+  });
+
+  test.skipIf(!unix)("a staged binary of a higher version is kept, and named", () => {
+    const source = staged(fake("2.0.0"));
+    expect(stageBinary(source, dataDir, { version: "1.0.0", force: false })).toEqual({
+      path: target(),
+      kept: "2.0.0",
+    });
+    expect(readFileSync(target(), "utf8")).toBe(fake("2.0.0"));
+  });
+
+  test.skipIf(!unix).each([
+    ["of the same version", fake("1.0.0"), 0o755],
+    ["of a lower version", fake("0.9.0"), 0o755],
+    ["that exits 1 on --version", "#!/bin/sh\nexit 1\n", 0o755],
+    ["that answers something that is not a version", fake("not a version"), 0o755],
+    ["that cannot be run", fake("2.0.0"), 0o644],
+  ])("a staged binary %s is replaced", (_name, content, mode) => {
+    const source = staged(content, mode);
+    expect(stageBinary(source, dataDir, { version: "1.0.0", force: false })).toEqual({
+      path: target(),
+      kept: null,
+    });
+    expect(readFileSync(target(), "utf8")).toBe("the source");
+  });
+
+  test.skipIf(!unix)("with force, a staged binary of a higher version is replaced", () => {
+    const source = staged(fake("2.0.0"));
+    expect(stageBinary(source, dataDir, { version: "1.0.0", force: true })).toEqual({
+      path: target(),
+      kept: null,
+    });
+    expect(readFileSync(target(), "utf8")).toBe("the source");
   });
 });
 

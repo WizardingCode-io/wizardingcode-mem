@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// wizardingcode-mem for npm: fetches the binary of this package's version on first use (from
-// the GitHub release, checksum verified), keeps it in ~/.wizardingcode/mem/bin, and runs it.
+// wizardingcode-mem for npm: fetches the binary of this package's version when none is in place
+// or the one in place is older (from the GitHub release, checksum verified), keeps it in
+// ~/.wizardingcode/mem/bin, and runs it.
 // Nothing runs at install time; `npx wizardingcode-mem install` is the whole setup.
 const { createHash } = require("node:crypto");
 const fs = require("node:fs");
@@ -37,6 +38,35 @@ function installedVersion() {
   }
 }
 
+// True when `have` is missing, not a version, or older than `wanted` (scripts/plugins.ts, OLDER_JS).
+function older(have, wanted) {
+  const shape = /^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/;
+  if (!have || !shape.test(have)) return true;
+  const split = (version) => {
+    const cut = version.indexOf("-");
+    return cut === -1 ? [version, null] : [version.slice(0, cut), version.slice(cut + 1)];
+  };
+  const [coreA, preA] = split(have);
+  const [coreB, preB] = split(wanted);
+  const a = coreA.split(".").map(Number);
+  const b = coreB.split(".").map(Number);
+  for (let i = 0; i < 3; i++) {
+    if (a[i] !== b[i]) return a[i] < b[i];
+  }
+  if (preA === null || preB === null) return preA !== null && preB === null;
+  const x = preA.split(".");
+  const y = preB.split(".");
+  for (let i = 0; i < Math.min(x.length, y.length); i++) {
+    if (x[i] === y[i]) continue;
+    const p = /^\d+$/.test(x[i]);
+    const q = /^\d+$/.test(y[i]);
+    if (p && q) return Number(x[i]) < Number(y[i]);
+    if (p !== q) return p;
+    return x[i] < y[i];
+  }
+  return x.length < y.length;
+}
+
 async function fetchText(url) {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
@@ -62,13 +92,20 @@ async function download() {
 }
 
 async function main() {
-  if (installedVersion() !== version) {
+  // The staged binary only moves forward: a newer one, put there by a plugin or a newer
+  // package, is run as it is.
+  const staged = installedVersion();
+  if (older(staged, version)) {
     try {
       await download();
     } catch (error) {
       console.error(`wizardingcode-mem: ${error instanceof Error ? error.message : String(error)}`);
       process.exit(1);
     }
+  } else if (staged !== version) {
+    process.stderr.write(
+      `wizardingcode-mem: running ${staged} already in ${binary}; this package is ${version}\n`,
+    );
   }
   const run = spawnSync(binary, process.argv.slice(2), { stdio: "inherit" });
   if (run.error) {

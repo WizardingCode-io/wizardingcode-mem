@@ -1,0 +1,17 @@
+{
+  "name": "wizardingcode-plugins",
+  "interface": { "displayName": "WizardingCode" },
+  "plugins": [
+    {
+      "name": "wizardingcode-mem",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/WizardingCode-io/wizardingcode-mem.git",
+        "path": "./plugins/codex",
+        "ref": "v0.8.0"
+      },
+      "policy": { "installation": "AVAILABLE" },
+      "category": "Productivity"
+    }
+  ]
+}

@@ -107,7 +107,7 @@ describe("the npm package", () => {
     expect(downloads).toBe(1);
   });
 
-  test("a binary of another version in place is replaced by the package's", async () => {
+  test("an older binary in place is replaced by the package's", async () => {
     mkdirSync(join(home, ".wizardingcode", "mem", "bin"), { recursive: true });
     writeFileSync(join(home, ".wizardingcode", "mem", "bin", "wizardingcode-mem"), fake("0.0.1"));
     chmodSync(join(home, ".wizardingcode", "mem", "bin", "wizardingcode-mem"), 0o755);
@@ -116,6 +116,20 @@ describe("the npm package", () => {
     expect(
       readFileSync(join(home, ".wizardingcode", "mem", "bin", "wizardingcode-mem"), "utf8"),
     ).toContain(npmPkg.version);
+  });
+
+  test("a newer binary in place is run, and nothing is downloaded", async () => {
+    const binary = join(home, ".wizardingcode", "mem", "bin", "wizardingcode-mem");
+    mkdirSync(join(home, ".wizardingcode", "mem", "bin"), { recursive: true });
+    writeFileSync(binary, fake("99.0.0"));
+    chmodSync(binary, 0o755);
+    const result = await shim(release(), "status", "--x");
+    expect(downloads).toBe(0);
+    expect(result.stdout).toBe("ran: status --x\n");
+    expect(result.exitCode).toBe(3);
+    expect(result.stderr).toBe(
+      `wizardingcode-mem: running 99.0.0 already in ${binary}; this package is ${npmPkg.version}\n`,
+    );
   });
 
   test("a checksum that does not match stops everything", async () => {

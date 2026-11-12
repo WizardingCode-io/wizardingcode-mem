@@ -2,7 +2,9 @@ name: release
 
 # A tag v<version> publishes a GitHub release holding the five binaries and their
 # checksums. The tag must match package.json; the macOS binaries are signed ad hoc on a
-# macOS runner because Apple Silicon refuses unsigned ones.
+# macOS runner because Apple Silicon refuses unsigned ones. It then starts distribute.yml, which
+# publishes to npm, the tap and the marketplace and moves the image's latest tag
+# (docs/runbooks/release.md).
 
 on:
   push:
@@ -58,7 +60,7 @@ jobs:
           if-no-files-found: error
 
   # The team server's image (ADR 0026): the signed release's Linux binaries into one image
-  # for both platforms, tagged with the version and, for a plain release, latest.
+  # for both platforms, tagged with the version. distribute.yml moves latest, last.
   docker:
     needs: sign
     runs-on: ubuntu-latest
@@ -85,7 +87,6 @@ jobs:
           images: ghcr.io/wizardingcode-io/wizardingcode-mem
           tags: |
             type=semver,pattern={{version}}
-            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
       - uses: docker/build-push-action@v6
         with:
           context: .
@@ -99,7 +100,10 @@ jobs:
     needs: [sign, docker]
     runs-on: ubuntu-latest
     steps:
+      # The whole history, with tags: the Changes list reaches back to the previous release.
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: actions/download-artifact@v8
         with:
           name: binaries
@@ -126,7 +130,11 @@ jobs:
             echo
             echo "## Changes"
             echo
-            previous="$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)"
+            # A plain release lists what changed since the previous plain one, pre-releases included.
+            case "${GITHUB_REF_NAME}" in
+              *-*) previous="$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)" ;;
+              *) previous="$(git describe --tags --abbrev=0 --exclude '*-*' "${GITHUB_REF_NAME}^" 2>/dev/null || true)" ;;
+            esac
             if [ -n "$previous" ]; then
               git log --no-merges --format='- %s' "$previous..${GITHUB_REF_NAME}"
             else
@@ -138,3 +146,16 @@ jobs:
         run: |
           case "${GITHUB_REF_NAME}" in *-*) prerelease="--prerelease" ;; *) prerelease="" ;; esac
           gh release create "${GITHUB_REF_NAME}" $prerelease --title "wizardingcode-mem ${GITHUB_REF_NAME#v}" --notes-file notes.md dist/wizardingcode-mem-* dist/checksums.txt
+
+  # The rest of the release (npm, the tap, the marketplace, the image's latest tag) is
+  # distribute.yml's, always run from main: a tag's own copy of that workflow is never trusted.
+  distribute:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh workflow run distribute.yml --ref main -f tag="$GITHUB_REF_NAME"

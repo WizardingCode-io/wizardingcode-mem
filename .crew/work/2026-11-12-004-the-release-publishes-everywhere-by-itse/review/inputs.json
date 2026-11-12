@@ -1,0 +1,43 @@
+{
+  "dependencies": [],
+  "phrases": [
+    {
+      "file": "scripts/plugins.ts",
+      "line": 61,
+      "phrase": "shim"
+    },
+    {
+      "file": "tests/integration/npm-shim.test.ts",
+      "line": 126,
+      "phrase": "shim"
+    },
+    {
+      "file": "tests/unit/version-order.test.ts",
+      "line": 54,
+      "phrase": "shim"
+    },
+    {
+      "file": "tests/unit/version-order.test.ts",
+      "line": 55,
+      "phrase": "shim"
+    },
+    {
+      "file": "tests/unit/version-order.test.ts",
+      "line": 56,
+      "phrase": "shim"
+    },
+    {
+      "file": "tests/unit/version-order.test.ts",
+      "line": 58,
+      "phrase": "shim"
+    },
+    {
+      "file": "tests/unit/version-order.test.ts",
+      "line": 59,
+      "phrase": "shim"
+    }
+  ],
+  "fingerprint": "sha256:86f7ad96ab943b005d1fbf41ae3c5c4f5d454b65f5a89668cb620155cd5cd3cb",
+  "at": "2026-11-12T16:45:39.612Z",
+  "captures": []
+}
