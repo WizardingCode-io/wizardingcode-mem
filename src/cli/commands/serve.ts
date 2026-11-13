@@ -1,9 +1,17 @@
 // `wizardingcode-mem serve`: the team server, and the subcommands an operator runs beside it
 // (ADR 0026). The server logs to standard output; every subcommand sends the log to standard
 // error, so its own output stands alone on standard output.
+import pkg from "../../../package.json" with { type: "json" };
 import { SchemaTooNewError } from "../../store/db.ts";
 import { readAudit } from "../../team/audit.ts";
-import { type Db, openTeamExisting, openTeamForWrite, teamPaths } from "../../team/db.ts";
+import { ACCEPTED_CONTRACTS, CONTRACT } from "../../team/contract.ts";
+import {
+  type Db,
+  openTeamExisting,
+  openTeamForWrite,
+  TEAM_LATEST,
+  teamPaths,
+} from "../../team/db.ts";
 import {
   HttpError,
   LeaseHeldError,
@@ -29,6 +37,7 @@ import {
 } from "../../team/members.ts";
 import { purgeItem, runMirror } from "../../team/mirror.ts";
 import { disableWithItems, reinstateByAdmin, withdrawByAdmin } from "../../team/push.ts";
+import { RestoreRefused, restore as restoreTeam } from "../../team/restore.ts";
 import { startTeamServer } from "../../team/server.ts";
 import { readStatus, renderStatus } from "../../team/status.ts";
 import {
@@ -45,7 +54,7 @@ import { EXIT_USAGE } from "../exit.ts";
 const USAGE = `Usage: wizardingcode-mem serve [--data <dir>] [--host <addr>] [--port <n>] [--trust-proxy]
        wizardingcode-mem serve [--data <dir>] <subcommand> ...
 
-Subcommands (each takes --data <dir> as well; health takes --url alone):
+Subcommands (each but version and health takes --data <dir> as well; health takes --url alone):
        invite --role admin|member --name <name> [--expires <hours>]
        invite --for <member id> [--expires <hours>]
        invitations
@@ -62,7 +71,9 @@ Subcommands (each takes --data <dir> as well; health takes --url alone):
        mirror [--rebuild]
        purge entry <uid> | memory remote:<alias>:<uid> --yes
        purge name <alias> --yes
+       restore --to-schema <n> [--yes]
        instance renew
+       version
        health [--url <origin>]
 
 The data directory is --data, WIZARDINGCODE_MEM_TEAM_DATA, or <data dir>/team.
@@ -605,11 +616,48 @@ async function health(argv: string[]): Promise<number> {
   }
 }
 
+/**
+ * Puts back the copy an upgrade made (ADR 0031). Without `--yes` it reads and prints; the
+ * lines go to standard output, a refusal to standard error with exit 1.
+ */
+function restoreCommand(shell: Shell, argv: string[]): number {
+  const parsed = parseFlags(argv, { "to-schema": "value", yes: "flag" });
+  if ("error" in parsed) return usage(parsed.error);
+  const raw = parsed.values["to-schema"];
+  const toSchema = typeof raw === "string" && /^\d+$/.test(raw) ? Number(raw) : null;
+  if (toSchema === null || parsed.rest.length > 0) return usage("restore needs --to-schema <n>");
+  try {
+    const lines = restoreTeam({
+      dir: shell.dir,
+      toSchema,
+      yes: parsed.values.yes === true,
+      now: Date.now,
+    });
+    for (const line of lines) out(line);
+    return 0;
+  } catch (error) {
+    if (!(error instanceof RestoreRefused)) throw error;
+    err(`wizardingcode-mem serve: restore refused: ${error.message}`);
+    return 1;
+  }
+}
+
+// What this binary is, asked of no data directory: the host's script reads it from an image
+// before that image has ever run against the data (ADR 0031).
+function version(): number {
+  out(`version=${pkg.version}`);
+  out(`team_schema=${TEAM_LATEST}`);
+  out(`contract=${CONTRACT}`);
+  out(`accepts=${ACCEPTED_CONTRACTS.join(",")}`);
+  return 0;
+}
+
 export async function run(argv: string[]): Promise<number> {
   if (argv[0] === "--help" || argv[0] === "-h") {
     process.stdout.write(USAGE);
     return 0;
   }
+  if (argv[0] === "version") return version();
   const taken = takeData(argv);
   if ("error" in taken) return usage(taken.error);
   const [sub, ...rest] = taken.rest;
@@ -650,6 +698,8 @@ export async function run(argv: string[]): Promise<number> {
         return mirror(shell, rest);
       case "purge":
         return purge(shell, rest);
+      case "restore":
+        return restoreCommand(shell, rest);
       case "instance":
         if (rest[0] !== "renew") return usage(`unknown subcommand "instance ${rest[0] ?? ""}"`);
         return instanceRenew(shell);

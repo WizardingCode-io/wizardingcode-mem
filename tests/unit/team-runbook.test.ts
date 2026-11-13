@@ -105,6 +105,44 @@ describe("the team runbook", () => {
     expect(named.filter((event) => !team.includes(`event: "${event}"`))).toEqual([]);
   });
 
+  test("the rollback is the restore command, and every named command comes before the start", () => {
+    /** The text of one `###` section, its heading included. */
+    const sectionOf = (heading: string): string => {
+      const start = runbook.indexOf(`### ${heading}\n`);
+      expect(start).toBeGreaterThan(-1);
+      const next = runbook.indexOf("\n### ", start + 1);
+      return runbook.slice(start, next === -1 ? undefined : next);
+    };
+    const section = sectionOf("Rollback");
+    expect(section).toContain("docker compose run --rm server serve restore --to-schema");
+    expect(section).not.toContain("cp /data/team.db");
+    expect(section).not.toContain("rm -f /data/team.db-wal");
+    const order = [
+      "serve instance renew",
+      "serve purge",
+      "serve mirror --rebuild",
+      "docker compose up -d server",
+    ].map((command) => section.indexOf(command, section.indexOf("serve restore --to-schema")));
+    expect(order.every((index) => index > -1)).toBe(true);
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    expect(new Set(order).size).toBe(order.length);
+    for (const words of [
+      "docker compose exec",
+      "docker compose restart caddy",
+      "unknown subcommand",
+      "team-before-rollback-",
+      "erased",
+      "no upgrade copy",
+      "new invitation",
+      "same team schema",
+    ]) {
+      expect(section).toContain(words);
+    }
+    expect(sectionOf("Before the first start, once")).toContain(
+      "everyone who can push a tag or a branch",
+    );
+  });
+
   test("the documents that point at it do", () => {
     expect(source("README.md")).toContain(RUNBOOK);
     expect(source("CLAUDE.md")).toContain(RUNBOOK);

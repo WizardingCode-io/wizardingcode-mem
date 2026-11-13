@@ -87,6 +87,9 @@ jobs:
           images: ghcr.io/wizardingcode-io/wizardingcode-mem
           tags: |
             type=semver,pattern={{version}}
+          # The action's default adds latest to a plain release; latest is moved once, last,
+          # by distribute.yml (ADR 0029, ADR 0031).
+          flavor: latest=false
       - uses: docker/build-push-action@v6
         with:
           context: .

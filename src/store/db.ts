@@ -464,6 +464,26 @@ export function openExistingFile(
 }
 
 /**
+ * Opens a database file that must exist, for writing, as it is: no migration runs and no copy
+ * is made. `before` runs first; anything it throws closes the handle and is rethrown.
+ */
+export function openForWrite(
+  dir: string,
+  file: string,
+  options: { before?: (db: Db) => void; busyTimeoutMs?: number } = {},
+): Db {
+  const db = new Database(join(dir, file), { readwrite: true, create: false });
+  try {
+    db.run(`PRAGMA busy_timeout = ${Math.max(0, Math.trunc(options.busyTimeoutMs ?? 5000))}`);
+    options.before?.(db);
+  } catch (error) {
+    db.close();
+    throw error;
+  }
+  return db;
+}
+
+/**
  * Opens the client store for reading only, without creating or migrating anything.
  * Null when there is no database yet. For commands that inspect: status and doctor.
  * `allowNewer`: for a caller that reads only the meta table, the same in every version.

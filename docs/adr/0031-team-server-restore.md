@@ -1,0 +1,63 @@
+# ADR 0031 — The team server's way back: `latest` made true, and `serve restore`
+
+Date: 2026-11-13 · Status: **draft**. Work item 2026-11-12-009, the first half of piece 3 of 3 of 2026-11-11-004 ("updated everywhere on release"; piece 1 is [ADR 0029](0029-release-distribution.md), piece 2 [ADR 0030](0030-release-notice.md)). It corrects ADR 0029 and [ADR 0026](0026-team-server.md) on when the image's `latest` was pushed, replaces ADR 0026's hand rollback with a command, and closes, for a rollback, the restore that ADR 0026's D-13 cannot detect. The operator's procedure is `docs/runbooks/team-server.md`, Rollback.
+
+## Context
+
+Piece 3 was to make the team server follow releases: a script and a timer on the host that follow the image tag `latest`, wait for health, and go back on failure, across a schema migration by restoring the server's own copy of `team.db`. Six readers with no context attacked that concept on 2026-11-12. It did not survive as written:
+
+- **`latest` already moved at build time.** `release.yml`'s `docker/metadata-action` step set no `flavor`, and the action's default adds `latest` to a plain version tag. The log of the 0.8.0 release shows the tag pushed by the build, before npm, the tap, the marketplace and the contract hold. ADR 0029's "`latest` moves last" was false, and the test that held the workflow read the `tags` input, never the flavor.
+- **The hand rollback loses data.** The runbook copied `team.db` aside and deleted `team.db-wal`. After a kill the writes since the last checkpoint are in that log: the copy "kept aside" lacked them and the delete destroyed them.
+- **A restored server serves old rows as current.** The copy holds tokens and rows as they were: a device revoked since authenticates again, an erased entry goes to every member, an invitation used since can be used twice.
+- **Nothing an image says of itself can be read before it runs against the data.** A script would have had to infer a migration from a file appearing under `backups/`.
+
+The author decided (D-1 of the item, 2026-11-13): a timer may upgrade by itself only a release that does not migrate the team schema, and go back by the image alone, touching no data; a release that migrates waits for the operator. This ADR is what both cases stand on: a true `latest`, an image that says its schema, and one command that restores correctly. The script and the timer are the next item.
+
+## Decision
+
+**`latest` is not pushed by the build.** `release.yml`'s metadata step sets `flavor: latest=false`. Two tests in `tests/unit/deploy-files.test.ts` hold it: every use of `docker/metadata-action` in any workflow turns the flavor off, and no workflow but `distribute.yml` names an image's `latest` tag.
+
+**`serve version`.** `wizardingcode-mem serve version` prints `version`, `team_schema`, `contract` and `accepts`, one `key=value` a line. It reads no data directory and opens no database, so it can be asked of an image before that image runs: `docker run --rm <image> serve version`. The server's `listening` event gains `version` and `teamSchema`. `serve status` already printed the binary's version and the database's schema and is unchanged.
+
+**`serve restore --to-schema <n> [--yes]`** (`src/team/restore.ts`), run by the newer image with the server stopped. `--to-schema` is required: with two migrations in a row the newest copy is not the one the older image opens.
+
+*The checks* run through read-only opens, with `--yes` or without, so a refusal changes no byte of `team.db`, of its log, of `feed.seq` or of `backups/`: a fresh `serve.lease`; the present file exactly at this binary's schema; `<n>` below it; the upgrade copy, the newest `backups/team-<ms>-v<n>-<pid>.db`, opened and found to be at `user_version` `<n>`, a team database, and whole (`quick_check`); free space of the copy's size and 1 GiB.
+
+*What is lost* is printed before the yes: counts of the entries, revisions, memories, names, members, devices and feed changes written since the copy's time, then the commands to run afterwards. Each audit row since the copy is a line; an action that can be repeated carries its command. For a device, a member and an invitation the upgrade copy is asked whether the target is in it, and one that is not is printed as lost. For an item and a name the command is always printed: a purge left out because the item "is not in the copy" would be an erasure undone in silence, and the older image answers `no such item` where there is nothing to do. A token rotated since the copy carries `serve revoke`, since the copy holds the old token. An invitation made before the copy and used after it is revoked again.
+
+*With `--yes`*: the present database is opened by `openTeamPresent` (read-write, never migrating; the two writing opens that existed migrate, and a migration prunes `backups/`, which could delete the copy being restored); the restore claims `serve.lease` for 15 minutes, so that no server starts on the present file during the copy; the upgrade copy is copied to `team.db.restoring`, set to WAL mode, checked with `integrity_check`, checkpointed and synced; the lease is claimed again (a server that took it during the copy stops the restore, nothing changed); the present file's log is folded into it; the lease is released; `team.db` is renamed to `backups/team-before-rollback-<ms>.db`, its side files with it, and the staging file is renamed into place. No row of the copy is ever written over the present file. A run killed between the two renames leaves no `team.db`; the next `--yes` run finishes it.
+
+*WAL on the staging file.* A copy made by `VACUUM INTO` is in the rollback-journal mode (probed: Bun 1.4.2, SQLite 3.54.0), whatever the source's mode; the server expects WAL, so the restore sets it.
+
+*The renewal is the older image's.* The restore writes nothing into the restored file and never writes `feed.seq`. Left alone, the server's next start would find `feed.seq` ahead of the file and renew its instance (D-13 of ADR 0026). But the repeated actions must run before that start, by the older image, whose every admin command ends by overwriting `feed.seq` with the database's own marks: the first of them hides the restore. No change to this binary can fix what an older image runs. So the first command the restore prints is `serve instance renew`, which the older image has: a new instance, and the feed's sequence a million past the restored file's mark, printed once more for every million changes written since the copy. The integration test runs both orders: with the renewal first the instance is new and the sequence past the old mark; without it the copy's own instance is served.
+
+*The mirror.* `serve mirror --rebuild` is the last command printed: the repositories under `repos/` hold commits for what was written since the copy.
+
+**The opens.** `src/team/db.ts` has six: `openTeamDb`, `openTeamForWrite`, `openTeamExisting` (now with the schema as a parameter for tests), and the three the restore needs, `openTeamCopy` (read-only, a file by its path), `openTeamPresent` and `openTeamStaging`. Every statement the restore runs is a function of `src/team/store.ts`.
+
+## Alternatives
+
+- Keep the hand copy-back and fix its text. Rejected: it leaves the choice of the copy, the checks, the lease, the journal mode and the order of the swap to a person reading a runbook during an outage.
+- A second full copy of the present database as the aside file. Rejected for the rename: it needs no room, cannot fail half way, and is the file that was there.
+- The restore runs the repeated actions itself. Rejected: they must be run by the older image, and an erasure run by a restore nobody read is an erasure nobody decided twice.
+- A rule in this binary that an admin command never lowers `feed.seq`. Rejected: the commands between the restore and the start are the older image's.
+- Choosing the copy by its file name alone. Rejected: the folder is pruned and written by hand.
+- Holding the lease across the swap. Rejected: the lease is a row of the file moved away.
+- `--to-schema` defaulting to the newest copy. Rejected: a wrong guess swaps the database for one the server then refuses.
+- The whole of piece 3 in one item. Rejected: the script's risks and the data's risks are two reviews.
+
+## Limits
+
+- `latest` is still no proof of a release: a tag pushed on an older commit runs that commit's `release.yml`, which pushes it, and a branch's workflow can ask for `packages: write`. So everyone who can push a tag or a branch to the repository can move `latest`. Nothing follows it yet; the next item, which makes something follow it, must name its control.
+- From the restore's end to the operator's start, only the runbook keeps the server stopped: no lease can be held, and `docker compose up -d` of any service starts it.
+- The upgrade copies are pruned to the newest two, so after two later migrations there is no copy to go back to; the refusal says so.
+- Aside files are never pruned, and they and the upgrade copies hold erased rows no purge reaches.
+- A member's own pushes since the copy are counted, not named, and are not sent again by the clients: they stay on the members' machines and in the aside file.
+- The older image must know every command printed. Read from the two tags: 0.7.0 and 0.8.0 have every subcommand the restore prints, but 0.7.0 has no `purge name` (and, at schema 1, no names to purge). A command the older image refuses as unknown means going forward again; the runbook has the moves.
+- The tests stand in for a newer binary by a schema one above the real one (a probe migration), so the upgrade copy is a real database at the real schema and the older image's commands are this binary's own. No test runs two real images.
+- A read-only open of a WAL database with no side files fails on macOS and succeeds on Linux (probed with the pinned Bun on both). The restore's last check therefore opens the file it just moved in with a writer's open, and writes no row. The restore's tests pass on macOS and in a Linux container.
+- The finishing of a cut restore prepares the staging file again (WAL mode, the integrity check), since the cut run may have died before it did.
+
+## What the reviews found
+
+Five rounds of the leads and two of the readers with no context changed the design more than once: the spec first said `serve status` showed no version (false); the first way to keep the renewal was a rule in the wrong binary; the first draft assumed a `VACUUM INTO` copy was in WAL mode (a probe showed it is not); asking the present database whether a purged item existed would have dropped every purge from the list; the lease was first held across the swap, in a file being moved; and a restore killed between its renames had no way forward.

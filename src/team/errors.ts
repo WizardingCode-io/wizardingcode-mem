@@ -28,6 +28,18 @@ export class SchemaBehindError extends Error {
   }
 }
 
+/** A writer that never migrates met a `team.db` at another schema than its binary's. */
+export class SchemaMismatchError extends Error {
+  readonly found: number;
+  readonly latest: number;
+  constructor(found: number, latest: number) {
+    super(`team.db is at schema ${found}, this binary runs ${latest}`);
+    this.name = "SchemaMismatchError";
+    this.found = found;
+    this.latest = latest;
+  }
+}
+
 /** A subcommand that needs the server stopped found its lease fresh. */
 export class ServerRunningError extends Error {
   constructor(sub: string) {

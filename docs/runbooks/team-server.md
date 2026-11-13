@@ -6,7 +6,7 @@ The team server ([ADR 0026](../adr/0026-team-server.md)) is one container on a h
 
 ### Before the first start, once
 
-- **The image.** `ghcr.io/wizardingcode-io/wizardingcode-mem`, pushed by the release with the version as its tag (`0.7.0`, say). `latest` is moved last by the release's distribution, after npm, the Homebrew tap and the marketplace succeeded, and stays on the previous release when the new one would refuse that release's clients (`docs/runbooks/release.md`). The package on the GitHub container registry starts private: make it public once in the organisation's package settings, or run `docker login ghcr.io` on the host with a token that reads packages before the first `docker compose pull`.
+- **The image.** `ghcr.io/wizardingcode-io/wizardingcode-mem`, pushed by the release with the version as its tag (`0.7.0`, say). `latest` is moved last by the release's distribution, after npm, the Homebrew tap and the marketplace succeeded, and stays on the previous release when the new one would refuse that release's clients (`docs/runbooks/release.md`). Up to and including 0.8.0, `latest` was pushed at build time, before any of that; it no longer is (ADR 0031). It is still no proof of a release: everyone who can push a tag or a branch to the repository can move it, so pin a version in `.env`, as `.env.example` does. `docker run --rm ghcr.io/wizardingcode-io/wizardingcode-mem:<tag> serve version` prints what an image is before it runs against your data: its `version`, its `team_schema`, the `contract` it speaks and the ones it `accepts`. The package on the GitHub container registry starts private: make it public once in the organisation's package settings, or run `docker login ghcr.io` on the host with a token that reads packages before the first `docker compose pull`.
 - **The host.** DNS for the team's domain pointing at it, ports 80 and 443 open. Nothing else is published: Caddy is the only way in, and the server's own port (8787) stays inside the compose network.
 - **The files.** Copy `compose.yml`, `Caddyfile` and `.env.example` from the repository to one folder on the host; copy `.env.example` to `.env` and set `SERVER_DOMAIN` and `WIZARDINGCODE_MEM_VERSION` (the tag, without its `v`).
 
@@ -71,14 +71,45 @@ Across a schema bump the new binary copies `team.db` first, to `/data/backups/te
 
 ### Rollback
 
-A previous image exits 3 against a newer `team.db`, and `restart: unless-stopped` would loop on it, so a rollback restores the copy the upgrade made. Across the 0.8.0 bump, first, while the server still answers, ask a member for `wizardingcode-mem share names` and keep its output: it lists every shared name the server holds (the slug, who created it, its counts, its last change), and the names in it that the copy (dated by the `<ms>` in its file name) predates are the ones the rollback loses; the same command after the re-upgrade shows which are gone. Then:
+There are two cases, told apart by the team schema of the two images: `docker run --rm ghcr.io/wizardingcode-io/wizardingcode-mem:<tag> serve version` prints `team_schema=<n>` for each. An image that answers `unknown subcommand "version"` is 0.8.0 or older: 0.8.0 runs team schema 2, 0.7.0 schema 1.
+
+**To a release of the same team schema.** Set `WIZARDINGCODE_MEM_VERSION` back to the previous tag and `docker compose up -d server`. Nothing is restored, and `serve restore` refuses this case (`nothing to go back to`).
+
+**Across a migration.** A previous image exits 3 against a newer `team.db`, and `restart: unless-stopped` would loop on it, so the copy the upgrade made is put back first, by the newer image, with the server stopped. In this order:
+
+1. Check that the older tag is still on the host (`docker image ls`), or pull it now.
+2. `docker compose stop server`. From here to the last step, run no `docker compose up` at all, of any service: `caddy` depends on the server, so `up -d caddy` starts the server too. `docker compose restart caddy` restarts Caddy alone. `docker compose exec` does not work while the server is stopped; do not start the server to make it work: every command below is a `docker compose run --rm`.
+3. Read what the restore would do, with `<n>` the older image's team schema:
+
+   ```sh
+   docker compose run --rm server serve restore --to-schema <n>
+   ```
+
+   It changes nothing. It prints the upgrade copy it would put back (`would_restore=`), when that copy was made (`copied_at=`), what was written since and would be lost (`lost.entries_created`, `lost.entries_revised`, `lost.memories`, `lost.names`, `lost.members`, `lost.devices`, `lost.changes`), and the commands to run afterwards. It refuses, with exit 1 and the reason, while a server's lease is fresh (up to 30 seconds after a kill), when the copy is not what its name says, or when the disk has less free than the copy's size and 1 GiB.
+4. The same with `--yes`. The present `team.db` is moved, whole, to `/data/backups/team-before-rollback-<ms>.db` (`aside=` names it) and the upgrade copy takes its place. Keep the output: it is the list for step 6.
+5. Set `WIZARDINGCODE_MEM_VERSION` back to the previous tag in `.env`.
+6. Run every command the restore printed, in the order printed, with the older image (`docker compose run --rm server …` now runs it):
+   - first `serve instance renew`, as many times as it was printed (once, unless a million changes were written since the copy): every client then pulls from zero. It must come first: any other command of the older image rewrites `feed.seq` and hides the restore from the server, which would then serve the copy's own instance, and the clients would miss what the copy lacks;
+   - then each repeated action, the lines ending `-> docker compose run --rm server serve …`: a device revoked since the copy (`serve revoke`), a member disabled or enabled, a role, a withdrawal, an invitation used or revoked since the copy (`serve invitation revoke`), and every erasure (`serve purge … --yes`). A purge of an item that arrived after the copy is answered `no such item` by the older image, and that answer is fine. A device whose token was rotated since the copy is revoked, since the copy holds its old token: its person joins again with a new invitation;
+   - last `serve mirror --rebuild`, which writes the repositories under `repos/` again from the restored database.
+7. Only then `docker compose up -d server`.
+
+The order matters because the restored file holds tokens and rows as they were at the copy: once the server is up, a device revoked since authenticates again, and every restored row, an erased one included, goes to every member who pulls.
+
+If the older image answers `unknown subcommand` to one of the printed commands, that action cannot be kept across this rollback. Leave the server stopped and go forward again: set `.env` to the newer tag, put the aside file back, and start:
 
 ```sh
-docker compose stop server
-docker compose run --rm --entrypoint sh server -c 'cp /data/team.db /data/backups/team-before-rollback.db && cp /data/backups/team-<ms>-v<n>-<pid>.db /data/team.db && rm -f /data/team.db-wal /data/team.db-shm'
+docker compose run --rm --entrypoint sh server -c 'cd /data && rm -f team.db-wal team.db-shm && mv team.db backups/team-restored-copy.db && for s in "" -wal -shm; do if [ -e "backups/team-before-rollback-<ms>.db$s" ]; then mv "backups/team-before-rollback-<ms>.db$s" "team.db$s"; fi; done'
+docker compose up -d server
 ```
 
-then set `WIZARDINGCODE_MEM_VERSION` back to the previous tag and `docker compose up -d server`. The first `cp` keeps the newer file aside, as `team-before-rollback.db`: it is the only copy of what the members sent since the upgrade's copy, and the rolled-back server runs without it, so nothing would show its loss. A rollback across the 0.8.0 bump loses the shared names created since the copy. While the 0.7.0 image runs, every member's client speaks contract 1 and holds its shared names (`names held (server at contract 1)` in `wizardingcode-mem status`); once the server is upgraded again, a project bound to a lost name reads `missing` as soon as it has something to send, nothing of it is sent until its person sets the level again, which re-creates the name with the id their machine holds; tell those creators which names to re-create, so each acts once. The `-wal` and `-shm` files go with the replaced file: a stale write-ahead log would replay frames of the newer schema over the older copy. `feed.seq` stays ahead of the copy, so the server detects the restore at start (`event: "restore-detected"`), renews its instance, and every client pulls from zero and sends again what the copy lacks.
+The same two moves are the way back when `serve restore --yes` ends saying that `team.db` is the upgrade copy but failed its check. A restore killed during its swap leaves no `team.db`: run the same `serve restore --to-schema <n> --yes` again before anything else, and it finishes the swap (`finished=`). Going forward after the older image's renewal, the newer server finds `feed.seq` ahead of its file at start, logs `event: "restore-detected"` and renews its instance: every client pulls from zero once more, and loses nothing.
+
+What members meet afterwards. A device enrolled since the copy reads `revoked`, and its person needs a new invitation (`lost.members` and `lost.devices` count them). A client keeps as sent what the server lost and does not send it again by itself: entries and memories written since the copy are on the members' machines and in the aside file, and nowhere on the server. Across the 0.8.0 bump the shared names created since the copy are gone (`lost.names`): while the 0.7.0 image runs, every member's client speaks contract 1 and holds its shared names (`names held (server at contract 1)` in `wizardingcode-mem status`); once the server is upgraded again, a project bound to a lost name reads `missing` as soon as it has something to send, and nothing of it is sent until its person sets the level again, which re-creates the name with the id their machine holds. Tell those creators which names to re-create, so each acts once; `wizardingcode-mem share names`, asked of a member before the stop, lists the names the server held.
+
+When the restore refuses with `no upgrade copy` (two later migrations pruned it: the folder keeps the newest two), there is no way back by this command. The choice is a restore of the whole volume from your own backup (below), or forward.
+
+The aside file and the upgrade copies hold everything as it was, erased rows included. No purge reaches them, and they count against the disk. Nothing prunes an aside file: once the rollback is settled, delete it by hand, `docker compose run --rm --entrypoint sh server -c 'rm /data/backups/team-before-rollback-<ms>.db*'`.
 
 ### A restore of the volume
 
@@ -104,7 +135,7 @@ One process serves one data directory, under `serve.lease`. After a kill (not a 
 
 | Event | What it says |
 |---|---|
-| `event: "listening"` | the server is up on its host and port |
+| `event: "listening"` | the server is up on its host and port; `version` is the release that runs and `teamSchema` the schema of `team.db` that release writes |
 | `event: "bootstrap"` | the first admin's code and its validity, once |
 | `event: "request"` | one request: id, device, route, status, time, address; a held pull's time; a pull's cursor and counts; a push's counts and the refused uids with their reasons |
 | `event: "error"` | an error with its scope, name and message, and the request id when there was one; every `logError` of the process ends here |
