@@ -2,14 +2,22 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { TARGETS } from "../../scripts/build.ts";
 import {
+  type BuildRun,
+  BYPASS_LINE,
+  builtDigest,
   checkPackageVersion,
+  clean,
   decideHold,
   decideNpmView,
   decidePlan,
+  decideSign,
   decideToken,
   editManifest,
   editManifests,
   environmentState,
+  IMAGE,
+  imageLine,
+  lastLine,
   latestLine,
   type Outcome,
   type PlanFacts,
@@ -23,6 +31,8 @@ import {
   ReleaseError,
   renderFormula,
   summaryLine,
+  verifyArgs,
+  verifyCommand,
 } from "../../scripts/release/lib.ts";
 import { ACCEPTED_CONTRACTS, CONTRACT } from "../../src/team/contract.ts";
 
@@ -31,6 +41,112 @@ const read = (path: string) => readFileSync(`${ROOT}${path}`, "utf8");
 
 // The pure decisions of the release's distribution (scripts/release/lib.ts): what may be
 // distributed, what each target writes, and every line the run's summary carries.
+
+/** A digest, and the command that checks a signature of it. */
+const D = `sha256:${"ab".repeat(32)}`;
+const CHECK = `cosign verify ${IMAGE}@${D} --certificate-identity https://github.com/WizardingCode-io/wizardingcode-mem/.github/workflows/distribute.yml@refs/heads/main --certificate-oidc-issuer https://token.actions.githubusercontent.com`;
+
+describe("the image's signature", () => {
+  test("the one verification command", () => {
+    expect(verifyCommand(`${IMAGE}@${D}`)).toBe(CHECK);
+    expect(verifyArgs("x")).toEqual(CHECK.split(" ").slice(1).with(1, "x"));
+  });
+
+  test("text that comes from a program or a file is cleaned before it is printed", () => {
+    expect(clean("a\u001b[2Kb\u202ec\u200bd\ne", 20)).toBe("a?[2Kb?c?d?e");
+    expect(clean("abcdef", 3)).toBe("abc");
+    expect(lastLine("one\n\n  two  \n\n")).toBe("  two  ");
+    expect(lastLine("\n \n")).toBe("");
+  });
+});
+
+describe("the built digest", () => {
+  const run = (over: Partial<BuildRun> = {}): BuildRun => ({
+    url: "https://github.com/o/r/actions/runs/7",
+    createdAt: "2026-11-13T10:00:00Z",
+    docker: "success",
+    artifact: `${D}\n`,
+    ...over,
+  });
+
+  test("the newest run whose docker job succeeded gives the digest, and every other case gives none with its reason", () => {
+    expect(builtDigest([run()])).toEqual({
+      digest: D,
+      run: "https://github.com/o/r/actions/runs/7",
+    });
+    expect(builtDigest([])).toEqual({
+      digest: null,
+      reason: "no run of release.yml for this tag's commit",
+    });
+    expect(builtDigest([run({ docker: "failure" }), run({ docker: null })])).toEqual({
+      digest: null,
+      reason: "no run of release.yml built the image",
+    });
+    expect(builtDigest([run({ artifact: null })])).toEqual({
+      digest: null,
+      reason: "the release run https://github.com/o/r/actions/runs/7 recorded no image digest",
+    });
+    for (const [text, shown] of [
+      ["sha256:abc", "sha256:abc"],
+      ["latest\n", "latest"],
+      [`${D} \n`, `${D} `],
+      ["sha256:\u001b[2K", "sha256:?[2K"],
+    ] as const) {
+      expect(builtDigest([run({ artifact: text })])).toEqual({
+        digest: null,
+        reason: `the release run https://github.com/o/r/actions/runs/7 recorded ${shown}, which is not a digest`,
+      });
+    }
+    // A tag deleted and pushed again leaves two runs: the newest is read, whatever their order.
+    const older = run({
+      url: "https://github.com/o/r/actions/runs/5",
+      artifact: `sha256:${"cd".repeat(32)}`,
+    });
+    const newer = run({
+      url: "https://github.com/o/r/actions/runs/9",
+      createdAt: "2026-11-13T11:00:00Z",
+    });
+    expect(builtDigest([older, newer])).toEqual({ digest: D, run: newer.url });
+    expect(builtDigest([newer, older])).toEqual({ digest: D, run: newer.url });
+    // A newer run that did not build does not hide an older one that did.
+    expect(
+      builtDigest([run({ createdAt: "2026-11-13T12:00:00Z", docker: "failure" }), newer]),
+    ).toEqual({
+      digest: D,
+      run: newer.url,
+    });
+  });
+
+  test("the image line plan writes, and the line for administrators who can bypass", () => {
+    expect(imageLine("v0.9.0", { digest: D, run: "https://github.com/o/r/actions/runs/7" })).toBe(
+      `image: v0.9.0 built by https://github.com/o/r/actions/runs/7 as ${D}`,
+    );
+    expect(
+      imageLine("v0.9.0", { digest: null, reason: "no run of release.yml built the image" }),
+    ).toBe("image: no digest: no run of release.yml built the image; latest is not moved");
+    expect(BYPASS_LINE).toBe(
+      "environment release-sign: administrators can bypass its rules; forbid it (docs/runbooks/release.md)",
+    );
+  });
+});
+
+describe("what the signing does", () => {
+  test("each row, and the earlier row when two apply", () => {
+    const other = `sha256:${"cd".repeat(32)}`;
+    const facts = { built: D, tagged: D as string | null, signed: false, dryRun: false };
+    expect(decideSign({ ...facts, built: "" })).toBe("no-digest");
+    expect(decideSign({ ...facts, tagged: null })).toBe("unreadable");
+    expect(decideSign({ ...facts, tagged: other })).toBe("tag-moved");
+    expect(decideSign({ ...facts, dryRun: true })).toBe("would-sign");
+    expect(decideSign({ ...facts, signed: true })).toBe("already-signed");
+    expect(decideSign(facts)).toBe("sign");
+    // Two facts that would each give a row: the earlier row wins.
+    expect(decideSign({ ...facts, built: "", tagged: null })).toBe("no-digest");
+    expect(decideSign({ ...facts, tagged: null, dryRun: true })).toBe("unreadable");
+    expect(decideSign({ ...facts, tagged: other, dryRun: true })).toBe("tag-moved");
+    expect(decideSign({ ...facts, signed: true, dryRun: true })).toBe("would-sign");
+  });
+});
 
 describe("the run's summary", () => {
   test("every text of the summary table", () => {
@@ -85,6 +201,37 @@ describe("the run's summary", () => {
         "latest: moved to 0.10.0, the hold released by hand",
       ],
       ["latest", { kind: "skipped-prerelease" }, "latest: skipped: pre-release"],
+      ["latest", { kind: "signed", digest: D }, `latest: signed ${D}; check it with: ${CHECK}`],
+      [
+        "latest",
+        { kind: "already-signed", digest: D },
+        `latest: already signed ${D}; check it with: ${CHECK}`,
+      ],
+      [
+        "latest",
+        { kind: "would-sign", digest: D },
+        `latest: would sign ${D} (dry run); a signed image is checked with: ${CHECK}`,
+      ],
+      [
+        "latest",
+        { kind: "no-digest" },
+        "latest: not signed: this release's build recorded no image digest; latest is not moved",
+      ],
+      [
+        "latest",
+        { kind: "unreadable", version: "0.9.0", said: "unauthorized" },
+        "latest: not signed: the registry did not say which image the tag 0.9.0 names: unauthorized",
+      ],
+      [
+        "latest",
+        { kind: "tag-moved", version: "0.9.0", built: D },
+        `latest: not signed: the tag 0.9.0 no longer names the image the release built (${D}); nothing is signed`,
+      ],
+      [
+        "latest",
+        { kind: "unverified", digest: D, said: "no matching signatures" },
+        `latest: not moved: the signature of ${D} did not verify: no matching signatures`,
+      ],
       [
         "latest",
         { kind: "not-moved", job: "marketplace" },
@@ -305,7 +452,12 @@ describe("what may be distributed", () => {
     exists: true,
     policy: { protected_branches: false, custom_branch_policies: true },
     branches: [{ name: "main", type: "branch" }],
+    reviewers: 0,
+    adminsBypass: false,
   };
+  /** The environment of the job that signs: the same rule, and a reviewer. */
+  const readyToSign = { ...ready, reviewers: 1 };
+  const missing = { exists: false, policy: null, branches: [], reviewers: 0, adminsBypass: false };
   const base: PlanFacts = {
     ref: "refs/heads/main",
     tag: "v0.9.0",
@@ -316,6 +468,7 @@ describe("what may be distributed", () => {
     hasDistribute: true,
     release: { isDraft: false, assets: [...REQUIRED_ASSETS] },
     environment: ready,
+    signEnvironment: readyToSign,
   };
   const refused = (facts: Partial<PlanFacts>) => {
     const decision = decidePlan({ ...base, ...facts });
@@ -374,7 +527,7 @@ describe("what may be distributed", () => {
         },
       }),
     ).toBe("the GitHub release v0.9.0 lacks: wizardingcode-mem-linux-x64, checksums.txt");
-    expect(refused({ environment: { exists: false, policy: null, branches: [] } })).toBe(
+    expect(refused({ environment: missing })).toBe(
       "the environment release does not exist; create it with its rule first (docs/runbooks/release.md)",
     );
   });
@@ -401,7 +554,30 @@ describe("what may be distributed", () => {
     );
     expect(refused({ environment: { ...ready, branches: [] } })).toBe(unruled);
     expect(environmentState(ready)).toBe("ready");
-    expect(environmentState({ exists: false, policy: null, branches: [] })).toBe("missing");
+    expect(environmentState(missing)).toBe("missing");
+  });
+
+  test("the environment that signs must exist, allow main alone and have a reviewer", () => {
+    expect(refused({ signEnvironment: missing })).toBe(
+      "the environment release-sign does not exist; create it with its rule and its reviewer first (docs/runbooks/release.md)",
+    );
+    expect(refused({ signEnvironment: { ...readyToSign, branches: [] } })).toBe(
+      "the environment release-sign must allow the branch main only (docs/runbooks/release.md)",
+    );
+    expect(refused({ signEnvironment: { ...readyToSign, reviewers: 0 } })).toBe(
+      "the environment release-sign has no required reviewer; add one first (docs/runbooks/release.md)",
+    );
+    // release is judged first, and needs no reviewer of its own.
+    expect(refused({ environment: missing, signEnvironment: ready })).toContain(
+      "the environment release does not exist",
+    );
+    expect(refused({})).toBe("accepted");
+    expect(environmentState(readyToSign, true)).toBe("ready");
+    expect(environmentState(ready, true)).toBe("unreviewed");
+    expect(environmentState(ready)).toBe("ready");
+    // A reading that lacks the field is no reviewer, never a pass.
+    const unread = { ...ready, reviewers: undefined as unknown as number };
+    expect(environmentState(unread, true)).toBe("unreviewed");
   });
 
   test("the first refusal that applies is the one given", () => {

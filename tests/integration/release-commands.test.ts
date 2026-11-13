@@ -83,7 +83,12 @@ describe("plan.ts", () => {
   });
   /** A repository where v0.9.0 follows v0.8.0, both on main, and the environment is ready. */
   function world(
-    options: { onMain?: boolean; environment?: string; accepted?: string } = {},
+    options: {
+      onMain?: boolean;
+      environment?: string;
+      signEnvironment?: string;
+      accepted?: string;
+    } = {},
   ): void {
     stub(
       "git",
@@ -108,6 +113,9 @@ describe("plan.ts", () => {
         options.environment ??
           `  "api repos/o/r/environments/release") echo '{"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true}}' ;;`,
         `  "api repos/o/r/environments/release/deployment-branch-policies") echo '{"total_count":1,"branch_policies":[{"id":1,"name":"main","type":"branch"}]}' ;;`,
+        options.signEnvironment ??
+          `  "api repos/o/r/environments/release-sign") echo '{"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true},"can_admins_bypass":false,"protection_rules":[{"id":1,"type":"required_reviewers","reviewers":[{"type":"User","reviewer":{"login":"someone"}}]}]}' ;;`,
+        `  "api repos/o/r/environments/release-sign/deployment-branch-policies") echo '{"total_count":1,"branch_policies":[{"id":2,"name":"main","type":"branch"}]}' ;;`,
       ].join("\n"),
     );
   }
@@ -199,6 +207,34 @@ describe("plan.ts", () => {
     const result = await script("plan.ts", [], env("v0.9.0", { PKG: "0.9.0" }));
     expect(result.stderr).toBe(
       "release: the environment release does not exist; create it with its rule first (docs/runbooks/release.md)\n",
+    );
+  });
+
+  test("an environment that signs with no required reviewer is refused", async () => {
+    for (const rules of [
+      "",
+      `,"protection_rules":[{"id":1,"type":"required_reviewers","reviewers":[]}]`,
+      `,"protection_rules":[{"id":1,"type":"wait_timer","wait_timer":5}]`,
+    ]) {
+      world({
+        signEnvironment: `  "api repos/o/r/environments/release-sign") echo '{"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true}${rules}}' ;;`,
+      });
+      const result = await script("plan.ts", [], env("v0.9.0", { PKG: "0.9.0" }));
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toBe(
+        "release: the environment release-sign has no required reviewer; add one first (docs/runbooks/release.md)\n",
+      );
+      expect(result.output).toBe("");
+    }
+  });
+
+  test("a missing environment that signs is its own refusal", async () => {
+    world({
+      signEnvironment: `  "api repos/o/r/environments/release-sign") echo 'gh: Not Found (HTTP 404)' >&2; exit 1 ;;`,
+    });
+    const result = await script("plan.ts", [], env("v0.9.0", { PKG: "0.9.0" }));
+    expect(result.stderr).toBe(
+      "release: the environment release-sign does not exist; create it with its rule and its reviewer first (docs/runbooks/release.md)\n",
     );
   });
 

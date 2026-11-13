@@ -53,32 +53,45 @@ function readRelease(tag: string): PlanFacts["release"] {
   return { isDraft: release.isDraft, assets: release.assets.map((asset) => asset.name) };
 }
 
-/** The environment `release` and its deployment branch rule, as the API gives them. */
-function readEnvironment(repo: string): Environment {
+/** An environment, its deployment branch rule, its reviewers and the administrators' bypass, as the API gives them. */
+function readEnvironment(repo: string, name: string): Environment {
   const failed = (stderr: string) =>
-    new ReleaseError(`could not read the environment release: ${stderr.trim()}`);
-  const environment = run(["gh", "api", `repos/${repo}/environments/release`]);
+    new ReleaseError(`could not read the environment ${name}: ${stderr.trim()}`);
+  const environment = run(["gh", "api", `repos/${repo}/environments/${name}`]);
   if (environment.code !== 0) {
     if (environment.stderr.includes("HTTP 404"))
-      return { exists: false, policy: null, branches: [] };
+      return { exists: false, policy: null, branches: [], reviewers: 0, adminsBypass: false };
     throw failed(environment.stderr);
   }
-  const policy = (
-    JSON.parse(environment.stdout) as { deployment_branch_policy: Environment["policy"] }
-  ).deployment_branch_policy;
+  const answer = JSON.parse(environment.stdout) as {
+    deployment_branch_policy: Environment["policy"];
+    protection_rules?: Array<{ type?: string; reviewers?: unknown[] }>;
+    can_admins_bypass?: boolean;
+  };
   const policies = run([
     "gh",
     "api",
-    `repos/${repo}/environments/release/deployment-branch-policies`,
+    `repos/${repo}/environments/${name}/deployment-branch-policies`,
   ]);
   if (policies.code !== 0) throw failed(policies.stderr);
   const branches = (
     JSON.parse(policies.stdout) as { branch_policies: Array<{ name: string; type: string }> }
   ).branch_policies.map(({ name, type }) => ({ name, type }));
-  return { exists: true, policy, branches };
+  const reviewers = (answer.protection_rules ?? []).filter(
+    (rule) =>
+      rule.type === "required_reviewers" &&
+      Array.isArray(rule.reviewers) &&
+      rule.reviewers.length > 0,
+  ).length;
+  return {
+    exists: true,
+    policy: answer.deployment_branch_policy,
+    branches,
+    reviewers,
+    adminsBypass: answer.can_admins_bypass === true,
+  };
 }
 
-/** The contract file's text at a commit; "missing" when the tree has none, "unreadable" when it cannot be shown. */
 function contractAt(sha: string): "missing" | "unreadable" | string {
   if (git("cat-file", "-e", `${sha}:${CONTRACT_FILE}`).code !== 0) return "missing";
   const shown = git("show", `${sha}:${CONTRACT_FILE}`);
@@ -112,7 +125,8 @@ command("plan", () => {
   check();
   facts.release = readRelease(tag);
   check();
-  facts.environment = readEnvironment(repo);
+  facts.environment = readEnvironment(repo, "release");
+  facts.signEnvironment = readEnvironment(repo, "release-sign");
   const plan = check();
 
   let hold = { held: false, byHand: false, outcome: null } as ReturnType<typeof decideHold>;
