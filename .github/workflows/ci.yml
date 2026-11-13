@@ -148,7 +148,8 @@ jobs:
           printf 'SERVER_DOMAIN=localhost\nWIZARDINGCODE_MEM_VERSION=%s\n' "$version" > .env
           docker compose up -d --pull never --wait --wait-timeout 240 server
           ./upgrade.sh status | tee status.txt
-          grep -q "^runs: $version (no digest), healthy" status.txt
+          # A digest where the image store gives a built image one (containerd), "no digest" where it does not.
+          grep -Eq "^runs: $version \((no digest|sha256:[0-9a-f]{64})\), healthy" status.txt
           grep -q "^schema: " status.txt
           grep -q "^next: nothing to do$" status.txt
           docker compose stop server

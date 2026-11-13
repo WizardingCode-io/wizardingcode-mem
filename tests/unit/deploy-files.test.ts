@@ -536,7 +536,9 @@ describe("the workflows", () => {
       );
       expect(runs).toContain("docker compose up -d --pull never --wait");
       expect(runs).toContain("./upgrade.sh status");
-      expect(runs).toContain('grep -q "^runs: $version (no digest), healthy"');
+      expect(runs).toContain(
+        'grep -Eq "^runs: $version \\((no digest|sha256:[0-9a-f]{64})\\), healthy" status.txt',
+      );
       expect(runs).toContain("docker compose stop server");
       expect(runs).toContain(
         "--network none --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges:true",
