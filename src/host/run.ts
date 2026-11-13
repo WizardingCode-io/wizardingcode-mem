@@ -56,7 +56,7 @@ export const realRun: Run = (cmd, options) => {
 
 // Text a program or a registry gave, on its way to a terminal, the journal or the state. The
 // rule `shown` has in src/team/restore.ts and `clean` in scripts/release/lib.ts, copied on
-// purpose (src/host/ imports nothing of either); tests/unit/host-shown.test.ts holds the three equal.
+// purpose (src/host/ imports nothing of either); tests/unit/host-shown.test.ts holds it equal to `clean`.
 // biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are what it finds
 const UNPRINTABLE = /[\u0000-\u001f\u007f-\u009f\p{Cf}]/gu;
 

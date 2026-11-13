@@ -110,3 +110,16 @@ export function withEnvLine(text: string, value: string): string {
     .map((line) => (LINE.test(line.body) ? `${KEY}=${value}` : line.body) + line.ending)
     .join("");
 }
+
+/** That one line as it is written, quotes and all; null when there is none or more than one. */
+export function envLineBody(text: string): string | null {
+  const found = linesOf(text).filter((line) => LINE.test(line.body));
+  return found.length === 1 ? (found[0] as { body: string }).body : null;
+}
+
+/** `text` with that one line replaced by `body`, a whole line as `envLineBody` gives it. */
+export function withEnvBody(text: string, body: string): string {
+  return linesOf(text)
+    .map((line) => (LINE.test(line.body) ? body : line.body) + line.ending)
+    .join("");
+}
