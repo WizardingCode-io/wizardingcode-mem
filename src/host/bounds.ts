@@ -37,7 +37,11 @@ export const BOUNDS: Bounds = {
 export const LAUNCHER_MS = 30_000 * 6 + 120_000;
 /** A conservative floor, not the first release with `up --wait-timeout`. */
 export const MIN_COMPOSE = "2.20.0";
-/** Free space on the data volume under which nothing is pulled or applied. */
+/**
+ * Free space on the data volume under which nothing is pulled or applied. The server refuses
+ * pushes under 200 MiB and reports unhealthy under 100 MiB; 500 MiB leaves room above both for
+ * an image's layers on a one-disk host and for what a start writes.
+ */
 export const FLOOR_BYTES = 500 * 1024 * 1024;
 
 /** The longest an unattended run can take: every call at its bound, an apply and a way back that each wait twice. */

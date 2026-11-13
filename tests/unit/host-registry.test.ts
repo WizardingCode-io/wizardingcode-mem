@@ -97,6 +97,15 @@ describe("latestDigest", () => {
         "a challenge whose realm is not https",
         [() => unauthorized(CHALLENGE.replace("https://ghcr.io/token", "http://ghcr.io/token"))],
       ],
+      [
+        "a challenge whose realm is on another host",
+        [
+          () =>
+            unauthorized(
+              CHALLENGE.replace("https://ghcr.io/token", "https://tokens.example/token"),
+            ),
+        ],
+      ],
       ["a challenge that is not Bearer", [() => unauthorized('Basic realm="x"')]],
       ["a token answer with no token", [() => unauthorized(CHALLENGE), () => Response.json({})]],
       [

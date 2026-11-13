@@ -74,6 +74,37 @@ export class StateRefused extends Error {
 export const stateDir = (folder: string): string => join(folder, "upgrade-state");
 const stateFile = (folder: string): string => join(stateDir(folder), "state.json");
 
+const SHA = /^sha256:[0-9a-f]{64}$/;
+/** A name Docker takes as a name: never empty, never read as an option. */
+const NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]*$/;
+
+/**
+ * An intent whose every field has the form the tool wrote it in. The tool passes its ids, its
+ * volume, its project and its files to Docker, so one it did not write is refused, not run.
+ */
+function isIntent(value: unknown): value is Intent {
+  if (typeof value !== "object" || value === null) return false;
+  const i = value as Record<string, unknown>;
+  const text = (key: string) => typeof i[key] === "string";
+  return (
+    SHA.test(String(i.digest)) &&
+    SHA.test(String(i.id)) &&
+    SHA.test(String(i.fromId)) &&
+    /^\d+\.\d+\.\d+$/.test(String(i.version)) &&
+    text("fromVersion") &&
+    text("fromEnvLine") &&
+    Number.isInteger(i.schema) &&
+    NAME.test(String(i.project)) &&
+    NAME.test(String(i.volume)) &&
+    typeof i.directory === "string" &&
+    i.directory.startsWith("/") &&
+    Array.isArray(i.files) &&
+    i.files.every((file) => typeof file === "string" && file.startsWith("/")) &&
+    typeof i.attended === "boolean" &&
+    typeof i.at === "number"
+  );
+}
+
 /** The state of `folder`: empty with no file; a `StateRefused` for one it cannot read for certain. */
 export function readState(folder: string): State {
   const path = stateFile(folder);
@@ -92,6 +123,9 @@ export function readState(folder: string): State {
     throw new StateRefused(path, "has no format");
   if (format > FORMAT)
     throw new StateRefused(path, `is of format ${format}, which a newer tool wrote`);
+  const intent = (parsed as { intent?: unknown }).intent;
+  if (intent !== undefined && !isIntent(intent))
+    throw new StateRefused(path, "holds an intent this tool cannot read for certain");
   return parsed as State;
 }
 
@@ -104,6 +138,18 @@ export function writeState(writer: Writer, folder: string, state: State): void {
 export function pushRejected(state: State, entry: Rejected): void {
   const others = (state.rejected ?? []).filter((r) => r.digest !== entry.digest);
   state.rejected = [...others, entry].slice(-REJECTED_KEPT);
+}
+
+/** One line of the history: the time, the verb, the outcome, the exit, and the two versions. */
+export function historyLine(
+  at: number,
+  verb: string,
+  outcome: string,
+  exit: number,
+  versions: { from: string; to: string },
+): string {
+  const time = new Date(at).toISOString().replace(/\.\d{3}Z$/, "Z");
+  return [time, verb, outcome, exit, versions.from, versions.to].join("\t");
 }
 
 /** Adds one line to `history.log` and keeps the newest 200. */

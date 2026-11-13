@@ -112,7 +112,7 @@ if [ "$verb" != status ]; then
 fi
 
 # Every call to Docker has a time bound, and one that fails is never read as "no container".
-silent() {
+docker_did_not_answer() {
   say "Docker did not answer"
   exit 13
 }
@@ -124,7 +124,7 @@ dock() {
 
 ids=""
 for form in "$dir" "$phys"; do
-  found="$(dock 30 ps -a -q --filter "label=$SERVICE" --filter "label=com.docker.compose.project.working_dir=$form")" || silent
+  found="$(dock 30 ps -a -q --filter "label=$SERVICE" --filter "label=com.docker.compose.project.working_dir=$form")" || docker_did_not_answer
   ids="$ids
 $found"
   [ "$dir" != "$phys" ] || break
@@ -139,7 +139,7 @@ fi
 
 healthy=no
 if [ "$count" -eq 1 ]; then
-  facts="$(dock 30 inspect --format '{{.Image}} {{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} {{.Config.Image}}' "$ids")" || silent
+  facts="$(dock 30 inspect --format '{{.Image}} {{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} {{.Config.Image}}' "$ids")" || docker_did_not_answer
   image_id="$(printf '%s' "$facts" | awk '{print $1}')"
   running="$(printf '%s' "$facts" | awk '{print $2}')"
   health="$(printf '%s' "$facts" | awk '{print $3}')"
@@ -147,7 +147,7 @@ if [ "$count" -eq 1 ]; then
   if [ "$running" = running ] && [ "$health" = healthy ]; then healthy=yes; fi
 else
   # No server here. One of this repository's under another folder means this file is in the wrong place.
-  others="$(dock 30 ps -a --filter "label=$SERVICE" --format '{{.Image}}	{{.Label "com.docker.compose.project.working_dir"}}')" || silent
+  others="$(dock 30 ps -a --filter "label=$SERVICE" --format '{{.Image}}	{{.Label "com.docker.compose.project.working_dir"}}')" || docker_did_not_answer
   elsewhere="$(printf '%s\n' "$others" | awk -F '\t' -v image="$IMAGE" 'index($1, image ":") == 1 || index($1, image "@") == 1 { print $2; exit }')"
   if [ -n "$elsewhere" ]; then
     say "no server belongs to $dir, and one runs from $elsewhere: copy this file there and run it from there"
@@ -169,17 +169,17 @@ if [ "$healthy" = yes ] && [ "$image_id" != "$recorded" ] && { [ "$verb" != stat
       ;;
   esac
   # A run killed between create and rm left a container behind: it goes first.
-  stale="$(dock 30 ps -a -q --filter "label=$LABEL")" || silent
+  stale="$(dock 30 ps -a -q --filter "label=$LABEL")" || docker_did_not_answer
   for old in $stale; do
-    dock 30 rm -f "$old" >/dev/null || silent
+    dock 30 rm -f "$old" >/dev/null || docker_did_not_answer
   done
-  created="$(dock 30 create --label "$LABEL" "$image_id")" || silent
+  created="$(dock 30 create --label "$LABEL" "$image_id")" || docker_did_not_answer
   if ! dock 120 cp "$created:$TOOL_PATH" "$tooldir/.wizardingcode-mem.new"; then
     dock 30 rm -f "$created" >/dev/null 2>&1 || true
     rm -f "$tooldir/.wizardingcode-mem.new"
-    silent
+    docker_did_not_answer
   fi
-  dock 30 rm -f "$created" >/dev/null || silent
+  dock 30 rm -f "$created" >/dev/null || docker_did_not_answer
   chmod 0755 "$tooldir/.wizardingcode-mem.new"
   mv -f "$tooldir/.wizardingcode-mem.new" "$tool"
   printf '%s\n' "$image_id" >"$tooldir/image"

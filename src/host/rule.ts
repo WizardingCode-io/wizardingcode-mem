@@ -23,6 +23,9 @@ export const EXIT = {
   locked: 75,
 } as const;
 
+/** Where a person goes when the tool stops with the server down. */
+export const RUNBOOK = "see Rollback in docs/runbooks/team-server.md";
+
 /** What each exit code says, in the words the usage text and the runbook's table carry. */
 export const EXIT_MEANING: Record<number, string> = {
   [EXIT.ok]: "nothing to do, or done",

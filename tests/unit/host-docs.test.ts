@@ -88,6 +88,54 @@ describe("the record of the decision", () => {
     expect(adr).toMatch(/^# ADR 0033 /);
   });
 
+  test("ADR 0033 states its reasons and each limit the design was given", () => {
+    const adr = read("docs/adr/0033-host-follows-releases.md");
+    const limits = adr.slice(adr.indexOf("## Limits"), adr.indexOf("## What is not built"));
+    expect(limits.length).toBeGreaterThan(500);
+    const stated: Array<[what: string, where: string, pattern: RegExp]> = [
+      [
+        "why the tool comes out of the running server's image",
+        adr,
+        /the one image the host already trusts with the data/,
+      ],
+      ["never out of the running container", adr, /never from the running container's filesystem/],
+      [
+        "trust on first use",
+        adr,
+        /trusted on first use: it comes from the image the operator started by hand/,
+      ],
+      ["the marker is a guard", adr, /guards against a mistake[^.]*; it is not a security control/],
+      [
+        "no check of freshness",
+        limits,
+        /not that it is the newest[\s\S]*No check of freshness is built/,
+      ],
+      ["exit 12 can be the network", limits, /Exit 12 does not always mean an unsigned image/],
+      ["the release before", limits, /The release before must be able to verify this one/],
+      ["a broken serve host", limits, /A release whose `serve host` is broken stops every host/],
+      [
+        "the launcher is copied once",
+        limits,
+        /The launcher is copied once and nothing delivers it/,
+      ],
+      ["a binary run on the host", limits, /docker group, which is root in effect/],
+      ["the running server answers for itself", limits, /The running server answers for itself/],
+      ["health proves little", limits, /Health proves little/],
+      [
+        "same schema",
+        limits,
+        /"Same schema" is not "the older binary reads what the newer one wrote"/,
+      ],
+      ["what is not shown: other engines", limits, /Linux engines other than the CI runner's/],
+      ["what is not shown: the classic image store", limits, /the classic image store/],
+      ["what is not shown: the units", limits, /the units under a real systemd/],
+      ["what is not shown: a real signature", limits, /a real signature verified on a host/],
+      ["what is not shown: the token flow", limits, /token flow from a host under rate limits/],
+    ];
+    for (const [what, where, pattern] of stated)
+      expect({ what, stated: pattern.test(where) }).toEqual({ what, stated: true });
+  });
+
   test("ADR 0032 points to it where it said what was not built", () => {
     const adr = read("docs/adr/0032-signed-images.md");
     const notBuilt = adr.slice(adr.indexOf("## What is not built"));

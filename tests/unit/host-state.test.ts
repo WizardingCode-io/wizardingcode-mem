@@ -70,6 +70,50 @@ describe("the state file", () => {
     }
   });
 
+  test("an intent the tool did not write in its own form is refused, since its fields go to Docker", () => {
+    const good = {
+      digest: `sha256:${"b".repeat(64)}`,
+      id: `sha256:${"2".repeat(64)}`,
+      version: "0.9.2",
+      fromId: `sha256:${"1".repeat(64)}`,
+      fromEnvLine: "WIZARDINGCODE_MEM_VERSION=0.9.1",
+      fromVersion: "0.9.1",
+      schema: 2,
+      project: "proj",
+      directory: "/srv/team",
+      files: ["/srv/team/compose.yml"],
+      volume: "proj_data",
+      attended: false,
+      at: 1,
+    };
+    const dir = folder();
+    writeFileSync(file(dir), JSON.stringify({ format: 1, intent: good }));
+    expect(readState(dir).intent).toEqual(good);
+    for (const bad of [
+      { volume: "-v/etc:/data" },
+      { volume: "" },
+      { id: "--privileged" },
+      { fromId: "latest" },
+      { digest: "sha256:abc" },
+      { project: "-p" },
+      { files: ["../elsewhere.yml"] },
+      { files: "compose.yml" },
+      { directory: "relative" },
+      { schema: "2" },
+      { version: "0.9.2; reboot" },
+      { attended: "no" },
+    ]) {
+      const other = folder();
+      const text = JSON.stringify({ format: 1, intent: { ...good, ...bad } });
+      writeFileSync(file(other), text);
+      expect(() => readState(other)).toThrow(StateRefused);
+      expect(readFileSync(file(other), "utf8")).toBe(text);
+    }
+    const none = folder();
+    writeFileSync(file(none), JSON.stringify({ format: 1, intent: "soon" }));
+    expect(() => readState(none)).toThrow(StateRefused);
+  });
+
   test("a state that is a symbolic link is refused", () => {
     const dir = folder();
     writeFileSync(join(dir, "elsewhere.json"), '{"format":1}');

@@ -6,11 +6,9 @@ import { join } from "node:path";
 import type { Deps } from "./deps.ts";
 import { findContainer, healthOf, iso, runningFacts } from "./docker.ts";
 import { isLink, readEnvLine } from "./files.ts";
-import { EXIT } from "./rule.ts";
+import { EXIT, RUNBOOK } from "./rule.ts";
 import { shownText } from "./run.ts";
 import { readState, type State, StateRefused, stateDir } from "./state.ts";
-
-const RUNBOOK = "see Rollback in docs/runbooks/team-server.md";
 
 /** `ms` as the largest of seconds, minutes, hours and days that gives at least 1. */
 function age(ms: number): string {

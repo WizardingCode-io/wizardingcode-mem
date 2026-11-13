@@ -19,9 +19,18 @@ import {
 } from "./docker.ts";
 import { type EnvLine, isLink, readEnvLine } from "./files.ts";
 import { latestDigest } from "./registry.ts";
-import { type CandidateFacts, decide, EXIT, type Facts, type RunningFacts } from "./rule.ts";
+import {
+  type CandidateFacts,
+  type Decision,
+  decide,
+  EXIT,
+  type Facts,
+  RUNBOOK,
+  type RunningFacts,
+} from "./rule.ts";
 import {
   appendHistory,
+  historyLine,
   readState,
   type State,
   StateRefused,
@@ -29,7 +38,6 @@ import {
   writeState,
 } from "./state.ts";
 
-const RUNBOOK = "see Rollback in docs/runbooks/team-server.md";
 const MIB = 1024 * 1024;
 const mib = (bytes: number | null): string =>
   bytes === null ? "an unknown number of" : String(Math.floor(bytes / MIB));
@@ -138,14 +146,10 @@ async function runVerb(
         appendHistory(
           deps.writer,
           folder,
-          [
-            iso(deps.now()),
-            verb,
-            ended.outcome,
-            ended.exit,
-            ended.versions?.from ?? read.running?.version ?? "",
-            ended.versions?.to ?? read.candidate?.facts.version ?? "",
-          ].join("\t"),
+          historyLine(deps.now(), verb, ended.outcome, ended.exit, {
+            from: ended.versions?.from ?? read.running?.version ?? "",
+            to: ended.versions?.to ?? read.candidate?.facts.version ?? "",
+          }),
         );
     }
     for (const line of ended.lines) deps.out(dryRun ? `would: ${line}` : line);
@@ -159,13 +163,24 @@ async function runVerb(
       changed: false,
     });
 
+  /** Docker did not answer: the rule's first row, asked of the rule itself. */
+  const dockerSilent = (): number => {
+    const decided = decide({
+      attended: verb === "upgrade",
+      rejected: [],
+      floorBytes: FLOOR_BYTES,
+      docker: "silent",
+    }) as Decision;
+    return unchanged(decided.row, decided.outcome, decided.exit);
+  };
+
   const compose = composeVersion(deps);
-  if (compose === null) return unchanged(1, "cannot-check", EXIT.cannotCheck);
+  if (compose === null) return dockerSilent();
   if (olderThan(compose, MIN_COMPOSE))
     return refuse(`Docker Compose ${compose} is older than ${MIN_COMPOSE}, which this tool needs`);
 
   let found = findContainer(deps, folder);
-  if (found.kind === "silent") return unchanged(1, "cannot-check", EXIT.cannotCheck);
+  if (found.kind === "silent") return dockerSilent();
   if (found.kind === "many")
     return refuse(`more than one server container belongs to ${folder}: ${found.names.join(", ")}`);
   if (found.kind === "one") {
@@ -203,8 +218,7 @@ async function runVerb(
     if (ended !== null) return finish(ended);
     // The intent is settled; what runs and what .env names may both have changed.
     found = findContainer(deps, folder);
-    if (found.kind === "silent" || found.kind === "many")
-      return unchanged(1, "cannot-check", EXIT.cannotCheck);
+    if (found.kind === "silent" || found.kind === "many") return dockerSilent();
     read.env = readEnvLine(readFileSync(envFile, "utf8")) ?? env;
   }
 
@@ -214,7 +228,6 @@ async function runVerb(
     attended: verb === "upgrade",
     rejected: (state.rejected ?? []).map((r) => r.digest),
     floorBytes: FLOOR_BYTES,
-    docker: "ok",
   };
   for (;;) {
     const decided = decide(facts);
@@ -266,8 +279,10 @@ async function runVerb(
         }
         break;
       }
-      default:
+      case "docker":
+        // Every call above answered, or the run would have ended at the rule's first row.
         facts.docker = "ok";
+        break;
     }
   }
 
@@ -285,7 +300,13 @@ async function runVerb(
     apply(
       ctx,
       { digest: read.digest as string, id: candidate.id, version: candidate.facts.version },
-      { container: container as Container, version: running.version, schema: running.schema },
+      {
+        container: container as Container,
+        // A container with no volume at /data was refused above.
+        volume: (container as Container).volume as string,
+        version: running.version,
+        schema: running.schema,
+      },
       verb === "upgrade",
     ),
   );

@@ -10,7 +10,6 @@ import {
   composeOf,
   findContainer,
   healthOf,
-  iso,
   removeOtherImages,
   saveLogs,
   schemaWith,
@@ -18,10 +17,15 @@ import {
   upWait,
 } from "./docker.ts";
 import { envLineBody, modeOf, replaceFile, withEnvBody, withEnvLine } from "./files.ts";
-import { EXIT } from "./rule.ts";
-import { appendHistory, type Intent, pushRejected, type State, writeState } from "./state.ts";
-
-const RUNBOOK = "see Rollback in docs/runbooks/team-server.md";
+import { EXIT, RUNBOOK } from "./rule.ts";
+import {
+  appendHistory,
+  historyLine,
+  type Intent,
+  pushRejected,
+  type State,
+  writeState,
+} from "./state.ts";
 
 export interface Ctx {
   deps: Deps;
@@ -140,7 +144,7 @@ export function failedStartUnattended(
         appendHistory(
           deps.writer,
           folder,
-          [iso(deps.now()), ctx.verb, "interrupted", 0, versions.from, versions.to].join("\t"),
+          historyLine(deps.now(), ctx.verb, "interrupted", 0, versions),
         );
         return null;
       }
@@ -221,7 +225,7 @@ function failedStartAttended(ctx: Ctx, intent: Intent, container: Container | nu
 export function apply(
   ctx: Ctx,
   candidate: { digest: string; id: string; version: string },
-  running: { container: Container; version: string; schema: number },
+  running: { container: Container; volume: string; version: string; schema: number },
   attended: boolean,
 ): Ended {
   const { deps, folder, state } = ctx;
@@ -237,7 +241,7 @@ export function apply(
     project: running.container.project,
     directory: running.container.directory,
     files: running.container.files,
-    volume: running.container.volume ?? "",
+    volume: running.volume,
     attended,
     at: deps.now(),
   };
@@ -273,11 +277,7 @@ export function reconcile(ctx: Ctx, intent: Intent, container: Container | null)
   const versions = { from: intent.fromVersion, to: intent.version };
   const health = healthOf(container);
   const note = (what: string) =>
-    appendHistory(
-      deps.writer,
-      folder,
-      [iso(deps.now()), ctx.verb, what, 0, versions.from, versions.to].join("\t"),
-    );
+    appendHistory(deps.writer, folder, historyLine(deps.now(), ctx.verb, what, 0, versions));
   if (container !== null && health === "healthy") {
     if (container.imageId === intent.id) {
       recordApplied(ctx, intent);

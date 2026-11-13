@@ -20,7 +20,10 @@ export interface Look {
 }
 
 /** `realm`, `service` and `scope` of a `Bearer` challenge; null for anything else. */
-function challengeOf(header: string | null): { realm: URL; service: string; scope: string } | null {
+function challengeOf(
+  header: string | null,
+  registry: string,
+): { realm: URL; service: string; scope: string } | null {
   if (header === null || !/^Bearer\s/i.test(header)) return null;
   const part = (name: string) => new RegExp(`${name}="([^"]*)"`).exec(header)?.[1];
   const realm = part("realm");
@@ -31,8 +34,9 @@ function challengeOf(header: string | null): { realm: URL; service: string; scop
   } catch {
     return null;
   }
-  // A token is asked only of an https address: the challenge is the registry's word, not ours.
-  if (url.protocol !== "https:") return null;
+  // A token is asked only of an https address on the registry's own host: the challenge is
+  // the registry's word, and it must not send a request anywhere else.
+  if (url.protocol !== "https:" || url.host !== new URL(registry).host) return null;
   return { realm: url, service: part("service") ?? "", scope: part("scope") ?? "" };
 }
 
@@ -55,7 +59,7 @@ export async function latestDigest(look: Look): Promise<string | null> {
   try {
     const first = await ask(manifest, "HEAD", { accept: ACCEPT });
     if (first.status !== 401) return digestOf(first);
-    const challenge = challengeOf(first.headers.get("www-authenticate"));
+    const challenge = challengeOf(first.headers.get("www-authenticate"), look.target.registry);
     if (challenge === null) return null;
     const tokenUrl = new URL(challenge.realm);
     tokenUrl.searchParams.set("service", challenge.service);

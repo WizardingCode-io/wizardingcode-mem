@@ -106,9 +106,7 @@ export function readEnvLine(text: string): EnvLine | null {
 
 /** `text` with that one line naming `value`, and every other byte as it was. */
 export function withEnvLine(text: string, value: string): string {
-  return linesOf(text)
-    .map((line) => (LINE.test(line.body) ? `${KEY}=${value}` : line.body) + line.ending)
-    .join("");
+  return withEnvBody(text, `${KEY}=${value}`);
 }
 
 /** That one line as it is written, quotes and all; null when there is none or more than one. */

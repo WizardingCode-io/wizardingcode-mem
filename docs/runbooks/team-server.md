@@ -89,7 +89,7 @@ journalctl -u wizardingcode-mem-upgrade.service
 
 `upgrade.sh status` says what runs, the last change and the last run, a release that waits or was rejected, and one next command. The launcher keeps its files in `upgrade-state/` beside `compose.yml`: the state, a history of the runs that changed something or failed, and under `logs/` the last 200 log lines of each release that failed to start. Those logs can hold the bootstrap code of a fresh server; they are readable by their owner only, and the ten newest are kept.
 
-The install, as the user that owns the folder and belongs to the `docker` group, never with `sudo` (the launcher refuses a user who is not the folder's owner):
+The install, as the user that owns the folder and belongs to the `docker` group, never with `sudo` (the launcher refuses a user who is not the folder's owner). A member of the `docker` group can do on the host what root can, so the timer runs with that reach, as your own `docker compose` already does; keep the folder writable by that user alone:
 
 ```sh
 ./upgrade.sh follow --dry-run
@@ -128,7 +128,7 @@ The exit codes of a run, the same at every run while the cause lasts:
 | 69 | a refusal before anything was changed |
 | 75 | another run holds the lock |
 
-Every exit from 10 to 15 fails the unit, at every hourly run. Nothing tells anyone by default: wire a unit of your own with `OnFailure=` under `[Unit]` of the service (one that mails, or posts the last lines of the journal). Exit 12 is not always an attack: read the verifier's lines in the journal before you treat it as one. Exit 75 is counted as success: it is the timer meeting an `upgrade` you typed.
+Every exit from 10 to 15 fails the unit, at every hourly run. Nothing tells anyone by default: wire a unit of your own with `OnFailure=` under `[Unit]` of the service (one that mails, or posts the last lines of the journal); the shipped service has the line, commented out. Until you do, the first sign of a failed run is `upgrade.sh status`, the journal, or a member whose client says the server stopped. Exit 12 is not always an attack: read the verifier's lines in the journal before you treat it as one. Exit 75 is counted as success: it is the timer meeting an `upgrade` you typed.
 
 To keep unattended applies to a window, replace the timer's `OnCalendar` (for example `OnCalendar=*-*-* 03:00`). On a host without systemd, one cron line does the timer's work: `17 * * * * /srv/team/upgrade.sh follow`. A hand upgrade stays valid: turn the timer off first (`systemctl disable --now wizardingcode-mem-upgrade.timer`), or the next run reads a `.env` that differs from what runs and waits for you (exit 14). The launcher is a file you copied: when it says it is older than the tool, copy `deploy/upgrade.sh` again.
 
