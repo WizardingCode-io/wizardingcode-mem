@@ -89,7 +89,7 @@ describe("the team runbook", () => {
           .map((m) => m[1] as string)
           .filter(
             (span) =>
-              /^(Dockerfile|compose\.yml|Caddyfile|\.env\.example|docs\/|src\/|tests\/|scripts\/)/.test(
+              /^(Dockerfile|compose\.yml|Caddyfile|\.env\.example|docs\/|src\/|tests\/|scripts\/|deploy\/)/.test(
                 span,
               ) && !span.includes("<"),
           ),

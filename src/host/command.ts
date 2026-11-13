@@ -4,7 +4,7 @@
 // the environment can replace the repository, the registry or the verifier.
 import type { Deps } from "./deps.ts";
 import { follow, upgrade } from "./follow.ts";
-import { EXIT } from "./rule.ts";
+import { EXIT, EXIT_MEANING } from "./rule.ts";
 import { status } from "./status.ts";
 
 const USAGE = `Usage: wizardingcode-mem serve host status | follow [--dry-run] | upgrade --dir <folder>
@@ -14,6 +14,11 @@ const USAGE = `Usage: wizardingcode-mem serve host status | follow [--dry-run] |
   follow              the timer's verb: applies a signed release that does not migrate
   follow --dry-run    what follow would do; may download the candidate, changes nothing that runs
   upgrade             the operator's verb: applies a signed release across a migration too
+
+Exit codes:
+${Object.entries(EXIT_MEANING)
+  .map(([code, meaning]) => `  ${code.padStart(2)}  ${meaning}`)
+  .join("\n")}
 `;
 
 export async function hostCommand(argv: string[], deps: Deps): Promise<number> {

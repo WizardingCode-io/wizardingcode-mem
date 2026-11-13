@@ -76,7 +76,65 @@ docker compose up -d server
 
 Across a schema bump the new binary copies `team.db` first, to `/data/backups/team-<ms>-v<n>-<pid>.db`, and migrates in place; 0.8.0 is such a bump (team schema 2: the registry of shared names and the renamed alias columns). Upgrade the server before members name projects: a 0.8.0 client against a 0.7.0 server holds its shared names (`wizardingcode-mem status` ends the server line `names held (server at contract 1)`, `doctor` warns, the Servers page says it) and refuses to create or join one until the server speaks contract 2; the hold ends within a minute of the upgrade while the sync runs, or at the member's next dock or CLI action. A member whose client is older than the server's contract sees the server `stopped (contract)` in `wizardingcode-mem status`, with the remedy `upgrade wizardingcode-mem`; nothing of theirs is lost, the sync resumes after the upgrade.
 
+**A host that follows releases by itself (ADR 0033).** From the first release that has `wizardingcode-mem serve host`, a host can apply releases without you. Copy three files of the repository beside your `compose.yml`, once: `deploy/upgrade.sh`, `deploy/wizardingcode-mem-upgrade.service` and `deploy/wizardingcode-mem-upgrade.timer`. They are for a Linux host with systemd, Docker with the Compose plugin (2.20 or later), `flock` and `timeout`, and a server started from this folder with its data in the volume at `/data`. A server older than that first release is upgraded to it by hand, as above, once.
+
+What it does, unattended: once an hour, and between 3 and 13 minutes after a boot, it asks the registry which image `latest` names. It applies that image only when all of this holds: its signature verifies as made by `distribute.yml` at `main` (the same check as in "Before the first start, once", run from cosign's own image); it is a higher version; it has the team schema your database is at; it still accepts every contract your server accepts; and the data volume has 500 MiB free. If the new server does not come up healthy and the schema did not move, the previous image is started again and that release is not tried again. A release that migrates the schema, or drops a contract, is never applied unattended: it waits for you.
+
+Where to look first, months later:
+
+```sh
+./upgrade.sh status
+journalctl -u wizardingcode-mem-upgrade.service
+```
+
+`upgrade.sh status` says what runs, the last change and the last run, a release that waits or was rejected, and one next command. The launcher keeps its files in `upgrade-state/` beside `compose.yml`: the state, a history of the runs that changed something or failed, and under `logs/` the last 200 log lines of each release that failed to start. Those logs can hold the bootstrap code of a fresh server; they are readable by their owner only, and the ten newest are kept.
+
+The install, as the user that owns the folder and belongs to the `docker` group, never with `sudo` (the launcher refuses a user who is not the folder's owner):
+
+```sh
+./upgrade.sh follow --dry-run
+```
+
+The dry run changes no container, no `.env` and no state, and says what `follow` would do. It is not a run that touches nothing: it takes the lock and may download the candidate image, and remove an older candidate's image. Then copy the two units to `/etc/systemd/system/`, set `User=` and the path in `ExecStart=`, and:
+
+```sh
+systemctl daemon-reload
+systemctl enable --now wizardingcode-mem-upgrade.timer
+```
+
+Enabling the timer is the opt-in. The verbs:
+
+| Verb | What it does |
+| :- | :- |
+| `upgrade.sh status` | Reads and prints; changes nothing |
+| `upgrade.sh follow` | The timer's verb: applies a signed release that does not migrate |
+| `upgrade.sh follow --dry-run` | What `follow` would do; may download |
+| `upgrade.sh upgrade` | Yours: applies a signed release across a migration too, and one that was rejected. When the server does not come up it undoes nothing and prints the restore command of Rollback |
+
+After an apply, `.env` names the version with its image digest (`WIZARDINGCODE_MEM_VERSION=0.9.2@sha256:…`), so the next `docker compose up` of any service starts the image that was verified, whatever the tag names by then.
+
+The exit codes of a run, the same at every run while the cause lasts:
+
+| Exit | Meaning |
+| :- | :- |
+| 0 | nothing to do, or done |
+| 10 | the server needs a person now: it is not running healthy |
+| 11 | a release was rejected here: it did not start, and the previous one runs |
+| 12 | an image did not verify as signed, or the verifier could not reach Sigstore or the registry |
+| 13 | the tool could not check: Docker, the running server or the registry did not answer |
+| 14 | something waits for the operator: a migration, a dropped contract, a .env that differs |
+| 15 | the data volume is short of free space |
+| 64 | usage |
+| 69 | a refusal before anything was changed |
+| 75 | another run holds the lock |
+
+Every exit from 10 to 15 fails the unit, at every hourly run. Nothing tells anyone by default: wire a unit of your own with `OnFailure=` under `[Unit]` of the service (one that mails, or posts the last lines of the journal). Exit 12 is not always an attack: read the verifier's lines in the journal before you treat it as one. Exit 75 is counted as success: it is the timer meeting an `upgrade` you typed.
+
+To keep unattended applies to a window, replace the timer's `OnCalendar` (for example `OnCalendar=*-*-* 03:00`). On a host without systemd, one cron line does the timer's work: `17 * * * * /srv/team/upgrade.sh follow`. A hand upgrade stays valid: turn the timer off first (`systemctl disable --now wizardingcode-mem-upgrade.timer`), or the next run reads a `.env` that differs from what runs and waits for you (exit 14). The launcher is a file you copied: when it says it is older than the tool, copy `deploy/upgrade.sh` again.
+
 ### Rollback
+
+On a host whose timer follows releases, turn it off first, so that no run starts the server in the middle of this: `systemctl disable --now wizardingcode-mem-upgrade.timer`. Turn it on again when the server runs healthy.
 
 There are two cases, told apart by the team schema of the two images: `docker run --rm ghcr.io/wizardingcode-io/wizardingcode-mem:<tag> serve version` prints `team_schema=<n>` for each. An image that answers `unknown subcommand "version"` is 0.8.0 or older: 0.8.0 runs team schema 2, 0.7.0 schema 1.
 

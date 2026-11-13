@@ -78,7 +78,7 @@ describe("follow applies a verified higher release of the same schema", () => {
     const w = hostWorld();
     await follow(w.deps, w.folder, { dryRun: false });
     const state = w.writes.indexOf("rename state.json");
-    const env = w.writes.indexOf("write ..env." + process.pid + ".tmp");
+    const env = w.writes.indexOf(`write ..env.${process.pid}.tmp`);
     expect(state).toBeGreaterThan(-1);
     expect(env).toBeGreaterThan(state);
     expect(w.state().intent).toBeUndefined();

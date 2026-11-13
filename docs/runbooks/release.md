@@ -128,6 +128,15 @@ The rule looks one release back, which is what the server promises (it accepts i
 
 A hold that names a file (`latest: held: src/team/contract.ts at <tag>`) means the rule could not read the contract there and held to be safe.
 
+## What a release keeps for the hosts
+
+A team server's host that follows releases (ADR 0033, `docs/runbooks/team-server.md`, Upgrade) judges each release with the tool of the release it runs. Two rules follow, and no test of the repository can hold either, because both are about a release that does not exist yet:
+
+- **The release before must be able to verify this one.** A host verifies with `COSIGN_IMAGE` and `SIGNER_IDENTITY` as the release it runs has them. So a newer cosign on the signing side (`COSIGN_VERSION`, the installer's pin in `distribute.yml`), or a corrected `SIGNER_IDENTITY`, ships in two steps: first a release whose `COSIGN_IMAGE` (or identity) is the new one while the signing side stays as it was, then, once that release is out, the signing side's change. Done in one step, every host answers `not-verified` (exit 12) and its operator upgrades by hand once.
+- **The state's format is read a release before it is written.** `upgrade-state/state.json` is written by one release's tool and read by the next one's, and by the previous one's after a way back. A key is only ever added. A release that must raise `FORMAT` in `src/host/state.ts` ships the reading of the new format a release before it writes it.
+
+The launcher, `deploy/upgrade.sh`, is not delivered to hosts: an operator copies it once. A change to the binary's path in the image, to the repository's name, or to the verbs and flags of `serve host` breaks the launchers already copied; `tests/unit/host-units.test.ts` fails on such a change, and the release's notes then say to copy the launcher again.
+
 ## Limits
 
 - The dist-tag `next` on npm stays on the last pre-release after a plain release supersedes it.

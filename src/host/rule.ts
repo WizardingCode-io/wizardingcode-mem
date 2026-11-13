@@ -23,6 +23,23 @@ export const EXIT = {
   locked: 75,
 } as const;
 
+/** What each exit code says, in the words the usage text and the runbook's table carry. */
+export const EXIT_MEANING: Record<number, string> = {
+  [EXIT.ok]: "nothing to do, or done",
+  [EXIT.down]: "the server needs a person now: it is not running healthy",
+  [EXIT.rejected]: "a release was rejected here: it did not start, and the previous one runs",
+  [EXIT.notVerified]:
+    "an image did not verify as signed, or the verifier could not reach Sigstore or the registry",
+  [EXIT.cannotCheck]:
+    "the tool could not check: Docker, the running server or the registry did not answer",
+  [EXIT.waits]:
+    "something waits for the operator: a migration, a dropped contract, a .env that differs",
+  [EXIT.lowDisk]: "the data volume is short of free space",
+  [EXIT.usage]: "usage",
+  [EXIT.unavailable]: "a refusal before anything was changed",
+  [EXIT.locked]: "another run holds the lock",
+};
+
 export type Outcome =
   | "cannot-check"
   | "starting"

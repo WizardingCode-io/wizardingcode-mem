@@ -90,4 +90,4 @@ cosign verify <image>@<digest> --certificate-identity https://github.com/Wizardi
 
 ## What is not built
 
-The host's side: the script and the timer that verify the signature on the host and apply a release, the attended upgrade across a migration (D-4), their units and their tests. It is the next item, and it starts from the item's `probes/returns-for-the-script.md`. Until then nothing verifies a signature by itself: the team runbook gives the command and still pins a version. The release's binaries are not signed by this item either, nor are the images of releases already made.
+The host's side was not built by this item: nothing here verifies a signature on a host or applies a release. It is [ADR 0033](0033-host-follows-releases.md) (work item 2026-11-13-002): a launcher and two units beside `compose.yml`, and `wizardingcode-mem serve host`, which verifies with the `verifyArgs` of this ADR. The release's binaries are not signed by this item either, nor are the images of releases already made.
