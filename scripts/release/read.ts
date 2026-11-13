@@ -7,6 +7,7 @@ import {
   clean,
   type Environment,
   lastLine,
+  newestBuilt,
   ReleaseError,
   type Runner,
 } from "./lib.ts";
@@ -86,6 +87,7 @@ export function readBuild(
   if (listed.code !== 0) return unlisted(lastLine(listed.stderr) || notList);
   const rows = parsed(listed.stdout);
   if (!Array.isArray(rows)) return unlisted(notList);
+  const ids = new Map<BuildRun, string>();
   const runs = rows
     .filter(
       (row): row is { databaseId: number; createdAt: string; url: string } =>
@@ -98,27 +100,26 @@ export function readBuild(
         typeof row.url === "string",
     )
     .map((row) => {
+      const id = String(row.databaseId);
       const build: BuildRun = {
         url: row.url,
         createdAt: row.createdAt,
-        docker: dockerConclusion(run, repo, String(row.databaseId)),
+        docker: dockerConclusion(run, repo, id),
         artifact: null,
       };
-      return { id: String(row.databaseId), build };
+      ids.set(build, id);
+      return build;
     });
-  // The one artifact builtDigest reads: that of the newest run whose docker job succeeded.
-  const [newest] = runs
-    .filter(({ build }) => build.docker === "success")
-    .sort((a, b) =>
-      a.build.createdAt < b.build.createdAt ? 1 : a.build.createdAt > b.build.createdAt ? -1 : 0,
-    );
-  if (newest !== undefined) {
-    const into = join(dir, newest.id);
+  // The one artifact builtDigest reads, chosen by the same rule.
+  const newest = newestBuilt(runs);
+  const id = newest === undefined ? undefined : ids.get(newest);
+  if (newest !== undefined && id !== undefined) {
+    const into = join(dir, id);
     const got = run([
       "gh",
       "run",
       "download",
-      newest.id,
+      id,
       "--repo",
       repo,
       "-n",
@@ -129,13 +130,13 @@ export function readBuild(
     const file = join(into, "image-digest.txt");
     if (got.code === 0 && existsSync(file)) {
       try {
-        newest.build.artifact = readFileSync(file, "utf8");
+        newest.artifact = readFileSync(file, "utf8");
       } catch {
-        newest.build.artifact = null;
+        newest.artifact = null;
       }
     }
   }
-  return runs.map(({ build }) => build);
+  return runs;
 }
 
 /** JSON's value, or undefined when the text is not JSON. */

@@ -26,6 +26,34 @@ import {
 
 const NOT_A_DIGEST = "an answer that is not a digest";
 
+/** What the signing can end as. */
+export type SignOutcome = Extract<
+  Outcome,
+  {
+    kind:
+      | "signed"
+      | "already-signed"
+      | "would-sign"
+      | "no-digest"
+      | "unreadable"
+      | "tag-moved"
+      | "unverified"
+      | "failed";
+  }
+>;
+
+/** The job's exit for each: every outcome that signed or moved nothing it was asked to stops the job. */
+const EXIT: Record<SignOutcome["kind"], 0 | 1> = {
+  signed: 0,
+  "already-signed": 0,
+  "would-sign": 0,
+  "no-digest": 1,
+  unreadable: 1,
+  "tag-moved": 1,
+  unverified: 1,
+  failed: 1,
+};
+
 /** The digest a tag of the image names, or what the registry said instead. */
 function named(run: Runner, tag: string): { digest: string } | { said: string } {
   const out = run([
@@ -53,9 +81,9 @@ export function signImage(options: {
   /** The digest plan read from the release's run; empty when it read none. */
   built: string;
   dryRun: boolean;
-}): Outcome {
+}): SignOutcome {
   const { run, version, built, dryRun } = options;
-  const failed = (sentence: string): Outcome => ({ kind: "failed", sentence });
+  const failed = (sentence: string): SignOutcome => ({ kind: "failed", sentence });
   const reference = `${IMAGE}@${built}`;
   const verify = () => run(["cosign", ...verifyArgs(reference)]);
 
@@ -115,7 +143,7 @@ function need(name: string): string {
 }
 
 if (import.meta.main) {
-  let outcome: Outcome;
+  let outcome: SignOutcome;
   try {
     outcome = signImage({
       run,
@@ -129,7 +157,9 @@ if (import.meta.main) {
       sentence: clean(error instanceof Error ? error.message : String(error), 300),
     };
   }
-  summary(summaryLine("latest", outcome));
-  const stops = ["no-digest", "unreadable", "tag-moved", "unverified", "failed"];
-  process.exit(stops.includes(outcome.kind) ? 1 : 0);
+  const line = summaryLine("latest", outcome);
+  summary(line);
+  // The job's log says a stop too, as every other command's failure does.
+  if (EXIT[outcome.kind] === 1) process.stderr.write(`release: ${line}\n`);
+  process.exit(EXIT[outcome.kind]);
 }

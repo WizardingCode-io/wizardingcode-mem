@@ -602,6 +602,16 @@ export interface BuildRun {
 export type Built = { digest: string; run: string } | { digest: null; reason: string };
 
 /**
+ * The newest run whose docker job succeeded, or none. The one rule for which run's record
+ * counts: readBuild downloads that run's artifact and builtDigest reads it.
+ */
+export function newestBuilt(runs: BuildRun[]): BuildRun | undefined {
+  return runs
+    .filter((run) => run.docker === "success")
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0))[0];
+}
+
+/**
  * The digest a release's own build recorded: that of the newest run whose docker job
  * succeeded (a tag deleted and pushed again leaves two). The job that signs compares it with
  * what the tag names, so a wrong choice here signs nothing.
@@ -609,10 +619,7 @@ export type Built = { digest: string; run: string } | { digest: null; reason: st
 export function builtDigest(runs: BuildRun[]): Built {
   if (runs.length === 0)
     return { digest: null, reason: "no run of release.yml for this tag's commit" };
-  const built = runs
-    .filter((run) => run.docker === "success")
-    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
-  const [newest] = built;
+  const newest = newestBuilt(runs);
   if (newest === undefined)
     return { digest: null, reason: "no run of release.yml built the image" };
   if (newest.artifact === null)

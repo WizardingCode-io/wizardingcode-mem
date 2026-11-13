@@ -301,6 +301,108 @@ describe("plan.ts", () => {
   });
 });
 
+describe("sign.ts", () => {
+  const D2 = `sha256:${"2".repeat(64)}`;
+  const IMG = "ghcr.io/wizardingcode-io/wizardingcode-mem";
+  const env = (more: Record<string, string> = {}) => ({
+    VERSION: "0.9.0",
+    IMAGE_DIGEST: DIGEST,
+    DRY_RUN: "false",
+    ...more,
+  });
+  /** A registry where 0.9.0 names `tagged`, and a cosign whose verify exits `verify`. */
+  function world(options: { tagged?: string; verify?: number; sign?: string } = {}): void {
+    stub(
+      "docker",
+      [
+        `  "buildx imagetools inspect ${IMG}:0.9.0 "*) echo '"${options.tagged ?? DIGEST}"' ;;`,
+        `  "buildx imagetools inspect ${IMG}:latest "*) echo '"${DIGEST}"' ;;`,
+        `  "buildx imagetools create "*) exit 0 ;;`,
+      ].join("\n"),
+    );
+    stub(
+      "cosign",
+      [
+        `  "verify "*) exit ${options.verify ?? 0} ;;`,
+        options.sign ?? `  "sign "*) exit 0 ;;`,
+      ].join("\n"),
+    );
+  }
+
+  test("a signed image: one line in the summary, latest moved, exit 0", async () => {
+    world();
+    const result = await script("sign.ts", [], env());
+    expect(result.stderr).toBe("");
+    expect(result.exitCode).toBe(0);
+    expect(result.summary).toStartWith(
+      `latest: already signed ${DIGEST}; check it with: cosign verify `,
+    );
+    expect(result.summary.trimEnd().split("\n")).toHaveLength(1);
+    expect(log("docker")).toContain(`buildx imagetools create -t ${IMG}:latest ${IMG}@${DIGEST}\n`);
+  });
+
+  test("a dry run is read from DRY_RUN: nothing is signed or moved, exit 0", async () => {
+    world({ verify: 1 });
+    const result = await script("sign.ts", [], env({ DRY_RUN: "true" }));
+    expect(result.exitCode).toBe(0);
+    expect(result.summary).toStartWith(`latest: would sign ${DIGEST} (dry run); `);
+    expect(log("cosign")).not.toContain("sign --yes");
+    expect(log("docker")).not.toContain("imagetools create");
+  });
+
+  test("every outcome that signs or moves nothing exits 1, with its line in the summary and the log", async () => {
+    const cases: Array<[() => void, Record<string, string>, string]> = [
+      [
+        () => world(),
+        env({ IMAGE_DIGEST: "" }),
+        "latest: not signed: this release's build recorded no image digest; latest is not moved",
+      ],
+      [
+        () => {
+          world();
+          stub(
+            "docker",
+            `  "buildx imagetools inspect "*) echo 'ERROR: unauthorized' >&2; exit 1 ;;`,
+          );
+        },
+        env(),
+        "latest: not signed: the registry did not say which image the tag 0.9.0 names: ERROR: unauthorized",
+      ],
+      [
+        () => world({ tagged: D2 }),
+        env(),
+        `latest: not signed: the tag 0.9.0 no longer names the image the release built (${DIGEST}); nothing is signed`,
+      ],
+      [
+        () => world({ verify: 1 }),
+        env(),
+        `latest: not moved: the signature of ${DIGEST} did not verify: `,
+      ],
+      [
+        () => world({ verify: 1, sign: `  "sign "*) echo 'Error: no token' >&2; exit 1 ;;` }),
+        env(),
+        "latest: failed: the image's signing did not succeed: Error: no token",
+      ],
+      [
+        () => world(),
+        { IMAGE_DIGEST: DIGEST, DRY_RUN: "false" },
+        "latest: failed: VERSION is not set",
+      ],
+    ];
+    for (const [prepare, variables, line] of cases) {
+      rmSync(join(base, "summary"), { force: true });
+      rmSync(join(base, "docker.log"), { force: true });
+      prepare();
+      const result = await script("sign.ts", [], variables);
+      expect({ line, code: result.exitCode }).toEqual({ line, code: 1 });
+      expect(result.summary).toBe(`${line}\n`);
+      // The job's log says it too, as every other command's failure does.
+      expect(result.stderr).toBe(`release: ${line}\n`);
+      expect(log("docker")).not.toContain("imagetools create");
+    }
+  });
+});
+
 describe("npm.ts", () => {
   let folder: string;
   beforeEach(() => {
