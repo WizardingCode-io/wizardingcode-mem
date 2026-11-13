@@ -1106,35 +1106,36 @@ export function insertAudit(
   );
 }
 
+interface AuditRecord {
+  id: number;
+  at: number;
+  source: string;
+  device_id: string | null;
+  address: string | null;
+  action: string;
+  target: string | null;
+  detail: string;
+}
+
+const AUDIT_COLUMNS = "id, at, source, device_id, address, action, target, detail";
+
+const auditRow = (row: AuditRecord): AuditRow => ({
+  id: row.id,
+  at: row.at,
+  source: row.source,
+  deviceId: row.device_id,
+  address: row.address,
+  action: row.action,
+  target: row.target,
+  detail: row.detail,
+});
+
 /** The newest rows first. */
 export function listAudit(db: Db, limit: number): AuditRow[] {
   return db
-    .query<
-      {
-        id: number;
-        at: number;
-        source: string;
-        device_id: string | null;
-        address: string | null;
-        action: string;
-        target: string | null;
-        detail: string;
-      },
-      [number]
-    >(
-      "SELECT id, at, source, device_id, address, action, target, detail FROM audit ORDER BY id DESC LIMIT ?",
-    )
+    .query<AuditRecord, [number]>(`SELECT ${AUDIT_COLUMNS} FROM audit ORDER BY id DESC LIMIT ?`)
     .all(limit)
-    .map((row) => ({
-      id: row.id,
-      at: row.at,
-      source: row.source,
-      deviceId: row.device_id,
-      address: row.address,
-      action: row.action,
-      target: row.target,
-      detail: row.detail,
-    }));
+    .map(auditRow);
 }
 
 // --- What a restore loses ---------------------------------------------------------------
@@ -1157,9 +1158,10 @@ export function lostSince(db: Db, at: number): LostSince {
       "SELECT count(*) AS n FROM entry_revisions WHERE revision = 1 AND at > ?",
       at,
     ),
+    // A withdrawal is a revision too; it is counted apart (`withdrawnSince`).
     entriesRevised: n(
       `SELECT count(DISTINCT r.uuid) AS n FROM entry_revisions r
-       WHERE r.revision > 1 AND r.at > ?
+       WHERE r.revision > 1 AND r.op = 'send' AND r.at > ?
          AND EXISTS (SELECT 1 FROM entry_revisions f WHERE f.uuid = r.uuid AND f.revision = 1 AND f.at <= ?)`,
       at,
       at,
@@ -1174,32 +1176,32 @@ export function lostSince(db: Db, at: number): LostSince {
 /** Every audit row after `at`, oldest first. */
 export function auditSince(db: Db, at: number): AuditRow[] {
   return db
-    .query<
-      {
-        id: number;
-        at: number;
-        source: string;
-        device_id: string | null;
-        address: string | null;
-        action: string;
-        target: string | null;
-        detail: string;
-      },
-      [number]
-    >(
-      "SELECT id, at, source, device_id, address, action, target, detail FROM audit WHERE at > ? ORDER BY id ASC",
-    )
+    .query<AuditRecord, [number]>(`SELECT ${AUDIT_COLUMNS} FROM audit WHERE at > ? ORDER BY id ASC`)
     .all(at)
-    .map((row) => ({
-      id: row.id,
-      at: row.at,
-      source: row.source,
-      deviceId: row.device_id,
-      address: row.address,
-      action: row.action,
-      target: row.target,
-      detail: row.detail,
-    }));
+    .map(auditRow);
+}
+
+/** The items whose current feed row is a withdrawal made after `at`, oldest first: by a member's push or by an admin. */
+export function withdrawnSince(
+  db: Db,
+  at: number,
+): { kind: "entry" | "memory"; uid: string; key: string }[] {
+  return db
+    .query<{ kind: "entry" | "memory"; uid: string; key: string }, [number]>(
+      "SELECT kind, uid, key FROM changes WHERE current = 1 AND op = 'tombstone' AND at > ? ORDER BY seq",
+    )
+    .all(at);
+}
+
+/** Whether `copy` holds the item live: its current feed row there is an upsert. The feed's `key`, `current` and `op` are unchanged since schema 1. */
+export function liveInCopy(copy: Db, key: string): boolean {
+  return (
+    copy
+      .query<{ found: number }, [string]>(
+        "SELECT 1 AS found FROM changes WHERE key = ? AND current = 1 AND op = 'upsert'",
+      )
+      .get(key) !== null
+  );
 }
 
 /** The three tables a restore asks an upgrade copy about; each has had `id` since schema 1. */
@@ -1214,16 +1216,12 @@ export function inCopy(copy: Db, table: keyof typeof IN_COPY, id: string): boole
   return copy.query<{ found: number }, [string]>(IN_COPY[table]).get(id) !== null;
 }
 
-/** The invitations used after `at` that would be open again in a copy taken at `at`. */
-export function invitationsUsedSince(
-  db: Db,
-  at: number,
-  now: number,
-): { id: string; createdAt: number }[] {
+/** The ids of the invitations used after `at` that are neither expired nor revoked: a copy taken at `at` holds them open. */
+export function invitationsUsedSince(db: Db, at: number, now: number): string[] {
   return db
-    .query<{ id: string; created_at: number }, [number, number]>(
-      "SELECT id, created_at FROM invitations WHERE used_at > ? AND expires_at > ? AND revoked_at IS NULL ORDER BY created_at, id",
+    .query<{ id: string }, [number, number]>(
+      "SELECT id FROM invitations WHERE used_at > ? AND expires_at > ? AND revoked_at IS NULL ORDER BY created_at, id",
     )
     .all(at, now)
-    .map((row) => ({ id: row.id, createdAt: row.created_at }));
+    .map((row) => row.id);
 }

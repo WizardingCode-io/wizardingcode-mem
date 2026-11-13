@@ -128,6 +128,11 @@ describe("the team runbook", () => {
     expect(new Set(order).size).toBe(order.length);
     for (const words of [
       "docker compose exec",
+      "run no `docker compose up`",
+      "serve revoke",
+      "serve invitation revoke",
+      "serve withdraw",
+      "15 minutes",
       "docker compose restart caddy",
       "unknown subcommand",
       "team-before-rollback-",

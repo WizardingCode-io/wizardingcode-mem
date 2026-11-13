@@ -18,15 +18,12 @@ import {
 import { join } from "node:path";
 import {
   type Db,
-  enableWal,
   openTeamCopy,
-  openTeamExisting,
   openTeamPresent,
   openTeamStaging,
-  restrict,
-  SchemaTooNewError,
   TEAM_DB_FILE,
   TEAM_LATEST,
+  teamBackups,
   teamPaths,
 } from "./db.ts";
 import { freeBytes as diskFreeBytes } from "./disk.ts";
@@ -44,11 +41,13 @@ import {
   invitationsUsedSince,
   journalMode,
   leaseOf,
+  liveInCopy,
   lostSince,
   quickCheck,
   releaseLease,
   sequenceHighWater,
   teamSchemaVersion,
+  withdrawnSince,
 } from "./store.ts";
 
 export interface RestoreInput {
@@ -65,7 +64,9 @@ export interface RestoreInput {
 }
 
 /** How long the restore's own lease keeps a server from starting: the copy of a large file fits in it. */
-export const RESTORE_LEASE_MS = 900_000;
+const RESTORE_LEASE_MS = 900_000;
+/** The owner of the restore's lease starts with this; a refusal reads it to say who holds the lease. */
+const RESTORE_OWNER = "restore-";
 
 /** A restore that will not run, with the reason in words; nothing was changed. */
 export class RestoreRefused extends Error {
@@ -80,12 +81,36 @@ const FREE_MARGIN_BYTES = 1_073_741_824;
 const SIDE_FILES = ["-wal", "-shm"] as const;
 const P = "docker compose run --rm server serve ";
 const LOST = "lost with the restore";
-const ITEM_NOTE = " (the older image answers no such item if it arrived after the copy)";
-const NAME_NOTE = " (the older image answers no such name if it arrived after the copy)";
+const ITEM_NOTE = "the older image answers no such item if it arrived after the copy";
+const NAME_NOTE = "the older image answers no such name if it was created after the copy";
+const TOKEN_NOTE = "the device joins again with a new invitation";
+const WITHDRAWN_NOTE =
+  "the older image's withdrawal is the operator's: its member cannot send the item again until serve reinstate";
 
 const iso = (ms: number): string => new Date(ms).toISOString();
+// The same one line as `src/update/reason.ts` has: that folder imports nothing of the server's, nor the server of it.
 const firstLine = (error: unknown): string =>
   (error instanceof Error ? error.message : String(error)).split("\n")[0] ?? "";
+
+// What the lines print comes from the database, and some of it from members (a uid's alias, a
+// device's label). The operator pastes the commands into a shell on the host, so nothing of
+// it reaches a command unquoted, and no control character reaches the terminal at all.
+// biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are what it finds
+const CONTROL = /[\u0000-\u001f\u007f-\u009f]/;
+const CONTROL_ALL = new RegExp(CONTROL.source, "g");
+const PLAIN = /^[A-Za-z0-9_.:@/-]+$/;
+
+/** A text for the left side of a line: every control character replaced. */
+const shown = (text: string): string => text.replace(CONTROL_ALL, "?");
+
+/** A text as one shell argument: as it is when plain, single-quoted otherwise; null when it holds a control character. */
+function arg(text: string): string | null {
+  if (text === "" || CONTROL.test(text)) return null;
+  return PLAIN.test(text) ? text : `'${text.replaceAll("'", "'\\''")}'`;
+}
+
+const KINDS: readonly string[] = ["entry", "memory"];
+const ROLES: readonly string[] = ["admin", "member"];
 
 /** The name in `folder` matching `pattern` whose first group is the greatest number. */
 function newest(folder: string, pattern: RegExp): { name: string; n: number } | null {
@@ -139,15 +164,13 @@ function checkInPlace(present: string, aside: string): void {
 }
 
 /**
- * Makes the staging file what the server expects: a copy made by `VACUUM INTO` is in the
- * rollback-journal mode, so WAL is set here; then the whole file is checked and its log cut,
- * and the side files go, so that one rename moves the database.
+ * Makes the staging file what the server expects: the open sets WAL (a copy made by
+ * `VACUUM INTO` is in the rollback-journal mode); then the whole file is checked and its log
+ * cut, and the side files go, so that one rename moves the database.
  */
 function prepareStaging(staging: string): void {
-  restrict(staging, 0o600);
   const staged = openTeamStaging(staging);
   try {
-    enableWal(staged, 5000);
     if (!integrityCheck(staged)) {
       throw new RestoreRefused("the staging file failed its integrity check");
     }
@@ -159,12 +182,31 @@ function prepareStaging(staging: string): void {
   fsyncPath(staging, "r+");
 }
 
-/** The right side of an audit line: the older image's command that does it again, or that it is lost. */
-function redo(row: AuditRow, copy: Db): string {
-  const target = row.target;
-  if (target === null) return LOST;
-  const known = (table: "devices" | "members" | "invitations", command: string): string =>
-    inCopy(copy, table, target) ? command : LOST;
+interface Redo {
+  /** The command the older image runs to do the action again; null when it is lost. */
+  command: string | null;
+  note?: string;
+}
+
+const LOST_REDO: Redo = { command: null };
+
+/**
+ * What to do again for one audit row. It reads the row's `detail`, a text the writers shape:
+ * `<kind> revision <n>` for `item withdrawn` (routes.ts, serve.ts), the kind alone for
+ * `item reinstated`, `<kind>: <n> rows, …` for `purged` (mirror.ts), the role for `role set`,
+ * `devices <n>, withdrawn <n>` for `member disabled`. A detail that is not in its shape makes
+ * the line lost, never a command.
+ */
+function redo(row: AuditRow, copy: Db): Redo {
+  const target = row.target === null ? null : arg(row.target);
+  if (row.target === null || target === null) return LOST_REDO;
+  const raw = row.target;
+  const known = (table: "devices" | "members" | "invitations", command: string, note?: string) =>
+    inCopy(copy, table, raw) ? { command, ...(note === undefined ? {} : { note }) } : LOST_REDO;
+  const item = (verb: string, kind: string | undefined, flags = ""): Redo =>
+    kind !== undefined && KINDS.includes(kind)
+      ? { command: `${P}${verb} ${kind} ${target}${flags}`, note: ITEM_NOTE }
+      : LOST_REDO;
   switch (row.action) {
     case "device revoked":
       return known("devices", `${P}revoke ${target}`);
@@ -176,27 +218,33 @@ function redo(row: AuditRow, copy: Db): string {
     case "member enabled":
       return known("members", `${P}enable ${target}`);
     case "role set":
-      return known("members", `${P}role ${target} ${row.detail}`);
+      return ROLES.includes(row.detail)
+        ? known("members", `${P}role ${target} ${row.detail}`)
+        : LOST_REDO;
+    // The copy holds the device's old token: the device is revoked.
     case "token rotated":
-      return known(
-        "devices",
-        `${P}revoke ${target} (the device joins again with a new invitation)`,
-      );
+      return known("devices", `${P}revoke ${target}`, TOKEN_NOTE);
     case "invitation revoked":
       return known("invitations", `${P}invitation revoke ${target}`);
     // An item or a name is never asked of the copy: one that arrived after it is answered by
     // the older image itself, and a purge left unprinted would be an erasure undone in silence.
     case "item withdrawn":
-      return `${P}withdraw ${row.detail.split(" ")[0]} ${target}${ITEM_NOTE}`;
+      return item("withdraw", row.detail.split(" ")[0]);
     case "item reinstated":
-      return `${P}reinstate ${row.detail} ${target}${ITEM_NOTE}`;
+      return item("reinstate", row.detail);
     case "purged":
-      return `${P}purge ${row.detail.split(":")[0]} ${target} --yes${ITEM_NOTE}`;
+      return item("purge", row.detail.split(":")[0], " --yes");
     case "name purged":
-      return `${P}purge name ${target} --yes${NAME_NOTE}`;
+      return { command: `${P}purge name ${target} --yes`, note: NAME_NOTE };
     default:
-      return LOST;
+      return LOST_REDO;
   }
+}
+
+/** One line of the list, and its note on a line of its own so that the command pastes whole. */
+function listed(left: string, todo: Redo): string[] {
+  const line = `${left} -> ${todo.command ?? LOST}`;
+  return todo.command !== null && todo.note !== undefined ? [line, `  note: ${todo.note}`] : [line];
 }
 
 /** Finishes a restore that was killed between its two renames, or refuses. */
@@ -208,7 +256,7 @@ function finishCut(dir: string, present: string, staging: string, backups: strin
       `team.db is missing and there is no staging file${
         aside === null
           ? `; no aside file was found in ${backups}`
-          : `; the database as it was is ${aside}: put it back with docker compose run --rm --entrypoint sh server -c 'mv ${aside} /data/team.db'`
+          : `; the database as it was is ${aside}, with its -wal and -shm beside it when they exist: the runbook's Rollback has the moves that put it back`
       }`,
     );
   }
@@ -236,19 +284,20 @@ function plan(input: RestoreInput, latest: number, backups: string): Plan {
   let db: Db | null = null;
   let copy: Db | null = null;
   try {
+    const presentPath = join(dir, TEAM_DB_FILE);
+    if (!existsSync(presentPath)) throw new RestoreRefused(`no team.db in ${dir}`);
     try {
-      db = openTeamExisting(dir, latest);
+      db = openTeamCopy(presentPath);
     } catch (error) {
-      if (!(error instanceof SchemaTooNewError)) throw error;
-      throw new RestoreRefused(
-        "team.db is at a newer schema than this binary: run the restore with the image that left it",
-      );
+      if (!(error instanceof NotATeamDatabaseError)) throw error;
+      throw new RestoreRefused("team.db is not a team database");
     }
-    if (db === null) throw new RestoreRefused(`no team.db in ${dir}`);
     const lease = leaseOf(db, SERVE_LEASE);
     if (lease !== null && lease.until > now()) {
       throw new RestoreRefused(
-        `serve.lease is held by ${lease.owner} until ${iso(lease.until)}: stop the server first`,
+        lease.owner.startsWith(RESTORE_OWNER)
+          ? `an earlier restore holds serve.lease until ${iso(lease.until)}: it is still running, or it was killed during its copy; run it again after that time`
+          : `serve.lease is held by ${shown(lease.owner)} until ${iso(lease.until)}: stop the server first (a killed server's lease ends within 30 seconds)`,
       );
     }
     const present = teamSchemaVersion(db);
@@ -261,7 +310,10 @@ function plan(input: RestoreInput, latest: number, backups: string): Plan {
       throw new RestoreRefused(`nothing to go back to: this binary runs schema ${latest}`);
     }
     if (!existsSync(backups)) throw new RestoreRefused(`no backups folder at ${backups}`);
-    const found = newest(backups, new RegExp(`^team-(\\d+)-v${toSchema}-\\d+\\.db$`));
+    const found = newest(
+      backups,
+      new RegExp(`^${teamBackups(dir).prefix}-(\\d+)-v${toSchema}-\\d+\\.db$`),
+    );
     if (found === null) {
       throw new RestoreRefused(`no upgrade copy for schema ${toSchema} in ${backups}`);
     }
@@ -292,6 +344,17 @@ function plan(input: RestoreInput, latest: number, backups: string): Plan {
     const lines = [`would_restore=${copyPath}`, `copied_at=${iso(ms)}`];
     if (free === null) lines.push("disk=unknown");
     const lost = lostSince(db, ms);
+    const audit = auditSince(db, ms);
+    // A member's own withdrawal writes no audit row: the feed is asked. One the audit already
+    // carries (an admin's) has its line there, and one of an item the copy never held is
+    // gone with the item.
+    const audited = new Set(
+      audit.filter((row) => row.action === "item withdrawn").map((row) => row.target),
+    );
+    const held = copy;
+    const withdrawn = withdrawnSince(db, ms).filter(
+      (item) => !audited.has(item.uid) && liveInCopy(held, item.key),
+    );
     const mark = Math.max(
       readHighWater(teamPaths(dir).feedFile).changes,
       sequenceHighWater(db, "changes"),
@@ -304,22 +367,36 @@ function plan(input: RestoreInput, latest: number, backups: string): Plan {
       `lost.names=${lost.names}`,
       `lost.members=${lost.members}`,
       `lost.devices=${lost.devices}`,
+      `lost.withdrawn=${withdrawn.length}`,
       `lost.changes=${lostChanges}`,
     );
     // The older image's renewal moves the sequence one margin past its own mark; the clients
     // have seen numbers up to the present mark, so it runs until the sequence is past that.
     const renewals = Math.floor(lostChanges / SEQUENCE_MARGIN) + 1;
     for (let i = 0; i < renewals; i++) lines.push(`run: ${P}instance renew`);
-    for (const row of auditSince(db, ms)) {
+    for (const row of audit) {
+      const left = [iso(row.at), row.source, row.action, row.target ?? "-", row.detail]
+        .map(shown)
+        .join(" ");
+      lines.push(...listed(left, redo(row, copy)));
+    }
+    for (const item of withdrawn) {
+      const uid = arg(item.uid);
       lines.push(
-        `${iso(row.at)} ${row.source} ${row.action} ${row.target ?? "-"} ${row.detail} -> ${redo(row, copy)}`,
+        ...listed(
+          `${item.kind} ${shown(item.uid)} withdrawn since the copy`,
+          uid === null
+            ? LOST_REDO
+            : { command: `${P}withdraw ${item.kind} ${uid}`, note: WITHDRAWN_NOTE },
+        ),
       );
     }
-    for (const invitation of invitationsUsedSince(db, ms, now())) {
+    for (const id of invitationsUsedSince(db, ms, now())) {
+      const invitation = arg(id);
       lines.push(
-        inCopy(copy, "invitations", invitation.id)
-          ? `invitation ${invitation.id} used since the copy -> ${P}invitation revoke ${invitation.id}`
-          : `invitation ${invitation.id} -> ${LOST}`,
+        invitation !== null && inCopy(copy, "invitations", id)
+          ? `invitation ${shown(id)} used since the copy -> ${P}invitation revoke ${invitation}`
+          : `invitation ${shown(id)} -> ${LOST}`,
       );
     }
     lines.push(`run: ${P}mirror --rebuild`);
@@ -340,7 +417,7 @@ export function restore(input: RestoreInput): string[] {
   const latest = input.latest ?? TEAM_LATEST;
   const present = join(dir, TEAM_DB_FILE);
   const staging = `${present}.restoring`;
-  const backups = join(dir, "backups");
+  const backups = teamBackups(dir).folder;
 
   if (yes && !existsSync(present)) return finishCut(dir, present, staging, backups);
   // A staging file with the present one still in place is a run cut before its swap: the copy is made again.
@@ -352,7 +429,7 @@ export function restore(input: RestoreInput): string[] {
   // The lease lives in the database about to be moved aside: it keeps a server from starting
   // on the present file while the copy is made, and is released before the swap.
   const writer = openTeamPresent(dir, latest);
-  const owner = `restore-${newHexId()}`;
+  const owner = `${RESTORE_OWNER}${newHexId()}`;
   if (!claimLease(writer, SERVE_LEASE, owner, now(), RESTORE_LEASE_MS)) {
     writer.close();
     throw new RestoreRefused("serve.lease was taken: a server started; stop it first");

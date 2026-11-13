@@ -467,15 +467,11 @@ export function openExistingFile(
  * Opens a database file that must exist, for writing, as it is: no migration runs and no copy
  * is made. `before` runs first; anything it throws closes the handle and is rethrown.
  */
-export function openForWrite(
-  dir: string,
-  file: string,
-  options: { before?: (db: Db) => void; busyTimeoutMs?: number } = {},
-): Db {
+export function openForWrite(dir: string, file: string, before?: (db: Db) => void): Db {
   const db = new Database(join(dir, file), { readwrite: true, create: false });
   try {
-    db.run(`PRAGMA busy_timeout = ${Math.max(0, Math.trunc(options.busyTimeoutMs ?? 5000))}`);
-    options.before?.(db);
+    db.run("PRAGMA busy_timeout = 5000");
+    before?.(db);
   } catch (error) {
     db.close();
     throw error;

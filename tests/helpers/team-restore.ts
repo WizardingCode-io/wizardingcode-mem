@@ -36,7 +36,7 @@ import {
 
 /** The tests stand in for a newer binary by a schema one above the real one. */
 export const NEXT = TEAM_LATEST + 1;
-export const PROBE_MIGRATION: Migration = {
+const PROBE_MIGRATION: Migration = {
   version: NEXT,
   name: "restore_probe",
   sql: "CREATE TABLE restore_probe (x INTEGER)",
@@ -58,6 +58,8 @@ export interface WorldIds {
   rui: { memberId: string; deviceId: string };
   old: { uid: string; file: string };
   doomed: { uid: string; file: string };
+  /** An entry its member withdraws after the upgrade. */
+  unshared: { uid: string };
   memoryUid: string;
   /** The invitation minted before the upgrade and not used by then. */
   invitation: string;
@@ -95,8 +97,9 @@ export async function world(): Promise<{ dir: string; ids: WorldIds }> {
   const rui = await memberOf(t, admin.token, "Rui");
   const old = entryPayload({ scope: "shared", slug: "old" });
   const doomed = entryPayload({ scope: "shared", slug: "doomed" });
+  const unshared = entryPayload({ scope: "shared", slug: "unshared" });
   const memory = memoryPayload();
-  for (const payload of [old, doomed, memory]) {
+  for (const payload of [old, doomed, unshared, memory]) {
     const result = await pushOne(t.server, ana.token, sendOf(payload));
     if (result.result !== "applied") throw new Error(`push: ${JSON.stringify(result)}`);
   }
@@ -116,6 +119,7 @@ export async function world(): Promise<{ dir: string; ids: WorldIds }> {
       rui,
       old: { uid: old.uid, file: fileNameFor(uuidOf(old.uid), "old") },
       doomed: { uid: doomed.uid, file: fileNameFor(uuidOf(doomed.uid), "doomed") },
+      unshared: { uid: unshared.uid },
       memoryUid: memory.uid,
       invitation: made.body.id as string,
       instance,
@@ -338,6 +342,28 @@ export function since(dir: string, ids: WorldIds): SinceIds {
       target: ids.doomed.uid,
       detail: "entry: 2 rows, 1 feed rows",
     });
+
+    // Ana withdraws an entry of hers: a member's own push, which writes no audit row.
+    const goneUuid = uuidOf(ids.unshared.uid);
+    const goneChange = one(
+      db,
+      "SELECT * FROM changes WHERE uid = ? AND current = 1",
+      ids.unshared.uid,
+    );
+    const goneRevision = one(db, "SELECT * FROM entry_revisions WHERE uuid = ?", goneUuid);
+    const goneSeq = change(db, goneChange, { op: "tombstone", revision: 2, at: now() });
+    insertRow(db, "entry_revisions", {
+      ...goneRevision,
+      revision: 2,
+      seq: goneSeq,
+      op: "withdraw",
+      at: now(),
+    });
+    db.run("UPDATE entries SET revision = 2, withdrawn_at = ?, updated_at = ? WHERE uuid = ?", [
+      now(),
+      now(),
+      goneUuid,
+    ]);
 
     // Ana's device rotates its token.
     audit(db, { action: "token rotated", target: ids.ana.deviceId }, ids.ana.deviceId);

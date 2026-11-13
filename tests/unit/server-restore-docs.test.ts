@@ -19,6 +19,10 @@ describe("the restore's documents", () => {
       "serve mirror --rebuild",
       "serve version",
       "openTeamPresent",
+      "read-only opens",
+      "by the older image",
+      "single-quoted",
+      "lost.withdrawn",
       "everyone who can push a tag or a branch",
       "0026",
     ]) {

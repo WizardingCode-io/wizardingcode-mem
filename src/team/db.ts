@@ -7,17 +7,21 @@
 //   openTeamDb        creates or migrates, with no look for a server (tests, tools);
 //   openTeamForWrite  creates or migrates beside a possibly running server;
 //   openTeamExisting  read-only, refusing a schema above the binary's;
-//   openTeamCopy      read-only, any file by its path and at any schema (an upgrade copy);
+//   openTeamCopy      read-only, a file by its path and at any schema (an upgrade copy, and
+//                     the present file while a restore checks it);
 //   openTeamPresent   read-write and never migrating: the schema must be the binary's;
-//   openTeamStaging   read-write, a file by its path, never migrating (the restore's staging file).
+//   openTeamStaging   read-write, a file by its path, never migrating, set to WAL (the
+//                     restore's staging file, and that same file once it is `team.db`).
 import { basename, dirname, join } from "node:path";
 import {
   type Backups,
   type Db,
+  enableWal,
   type Migration,
   openExistingFile,
   openFile,
   openForWrite,
+  restrict,
 } from "../store/db.ts";
 import { NotATeamDatabaseError, SchemaBehindError, SchemaMismatchError } from "./errors.ts";
 import { newHexId } from "./ids.ts";
@@ -25,7 +29,6 @@ import teamInit from "./migrations/0001_team_init.sql" with { type: "text" };
 import teamNames from "./migrations/0002_team_names.sql" with { type: "text" };
 import { leaseActive } from "./store.ts";
 
-export { enableWal, restrict, SchemaTooNewError } from "../store/db.ts";
 export type { Db, Migration };
 
 export const TEAM_DB_FILE = "team.db";
@@ -109,12 +112,16 @@ export function openTeamDb(dir: string, busyTimeoutMs = 5000): Db {
   return openWriter(dir, busyTimeoutMs, TEAM_MIGRATIONS);
 }
 
-/** Read-only, for the subcommands that inspect; null without the file. `latest` is for tests. */
-export function openTeamExisting(dir: string, latest = TEAM_LATEST): Db | null {
-  return openExistingFile(dir, TEAM_DB_FILE, { before: requireTeamSchema, latest });
+/** Read-only, for the subcommands that inspect; null without the file. */
+export function openTeamExisting(dir: string): Db | null {
+  return openExistingFile(dir, TEAM_DB_FILE, { before: requireTeamSchema, latest: TEAM_LATEST });
 }
 
-/** Read-only, a team database by its path, whatever its schema: an upgrade copy, or the file a restore just put in place. */
+/**
+ * Read-only, a team database by its path, whatever its schema: an upgrade copy, or the
+ * present file while a restore checks it (a file ahead of this binary included, which the
+ * restore refuses in its own words).
+ */
 export function openTeamCopy(file: string): Db {
   const db = openExistingFile(dirname(file), basename(file), { before: requireTeamSchema });
   if (db === null) throw new Error("no such file");
@@ -127,7 +134,7 @@ export function openTeamCopy(file: string): Db {
  * refused with `SchemaMismatchError`. `latest` is for tests.
  */
 export function openTeamPresent(dir: string, latest = TEAM_LATEST): Db {
-  const db = openForWrite(dir, TEAM_DB_FILE, { before: prepareWriter });
+  const db = openForWrite(dir, TEAM_DB_FILE, prepareWriter);
   const found = userVersion(db);
   if (found !== latest) {
     db.close();
@@ -136,9 +143,19 @@ export function openTeamPresent(dir: string, latest = TEAM_LATEST): Db {
   return db;
 }
 
-/** Read-write, a team database by its path, never migrating: the restore's staging file. */
+/**
+ * Read-write, a team database by its path, never migrating: the restore's staging file, and
+ * the same file once it has been renamed to `team.db` (a read-only connection cannot open a
+ * WAL database that has no side files on every platform). The file is made the owner's alone
+ * and set to WAL, which a copy made by `VACUUM INTO` is not in; on a file already in WAL the
+ * statement changes nothing.
+ */
 export function openTeamStaging(file: string): Db {
-  return openForWrite(dirname(file), basename(file), { before: requireTeamSchema });
+  restrict(file, 0o600);
+  return openForWrite(dirname(file), basename(file), (db) => {
+    requireTeamSchema(db);
+    enableWal(db, 5000);
+  });
 }
 
 /**
