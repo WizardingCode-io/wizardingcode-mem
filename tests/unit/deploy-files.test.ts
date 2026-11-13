@@ -244,6 +244,70 @@ describe("the workflows", () => {
     expect(Object.keys(start?.env ?? {}).sort()).toEqual(["GH_REPO", "GH_TOKEN"]);
   });
 
+  describe("release.yml is held like distribute.yml: its build is what gets signed (ADR 0032)", () => {
+    const release = () => parseYaml(read(".github/workflows/release.yml")) as Workflow;
+
+    test("release.yml: every action is pinned by commit, nothing reaches a shell by interpolation, no checkout keeps credentials", () => {
+      let actions = 0;
+      for (const [name, job] of Object.entries(release().jobs)) {
+        for (const step of job.steps) {
+          if (step.run !== undefined)
+            expect({ name, run: step.run.includes(OPEN) }).toEqual({ name, run: false });
+          if (step.uses === undefined) continue;
+          actions++;
+          const pin = step.uses.split("@")[1] ?? "";
+          expect({ uses: step.uses, pinned: /^[0-9a-f]{40}$/.test(pin) }).toEqual({
+            uses: step.uses,
+            pinned: true,
+          });
+          if (step.uses.startsWith("actions/checkout@"))
+            expect({ name, kept: step.with?.["persist-credentials"] }).toEqual({
+              name,
+              kept: false,
+            });
+        }
+      }
+      expect(actions).toBeGreaterThan(10);
+    });
+
+    test("release.yml: it starts from no permission, and each job has only what it needs", () => {
+      const file = release();
+      expect(file.permissions).toEqual({});
+      const permissions = Object.fromEntries(
+        Object.entries(file.jobs).map(([name, job]) => [name, job.permissions]),
+      );
+      expect(permissions).toEqual({
+        build: { contents: "read" },
+        sign: { contents: "read" },
+        docker: { contents: "read", packages: "write" },
+        publish: { contents: "write" },
+        distribute: { actions: "write" },
+      });
+    });
+
+    test("release.yml: docker records its build's digest as the artifact image-digest", () => {
+      const steps = release().jobs.docker?.steps ?? [];
+      const build = steps.findIndex((step) => step.uses?.startsWith("docker/build-push-action@"));
+      expect(build).toBeGreaterThan(-1);
+      expect(steps[build]?.id).toBe("build");
+      // The build's own answer, never the tag read back after the push.
+      const record = steps[build + 1];
+      expect(record?.env).toEqual({ DIGEST: expr("steps.build.outputs.digest") });
+      expect(record?.run).toContain('"$DIGEST"');
+      // Printed to the log, which is where the person who approves the signing reads it.
+      expect(record?.run).toContain("tee image-digest.txt");
+      const upload = steps.at(-1);
+      expect(steps).toHaveLength(build + 3);
+      expect(upload?.uses).toStartWith("actions/upload-artifact@");
+      expect(upload?.with).toEqual({
+        name: "image-digest",
+        path: "image-digest.txt",
+        "if-no-files-found": "error",
+        overwrite: true,
+      });
+    });
+  });
+
   describe("distribute.yml", () => {
     const raw = () => read(".github/workflows/distribute.yml");
     const workflow = () => parseYaml(raw()) as Workflow;
