@@ -1,0 +1,15 @@
+# When a team server's host looks for a signed release (ADR 0033). The delay applies to every
+# trigger, so the run after boot comes 3 to 13 minutes after it. To keep upgrades to a window,
+# replace OnCalendar (for example: OnCalendar=*-*-* 03:00).
+[Unit]
+Description=wizardingcode-mem team server: look for a signed release
+
+[Timer]
+OnBootSec=3min
+OnCalendar=hourly
+RandomizedDelaySec=10min
+Persistent=true
+Unit=wizardingcode-mem-upgrade.service
+
+[Install]
+WantedBy=timers.target
