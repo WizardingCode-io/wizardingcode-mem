@@ -4,6 +4,7 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { COSIGN_IMAGE, IMAGE, verifyArgs, verifyCommand } from "../../scripts/release/lib.ts";
 
 const ROOT = join(import.meta.dir, "..", "..");
 const at = (path: string) => join(ROOT, path);
@@ -105,6 +106,22 @@ describe("the team runbook", () => {
     expect(named.filter((event) => !team.includes(`event: "${event}"`))).toEqual([]);
   });
 
+  test("the image's signature is checked with the one command", () => {
+    const start = runbook.indexOf("### Before the first start, once\n");
+    expect(start).toBeGreaterThan(-1);
+    const section = runbook.slice(start, runbook.indexOf("\n### ", start + 1));
+    // The same arguments the release's own job verifies with (scripts/release/lib.ts).
+    const reference = `${IMAGE}@sha256:<digest>`;
+    const lines = section.split("\n").map((line) => line.trim());
+    expect(lines).toContain(verifyCommand(reference));
+    expect(lines).toContain(
+      ["docker", "run", "--rm", COSIGN_IMAGE, ...verifyArgs(reference)].join(" "),
+    );
+    expect(section).toContain("distribute.yml@refs/heads/main");
+    // The rewrite keeps what the paragraph already said of the tag.
+    expect(section).toContain("everyone who can push a tag or a branch");
+  });
+
   test("the rollback is the restore command, and every named command comes before the start", () => {
     /** The text of one `###` section, its heading included. */
     const sectionOf = (heading: string): string => {
@@ -117,6 +134,10 @@ describe("the team runbook", () => {
     expect(section).toContain("docker compose run --rm server serve restore --to-schema");
     expect(section).not.toContain("cp /data/team.db");
     expect(section).not.toContain("rm -f /data/team.db-wal");
+    // The older image's own words for an item that arrived after the copy.
+    expect(section).toContain("wizardingcode-mem serve: unknown");
+    expect(section).toContain("serve reinstate");
+    expect(section).not.toContain("no such item");
     const order = [
       "serve instance renew",
       "serve purge",

@@ -5,20 +5,29 @@ name: release
 # macOS runner because Apple Silicon refuses unsigned ones. It then starts distribute.yml, which
 # publishes to npm, the tap and the marketplace and moves the image's latest tag
 # (docs/runbooks/release.md).
+#
+# The image this workflow builds is the one distribute.yml signs, by the digest the docker job
+# records (ADR 0032). So it is held as that workflow is: every action pinned by commit, no run:
+# interpolating an expression, no checkout keeping credentials, each job with only the
+# permissions it needs. tests/unit/deploy-files.test.ts holds it.
 
 on:
   push:
     tags: ["v*"]
 
-permissions:
-  contents: write
+# No job has more than it needs: only publish writes the repository (it makes the release).
+permissions: {}
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v7
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version-file: .bun-version
       - run: bun install --frozen-lockfile
@@ -32,7 +41,7 @@ jobs:
           fi
       - run: bun run check
       - run: bun run build
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: unsigned
           path: dist/
@@ -41,8 +50,10 @@ jobs:
   sign:
     needs: build
     runs-on: macos-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: unsigned
           path: dist
@@ -53,7 +64,7 @@ jobs:
             codesign --verify --verbose "$file"
             "$file" --version
           done
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: binaries
           path: dist/
@@ -68,20 +79,24 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v8
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: binaries
           path: dist
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      # The docker actions stay on the majors every release so far was built with; distribute.yml,
+      # written later, has newer ones. Each is the commit of the release its comment names.
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           # A registry reference carries no capitals.
           images: ghcr.io/wizardingcode-io/wizardingcode-mem
@@ -90,7 +105,8 @@ jobs:
           # The action's default adds latest to a plain release; latest is moved once, last,
           # by distribute.yml (ADR 0029, ADR 0031).
           flavor: latest=false
-      - uses: docker/build-push-action@v6
+      - id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           file: Dockerfile
@@ -98,16 +114,32 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+      # The digest of the index this build pushed, from the build itself and never from the
+      # tag read back: it is what distribute.yml signs (ADR 0032). Printed, so that the person
+      # who approves the signing can read it here; kept as an artifact, which plan reads.
+      - env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: printf '%s\n' "$DIGEST" | tee image-digest.txt
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: image-digest
+          path: image-digest.txt
+          if-no-files-found: error
+          # A re-run of this job replaces the record; without this the second upload fails.
+          overwrite: true
 
   publish:
     needs: [sign, docker]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       # The whole history, with tags: the Changes list reaches back to the previous release.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: actions/download-artifact@v8
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: binaries
           path: dist

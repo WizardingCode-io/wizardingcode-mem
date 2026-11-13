@@ -4,12 +4,22 @@
 //   bun scripts/release/plan.ts
 //
 // Environment: TAG, RELEASE_HOLD, DRY_RUN, GITHUB_REF, GITHUB_REPOSITORY, GH_TOKEN (for gh).
+//
+// It reads git's tags and trees, the tag's GitHub release, the environments release and
+// release-sign, and, for a release that is not a pre-release, the run of release.yml that
+// built the tag's image: the digest that run recorded is the only one the job latest may sign.
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
+  type Built,
+  BYPASS_LINE,
+  builtDigest,
   CONTRACT_FILE,
   command,
   decideHold,
   decidePlan,
-  type Environment,
+  imageLine,
   isVersionTag,
   latestLine,
   output,
@@ -21,6 +31,7 @@ import {
   run,
   summary,
 } from "./lib.ts";
+import { readBuild, readEnvironment } from "./read.ts";
 
 const git = (...args: string[]) => run(["git", ...args]);
 
@@ -51,31 +62,6 @@ function readRelease(tag: string): PlanFacts["release"] {
   }
   const release = JSON.parse(out.stdout) as { isDraft: boolean; assets: Array<{ name: string }> };
   return { isDraft: release.isDraft, assets: release.assets.map((asset) => asset.name) };
-}
-
-/** The environment `release` and its deployment branch rule, as the API gives them. */
-function readEnvironment(repo: string): Environment {
-  const failed = (stderr: string) =>
-    new ReleaseError(`could not read the environment release: ${stderr.trim()}`);
-  const environment = run(["gh", "api", `repos/${repo}/environments/release`]);
-  if (environment.code !== 0) {
-    if (environment.stderr.includes("HTTP 404"))
-      return { exists: false, policy: null, branches: [] };
-    throw failed(environment.stderr);
-  }
-  const policy = (
-    JSON.parse(environment.stdout) as { deployment_branch_policy: Environment["policy"] }
-  ).deployment_branch_policy;
-  const policies = run([
-    "gh",
-    "api",
-    `repos/${repo}/environments/release/deployment-branch-policies`,
-  ]);
-  if (policies.code !== 0) throw failed(policies.stderr);
-  const branches = (
-    JSON.parse(policies.stdout) as { branch_policies: Array<{ name: string; type: string }> }
-  ).branch_policies.map(({ name, type }) => ({ name, type }));
-  return { exists: true, policy, branches };
 }
 
 /** The contract file's text at a commit; "missing" when the tree has none, "unreadable" when it cannot be shown. */
@@ -112,7 +98,8 @@ command("plan", () => {
   check();
   facts.release = readRelease(tag);
   check();
-  facts.environment = readEnvironment(repo);
+  facts.environment = readEnvironment(run, repo, "release");
+  facts.signEnvironment = readEnvironment(run, repo, "release-sign");
   const plan = check();
 
   let hold = { held: false, byHand: false, outcome: null } as ReturnType<typeof decideHold>;
@@ -142,6 +129,22 @@ command("plan", () => {
           byHand: hold.byHand,
         }),
   );
+  // No failure of this reading refuses a distribution: with no digest, latest is not moved.
+  let built: Built | null = null;
+  if (!plan.prerelease) {
+    const dir = mkdtempSync(join(tmpdir(), "wcm-build-"));
+    try {
+      const read = readBuild(run, repo, tag, plan.sha, dir);
+      built = Array.isArray(read) ? builtDigest(read) : { digest: null, reason: read.unreadable };
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+  const signable = built !== null && built.digest !== null ? built : null;
+  output("image_digest", signable?.digest ?? "");
+  output("image_run", signable?.run ?? "");
   for (const line of planSummary({ prerelease: plan.prerelease, hold: hold.outcome }))
     summary(line);
+  if (built !== null) summary(imageLine(tag, built));
+  if (facts.signEnvironment.adminsBypass) summary(BYPASS_LINE);
 });

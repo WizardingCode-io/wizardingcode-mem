@@ -52,6 +52,26 @@ export function summary(line: string): void {
   if (file !== undefined && file !== "") appendFileSync(file, `${line}\n`);
 }
 
+// Text a program or a file gave, on its way to a terminal or the summary. The same rule as
+// src/team/restore.ts has, copied on purpose: scripts/release/ imports nothing of the server.
+// biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are what it finds
+const UNPRINTABLE = /[\u0000-\u001f\u007f-\u009f\p{Cf}]/gu;
+
+/** `text` with every control and format character replaced by `?`, then cut to `max` characters. */
+export function clean(text: string, max: number): string {
+  return text.replace(UNPRINTABLE, "?").slice(0, max);
+}
+
+/** The last line of `text` that is not blank, as it is; empty when there is none. */
+export function lastLine(text: string): string {
+  return (
+    text
+      .split("\n")
+      .filter((line) => line.trim() !== "")
+      .at(-1) ?? ""
+  );
+}
+
 /** An output of the step, for the jobs that need it. */
 export function output(name: string, value: string): void {
   const file = process.env.GITHUB_OUTPUT;
@@ -88,12 +108,18 @@ export type Outcome =
   | { kind: "left-alone"; higher: string }
   | { kind: "would-write"; version: string }
   | { kind: "skipped-prerelease" }
+  | { kind: "signed"; digest: string }
+  | { kind: "already-signed"; digest: string }
+  | { kind: "would-sign"; digest: string }
+  | { kind: "no-digest" }
+  | { kind: "unreadable"; version: string; said: string }
+  | { kind: "tag-moved"; version: string; built: string }
+  | { kind: "unverified"; digest: string; said: string }
   | { kind: "moved"; version: string }
   | { kind: "would-move"; version: string }
   | { kind: "held-contract"; tag: string; accepts: number; previous: string; speaks: number }
   | { kind: "held-unreadable"; read: string }
   | { kind: "moved-by-hand"; version: string }
-  | { kind: "not-moved"; job: string }
   | { kind: "token-ok"; date: string; days: number }
   | { kind: "token-renew"; date: string; days: number }
   | { kind: "token-unknown" }
@@ -114,13 +140,19 @@ const OUTCOMES: Record<Target, ReadonlyArray<Outcome["kind"]>> = {
     "failed",
   ],
   latest: [
+    "signed",
+    "already-signed",
+    "would-sign",
+    "no-digest",
+    "unreadable",
+    "tag-moved",
+    "unverified",
     "moved",
     "would-move",
     "held-contract",
     "held-unreadable",
     "moved-by-hand",
     "skipped-prerelease",
-    "not-moved",
     "failed",
   ],
   token: ["token-ok", "token-renew", "token-unknown", "failed"],
@@ -147,6 +179,20 @@ export function summaryLine(target: Target, outcome: Outcome): string {
       return `${target}: would write ${outcome.version} (dry run)`;
     case "skipped-prerelease":
       return `${target}: skipped: pre-release`;
+    case "signed":
+      return `latest: signed ${outcome.digest}; check it with: ${verifyCommand(`${IMAGE}@${outcome.digest}`)}`;
+    case "already-signed":
+      return `latest: already signed ${outcome.digest}; check it with: ${verifyCommand(`${IMAGE}@${outcome.digest}`)}`;
+    case "would-sign":
+      return `latest: would sign ${outcome.digest} (dry run); a signed image is checked with: ${verifyCommand(`${IMAGE}@${outcome.digest}`)}`;
+    case "no-digest":
+      return "latest: not signed: this release's build recorded no image digest; latest is not moved";
+    case "unreadable":
+      return `latest: not signed: the registry did not say which image the tag ${outcome.version} names: ${outcome.said}`;
+    case "tag-moved":
+      return `latest: not signed: the tag ${outcome.version} no longer names the image the release built (${outcome.built}); nothing is signed`;
+    case "unverified":
+      return `latest: not moved: the signature of ${outcome.digest} did not verify: ${outcome.said}`;
     case "moved":
       return `latest: moved to ${outcome.version}`;
     case "would-move":
@@ -157,8 +203,6 @@ export function summaryLine(target: Target, outcome: Outcome): string {
       return `latest: held: ${outcome.read}`;
     case "moved-by-hand":
       return `latest: moved to ${outcome.version}, the hold released by hand`;
-    case "not-moved":
-      return `latest: not moved: ${outcome.job} did not succeed`;
     case "token-ok":
       return `MARKETPLACE_TOKEN expires on ${outcome.date} (${outcome.days} days)`;
     case "token-renew":
@@ -360,17 +404,28 @@ export interface Environment {
   exists: boolean;
   policy: { protected_branches: boolean; custom_branch_policies: boolean } | null;
   branches: Array<{ name: string; type: string }>;
+  /** How many of its protection rules require a reviewer and name at least one. */
+  reviewers: number;
+  /** Whether an administrator may bypass its rules. */
+  adminsBypass: boolean;
 }
 
-/** The environment `release`: ready only when its deployment rule is exactly the branch main. */
-export function environmentState(environment: Environment): "ready" | "missing" | "unruled" {
+/**
+ * An environment: ready only when its deployment rule is exactly the branch main and, for
+ * the one that signs (`needsReviewer`), when it has a required reviewer. A reading that
+ * lacks the count is no reviewer, never a pass.
+ */
+export function environmentState(
+  environment: Environment,
+  needsReviewer = false,
+): "ready" | "missing" | "unruled" | "unreviewed" {
   if (!environment.exists) return "missing";
   const { policy, branches } = environment;
   const selected = policy?.protected_branches === false && policy.custom_branch_policies === true;
   const [only] = branches;
-  return selected && branches.length === 1 && only?.name === "main" && only.type === "branch"
-    ? "ready"
-    : "unruled";
+  if (!(selected && branches.length === 1 && only?.name === "main" && only.type === "branch"))
+    return "unruled";
+  return needsReviewer && !(environment.reviewers >= 1) ? "unreviewed" : "ready";
 }
 
 export interface PlanFacts {
@@ -386,7 +441,10 @@ export interface PlanFacts {
   packageVersion: string | null;
   hasDistribute: boolean;
   release: { isDraft: boolean; assets: string[] } | null;
+  /** `release`: where npm, the tap and the marketplace are written. */
   environment: Environment;
+  /** `release-sign`: where the image is signed and latest moved, behind a reviewer (ADR 0032). */
+  signEnvironment: Environment;
 }
 
 /** A release's tag: `v` and a version. */
@@ -414,6 +472,15 @@ export function passingFacts(ref: string, tag: string): PlanFacts {
       exists: true,
       policy: { protected_branches: false, custom_branch_policies: true },
       branches: [{ name: "main", type: "branch" }],
+      reviewers: 0,
+      adminsBypass: false,
+    },
+    signEnvironment: {
+      exists: true,
+      policy: { protected_branches: false, custom_branch_policies: true },
+      branches: [{ name: "main", type: "branch" }],
+      reviewers: 1,
+      adminsBypass: false,
     },
   };
 }
@@ -471,7 +538,134 @@ export function decidePlan(
     );
   if (environment === "unruled")
     return no("the environment release must allow the branch main only (docs/runbooks/release.md)");
+  // The job that signs waits for a person: without that, whoever can start this workflow on
+  // main gets an image signed (ADR 0032).
+  const sign = environmentState(facts.signEnvironment, true);
+  if (sign === "missing")
+    return no(
+      "the environment release-sign does not exist; create it with its rule and its reviewer first (docs/runbooks/release.md)",
+    );
+  if (sign === "unruled")
+    return no(
+      "the environment release-sign must allow the branch main only (docs/runbooks/release.md)",
+    );
+  if (sign === "unreviewed")
+    return no(
+      "the environment release-sign has no required reviewer; add one first (docs/runbooks/release.md)",
+    );
   return { ok: true, version, sha: facts.tagSha, prerelease: isPrerelease(tag) };
+}
+
+// --- The image's signature (ADR 0032) ------------------------------------------------------
+
+export const IMAGE = "ghcr.io/wizardingcode-io/wizardingcode-mem";
+/** cosign's version: what distribute.yml installs, and the release COSIGN_IMAGE is. */
+export const COSIGN_VERSION = "v3.1.4";
+/** cosign's own image at that version, by its index digest: a host verifies with it and installs nothing. */
+export const COSIGN_IMAGE =
+  "ghcr.io/sigstore/cosign/cosign@sha256:0f06154836d2de34f887a5c273506d52ca43edaa1d9e53e6510fa78a48f69c2d";
+/**
+ * What a signature made by a job of distribute.yml in a run on main carries. It is a contract
+ * with every host that verifies: a rename of the workflow file or of the default branch makes
+ * every host refuse every new image.
+ */
+export const SIGNER_IDENTITY =
+  "https://github.com/WizardingCode-io/wizardingcode-mem/.github/workflows/distribute.yml@refs/heads/main";
+export const OIDC_ISSUER = "https://token.actions.githubusercontent.com";
+export const DIGEST = /^sha256:[0-9a-f]{64}$/;
+
+/** cosign's arguments to check that `reference` was signed by distribute.yml at main: the one form, here and in the runbook. */
+export function verifyArgs(reference: string): string[] {
+  return [
+    "verify",
+    reference,
+    "--certificate-identity",
+    SIGNER_IDENTITY,
+    "--certificate-oidc-issuer",
+    OIDC_ISSUER,
+  ];
+}
+
+export const verifyCommand = (reference: string): string =>
+  ["cosign", ...verifyArgs(reference)].join(" ");
+
+/** One run of release.yml for a tag: whether its docker job built the image, and what it recorded. */
+export interface BuildRun {
+  url: string;
+  createdAt: string;
+  /** The conclusion of the job `docker`; null when it could not be read or is not there. */
+  docker: string | null;
+  /** The text of the artifact `image-digest`; null when there is none. */
+  artifact: string | null;
+}
+
+export type Built = { digest: string; run: string } | { digest: null; reason: string };
+
+/**
+ * The newest run whose docker job succeeded, or none. The one rule for which run's record
+ * counts: readBuild downloads that run's artifact and builtDigest reads it.
+ */
+export function newestBuilt(runs: BuildRun[]): BuildRun | undefined {
+  return runs
+    .filter((run) => run.docker === "success")
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0))[0];
+}
+
+/**
+ * The digest a release's own build recorded: that of the newest run whose docker job
+ * succeeded (a tag deleted and pushed again leaves two). The job that signs compares it with
+ * what the tag names, so a wrong choice here signs nothing.
+ */
+export function builtDigest(runs: BuildRun[]): Built {
+  if (runs.length === 0)
+    return { digest: null, reason: "no run of release.yml for this tag's commit" };
+  const newest = newestBuilt(runs);
+  if (newest === undefined)
+    return { digest: null, reason: "no run of release.yml built the image" };
+  if (newest.artifact === null)
+    return { digest: null, reason: `the release run ${newest.url} recorded no image digest` };
+  const text = newest.artifact.endsWith("\n") ? newest.artifact.slice(0, -1) : newest.artifact;
+  if (!DIGEST.test(text))
+    return {
+      digest: null,
+      reason: `the release run ${newest.url} recorded ${clean(text, 80)}, which is not a digest`,
+    };
+  return { digest: text, run: newest.url };
+}
+
+/** plan's line of the summary: which image this distribution may sign, and where that was read. */
+export function imageLine(tag: string, built: Built): string {
+  return built.digest === null
+    ? `image: no digest: ${built.reason}; latest is not moved`
+    : `image: ${tag} built by ${built.run} as ${built.digest}`;
+}
+
+export const BYPASS_LINE =
+  "environment release-sign: administrators can bypass its rules; forbid it (docs/runbooks/release.md)";
+
+/** What the job that signs does. A decision, named apart from the summary's outcomes: `sign` is to do, `signed` is done. */
+export type SignDecision =
+  | "no-digest"
+  | "unreadable"
+  | "tag-moved"
+  | "would-sign"
+  | "already-signed"
+  | "sign";
+
+/** The first row that applies: nothing is signed unless the tag still names the image the release built. */
+export function decideSign(facts: {
+  /** The digest plan read from the release's run; empty when it read none. */
+  built: string;
+  /** The digest the version tag names now; null when the registry did not say. */
+  tagged: string | null;
+  signed: boolean;
+  dryRun: boolean;
+}): SignDecision {
+  if (facts.built === "") return "no-digest";
+  if (facts.tagged === null) return "unreadable";
+  if (facts.tagged !== facts.built) return "tag-moved";
+  if (facts.dryRun) return "would-sign";
+  return facts.signed ? "already-signed" : "sign";
 }
 
 // --- The hold of latest --------------------------------------------------------------------

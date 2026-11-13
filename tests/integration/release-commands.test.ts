@@ -11,7 +11,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { REQUIRED_ASSETS } from "../../scripts/release/lib.ts";
+import { BYPASS_LINE, REQUIRED_ASSETS } from "../../scripts/release/lib.ts";
 
 // The release's command files, run the way the workflow runs them, with stand-ins for git,
 // gh and npm first on PATH: each answers fixed texts by its arguments and logs how it was called.
@@ -19,6 +19,9 @@ import { REQUIRED_ASSETS } from "../../scripts/release/lib.ts";
 const ROOT = new URL("../../", import.meta.url).pathname;
 const SHA = "a".repeat(40);
 const OLD = "b".repeat(40);
+const DIGEST = `sha256:${"1".repeat(64)}`;
+const RUN = "https://github.com/o/r/actions/runs/7";
+const IMAGE_LINE = `image: v0.9.0 built by ${RUN} as ${DIGEST}\n`;
 
 let base: string;
 let bin: string;
@@ -83,7 +86,15 @@ describe("plan.ts", () => {
   });
   /** A repository where v0.9.0 follows v0.8.0, both on main, and the environment is ready. */
   function world(
-    options: { onMain?: boolean; environment?: string; accepted?: string } = {},
+    options: {
+      onMain?: boolean;
+      environment?: string;
+      signEnvironment?: string;
+      accepted?: string;
+      runs?: string;
+      view?: string;
+      download?: string;
+    } = {},
   ): void {
     stub(
       "git",
@@ -108,6 +119,15 @@ describe("plan.ts", () => {
         options.environment ??
           `  "api repos/o/r/environments/release") echo '{"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true}}' ;;`,
         `  "api repos/o/r/environments/release/deployment-branch-policies") echo '{"total_count":1,"branch_policies":[{"id":1,"name":"main","type":"branch"}]}' ;;`,
+        options.signEnvironment ??
+          `  "api repos/o/r/environments/release-sign") echo '{"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true},"can_admins_bypass":false,"protection_rules":[{"id":1,"type":"required_reviewers","reviewers":[{"type":"User","reviewer":{"login":"someone"}}]}]}' ;;`,
+        `  "api repos/o/r/environments/release-sign/deployment-branch-policies") echo '{"total_count":1,"branch_policies":[{"id":2,"name":"main","type":"branch"}]}' ;;`,
+        options.runs ??
+          `  "run list "*) echo '[{"databaseId":7,"headSha":"${SHA}","headBranch":"v0.9.0","createdAt":"2026-11-13T10:00:00Z","url":"${RUN}"}]' ;;`,
+        options.view ??
+          `  "run view 7 "*) echo '{"jobs":[{"name":"build","conclusion":"success"},{"name":"docker","conclusion":"success"}]}' ;;`,
+        options.download ??
+          `  "run download 7 "*) for last; do :; done; mkdir -p "$last"; printf '%s\\n' '${DIGEST}' > "$last/image-digest.txt" ;;`,
       ].join("\n"),
     );
   }
@@ -118,9 +138,12 @@ describe("plan.ts", () => {
     expect(result.stderr).toBe("");
     expect(result.exitCode).toBe(0);
     expect(result.output).toBe(
-      `version=0.9.0\nsha=${SHA}\nprerelease=false\nheld=false\nlatest_line=latest: moved to 0.9.0\n`,
+      `version=0.9.0\nsha=${SHA}\nprerelease=false\nheld=false\nlatest_line=latest: moved to 0.9.0\nimage_digest=${DIGEST}\nimage_run=${RUN}\n`,
     );
-    expect(result.summary).toBe("");
+    expect(result.summary).toBe(IMAGE_LINE);
+    expect(log("gh")).toContain(
+      "run list --repo o/r --workflow release.yml --event push --branch v0.9.0 ",
+    );
   });
 
   test("a dry run's line says it would move", async () => {
@@ -168,8 +191,9 @@ describe("plan.ts", () => {
     );
     expect(result.stderr).toBe("");
     expect(result.output).toBe(
-      `version=0.10.0-rc.1\nsha=${SHA}\nprerelease=true\nheld=false\nlatest_line=\n`,
+      `version=0.10.0-rc.1\nsha=${SHA}\nprerelease=true\nheld=false\nlatest_line=\nimage_digest=\nimage_run=\n`,
     );
+    expect(log("gh")).not.toContain("run list");
     expect(result.summary).toBe(
       "tap: skipped: pre-release\nmarketplace: skipped: pre-release\nlatest: skipped: pre-release\n",
     );
@@ -180,7 +204,10 @@ describe("plan.ts", () => {
     world({ accepted: "3" });
     const held = await script("plan.ts", [], env("v0.9.0", { PKG: "0.9.0" }));
     expect(held.output).toContain("held=true\nlatest_line=\n");
-    expect(held.summary).toBe("latest: held: v0.9.0 accepts contract 3 and up; v0.8.0 speaks 2\n");
+    expect(held.summary).toBe(
+      `latest: held: v0.9.0 accepts contract 3 and up; v0.8.0 speaks 2\n${IMAGE_LINE}`,
+    );
+    rmSync(join(base, "summary"));
     rmSync(join(base, "output"));
     const released = await script(
       "plan.ts",
@@ -190,6 +217,38 @@ describe("plan.ts", () => {
     expect(released.output).toContain(
       "held=false\nlatest_line=latest: moved to 0.9.0, the hold released by hand\n",
     );
+    expect(released.summary).toBe(IMAGE_LINE);
+  });
+
+  test("a release whose run recorded no digest, or whose runs cannot be listed, still passes and says so", async () => {
+    world({ download: `  "run download 7 "*) echo 'no artifact' >&2; exit 1 ;;` });
+    const bare = await script("plan.ts", [], env("v0.9.0", { PKG: "0.9.0" }));
+    expect(bare.stderr).toBe("");
+    expect(bare.exitCode).toBe(0);
+    expect(bare.output).toEndWith(
+      "latest_line=latest: moved to 0.9.0\nimage_digest=\nimage_run=\n",
+    );
+    expect(bare.summary).toBe(
+      `image: no digest: the release run ${RUN} recorded no image digest; latest is not moved\n`,
+    );
+    rmSync(join(base, "output"));
+    rmSync(join(base, "summary"));
+    world({ runs: `  "run list "*) echo 'HTTP 502' >&2; exit 1 ;;` });
+    const down = await script("plan.ts", [], env("v0.9.0", { PKG: "0.9.0" }));
+    expect(down.exitCode).toBe(0);
+    expect(down.output).toEndWith("image_digest=\nimage_run=\n");
+    expect(down.summary).toBe(
+      "image: no digest: the runs of release.yml could not be listed: HTTP 502; latest is not moved\n",
+    );
+  });
+
+  test("administrators who can bypass the environment that signs are named", async () => {
+    world({
+      signEnvironment: `  "api repos/o/r/environments/release-sign") echo '{"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true},"can_admins_bypass":true,"protection_rules":[{"id":1,"type":"required_reviewers","reviewers":[{"type":"User","reviewer":{"login":"someone"}}]}]}' ;;`,
+    });
+    const result = await script("plan.ts", [], env("v0.9.0", { PKG: "0.9.0" }));
+    expect(result.exitCode).toBe(0);
+    expect(result.summary).toBe(`${IMAGE_LINE}${BYPASS_LINE}\n`);
   });
 
   test("a missing environment is the refusal that points to the runbook", async () => {
@@ -202,6 +261,34 @@ describe("plan.ts", () => {
     );
   });
 
+  test("an environment that signs with no required reviewer is refused", async () => {
+    for (const rules of [
+      "",
+      `,"protection_rules":[{"id":1,"type":"required_reviewers","reviewers":[]}]`,
+      `,"protection_rules":[{"id":1,"type":"wait_timer","wait_timer":5}]`,
+    ]) {
+      world({
+        signEnvironment: `  "api repos/o/r/environments/release-sign") echo '{"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true}${rules}}' ;;`,
+      });
+      const result = await script("plan.ts", [], env("v0.9.0", { PKG: "0.9.0" }));
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toBe(
+        "release: the environment release-sign has no required reviewer; add one first (docs/runbooks/release.md)\n",
+      );
+      expect(result.output).toBe("");
+    }
+  });
+
+  test("a missing environment that signs is its own refusal", async () => {
+    world({
+      signEnvironment: `  "api repos/o/r/environments/release-sign") echo 'gh: Not Found (HTTP 404)' >&2; exit 1 ;;`,
+    });
+    const result = await script("plan.ts", [], env("v0.9.0", { PKG: "0.9.0" }));
+    expect(result.stderr).toBe(
+      "release: the environment release-sign does not exist; create it with its rule and its reviewer first (docs/runbooks/release.md)\n",
+    );
+  });
+
   test("an environment that cannot be read is said as that, never as a refusal with a guessed cause", async () => {
     world({
       environment: `  "api repos/o/r/environments/release") echo 'gh: Forbidden (HTTP 403)' >&2; exit 1 ;;`,
@@ -211,6 +298,108 @@ describe("plan.ts", () => {
     expect(result.stderr).toBe(
       "release: could not read the environment release: gh: Forbidden (HTTP 403)\n",
     );
+  });
+});
+
+describe("sign.ts", () => {
+  const D2 = `sha256:${"2".repeat(64)}`;
+  const IMG = "ghcr.io/wizardingcode-io/wizardingcode-mem";
+  const env = (more: Record<string, string> = {}) => ({
+    VERSION: "0.9.0",
+    IMAGE_DIGEST: DIGEST,
+    DRY_RUN: "false",
+    ...more,
+  });
+  /** A registry where 0.9.0 names `tagged`, and a cosign whose verify exits `verify`. */
+  function world(options: { tagged?: string; verify?: number; sign?: string } = {}): void {
+    stub(
+      "docker",
+      [
+        `  "buildx imagetools inspect ${IMG}:0.9.0 "*) echo '"${options.tagged ?? DIGEST}"' ;;`,
+        `  "buildx imagetools inspect ${IMG}:latest "*) echo '"${DIGEST}"' ;;`,
+        `  "buildx imagetools create "*) exit 0 ;;`,
+      ].join("\n"),
+    );
+    stub(
+      "cosign",
+      [
+        `  "verify "*) exit ${options.verify ?? 0} ;;`,
+        options.sign ?? `  "sign "*) exit 0 ;;`,
+      ].join("\n"),
+    );
+  }
+
+  test("a signed image: one line in the summary, latest moved, exit 0", async () => {
+    world();
+    const result = await script("sign.ts", [], env());
+    expect(result.stderr).toBe("");
+    expect(result.exitCode).toBe(0);
+    expect(result.summary).toStartWith(
+      `latest: already signed ${DIGEST}; check it with: cosign verify `,
+    );
+    expect(result.summary.trimEnd().split("\n")).toHaveLength(1);
+    expect(log("docker")).toContain(`buildx imagetools create -t ${IMG}:latest ${IMG}@${DIGEST}\n`);
+  });
+
+  test("a dry run is read from DRY_RUN: nothing is signed or moved, exit 0", async () => {
+    world({ verify: 1 });
+    const result = await script("sign.ts", [], env({ DRY_RUN: "true" }));
+    expect(result.exitCode).toBe(0);
+    expect(result.summary).toStartWith(`latest: would sign ${DIGEST} (dry run); `);
+    expect(log("cosign")).not.toContain("sign --yes");
+    expect(log("docker")).not.toContain("imagetools create");
+  });
+
+  test("every outcome that signs or moves nothing exits 1, with its line in the summary and the log", async () => {
+    const cases: Array<[() => void, Record<string, string>, string]> = [
+      [
+        () => world(),
+        env({ IMAGE_DIGEST: "" }),
+        "latest: not signed: this release's build recorded no image digest; latest is not moved",
+      ],
+      [
+        () => {
+          world();
+          stub(
+            "docker",
+            `  "buildx imagetools inspect "*) echo 'ERROR: unauthorized' >&2; exit 1 ;;`,
+          );
+        },
+        env(),
+        "latest: not signed: the registry did not say which image the tag 0.9.0 names: ERROR: unauthorized",
+      ],
+      [
+        () => world({ tagged: D2 }),
+        env(),
+        `latest: not signed: the tag 0.9.0 no longer names the image the release built (${DIGEST}); nothing is signed`,
+      ],
+      [
+        () => world({ verify: 1 }),
+        env(),
+        `latest: not moved: the signature of ${DIGEST} did not verify: `,
+      ],
+      [
+        () => world({ verify: 1, sign: `  "sign "*) echo 'Error: no token' >&2; exit 1 ;;` }),
+        env(),
+        "latest: failed: the image's signing did not succeed: Error: no token",
+      ],
+      [
+        () => world(),
+        { IMAGE_DIGEST: DIGEST, DRY_RUN: "false" },
+        "latest: failed: VERSION is not set",
+      ],
+    ];
+    for (const [prepare, variables, line] of cases) {
+      rmSync(join(base, "summary"), { force: true });
+      rmSync(join(base, "docker.log"), { force: true });
+      prepare();
+      const result = await script("sign.ts", [], variables);
+      expect({ line, code: result.exitCode }).toEqual({ line, code: 1 });
+      expect(result.summary).toBe(`${line}\n`);
+      // The job's log says it too, as every other command's failure does.
+      expect(result.stderr).toBe(`release: ${line}\n`);
+      expect(log("docker")).not.toContain("imagetools create");
+    }
   });
 });
 

@@ -25,9 +25,12 @@ describe("the restore's documents", () => {
       "lost.withdrawn",
       "everyone who can push a tag or a branch",
       "0026",
+      // What the older image really prints for an item it does not hold (ADR 0032's item).
+      "wizardingcode-mem serve: unknown",
     ]) {
       expect(adr).toContain(words);
     }
+    expect(adr).not.toContain("no such item");
   });
 
   test("the older ADRs say latest was pushed at build time, and ADR 0026 points at the restore", () => {
