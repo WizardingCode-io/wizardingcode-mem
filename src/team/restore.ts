@@ -81,7 +81,10 @@ const FREE_MARGIN_BYTES = 1_073_741_824;
 const SIDE_FILES = ["-wal", "-shm"] as const;
 const P = "docker compose run --rm server serve ";
 const LOST = "lost with the restore";
-const ITEM_NOTE = "the older image answers no such item if it arrived after the copy";
+// The words `serve withdraw`, `reinstate` and `purge` print for an item the database does not
+// hold (tests/integration/team-serve-cli.test.ts holds them).
+const ITEM_NOTE =
+  'the older image answers "wizardingcode-mem serve: unknown" and exits 1 if the item arrived after the copy';
 const NAME_NOTE = "the older image answers no such name if it was created after the copy";
 const TOKEN_NOTE = "the device joins again with a new invitation";
 const WITHDRAWN_NOTE =

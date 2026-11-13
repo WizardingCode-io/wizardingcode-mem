@@ -40,7 +40,8 @@ afterAll(() => {
 
 const P = "docker compose run --rm server serve ";
 const LOST = "lost with the restore";
-const ITEM_NOTE = "  note: the older image answers no such item if it arrived after the copy";
+const ITEM_NOTE =
+  '  note: the older image answers "wizardingcode-mem serve: unknown" and exits 1 if the item arrived after the copy';
 
 interface Scene {
   /** The crash image: the directory the restore works on. */

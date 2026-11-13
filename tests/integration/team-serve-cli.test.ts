@@ -403,6 +403,21 @@ describe("status, audit, health, instance renew", () => {
 });
 
 describe("what an image says of itself", () => {
+  test("an item the database does not hold is answered unknown, exit 1", async () => {
+    // The words a restore's note and the runbook quote (src/team/restore.ts, ITEM_NOTE).
+    const { t } = await team();
+    const item = `shared:${crypto.randomUUID()}`;
+    for (const args of [
+      ["withdraw", "entry", item],
+      ["reinstate", "entry", item],
+      ["purge", "entry", item, "--yes"],
+    ]) {
+      const result = await cli(t, ...args);
+      expect({ args, code: result.exitCode }).toEqual({ args, code: 1 });
+      expect(result.stderr).toEndWith("wizardingcode-mem serve: unknown\n");
+    }
+  });
+
   test("serve version answers with no data directory", async () => {
     const nowhere = join(mkdtempSync(join(tmpdir(), "wcm-version-")), "absent");
     const result = await runCliWith(

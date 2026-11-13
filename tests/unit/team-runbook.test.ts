@@ -117,6 +117,10 @@ describe("the team runbook", () => {
     expect(section).toContain("docker compose run --rm server serve restore --to-schema");
     expect(section).not.toContain("cp /data/team.db");
     expect(section).not.toContain("rm -f /data/team.db-wal");
+    // The older image's own words for an item that arrived after the copy.
+    expect(section).toContain("wizardingcode-mem serve: unknown");
+    expect(section).toContain("serve reinstate");
+    expect(section).not.toContain("no such item");
     const order = [
       "serve instance renew",
       "serve purge",
