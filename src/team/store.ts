@@ -1181,14 +1181,19 @@ export function auditSince(db: Db, at: number): AuditRow[] {
     .map(auditRow);
 }
 
+export interface Withdrawal {
+  kind: string;
+  uid: string;
+  key: string;
+  /** The item's revision at the withdrawal: what an audit row of the same withdrawal names. */
+  revision: number;
+}
+
 /** The items whose current feed row is a withdrawal made after `at`, oldest first: by a member's push or by an admin. */
-export function withdrawnSince(
-  db: Db,
-  at: number,
-): { kind: "entry" | "memory"; uid: string; key: string }[] {
+export function withdrawnSince(db: Db, at: number): Withdrawal[] {
   return db
-    .query<{ kind: "entry" | "memory"; uid: string; key: string }, [number]>(
-      "SELECT kind, uid, key FROM changes WHERE current = 1 AND op = 'tombstone' AND at > ? ORDER BY seq",
+    .query<Withdrawal, [number]>(
+      "SELECT kind, uid, key, revision FROM changes WHERE current = 1 AND op = 'tombstone' AND at > ? ORDER BY seq",
     )
     .all(at);
 }

@@ -95,15 +95,21 @@ const firstLine = (error: unknown): string =>
 // What the lines print comes from the database, and some of it from members (a uid's alias, a
 // device's label). The operator pastes the commands into a shell on the host, so nothing of
 // it reaches a command unquoted, and no control character reaches the terminal at all.
+// Control characters, and the format characters (a right-to-left override, a zero-width
+// space) that make a line read on screen as something it is not.
 // biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are what it finds
-const CONTROL = /[\u0000-\u001f\u007f-\u009f]/;
-const CONTROL_ALL = new RegExp(CONTROL.source, "g");
+const CONTROL = /[\u0000-\u001f\u007f-\u009f\p{Cf}]/u;
+const CONTROL_ALL = new RegExp(CONTROL.source, "gu");
 const PLAIN = /^[A-Za-z0-9_.:@/-]+$/;
 
-/** A text for the left side of a line: every control character replaced. */
-const shown = (text: string): string => text.replace(CONTROL_ALL, "?");
+/**
+ * A text for the left side of a line: every control and format character replaced, and no
+ * arrow of its own, so the one `->` of a line is the restore's and what follows it is the
+ * restore's word (a member's device label must not read as a command to run).
+ */
+const shown = (text: string): string => text.replace(CONTROL_ALL, "?").replaceAll("->", "-?");
 
-/** A text as one shell argument: as it is when plain, single-quoted otherwise; null when it holds a control character. */
+/** A text as one shell argument: as it is when plain, single-quoted otherwise; null when it holds a control or format character. */
 function arg(text: string): string | null {
   if (text === "" || CONTROL.test(text)) return null;
   return PLAIN.test(text) ? text : `'${text.replaceAll("'", "'\\''")}'`;
@@ -190,6 +196,25 @@ interface Redo {
 
 const LOST_REDO: Redo = { command: null };
 
+/** A command over one item: the kind must be one of the two known words, whoever wrote it. */
+function itemCommand(
+  verb: string,
+  kind: string | undefined,
+  target: string | null,
+  note: string,
+  flags = "",
+): Redo {
+  return target !== null && kind !== undefined && KINDS.includes(kind)
+    ? { command: `${P}${verb} ${kind} ${target}${flags}`, note }
+    : LOST_REDO;
+}
+
+/** The revision an `item withdrawn` audit row names (`<kind> revision <n>`); null out of that shape. */
+function auditedRevision(detail: string): number | null {
+  const match = /^\S+ revision (\d+)$/.exec(detail);
+  return match === null ? null : Number(match[1]);
+}
+
 /**
  * What to do again for one audit row. It reads the row's `detail`, a text the writers shape:
  * `<kind> revision <n>` for `item withdrawn` (routes.ts, serve.ts), the kind alone for
@@ -204,9 +229,7 @@ function redo(row: AuditRow, copy: Db): Redo {
   const known = (table: "devices" | "members" | "invitations", command: string, note?: string) =>
     inCopy(copy, table, raw) ? { command, ...(note === undefined ? {} : { note }) } : LOST_REDO;
   const item = (verb: string, kind: string | undefined, flags = ""): Redo =>
-    kind !== undefined && KINDS.includes(kind)
-      ? { command: `${P}${verb} ${kind} ${target}${flags}`, note: ITEM_NOTE }
-      : LOST_REDO;
+    itemCommand(verb, kind, target, ITEM_NOTE, flags);
   switch (row.action) {
     case "device revoked":
       return known("devices", `${P}revoke ${target}`);
@@ -345,15 +368,21 @@ function plan(input: RestoreInput, latest: number, backups: string): Plan {
     if (free === null) lines.push("disk=unknown");
     const lost = lostSince(db, ms);
     const audit = auditSince(db, ms);
-    // A member's own withdrawal writes no audit row: the feed is asked. One the audit already
-    // carries (an admin's) has its line there, and one of an item the copy never held is
-    // gone with the item.
+    // A member's own withdrawal writes no audit row: the feed is asked for every item whose
+    // current row is a withdrawal since the copy. One is left out only when an audit row
+    // carries that very withdrawal, the same item at the same revision (an admin's, which has
+    // its own line): matching the item alone would drop a member's withdrawal that came after
+    // an admin's withdrawal and reinstatement. One of an item the copy never held is gone
+    // with the item. Those a `disable --withdraw` made are listed again; running them twice
+    // changes nothing.
     const audited = new Set(
-      audit.filter((row) => row.action === "item withdrawn").map((row) => row.target),
+      audit
+        .filter((row) => row.action === "item withdrawn" && row.target !== null)
+        .map((row) => `${row.target}@${auditedRevision(row.detail)}`),
     );
     const held = copy;
     const withdrawn = withdrawnSince(db, ms).filter(
-      (item) => !audited.has(item.uid) && liveInCopy(held, item.key),
+      (item) => !audited.has(`${item.uid}@${item.revision}`) && liveInCopy(held, item.key),
     );
     const mark = Math.max(
       readHighWater(teamPaths(dir).feedFile).changes,
@@ -381,22 +410,21 @@ function plan(input: RestoreInput, latest: number, backups: string): Plan {
       lines.push(...listed(left, redo(row, copy)));
     }
     for (const item of withdrawn) {
-      const uid = arg(item.uid);
       lines.push(
         ...listed(
-          `${item.kind} ${shown(item.uid)} withdrawn since the copy`,
-          uid === null
-            ? LOST_REDO
-            : { command: `${P}withdraw ${item.kind} ${uid}`, note: WITHDRAWN_NOTE },
+          `${shown(item.kind)} ${shown(item.uid)} withdrawn since the copy`,
+          itemCommand("withdraw", item.kind, arg(item.uid), WITHDRAWN_NOTE),
         ),
       );
     }
     for (const id of invitationsUsedSince(db, ms, now())) {
       const invitation = arg(id);
+      const open = invitation !== null && inCopy(copy, "invitations", id);
       lines.push(
-        invitation !== null && inCopy(copy, "invitations", id)
-          ? `invitation ${shown(id)} used since the copy -> ${P}invitation revoke ${invitation}`
-          : `invitation ${shown(id)} -> ${LOST}`,
+        ...listed(
+          `invitation ${shown(id)}${open ? " used since the copy" : ""}`,
+          open ? { command: `${P}invitation revoke ${invitation}` } : LOST_REDO,
+        ),
       );
     }
     lines.push(`run: ${P}mirror --rebuild`);
@@ -420,8 +448,6 @@ export function restore(input: RestoreInput): string[] {
   const backups = teamBackups(dir).folder;
 
   if (yes && !existsSync(present)) return finishCut(dir, present, staging, backups);
-  // A staging file with the present one still in place is a run cut before its swap: the copy is made again.
-  if (yes) removeStaging(staging);
 
   const { copyPath, lines } = plan(input, latest, backups);
   if (!yes) return lines;
@@ -435,6 +461,9 @@ export function restore(input: RestoreInput): string[] {
     throw new RestoreRefused("serve.lease was taken: a server started; stop it first");
   }
   try {
+    // Only now, with the lease held: a staging file found here is a run cut before its swap,
+    // never the copy of a restore still running, which the lease check above would have met.
+    removeStaging(staging);
     (input.copyFile ?? copyFileSync)(copyPath, staging);
     prepareStaging(staging);
     if (!claimLease(writer, SERVE_LEASE, owner, now(), RESTORE_LEASE_MS)) {

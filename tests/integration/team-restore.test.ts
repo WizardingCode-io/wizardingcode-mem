@@ -270,6 +270,90 @@ describe("the dry run", () => {
     );
   });
 
+  test("a member's withdrawal after an admin's withdrawal and reinstatement of the same item is still listed", async () => {
+    const s = await scene((dir, _late, ids) => {
+      const db = rawOpen(dir);
+      // After the copy: the admin withdrew it (revision 2), reinstated it, and its member
+      // then withdrew it (revision 3, the current row).
+      audit(db, {
+        source: "cli",
+        action: "item withdrawn",
+        target: ids.unshared.uid,
+        detail: "entry revision 2",
+      });
+      audit(db, {
+        source: "cli",
+        action: "item reinstated",
+        target: ids.unshared.uid,
+        detail: "entry",
+      });
+      db.run("UPDATE changes SET revision = 3, at = ? WHERE uid = ? AND current = 1", [
+        Date.now(),
+        ids.unshared.uid,
+      ]);
+      db.close();
+    });
+    const lines = run(s);
+    expect(lines).toContain("lost.withdrawn=1");
+    const line = lineOf(lines, "withdrawn since the copy");
+    expect(line).toEndWith(` -> ${P}withdraw entry ${s.ids.unshared.uid}`);
+    // The member's withdrawal is the last word on the item: after the admin's two lines.
+    expect(lines.indexOf(line)).toBeGreaterThan(
+      lines.indexOf(lineOf(lines, " item reinstated ", s.ids.unshared.uid)),
+    );
+  });
+
+  test("a memory its member withdrew is listed, and a uid a shell would read is quoted there too", async () => {
+    const s = await scene((dir, _late, ids) => {
+      const db = rawOpen(dir);
+      db.run(
+        "UPDATE changes SET op = 'tombstone', revision = revision + 1, at = ? WHERE current = 1 AND (uid = ? OR (kind = 'memory' AND uid LIKE '%:' || ?))",
+        [Date.now(), ids.odd.uid, ids.memoryUid],
+      );
+      db.close();
+    });
+    const lines = run(s);
+    expect(lines).toContain("lost.withdrawn=3");
+    const memory = lines.filter((line) => line.startsWith("memory "));
+    expect(memory).toHaveLength(1);
+    const feedUid = (memory[0] as string).split(" ")[1] as string;
+    expect(feedUid).toEndWith(`:${s.ids.memoryUid}`);
+    expect(memory[0]).toBe(
+      `memory ${feedUid} withdrawn since the copy -> ${P}withdraw memory ${feedUid}`,
+    );
+    const odd = lineOf(lines, "entry ", "withdrawn since the copy", "acme/it");
+    const quoted = `'${s.ids.odd.uid.replaceAll("'", "'\\''")}'`;
+    expect(odd).toEndWith(` -> ${P}withdraw entry ${quoted}`);
+    const echoed = Bun.spawnSync(["sh", "-c", `printf %s ${quoted}`]);
+    expect(echoed.stdout.toString()).toBe(s.ids.odd.uid);
+  });
+
+  test("text a member wrote cannot imitate a command or reorder a line", async () => {
+    const s = await scene((dir) => {
+      const db = rawOpen(dir);
+      audit(db, {
+        action: "join",
+        target: "someone",
+        detail: `laptop -> ${P}disable admin\u202e\u200b`,
+      });
+      audit(db, {
+        source: "cli",
+        action: "purged",
+        target: "shared:66666666-6666-4666-8666-66666666666\u202e",
+        detail: "entry: 1 rows, 1 feed rows",
+      });
+      db.close();
+    });
+    const lines = run(s);
+    for (const line of lines) {
+      expect(line).not.toMatch(/\p{Cf}/u);
+      // One arrow a line at most: the one the restore wrote.
+      expect(line.split(" -> ").length).toBeLessThanOrEqual(2);
+    }
+    expect(lineOf(lines, " join ", "someone")).toEndWith(` -> ${LOST}`);
+    expect(lineOf(lines, " purged ", "shared:66666666")).toEndWith(` -> ${LOST}`);
+  });
+
   test("a withdrawal the audit already carries is not listed twice, and one of an item the copy lacks is not listed", async () => {
     const s = await scene((dir) => {
       const db = rawOpen(dir);
@@ -387,6 +471,8 @@ describe.each([false, true])("refusals (yes: %p)", (yes) => {
 
   test("a lease an earlier restore left, with words that do not say to stop a server", async () => {
     const s = await scene();
+    // The staging file of the restore that holds the lease is not this run's to remove.
+    writeFileSync(`${teamPaths(s.dir).db}.restoring`, "another run's copy");
     const db = rawOpen(s.dir);
     db.run("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", [
       SERVE_LEASE,

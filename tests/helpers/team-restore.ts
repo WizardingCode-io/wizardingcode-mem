@@ -60,6 +60,8 @@ export interface WorldIds {
   doomed: { uid: string; file: string };
   /** An entry its member withdraws after the upgrade. */
   unshared: { uid: string };
+  /** A project's entry whose alias no shell reads as plain text. */
+  odd: { uid: string };
   memoryUid: string;
   /** The invitation minted before the upgrade and not used by then. */
   invitation: string;
@@ -98,8 +100,13 @@ export async function world(): Promise<{ dir: string; ids: WorldIds }> {
   const old = entryPayload({ scope: "shared", slug: "old" });
   const doomed = entryPayload({ scope: "shared", slug: "doomed" });
   const unshared = entryPayload({ scope: "shared", slug: "unshared" });
+  const odd = entryPayload({
+    scope: "project",
+    remoteAlias: "remote:github.com/acme/it's;$(id)",
+    slug: "odd",
+  });
   const memory = memoryPayload();
-  for (const payload of [old, doomed, unshared, memory]) {
+  for (const payload of [old, doomed, unshared, odd, memory]) {
     const result = await pushOne(t.server, ana.token, sendOf(payload));
     if (result.result !== "applied") throw new Error(`push: ${JSON.stringify(result)}`);
   }
@@ -120,6 +127,7 @@ export async function world(): Promise<{ dir: string; ids: WorldIds }> {
       old: { uid: old.uid, file: fileNameFor(uuidOf(old.uid), "old") },
       doomed: { uid: doomed.uid, file: fileNameFor(uuidOf(doomed.uid), "doomed") },
       unshared: { uid: unshared.uid },
+      odd: { uid: odd.uid },
       memoryUid: memory.uid,
       invitation: made.body.id as string,
       instance,
