@@ -64,25 +64,6 @@ jobs:
           docker rm wcm
           docker volume rm wcm-data
 
-  # PROBE, removed before review (item 2026-11-13-001, AC-49): what a workflow's own token,
-  # with plan's permissions, reads of its own run while that run is in progress.
-  probe:
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      actions: read
-    env:
-      GH_TOKEN: ${{ github.token }}
-      GH_REPO: ${{ github.repository }}
-    steps:
-      - run: gh run view "$GITHUB_RUN_ID" --json status,jobs
-      - run: gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts"
-      - run: gh run download "$GITHUB_RUN_ID" -n binaries -D out && ls -l out
-      - run: gh run list --workflow release.yml --event push --json databaseId,headSha,headBranch,createdAt,url --limit 3
-      - run: gh api "repos/$GITHUB_REPOSITORY/environments" || true
-      - run: gh run view "$GITHUB_RUN_ID" --json status
-
   # Every binary is executed on the platform it targets: it must start, and the
   # platform probes (FTS5, startup latency, WAL, detached child, .env isolation, MCP) must pass.
   verify:
