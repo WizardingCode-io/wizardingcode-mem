@@ -417,6 +417,8 @@ describe("the workflows", () => {
         prerelease: expr("steps.plan.outputs.prerelease"),
         held: expr("steps.plan.outputs.held"),
         latest_line: expr("steps.plan.outputs.latest_line"),
+        image_digest: expr("steps.plan.outputs.image_digest"),
+        image_run: expr("steps.plan.outputs.image_run"),
       });
       const tree = jobs.npm?.steps.find((step) => step.with?.path === "release");
       expect(tree?.uses).toStartWith("actions/checkout@");

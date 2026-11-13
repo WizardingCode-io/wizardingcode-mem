@@ -52,6 +52,8 @@ jobs:
       prerelease: ${{ steps.plan.outputs.prerelease }}
       held: ${{ steps.plan.outputs.held }}
       latest_line: ${{ steps.plan.outputs.latest_line }}
+      image_digest: ${{ steps.plan.outputs.image_digest }}
+      image_run: ${{ steps.plan.outputs.image_run }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
