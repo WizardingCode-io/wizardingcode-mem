@@ -1,8 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { summaryLine } from "../../scripts/release/lib.ts";
+import { COSIGN_VERSION } from "../../scripts/release/lib.ts";
 
 const ROOT = new URL("../../", import.meta.url).pathname;
 const read = (name: string) => readFileSync(join(ROOT, name), "utf8");
@@ -326,7 +325,7 @@ describe("the workflows", () => {
       expect(file.permissions).toEqual({});
     });
 
-    test("five jobs on ubuntu, each with a time limit; only three enter the environment", () => {
+    test("five jobs on ubuntu, each with a time limit; only plan stays outside the environment", () => {
       const jobs = workflow().jobs;
       expect(Object.keys(jobs).sort()).toEqual(["latest", "marketplace", "npm", "plan", "tap"]);
       for (const [name, job] of Object.entries(jobs)) {
@@ -340,7 +339,8 @@ describe("the workflows", () => {
       expect(jobs.tap?.environment).toBe("release");
       expect(jobs.marketplace?.environment).toBe("release");
       expect(jobs.plan?.environment).toBeUndefined();
-      expect(jobs.latest?.environment).toBeUndefined();
+      // The job that signs waits for a reviewer, in an environment of its own (ADR 0032).
+      expect(jobs.latest?.environment).toBe("release-sign");
     });
 
     test("each job has only the permissions it needs", () => {
@@ -349,10 +349,27 @@ describe("the workflows", () => {
       expect(jobs.npm?.permissions).toEqual({ contents: "read", "id-token": "write" });
       expect(jobs.tap?.permissions).toEqual({ contents: "read" });
       expect(jobs.marketplace?.permissions).toEqual({ contents: "read" });
-      expect(jobs.latest?.permissions).toEqual({ packages: "write" });
+      expect(jobs.latest?.permissions).toEqual({
+        contents: "read",
+        packages: "write",
+        "id-token": "write",
+      });
+      // The token that signs and publishes is given only behind an environment's rule.
+      const withToken = Object.entries(jobs).filter(
+        ([, job]) => (job.permissions as Record<string, string> | undefined)?.["id-token"],
+      );
+      expect(withToken.map(([name]) => name).sort()).toEqual(["latest", "npm"]);
+      for (const [name, job] of withToken)
+        expect({
+          name,
+          behind: ["release", "release-sign"].includes(job.environment ?? ""),
+        }).toEqual({
+          name,
+          behind: true,
+        });
     });
 
-    test("latest comes last, only for a plain release that is not held, and says so when a target failed", () => {
+    test("latest comes last, only for a plain release that is not held and whose three targets succeeded", () => {
       const jobs = workflow().jobs;
       expect(jobs.npm?.needs).toBe("plan");
       expect(jobs.tap?.needs).toBe("plan");
@@ -362,51 +379,34 @@ describe("the workflows", () => {
       expect(jobs.marketplace?.if).toBe(PLAIN);
       const latest = jobs.latest;
       expect(latest?.needs).toEqual(["plan", "npm", "tap", "marketplace"]);
-      // A status function, so the job still runs to write its line when a needed job failed.
+      // No status function: a target that failed skips the job, so nobody is asked to approve
+      // a signing that would move nothing, and no digest means nothing to sign.
       expect(latest?.if).toBe(
-        `\${{ !cancelled() && ${PLAIN} && needs.plan.outputs.held == 'false' }}`,
+        `\${{ ${PLAIN} && needs.plan.outputs.held == 'false' && needs.plan.outputs.image_digest != '' && needs.npm.result == 'success' && needs.tap.result == 'success' && needs.marketplace.result == 'success' }}`,
       );
-      const [first] = latest?.steps ?? [];
-      expect(first?.env).toEqual({
-        NPM: expr("needs.npm.result"),
-        TAP: expr("needs.tap.result"),
-        MARKETPLACE: expr("needs.marketplace.result"),
+      const steps = latest?.steps ?? [];
+      expect(steps).toHaveLength(7);
+      const [checkout, bun, buildx, cosign, login, sign, last] = steps;
+      // The workflow's own commit on main: the script that signs is never the tag's.
+      expect(checkout?.uses).toStartWith("actions/checkout@");
+      expect(checkout?.with).toEqual({ "persist-credentials": false });
+      expect(bun?.uses).toStartWith("oven-sh/setup-bun@");
+      expect(bun?.with).toEqual({ "bun-version-file": ".bun-version" });
+      expect(buildx?.uses).toStartWith("docker/setup-buildx-action@");
+      expect(cosign?.uses).toStartWith("sigstore/cosign-installer@");
+      expect(cosign?.with).toEqual({ "cosign-release": COSIGN_VERSION });
+      expect(login?.uses).toStartWith("docker/login-action@");
+      expect(login?.with?.registry).toBe("ghcr.io");
+      expect(sign?.run).toBe("bun scripts/release/sign.ts");
+      expect(sign?.if).toBeUndefined();
+      expect(sign?.env).toEqual({
+        VERSION: expr("needs.plan.outputs.version"),
+        IMAGE_DIGEST: expr("needs.plan.outputs.image_digest"),
+        DRY_RUN: expr("inputs.dry_run"),
       });
-      // The one line of the summary written in the workflow itself: the text is summaryLine's.
-      expect(first?.run).toContain(
-        `echo "${summaryLine("latest", { kind: "not-moved", job: "$job" })}"`,
-      );
-      // Run as the runner runs it: the first needed job that did not succeed is named, exit 1.
-      const step = (results: Record<string, string>) => {
-        const file = join(mkdtempSync(join(tmpdir(), "wizardingcode-mem-latest-")), "summary");
-        const out = Bun.spawnSync(["sh", "-e", "-c", first?.run ?? "exit 99"], {
-          env: { PATH: process.env.PATH ?? "", GITHUB_STEP_SUMMARY: file, ...results },
-          stdout: "pipe",
-          stderr: "pipe",
-        });
-        return { code: out.exitCode, summary: existsSync(file) ? readFileSync(file, "utf8") : "" };
-      };
-      expect(step({ NPM: "success", TAP: "failure", MARKETPLACE: "success" })).toEqual({
-        code: 1,
-        summary: "latest: not moved: tap did not succeed\n",
-      });
-      expect(step({ NPM: "success", TAP: "success", MARKETPLACE: "skipped" })).toEqual({
-        code: 1,
-        summary: "latest: not moved: marketplace did not succeed\n",
-      });
-      expect(step({ NPM: "success", TAP: "success", MARKETPLACE: "success" })).toEqual({
-        code: 0,
-        summary: "",
-      });
-      const retag = latest?.steps.find((step) => step.run?.includes("imagetools create"));
-      expect(retag?.if).toBe(expr("!inputs.dry_run"));
-      expect(retag?.run).toContain(`-t ${IMAGE}:latest "${IMAGE}:$VERSION"`);
-      // A failed retag still gets its line in the summary.
-      expect(retag?.run).toContain(
-        `echo "${summaryLine("latest", { kind: "failed", sentence: "the image's retag did not succeed" })}"`,
-      );
-      const last = latest?.steps.at(-1);
       expect(last?.env).toEqual({ LINE: expr("needs.plan.outputs.latest_line") });
+      // The tag moves in sign.ts, by digest, after the signature verified: never in a shell line.
+      for (const step of steps) expect(step.run ?? "").not.toContain("imagetools");
     });
 
     test("npm publishes the commit plan judged, never the tag by name", () => {

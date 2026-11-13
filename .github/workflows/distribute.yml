@@ -9,6 +9,12 @@ name: distribute
 # this file's name and that environment registered as the trusted publisher of both packages:
 # renaming either breaks publishing until they are registered again.
 #
+# The job latest signs the image the release built and only then moves the image's latest tag.
+# It sits behind a second environment, "release-sign", which also allows main alone and has a
+# required reviewer: one person approves each signing. The signature carries this file's name
+# and the branch main, and every host checks for exactly those: renaming either makes every
+# host refuse every new image (ADR 0032).
+#
 # No run: script interpolates an expression (values arrive through env:), every action is
 # pinned by commit, and no checkout keeps credentials. tests/unit/deploy-files.test.ts holds it.
 
@@ -169,43 +175,43 @@ jobs:
           MARKETPLACE_TOKEN: ${{ secrets.MARKETPLACE_TOKEN }}
         run: bun scripts/release/push.ts --target marketplace
 
-  # The image's latest tag, last: a release that did not reach every channel is not the one a
-  # server should follow. It runs even when a target failed, to say that it did not move.
+  # The image's latest tag, last: ghcr.io/wizardingcode-io/wizardingcode-mem:latest moves only to
+  # the image the release's build recorded, after that image is signed here, from main, and the
+  # signature verified (ADR 0032). Skipped when a target failed: a release that did not reach
+  # every channel is not the one a server should follow.
   latest:
     needs: [plan, npm, tap, marketplace]
-    if: ${{ !cancelled() && needs.plan.outputs.prerelease == 'false' && needs.plan.outputs.held == 'false' }}
+    if: ${{ needs.plan.outputs.prerelease == 'false' && needs.plan.outputs.held == 'false' && needs.plan.outputs.image_digest != '' && needs.npm.result == 'success' && needs.tap.result == 'success' && needs.marketplace.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    environment: release-sign
     permissions:
+      contents: read
       packages: write
+      id-token: write
     steps:
-      - env:
-          NPM: ${{ needs.npm.result }}
-          TAP: ${{ needs.tap.result }}
-          MARKETPLACE: ${{ needs.marketplace.result }}
-        run: |
-          for pair in "npm:$NPM" "tap:$TAP" "marketplace:$MARKETPLACE"; do
-            job="${pair%%:*}"
-            if [ "${pair#*:}" != "success" ]; then
-              echo "latest: not moved: $job did not succeed" | tee -a "$GITHUB_STEP_SUMMARY"
-              exit 1
-            fi
-          done
+      # The workflow's own commit, on main: the script that signs is never the tag's.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .bun-version
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      # The same release of cosign a host verifies with (COSIGN_VERSION in scripts/release/lib.ts).
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+        with:
+          cosign-release: v3.1.4
       - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      # The manifest list already pushed gets a second tag; nothing is rebuilt.
-      - if: ${{ !inputs.dry_run }}
-        env:
+      - env:
           VERSION: ${{ needs.plan.outputs.version }}
-        run: |
-          docker buildx imagetools create -t ghcr.io/wizardingcode-io/wizardingcode-mem:latest "ghcr.io/wizardingcode-io/wizardingcode-mem:$VERSION" || {
-            echo "latest: failed: the image's retag did not succeed" | tee -a "$GITHUB_STEP_SUMMARY"
-            exit 1
-          }
+          IMAGE_DIGEST: ${{ needs.plan.outputs.image_digest }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: bun scripts/release/sign.ts
       - env:
           LINE: ${{ needs.plan.outputs.latest_line }}
         run: echo "$LINE" | tee -a "$GITHUB_STEP_SUMMARY"

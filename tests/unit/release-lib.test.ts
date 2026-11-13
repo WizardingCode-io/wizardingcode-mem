@@ -233,11 +233,6 @@ describe("the run's summary", () => {
         `latest: not moved: the signature of ${D} did not verify: no matching signatures`,
       ],
       [
-        "latest",
-        { kind: "not-moved", job: "marketplace" },
-        "latest: not moved: marketplace did not succeed",
-      ],
-      [
         "token",
         { kind: "token-ok", date: "2027-11-12", days: 365 },
         "MARKETPLACE_TOKEN expires on 2027-11-12 (365 days)",

@@ -120,7 +120,6 @@ export type Outcome =
   | { kind: "held-contract"; tag: string; accepts: number; previous: string; speaks: number }
   | { kind: "held-unreadable"; read: string }
   | { kind: "moved-by-hand"; version: string }
-  | { kind: "not-moved"; job: string }
   | { kind: "token-ok"; date: string; days: number }
   | { kind: "token-renew"; date: string; days: number }
   | { kind: "token-unknown" }
@@ -154,7 +153,6 @@ const OUTCOMES: Record<Target, ReadonlyArray<Outcome["kind"]>> = {
     "held-unreadable",
     "moved-by-hand",
     "skipped-prerelease",
-    "not-moved",
     "failed",
   ],
   token: ["token-ok", "token-renew", "token-unknown", "failed"],
@@ -205,8 +203,6 @@ export function summaryLine(target: Target, outcome: Outcome): string {
       return `latest: held: ${outcome.read}`;
     case "moved-by-hand":
       return `latest: moved to ${outcome.version}, the hold released by hand`;
-    case "not-moved":
-      return `latest: not moved: ${outcome.job} did not succeed`;
     case "token-ok":
       return `MARKETPLACE_TOKEN expires on ${outcome.date} (${outcome.days} days)`;
     case "token-renew":
