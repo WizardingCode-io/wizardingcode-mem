@@ -2,6 +2,7 @@
 // redirect github.com answers for `releases/latest` and nothing else: no body, no API, no
 // download. Everything that is not that redirect is a reason, never a version.
 import { isPlainVersion } from "../util/version.ts";
+import type { Mode } from "./mode.ts";
 import { reason } from "./reason.ts";
 import { lastFailed, readState, type UpdateState, writeState } from "./state.ts";
 
@@ -72,15 +73,6 @@ export function due(state: UpdateState | null, now: number): boolean {
   if (checkedAt === null && failedAt === null) return true;
   if (lastFailed(state)) return now - (failedAt as number) >= AFTER_FAILURE_MS;
   return now - (checkedAt as number) >= AFTER_SUCCESS_MS;
-}
-
-export type Mode = "check" | "off" | "off-unknown" | "ci";
-
-/** What the key's value and the environment allow; in doubt, no request. */
-export function mode(value: string | null, env: Record<string, string | undefined>): Mode {
-  if (value === "off") return "off";
-  if (value !== null && value !== "check") return "off-unknown";
-  return env.CI ? "ci" : "check";
 }
 
 export interface CheckResult {

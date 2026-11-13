@@ -8,7 +8,7 @@ const ROOT = join(import.meta.dir, "..", "..");
 const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
 /** Every module a file names in an import or a re-export, static or dynamic. */
 const imports = (source: string) =>
-  [...source.matchAll(/(?:from|import)\s*\(?\s*["']([^"']+)["']/g)].map(
+  [...source.matchAll(/(?:from|import)\s*\(?\s*["'`]([^"'`]+)["'`]/g)].map(
     (match) => match[1] as string,
   );
 /** Only the static ones: what loading the file loads. */
@@ -43,6 +43,44 @@ describe("the update folder's boundary", () => {
     const leaf = read("src/cli/reconciled.ts");
     expect(staticImports(leaf)).toEqual([]);
     expect(leaf).not.toMatch(/\bimport\s*\(/);
+  });
+});
+
+describe("the viewer loads no code that asks for a release", () => {
+  /** The file a relative import names, from the file that names it. */
+  const resolve = (from: string, path: string) =>
+    join(from, "..", path).replace(`${ROOT}/`, "").replace(/^\//, "");
+  /** Every repository file reachable from `start` through static and dynamic imports. */
+  function closure(start: string[]): Set<string> {
+    const seen = new Set<string>();
+    const queue = [...start];
+    while (queue.length > 0) {
+      const file = queue.pop() as string;
+      if (seen.has(file)) continue;
+      seen.add(file);
+      for (const path of imports(read(file))) {
+        if (!path.startsWith(".") || !path.endsWith(".ts")) continue;
+        queue.push(resolve(file, path));
+      }
+    }
+    return seen;
+  }
+
+  test("no file of src/ui reaches src/update/check.ts, at any depth", () => {
+    const files = readdirSync(join(ROOT, "src/ui"))
+      .filter((name) => name.endsWith(".ts"))
+      .map((name) => `src/ui/${name}`);
+    expect(files).toContain("src/ui/update.ts");
+    const reached = closure(files);
+    // The walk is real: it follows the viewer into the report and the report into its leaf.
+    expect(reached.has("src/update/report.ts")).toBe(true);
+    expect(reached.has("src/update/mode.ts")).toBe(true);
+    expect(reached.has("src/update/check.ts")).toBe(false);
+  });
+
+  test("the rule of the mode lives in the leaf, which loads nothing", () => {
+    expect(staticImports(read("src/update/mode.ts"))).toEqual([]);
+    expect(read("src/update/check.ts")).not.toMatch(/export (function|type) (mode|Mode)\b/);
   });
 });
 

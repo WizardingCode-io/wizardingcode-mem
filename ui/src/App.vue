@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watchEffect } from "vue";
 import { api } from "./api";
 import HistoryOffer from "./components/HistoryOffer.vue";
 import LinksOffer from "./components/LinksOffer.vue";
+import UpdateBanner from "./components/UpdateBanner.vue";
 import ProjectsView from "./components/ProjectsView.vue";
 import RulesView from "./components/RulesView.vue";
 import MemoryDetail from "./components/MemoryDetail.vue";
@@ -157,6 +158,7 @@ onMounted(async () => {
   <UApp :toaster="{ position: 'bottom-left', duration: 5000 }" :tooltip="{ delayDuration: 400 }">
     <div class="flex h-full flex-col overflow-hidden">
       <TopBar @palette="palette = true" />
+      <UpdateBanner v-if="!failed" @how="openSettings('about')" />
       <div class="flex min-h-0 flex-1">
         <Rail :tab="state.tab" @go="tab = $event" />
         <!-- The projects panel folds to nothing (240ms) and keeps its width while it moves. Settings are the

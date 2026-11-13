@@ -1,0 +1,18 @@
+{
+  "objections": [
+    {
+      "id": "O-1",
+      "raisedBy": "gap-round",
+      "severity": "advisory",
+      "text": "The release banner is on every view until dismissed, above the History and Links offers: three banners can stack on a first run.",
+      "raisedAt": "2026-11-12T22:01:23.150Z"
+    },
+    {
+      "id": "O-2",
+      "raisedBy": "gap-round",
+      "severity": "advisory",
+      "text": "GET /api/update runs the staged binary's --version at each page load, under ADR 0030's guards.",
+      "raisedAt": "2026-11-12T22:01:23.212Z"
+    }
+  ]
+}

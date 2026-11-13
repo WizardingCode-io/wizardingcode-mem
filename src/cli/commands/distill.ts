@@ -28,7 +28,8 @@ export async function run(
   // Which release is the latest: asked at most once a day, in this background process and
   // never on a hook's path, whether or not the store could be opened. Never fatal.
   try {
-    const { checkForRelease, mode } = await import("../../update/check.ts");
+    const { checkForRelease } = await import("../../update/check.ts");
+    const { mode } = await import("../../update/mode.ts");
     const { REPOSITORY } = await import("../../update/channels.ts");
     const { updateSetting } = await import("../../settings/settings.ts");
     const dataDir = defaultDataDir();

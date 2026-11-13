@@ -34,11 +34,13 @@ describe("the README", () => {
       expect({ said, found: (bullet[0] as string).includes(said) }).toEqual({ said, found: true });
   });
 
-  test("names the one setting the viewer has no field for, and lists it", () => {
+  test("lists the setting, with the switch the viewer has for it since item 2026-11-12-008", () => {
     const sentence = lineWith(readme, "Every setting can be changed from the viewer");
     expect(sentence).toHaveLength(1);
-    expect(sentence[0]).toContain("WIZARDINGCODE_MEM_UPDATE");
-    expect(lineWith(readme, "| `WIZARDINGCODE_MEM_UPDATE` |")).toHaveLength(1);
+    expect(sentence[0]).not.toContain("WIZARDINGCODE_MEM_UPDATE");
+    const row = lineWith(readme, "| `WIZARDINGCODE_MEM_UPDATE` |");
+    expect(row).toHaveLength(1);
+    expect(row[0]).toContain("**Settings → About**");
   });
 
   test("has every shell command the notice prints", () => {
@@ -80,5 +82,34 @@ describe("the release runbook, the ADR and CLAUDE.md", () => {
     const commands = claude.slice(start, claude.indexOf("\n## ", start + 1));
     expect(commands).toContain("src/update/");
     expect(commands).toContain("wizardingcode-mem update");
+  });
+
+  test("the viewer's notice: the README, CLAUDE.md and the findings row (ADR 0030)", () => {
+    const readme = read("README.md");
+    // Neither place says the key is set by hand any more.
+    expect(readme).not.toMatch(/two have no field yet/);
+    expect(readme).not.toMatch(/WIZARDINGCODE_MEM_UPDATE[^\n]*set by hand/);
+    expect(readme).toContain("one has no field yet and is set by hand: `WIZARDINGCODE_MEM_AUTHOR`");
+    expect(readme).toContain("**Settings → About**");
+    expect(readme).toMatch(/a banner at the top[^\n]*says a newer release is out/);
+
+    const claude = read("CLAUDE.md");
+    for (const said of [
+      "GET /api/update",
+      "POST /api/update/dismiss",
+      "src/ui/update.ts",
+      "ui/src/update.ts",
+      "src/update/mode.ts",
+      "update.dismissed",
+    ])
+      expect({ said, found: claude.includes(said) }).toEqual({ said, found: true });
+
+    const row = read("docs/real-use/findings.md")
+      .split("\n")
+      .find((line) => line.includes("The viewer has no About line for the latest release"));
+    expect(row).toContain("answered by item 2026-11-12-008");
+    // Its other remarks stay deferred.
+    expect(row).toContain("`stageBinary`");
+    expect(row).toMatch(/deferred \|$/);
   });
 });

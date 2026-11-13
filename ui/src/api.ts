@@ -1,5 +1,6 @@
 // The viewer's client for /api. The token comes from the URL the binary opened.
 import type { HistoryOffer, HistoryProgress, HistoryStatus, PastSearch } from "./history";
+import type { ViewerUpdate } from "./update";
 import type { LinkKind, LinksList, LinksOffer, LinkView, RulesList } from "./links";
 import type { ModuleInfo } from "./modules";
 import type { SemanticStatus } from "./semantic";
@@ -481,6 +482,10 @@ export const api = {
   historyProgress: () => call<HistoryProgress>("/api/history/progress"),
   /** The one-time offer: light, for every page load. */
   historyOffer: () => call<HistoryOffer>("/api/history/offer"),
+  /** What the daily check kept of the latest release; the viewer asks the network nothing. */
+  update: () => call<ViewerUpdate>("/api/update"),
+  /** Keeps the banner away for the release now known; a later one brings it back. */
+  dismissUpdate: () => call<{ dismissed: string | null }>("/api/update/dismiss", { method: "POST", body: "{}" }),
   /** Starts a background run; `started: false` when one is already going. */
   historyImport: () => call<{ started: boolean }>("/api/history/import", { method: "POST", body: "{}" }),
   historyIndex: () => call<{ started: boolean }>("/api/history/index", { method: "POST", body: "{}" }),

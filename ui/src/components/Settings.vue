@@ -5,6 +5,8 @@ import { computed, onMounted, ref } from "vue";
 import { api, type Check } from "../api";
 import { loadSettings, settingsState, valueOf } from "../settings";
 import About from "./settings/About.vue";
+import { aboutMark } from "../update";
+import { loadUpdate, updateState } from "../update-state";
 import Agents from "./settings/Agents.vue";
 import Backups from "./settings/Backups.vue";
 import Health from "./settings/Health.vue";
@@ -26,6 +28,7 @@ async function loadChecks() {
   }
 }
 onMounted(() => {
+  void loadUpdate();
   if (settingsState.view === null) void loadSettings();
   void loadChecks();
 });
@@ -68,7 +71,7 @@ const GROUPS = computed<{ label: string; items: { id: Page; label: string; icon:
       { id: "viewer", label: "Viewer", icon: "i-lucide-monitor" },
       { id: "servers", label: "Servers", icon: "i-lucide-server" },
       { id: "sharing", label: "Sharing", icon: "i-lucide-share-2" },
-      { id: "about", label: "About", icon: "i-lucide-info" },
+      { id: "about", label: "About", icon: "i-lucide-info", meta: aboutMark(updateState.value), warn: updateState.value?.out === true },
     ],
   },
 ]);
