@@ -1,6 +1,10 @@
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { openTeamExisting, teamPaths } from "../../src/team/db.ts";
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import pkg from "../../package.json" with { type: "json" };
+import { ACCEPTED_CONTRACTS, CONTRACT } from "../../src/team/contract.ts";
+import { openTeamExisting, TEAM_LATEST, teamPaths } from "../../src/team/db.ts";
 import { readHighWater } from "../../src/team/instance.ts";
 import { entryByUuid, getMeta, memoryByKey, sequenceHighWater } from "../../src/team/store.ts";
 import { runCliWith } from "../helpers/cli.ts";
@@ -395,5 +399,62 @@ describe("status, audit, health, instance renew", () => {
     expect(nonsense.exitCode).toBe(64);
     expect(nonsense.stderr).toContain("serve");
     expect(nonsense.stderr).toContain("invite");
+  });
+});
+
+describe("what an image says of itself", () => {
+  test("serve version answers with no data directory", async () => {
+    const nowhere = join(mkdtempSync(join(tmpdir(), "wcm-version-")), "absent");
+    const result = await runCliWith(
+      {
+        env: {
+          WIZARDINGCODE_MEM_TEAM_DATA: nowhere,
+          WIZARDINGCODE_HOME: nowhere,
+          WIZARDINGCODE_MEM_MIGRATE: "off",
+        },
+      },
+      "serve",
+      "version",
+    );
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.trim().split("\n")).toEqual([
+      `version=${pkg.version}`,
+      `team_schema=${TEAM_LATEST}`,
+      `contract=${CONTRACT}`,
+      `accepts=${ACCEPTED_CONTRACTS.join(",")}`,
+    ]);
+    expect(existsSync(nowhere)).toBe(false);
+  });
+
+  test("the listening event carries the version and the binary's schema", async () => {
+    const { t } = await team();
+    const listening = t.lines
+      .map((line) => JSON.parse(line) as Record<string, unknown>)
+      .find((line) => line.event === "listening");
+    expect(listening).toMatchObject({ version: pkg.version, teamSchema: TEAM_LATEST });
+  });
+});
+
+describe("serve restore", () => {
+  test("serve restore: usage, and a refusal's exit", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "wcm-restore-cli-"));
+    const t = await startTestServer({ now: Date.now, dataDir: dir });
+    await t.close();
+    const env = { env: { WIZARDINGCODE_MEM_MIGRATE: "off" } };
+    const bare = await runCliWith(env, "serve", "restore", "--data", dir);
+    expect(bare.exitCode).toBe(64);
+    const refused = await runCliWith(
+      env,
+      "serve",
+      "restore",
+      "--to-schema",
+      String(TEAM_LATEST),
+      "--data",
+      dir,
+    );
+    expect(refused.exitCode).toBe(1);
+    expect(refused.stdout).toBe("");
+    expect(refused.stderr).toContain("restore refused");
+    expect(refused.stderr).toContain("nothing to go back to");
   });
 });

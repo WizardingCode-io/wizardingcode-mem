@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { summaryLine } from "../../scripts/release/lib.ts";
@@ -163,6 +163,37 @@ describe("the compose file, the Caddyfile and the environment example", () => {
 });
 
 describe("the workflows", () => {
+  const workflowFiles = () =>
+    readdirSync(join(ROOT, ".github/workflows")).filter((name) => name.endsWith(".yml"));
+
+  test("every use of docker/metadata-action turns the latest flavor off", () => {
+    let uses = 0;
+    for (const name of workflowFiles()) {
+      const workflow = parseYaml(read(`.github/workflows/${name}`)) as Workflow;
+      for (const [job, body] of Object.entries(workflow.jobs)) {
+        for (const step of body.steps ?? []) {
+          if (!step.uses?.startsWith("docker/metadata-action@")) continue;
+          uses++;
+          expect({ name, job, flavor: String(step.with?.flavor ?? "") }).toEqual({
+            name,
+            job,
+            flavor: expect.stringContaining("latest=false"),
+          });
+        }
+      }
+    }
+    expect(uses).toBeGreaterThan(0);
+  });
+
+  // A guard: it passed before the flavor was set, since the default flavor names no tag in the file.
+  test("no workflow but distribute.yml names an image's latest tag", () => {
+    for (const name of workflowFiles()) {
+      const found = read(`.github/workflows/${name}`).match(/[a-z0-9./_-]+:latest\b/g) ?? [];
+      if (name === "distribute.yml") expect(found.length).toBeGreaterThan(0);
+      else expect({ name, found }).toEqual({ name, found: [] });
+    }
+  });
+
   test("release.yml: docker pushes the version tag only, publish reads the full history, and distribute starts distribute.yml", () => {
     const release = parseYaml(read(".github/workflows/release.yml")) as Workflow;
     const docker = release.jobs.docker;
@@ -185,6 +216,8 @@ describe("the workflows", () => {
     expect(tags).toContain("type=semver,pattern={{version}}");
     // The image's latest tag is moved last, by distribute.yml, never by the build.
     expect(tags).not.toContain("latest");
+    // The action's default flavor adds latest to a plain release without the word in the file.
+    expect(String(metadata?.with?.flavor ?? "")).toContain("latest=false");
     const build = docker?.steps.find((step) => step.uses?.startsWith("docker/build-push-action@"));
     expect(build?.with).toMatchObject({ context: ".", file: "Dockerfile", push: true });
     expect(String(build?.with?.platforms)).toBe("linux/amd64,linux/arm64");

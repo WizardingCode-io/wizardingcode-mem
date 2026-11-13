@@ -1,9 +1,10 @@
 // `wizardingcode-mem serve`: one process per data directory, over its own database, answering
 // the sync API; one lease, one change signal, one set of buckets, injected clock and timers.
+import pkg from "../../package.json" with { type: "json" };
 import { ENTRY_MAX_BYTES } from "../modules/knowledge/entry.ts";
 import { selfCommand } from "../util/self.ts";
 import { ACCEPTED_CONTRACTS, CONTRACT } from "./contract.ts";
-import { type Db, openTeamForWrite, teamPaths } from "./db.ts";
+import { type Db, openTeamForWrite, TEAM_LATEST, teamPaths } from "./db.ts";
 import { freeBytes as diskFreeBytes } from "./disk.ts";
 import { SchemaBehindError } from "./errors.ts";
 import { isLoopback } from "./ids.ts";
@@ -243,6 +244,8 @@ export async function startTeamServer(options: ServerOptions): Promise<TeamServe
     dataDir: options.dataDir,
     serverId,
     instance: instance(),
+    version: pkg.version,
+    teamSchema: TEAM_LATEST,
   });
 
   return {

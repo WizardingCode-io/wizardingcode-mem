@@ -1,12 +1,29 @@
 // The team server's own database, `team.db`: its own migration list and `user_version`, over
 // the core runner (`openFile`, `openExistingFile`), never a client's store. The one file of
 // the folder that imports the core store; the rest import `Db` from here. It holds the
-// schema, the three ways to open the file, and the statements an open runs before the store
-// can be asked: the version read, the schema check, `secure_delete`, and migration 1's
-// identity write.
-import { join } from "node:path";
-import { type Backups, type Db, type Migration, openExistingFile, openFile } from "../store/db.ts";
-import { NotATeamDatabaseError, SchemaBehindError } from "./errors.ts";
+// schema, the six ways to open a file, and the statements an open runs before the store can
+// be asked: the version read, the schema check, `secure_delete`, and migration 1's identity
+// write. The opens:
+//   openTeamDb        creates or migrates, with no look for a server (tests, tools);
+//   openTeamForWrite  creates or migrates beside a possibly running server;
+//   openTeamExisting  read-only, refusing a schema above the binary's;
+//   openTeamCopy      read-only, a file by its path and at any schema (an upgrade copy, and
+//                     the present file while a restore checks it);
+//   openTeamPresent   read-write and never migrating: the schema must be the binary's;
+//   openTeamStaging   read-write, a file by its path, never migrating, set to WAL (the
+//                     restore's staging file, and that same file once it is `team.db`).
+import { basename, dirname, join } from "node:path";
+import {
+  type Backups,
+  type Db,
+  enableWal,
+  type Migration,
+  openExistingFile,
+  openFile,
+  openForWrite,
+  restrict,
+} from "../store/db.ts";
+import { NotATeamDatabaseError, SchemaBehindError, SchemaMismatchError } from "./errors.ts";
 import { newHexId } from "./ids.ts";
 import teamInit from "./migrations/0001_team_init.sql" with { type: "text" };
 import teamNames from "./migrations/0002_team_names.sql" with { type: "text" };
@@ -98,6 +115,47 @@ export function openTeamDb(dir: string, busyTimeoutMs = 5000): Db {
 /** Read-only, for the subcommands that inspect; null without the file. */
 export function openTeamExisting(dir: string): Db | null {
   return openExistingFile(dir, TEAM_DB_FILE, { before: requireTeamSchema, latest: TEAM_LATEST });
+}
+
+/**
+ * Read-only, a team database by its path, whatever its schema: an upgrade copy, or the
+ * present file while a restore checks it (a file ahead of this binary included, which the
+ * restore refuses in its own words).
+ */
+export function openTeamCopy(file: string): Db {
+  const db = openExistingFile(dirname(file), basename(file), { before: requireTeamSchema });
+  if (db === null) throw new Error("no such file");
+  return db;
+}
+
+/**
+ * Read-write over the present file and never migrating: for the restore, which must write a
+ * lease into a database it is about to move aside. A file at another schema than `latest` is
+ * refused with `SchemaMismatchError`. `latest` is for tests.
+ */
+export function openTeamPresent(dir: string, latest = TEAM_LATEST): Db {
+  const db = openForWrite(dir, TEAM_DB_FILE, prepareWriter);
+  const found = userVersion(db);
+  if (found !== latest) {
+    db.close();
+    throw new SchemaMismatchError(found, latest);
+  }
+  return db;
+}
+
+/**
+ * Read-write, a team database by its path, never migrating: the restore's staging file, and
+ * the same file once it has been renamed to `team.db` (a read-only connection cannot open a
+ * WAL database that has no side files on every platform). The file is made the owner's alone
+ * and set to WAL, which a copy made by `VACUUM INTO` is not in; on a file already in WAL the
+ * statement changes nothing.
+ */
+export function openTeamStaging(file: string): Db {
+  restrict(file, 0o600);
+  return openForWrite(dirname(file), basename(file), (db) => {
+    requireTeamSchema(db);
+    enableWal(db, 5000);
+  });
 }
 
 /**

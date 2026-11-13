@@ -89,6 +89,26 @@ export function teamSchemaVersion(db: Db): number {
   return db.query<{ user_version: number }, []>("PRAGMA user_version").get()?.user_version ?? 0;
 }
 
+/** `PRAGMA quick_check` answers `ok`. */
+export function quickCheck(db: Db): boolean {
+  return db.query<{ quick_check: string }, []>("PRAGMA quick_check").get()?.quick_check === "ok";
+}
+
+/** `PRAGMA integrity_check` answers `ok`. */
+export function integrityCheck(db: Db): boolean {
+  return (
+    db.query<{ integrity_check: string }, []>("PRAGMA integrity_check").get()?.integrity_check ===
+    "ok"
+  );
+}
+
+/** The file's journal mode, lower case (`wal`, `delete`). */
+export function journalMode(db: Db): string {
+  return (
+    db.query<{ journal_mode: string }, []>("PRAGMA journal_mode").get()?.journal_mode ?? ""
+  ).toLowerCase();
+}
+
 // --- Members ----------------------------------------------------------------------------
 
 export type Role = "admin" | "member";
@@ -1086,33 +1106,127 @@ export function insertAudit(
   );
 }
 
+interface AuditRecord {
+  id: number;
+  at: number;
+  source: string;
+  device_id: string | null;
+  address: string | null;
+  action: string;
+  target: string | null;
+  detail: string;
+}
+
+const AUDIT_COLUMNS = "id, at, source, device_id, address, action, target, detail";
+
+const auditRow = (row: AuditRecord): AuditRow => ({
+  id: row.id,
+  at: row.at,
+  source: row.source,
+  deviceId: row.device_id,
+  address: row.address,
+  action: row.action,
+  target: row.target,
+  detail: row.detail,
+});
+
 /** The newest rows first. */
 export function listAudit(db: Db, limit: number): AuditRow[] {
   return db
-    .query<
-      {
-        id: number;
-        at: number;
-        source: string;
-        device_id: string | null;
-        address: string | null;
-        action: string;
-        target: string | null;
-        detail: string;
-      },
-      [number]
-    >(
-      "SELECT id, at, source, device_id, address, action, target, detail FROM audit ORDER BY id DESC LIMIT ?",
-    )
+    .query<AuditRecord, [number]>(`SELECT ${AUDIT_COLUMNS} FROM audit ORDER BY id DESC LIMIT ?`)
     .all(limit)
-    .map((row) => ({
-      id: row.id,
-      at: row.at,
-      source: row.source,
-      deviceId: row.device_id,
-      address: row.address,
-      action: row.action,
-      target: row.target,
-      detail: row.detail,
-    }));
+    .map(auditRow);
+}
+
+// --- What a restore loses ---------------------------------------------------------------
+
+export interface LostSince {
+  entriesCreated: number;
+  entriesRevised: number;
+  memories: number;
+  names: number;
+  members: number;
+  devices: number;
+}
+
+/** The rows written after `at`, by kind: what going back to a copy taken at `at` gives up. */
+export function lostSince(db: Db, at: number): LostSince {
+  const n = (sql: string, ...values: number[]): number =>
+    db.query<{ n: number }, number[]>(sql).get(...values)?.n ?? 0;
+  return {
+    entriesCreated: n(
+      "SELECT count(*) AS n FROM entry_revisions WHERE revision = 1 AND at > ?",
+      at,
+    ),
+    // A withdrawal is a revision too; it is counted apart (`withdrawnSince`).
+    entriesRevised: n(
+      `SELECT count(DISTINCT r.uuid) AS n FROM entry_revisions r
+       WHERE r.revision > 1 AND r.op = 'send' AND r.at > ?
+         AND EXISTS (SELECT 1 FROM entry_revisions f WHERE f.uuid = r.uuid AND f.revision = 1 AND f.at <= ?)`,
+      at,
+      at,
+    ),
+    memories: n("SELECT count(*) AS n FROM memories WHERE received_at > ?", at),
+    names: n("SELECT count(*) AS n FROM names WHERE created_at > ?", at),
+    members: n("SELECT count(*) AS n FROM members WHERE created_at > ?", at),
+    devices: n("SELECT count(*) AS n FROM devices WHERE created_at > ?", at),
+  };
+}
+
+/** Every audit row after `at`, oldest first. */
+export function auditSince(db: Db, at: number): AuditRow[] {
+  return db
+    .query<AuditRecord, [number]>(`SELECT ${AUDIT_COLUMNS} FROM audit WHERE at > ? ORDER BY id ASC`)
+    .all(at)
+    .map(auditRow);
+}
+
+export interface Withdrawal {
+  kind: string;
+  uid: string;
+  key: string;
+  /** The item's revision at the withdrawal: what an audit row of the same withdrawal names. */
+  revision: number;
+}
+
+/** The items whose current feed row is a withdrawal made after `at`, oldest first: by a member's push or by an admin. */
+export function withdrawnSince(db: Db, at: number): Withdrawal[] {
+  return db
+    .query<Withdrawal, [number]>(
+      "SELECT kind, uid, key, revision FROM changes WHERE current = 1 AND op = 'tombstone' AND at > ? ORDER BY seq",
+    )
+    .all(at);
+}
+
+/** Whether `copy` holds the item live: its current feed row there is an upsert. The feed's `key`, `current` and `op` are unchanged since schema 1. */
+export function liveInCopy(copy: Db, key: string): boolean {
+  return (
+    copy
+      .query<{ found: number }, [string]>(
+        "SELECT 1 AS found FROM changes WHERE key = ? AND current = 1 AND op = 'upsert'",
+      )
+      .get(key) !== null
+  );
+}
+
+/** The three tables a restore asks an upgrade copy about; each has had `id` since schema 1. */
+const IN_COPY = {
+  devices: "SELECT 1 AS found FROM devices WHERE id = ?",
+  members: "SELECT 1 AS found FROM members WHERE id = ?",
+  invitations: "SELECT 1 AS found FROM invitations WHERE id = ?",
+} as const;
+
+/** Whether `copy` holds the row: the statement comes from a closed list, never from the caller's text. */
+export function inCopy(copy: Db, table: keyof typeof IN_COPY, id: string): boolean {
+  return copy.query<{ found: number }, [string]>(IN_COPY[table]).get(id) !== null;
+}
+
+/** The ids of the invitations used after `at` that are neither expired nor revoked: a copy taken at `at` holds them open. */
+export function invitationsUsedSince(db: Db, at: number, now: number): string[] {
+  return db
+    .query<{ id: string }, [number, number]>(
+      "SELECT id FROM invitations WHERE used_at > ? AND expires_at > ? AND revoked_at IS NULL ORDER BY created_at, id",
+    )
+    .all(at, now)
+    .map((row) => row.id);
 }
