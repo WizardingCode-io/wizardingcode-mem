@@ -53,6 +53,7 @@ Taken by the author (2026-11-11 on the parent item, 2026-11-12 on this one):
 - A release's binaries and `checksums.txt` are not tied to the commit `plan` judged: someone with write access can replace them between the release and its distribution. Signatures are not part of this item.
 - `latest` can be moved outside `distribute.yml`: a tag on an older commit runs that commit's `release.yml`, and a branch's workflow can ask for `packages: write`. Nothing reads `latest` until piece 3, which must take this up.
 - Found by piece 3 ([ADR 0031](0031-team-server-restore.md)): as shipped, `release.yml` did not stop tagging `latest`. The metadata action's default flavor adds it to a plain version tag, so `latest` was still pushed at build time, before every other target and before the hold, for 0.8.0. ADR 0031 turns the flavor off and adds the test that reads it.
+- Since [ADR 0032](0032-signed-images.md) the job `latest` runs inside an environment of its own (`release-sign`, with a required reviewer), signs the digest the release's build recorded and retags by digest. It is skipped, and no longer fails, when a target did not succeed.
 - A tag on `main` whose release failed blocks the repeat of the release before it, until that release is completed or the tag deleted.
 - The hold looks one release back, as the server's accepted contracts do.
 - `install --force` is a way back for one binary, not for a machine: a plugin still at the newer version stages the newer binary again at its next session start, and an older binary refuses a store the newer one migrated.

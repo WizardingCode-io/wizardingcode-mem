@@ -56,6 +56,59 @@ describe("the release's documents", () => {
     }
   });
 
+  test("the runbook has the signing's setup, the one approval and what to do when the image is not signed", () => {
+    for (const words of [
+      "release-sign",
+      "Required reviewers",
+      "Allow administrators to bypass",
+      "covering the workflows' folder",
+      "one approval",
+      "image: <tag> built by",
+      "image: no digest",
+      // Each reason plan gives for no digest (builtDigest and readBuild).
+      "no run of release.yml",
+      "built the image",
+      "recorded no image digest",
+      "is not a digest",
+      "could not be listed",
+      "no longer names",
+      "did not say which image",
+      "90 days",
+      "public",
+      "replaces a run",
+    ]) {
+      expect({ words, said: runbook.includes(words) }).toEqual({ words, said: true });
+    }
+  });
+
+  test("ADR 0032 records the decisions, the control and what is not built", () => {
+    const adr = existsSync(join(ROOT, "docs/adr/0032-signed-images.md"))
+      ? read("docs/adr/0032-signed-images.md")
+      : "";
+    for (const words of [
+      "D-1",
+      "D-2",
+      "D-3",
+      "D-5",
+      "cosign",
+      "distribute.yml@refs/heads/main",
+      "release.yml",
+      "release-sign",
+      "required reviewer",
+      "administrator",
+      "image-digest",
+      "contract with every host",
+      "not built",
+    ]) {
+      expect({ words, said: adr.includes(words) }).toEqual({ words, said: true });
+    }
+    expect(read("docs/adr/0031-team-server-restore.md")).toContain("ADR 0032");
+    expect(read("docs/adr/0029-release-distribution.md")).toContain("ADR 0032");
+    const claude = read("CLAUDE.md");
+    expect(claude).toContain("scripts/release/sign.ts");
+    expect(claude).toContain("scripts/release/read.ts");
+  });
+
   test("every repository file the runbook cites exists", () => {
     const cited = [
       ...runbook.matchAll(/`((?:\.github|docs|scripts|src|packaging|npm|plugins)\/[^`\s<>*]+)`/g),

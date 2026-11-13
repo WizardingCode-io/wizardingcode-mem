@@ -52,7 +52,7 @@ The author decided (D-1 of the item, 2026-11-13): a timer may upgrade by itself 
 
 ## Limits
 
-- `latest` is still no proof of a release: a tag pushed on an older commit runs that commit's `release.yml`, which pushes it, and a branch's workflow can ask for `packages: write`. So everyone who can push a tag or a branch to the repository can move `latest`. Nothing follows it yet; the next item, which makes something follow it, must name its control.
+- `latest` is still no proof of a release: a tag pushed on an older commit runs that commit's `release.yml`, which pushes it, and a branch's workflow can ask for `packages: write`. So everyone who can push a tag or a branch to the repository can move `latest`. Nothing follows it yet; the next item, which makes something follow it, must name its control. [ADR 0032](0032-signed-images.md) signs the image `latest` names and says who can get one signed.
 - From the restore's end to the operator's start, only the runbook keeps the server stopped: no lease can be held, and `docker compose up -d` of any service starts it. The same holds for the instant between the lease's release and the first rename.
 - A restore killed during its copy leaves its lease for up to 15 minutes; the next run and a server start are refused until then, in words that say so.
 - The first release after this change is the first whose `latest` is moved by `distribute.yml` alone; a failure of that job shows only in its summary, so the tag is checked by hand after that release.
