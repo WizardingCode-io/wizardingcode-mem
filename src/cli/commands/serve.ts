@@ -22,7 +22,7 @@ import {
 } from "../../team/errors.ts";
 import { OPERATOR } from "../../team/ids.ts";
 import { currentMarks, renewInstance, writeHighWater } from "../../team/instance.ts";
-import { requireNoServer } from "../../team/lease.ts";
+import { requireNoServer, SERVE_TTL_MS } from "../../team/lease.ts";
 import { createTeamLog, installLogSink, type TeamLog } from "../../team/log.ts";
 import {
   checkRole,
@@ -75,6 +75,8 @@ Subcommands (each but version and health takes --data <dir> as well; health take
        instance renew
        version
        health [--url <origin>]
+       host status | follow [--dry-run] | upgrade --dir <folder>
+                     the host's side of a team server, run through deploy/upgrade.sh (ADR 0033)
 
 The data directory is --data, WIZARDINGCODE_MEM_TEAM_DATA, or <data dir>/team.
 `;
@@ -658,6 +660,17 @@ export async function run(argv: string[]): Promise<number> {
     return 0;
   }
   if (argv[0] === "version") return version();
+  // The host's tool is loaded only when asked for: the long-running server never reads it.
+  if (argv[0] === "host") {
+    const [{ hostCommand }, { realDeps }] = await Promise.all([
+      import("../../host/command.ts"),
+      import("../../host/deps.ts"),
+    ]);
+    return hostCommand(
+      argv.slice(1),
+      realDeps({ leaseMs: SERVE_TTL_MS, version: pkg.version, env: process.env }),
+    );
+  }
   const taken = takeData(argv);
   if ("error" in taken) return usage(taken.error);
   const [sub, ...rest] = taken.rest;

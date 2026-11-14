@@ -1,5 +1,5 @@
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import pkg from "../../package.json" with { type: "json" };
@@ -304,6 +304,11 @@ describe("status, audit, health, instance renew", () => {
     expect(value("heads.shared")).toMatch(/^[0-9a-f]{40}$/);
     expect(value("lease.owner")).toMatch(/^serve-/);
     expect(status.stdout).toMatch(/^version: \d+\.\d+\.\d+/m);
+    // The size an upgrade's copy needs (ADR 0033): team.db with its write-ahead log.
+    const wal = `${t.dir}/team.db-wal`;
+    const dbBytes = statSync(`${t.dir}/team.db`).size + (existsSync(wal) ? statSync(wal).size : 0);
+    expect(dbBytes).toBeGreaterThan(0);
+    expect(value("dbBytes")).toBe(String(dbBytes));
     const asJson = await cli(t, "status", "--json");
     expect(asJson.exitCode).toBe(0);
     const parsed = jsonOut(asJson.stdout) as {
@@ -313,12 +318,14 @@ describe("status, audit, health, instance renew", () => {
       marks: { changes: number; audit: number };
       mirror: { last: { commits: number } | null; pending: number };
       freeBytes: number | null;
+      dbBytes: number | null;
     };
     expect(parsed.serverId).toBe(t.server.serverId);
     expect(parsed.heads).toEqual([{ folder: "shared", head: value("heads.shared") as string }]);
     expect(parsed.marks.changes).toBe(1);
     expect(parsed.mirror.last?.commits).toBe(1);
     expect(typeof parsed.freeBytes).toBe("number");
+    expect(parsed.dbBytes).toBe(dbBytes);
 
     const none = await runCliWith(
       {

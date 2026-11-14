@@ -1,0 +1,24 @@
+# A team server's host follows signed releases (ADR 0033; docs/runbooks/team-server.md, Upgrade).
+# Copy this file and the timer to /etc/systemd/system/, fill in the two lines marked below,
+# then: systemctl daemon-reload && systemctl enable --now wizardingcode-mem-upgrade.timer
+#
+# A run that fails (exit 10 to 15) fails this unit. Nothing tells anyone unless you wire it:
+# add OnFailure=<your unit> under [Unit]. Exit 75 is "an upgrade you typed holds the lock".
+[Unit]
+Description=wizardingcode-mem team server: follow the signed release
+Documentation=https://github.com/WizardingCode-io/wizardingcode-mem/blob/main/docs/runbooks/team-server.md
+After=network-online.target docker.service
+Wants=network-online.target docker.service
+# Uncomment and name a unit of yours that tells you (mail, a webhook) when a run fails:
+#OnFailure=your-notifier@%n.service
+
+[Service]
+Type=oneshot
+# The user that owns the compose folder and belongs to the docker group: not root by name,
+# though a member of that group can do on this host what root can.
+User=CHANGE-ME
+# The launcher beside your compose.yml.
+ExecStart=/CHANGE/ME/upgrade.sh follow
+SuccessExitStatus=75
+# Above the longest unattended run: every call at its bound, an apply and a way back.
+TimeoutStartSec=75min

@@ -3,6 +3,15 @@
 // target writes, and every line the run's summary carries. docs/runbooks/release.md is the
 // author's side of it; docs/adr/0029-release-distribution.md says why it has this shape.
 import { appendFileSync } from "node:fs";
+import {
+  COSIGN_IMAGE,
+  COSIGN_VERSION,
+  DIGEST,
+  IMAGE,
+  OIDC_ISSUER,
+  SIGNER_IDENTITY,
+  verifyArgs,
+} from "../../src/host/signature.ts";
 import { highestVersion, isVersion, olderThan } from "../../src/util/version.ts";
 import { TARGETS } from "../build.ts";
 
@@ -558,33 +567,7 @@ export function decidePlan(
 
 // --- The image's signature (ADR 0032) ------------------------------------------------------
 
-export const IMAGE = "ghcr.io/wizardingcode-io/wizardingcode-mem";
-/** cosign's version: what distribute.yml installs, and the release COSIGN_IMAGE is. */
-export const COSIGN_VERSION = "v3.1.4";
-/** cosign's own image at that version, by its index digest: a host verifies with it and installs nothing. */
-export const COSIGN_IMAGE =
-  "ghcr.io/sigstore/cosign/cosign@sha256:0f06154836d2de34f887a5c273506d52ca43edaa1d9e53e6510fa78a48f69c2d";
-/**
- * What a signature made by a job of distribute.yml in a run on main carries. It is a contract
- * with every host that verifies: a rename of the workflow file or of the default branch makes
- * every host refuse every new image.
- */
-export const SIGNER_IDENTITY =
-  "https://github.com/WizardingCode-io/wizardingcode-mem/.github/workflows/distribute.yml@refs/heads/main";
-export const OIDC_ISSUER = "https://token.actions.githubusercontent.com";
-export const DIGEST = /^sha256:[0-9a-f]{64}$/;
-
-/** cosign's arguments to check that `reference` was signed by distribute.yml at main: the one form, here and in the runbook. */
-export function verifyArgs(reference: string): string[] {
-  return [
-    "verify",
-    reference,
-    "--certificate-identity",
-    SIGNER_IDENTITY,
-    "--certificate-oidc-issuer",
-    OIDC_ISSUER,
-  ];
-}
+export { COSIGN_IMAGE, COSIGN_VERSION, DIGEST, IMAGE, OIDC_ISSUER, SIGNER_IDENTITY, verifyArgs };
 
 export const verifyCommand = (reference: string): string =>
   ["cosign", ...verifyArgs(reference)].join(" ");

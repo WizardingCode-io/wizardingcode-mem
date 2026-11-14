@@ -487,4 +487,88 @@ describe("the workflows", () => {
     expect(runs).toContain("docker inspect -f '{{.State.ExitCode}}' wcm");
     expect(runs).toContain("docker volume rm wcm-data");
   });
+
+  // The host's tool against a real daemon (ADR 0033): the one place its launcher, its units and
+  // the image's binary outside its container are exercised on Linux.
+  describe("ci.yml: the host job", () => {
+    const ci = parseYaml(read(".github/workflows/ci.yml")) as Workflow;
+    const host = ci.jobs.host;
+    const steps = host?.steps ?? [];
+    const runs = steps.map((step) => step.run ?? "").join("\n");
+
+    test("runs after build, on Linux, under a time bound", () => {
+      expect(host?.needs).toBe("build");
+      expect(host?.["runs-on"]).toBe("ubuntu-latest");
+      expect(host?.["timeout-minutes"]).toBeGreaterThan(0);
+      expect(host?.["timeout-minutes"]).toBeLessThanOrEqual(30);
+    });
+
+    test("says what the run proved: Docker's and Compose's versions and the storage driver", () => {
+      expect(runs).toContain("docker version");
+      expect(runs).toContain("docker compose version");
+      expect(runs).toContain("docker info --format '{{.Driver}}'");
+    });
+
+    test("runs the scenarios, with the switch that turns them on", () => {
+      const scenario = steps.find((step) =>
+        (step.run ?? "").includes("tests/scenarios/host.test.ts"),
+      );
+      expect(scenario?.env).toEqual({ WIZARDINGCODE_MEM_HOST_SCENARIOS: "1" });
+      expect(scenario?.run).toContain("bun test tests/scenarios/host.test.ts");
+    });
+
+    test("verifies the two units with their two lines filled in", () => {
+      expect(runs).toContain("systemd-analyze verify");
+      expect(runs).toContain("wizardingcode-mem-upgrade.service");
+      expect(runs).toContain("wizardingcode-mem-upgrade.timer");
+      expect(runs).toMatch(/s#\^User=\.\*#User=/);
+      expect(runs).toMatch(/s#\^ExecStart=\.\*#ExecStart=/);
+    });
+
+    test("runs the launcher's status against the image built from the binaries artifact, then reads the schema with the server stopped", () => {
+      const download = steps.find((step) =>
+        (step.uses ?? "").startsWith("actions/download-artifact@"),
+      );
+      expect(download?.with).toEqual({ name: "binaries", path: "dist" });
+      expect(runs).toContain("docker build -t wizardingcode-mem:ci .");
+      expect(runs).toContain(
+        'docker tag wizardingcode-mem:ci "ghcr.io/wizardingcode-io/wizardingcode-mem:$version"',
+      );
+      expect(runs).toContain("docker compose up -d --pull never --wait");
+      expect(runs).toContain("./upgrade.sh status");
+      expect(runs).toContain(
+        'grep -Eq "^runs: $version \\((no digest|sha256:[0-9a-f]{64})\\), healthy" status.txt',
+      );
+      expect(runs).toContain("docker compose stop server");
+      expect(runs).toContain(
+        "--network none --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges:true",
+      );
+      expect(runs).toContain("serve status");
+      expect(runs.indexOf("docker compose stop server")).toBeLessThan(
+        runs.lastIndexOf("serve status"),
+      );
+    });
+
+    test("uses only actions the file already uses, by the same references", () => {
+      const others = Object.entries(ci.jobs)
+        .filter(([name]) => name !== "host")
+        .flatMap(([, job]) => job.steps.map((step) => step.uses))
+        .filter((uses): uses is string => uses !== undefined);
+      const mine = steps
+        .map((step) => step.uses)
+        .filter((uses): uses is string => uses !== undefined);
+      expect(mine.length).toBeGreaterThanOrEqual(3);
+      for (const uses of mine)
+        expect({ uses, known: others.includes(uses) }).toEqual({ uses, known: true });
+    });
+
+    test("the scenarios pin their registry and their base image by digest", () => {
+      const scenarios = read("tests/scenarios/host.test.ts");
+      expect(scenarios).toMatch(/"registry:2@sha256:[0-9a-f]{64}"/);
+      expect(scenarios).toMatch(/"busybox:1\.36@sha256:[0-9a-f]{64}"/);
+      expect(read("tests/scenarios/host/Dockerfile")).toMatch(
+        /^FROM busybox:1\.36@sha256:[0-9a-f]{64}$/m,
+      );
+    });
+  });
 });

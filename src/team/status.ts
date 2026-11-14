@@ -1,6 +1,6 @@
 // `serve status`: what an operator reads about a team server from its data directory, with
 // or without the server running, through a read-only connection.
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import pkg from "../../package.json" with { type: "json" };
 import { headOf } from "../modules/knowledge/repo.ts";
@@ -41,6 +41,8 @@ export interface TeamStatus {
   mirror: { last: MirrorLast | null; pending: number };
   heads: { folder: string; head: string | null }[];
   freeBytes: number | null;
+  /** The size of team.db with its write-ahead log: what an upgrade's copy needs (ADR 0033). */
+  dbBytes: number | null;
   lease: { owner: string; until: number } | null;
 }
 
@@ -76,6 +78,16 @@ function mirrorLast(raw: string | null): MirrorLast | null {
   }
 }
 
+/** The bytes of `team.db` and of its write-ahead log when there is one; null when it cannot be read. */
+function dbBytes(file: string): number | null {
+  try {
+    const wal = `${file}-wal`;
+    return statSync(file).size + (existsSync(wal) ? statSync(wal).size : 0);
+  } catch {
+    return null;
+  }
+}
+
 /** Null when the directory holds no team database. */
 export function readStatus(dir: string, now: number): TeamStatus | null {
   const db = openTeamExisting(dir);
@@ -96,6 +108,7 @@ export function readStatus(dir: string, now: number): TeamStatus | null {
       mirror: { last: mirrorLast(getMeta(db, "mirror.last")), pending: pendingMirrorCount(db) },
       heads: repoHeads(paths.repos),
       freeBytes: freeBytes(dir),
+      dbBytes: dbBytes(paths.db),
       lease: leaseOf(db, SERVE_LEASE),
     };
   } finally {
@@ -132,6 +145,7 @@ export function renderStatus(status: TeamStatus): string {
   lines.push(`mirror.pending: ${status.mirror.pending}`);
   for (const { folder, head } of status.heads) lines.push(`heads.${folder}: ${head ?? "none"}`);
   lines.push(`freeBytes: ${status.freeBytes ?? "unknown"}`);
+  lines.push(`dbBytes: ${status.dbBytes ?? "unknown"}`);
   if (status.lease === null) {
     lines.push("lease: none");
   } else {

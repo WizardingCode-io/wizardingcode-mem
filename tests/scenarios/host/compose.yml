@@ -1,0 +1,15 @@
+# The scenarios' project: one service named server with a volume at /data, as compose.yml has.
+services:
+  server:
+    image: ${SCENARIO_IMAGE:?}:${WIZARDINGCODE_MEM_VERSION:?}
+    volumes:
+      - data:/data
+    init: true
+    stop_grace_period: 1s
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+
+volumes:
+  data:

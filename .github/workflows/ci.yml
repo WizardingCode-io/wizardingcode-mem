@@ -101,3 +101,60 @@ jobs:
         with:
           name: spikes-${{ matrix.file }}
           path: spikes-${{ matrix.file }}.json
+
+  # The host's tool against a real daemon (ADR 0033): the scenarios of the two verbs, the two
+  # systemd units, and the launcher with the image built from this commit's binaries. It is
+  # the first place the image's binary runs on a host outside its container.
+  host:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+      - run: bun install --frozen-lockfile
+      - name: What this run proves
+        run: |
+          docker version
+          docker compose version
+          docker info --format '{{.Driver}}'
+      - name: The two verbs against a real daemon and a local registry
+        env:
+          WIZARDINGCODE_MEM_HOST_SCENARIOS: "1"
+        run: bun test tests/scenarios/host.test.ts
+      - name: A host's folder, as an operator makes it
+        run: |
+          set -eu
+          mkdir /tmp/wcm-host
+          cp compose.yml Caddyfile deploy/upgrade.sh /tmp/wcm-host/
+          cp deploy/wizardingcode-mem-upgrade.service deploy/wizardingcode-mem-upgrade.timer /tmp/wcm-host/
+          sed -i "s#^User=.*#User=$(id -un)#; s#^ExecStart=.*#ExecStart=/tmp/wcm-host/upgrade.sh follow#" /tmp/wcm-host/wizardingcode-mem-upgrade.service
+      - name: The two units, as systemd reads them
+        run: systemd-analyze verify /tmp/wcm-host/wizardingcode-mem-upgrade.service /tmp/wcm-host/wizardingcode-mem-upgrade.timer
+      - uses: actions/download-artifact@v8
+        with:
+          name: binaries
+          path: dist
+      - name: The launcher's status with this commit's image, then the schema read with the server stopped
+        run: |
+          set -eu
+          chmod +x dist/*
+          docker build -t wizardingcode-mem:ci .
+          version="$(bun -e 'console.log(require("./package.json").version)')"
+          docker tag wizardingcode-mem:ci "ghcr.io/wizardingcode-io/wizardingcode-mem:$version"
+          cd /tmp/wcm-host
+          printf 'SERVER_DOMAIN=localhost\nWIZARDINGCODE_MEM_VERSION=%s\n' "$version" > .env
+          docker compose up -d --pull never --wait --wait-timeout 240 server
+          ./upgrade.sh status | tee status.txt
+          # A digest where the image store gives a built image one (containerd), "no digest" where it does not.
+          grep -Eq "^runs: $version \((no digest|sha256:[0-9a-f]{64})\), healthy" status.txt
+          grep -q "^schema: " status.txt
+          grep -q "^next: nothing to do$" status.txt
+          docker compose stop server
+          image="$(docker image inspect --format '{{.Id}}' wizardingcode-mem:ci)"
+          volume="$(docker volume ls -q --filter label=com.docker.compose.project=wcm-host | grep '_data$' | grep -v caddy)"
+          docker run --rm --network none --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges:true -v "$volume:/data" "$image" serve status | tee stopped.txt
+          grep -q "^schema: " stopped.txt
+          docker compose down -v
