@@ -110,15 +110,43 @@ describe("a start that fails and cannot be undone by the image", () => {
     test(`${name}: exit 10, the reason in the state, the runbook named`, async () => {
       const w = hostWorld();
       arrange(w);
+      const before = w.env();
       expect(await follow(w.deps, w.folder, { dryRun: false })).toBe(10);
       expect(w.state().lastChange).toMatchObject({ kind: "down" });
       expect(w.state().lastChange?.reason).toMatch(reason);
       expect(w.state().intent).toBeUndefined();
       expect(w.state().rejected ?? []).toEqual([]);
       expect(w.out.join("\n")).toContain("Rollback in docs/runbooks/team-server.md");
-      if (name !== "the previous image does not come back healthy")
-        expect(w.env()).toContain(`WIZARDINGCODE_MEM_VERSION=${NEW.version}@${NEW.digest}`);
+      // .env is left naming the candidate when the schema says the previous image cannot take
+      // over. When it could, .env was put back before the start that then failed: it names the
+      // previous version, and every other line is as it was.
+      expect(w.env()).toBe(
+        name === "the previous image does not come back healthy"
+          ? before
+          : before.replace("=0.9.1\n", `=${NEW.version}@${NEW.digest}\n`),
+      );
     });
+
+  test("a schema the previous image reads, but that is not the one before the apply: exit 10, and the reason says which", async () => {
+    const w = hostWorld();
+    image(w, "0.9.2").start = ["exit2"];
+    // The database is at another schema once the candidate has started and failed.
+    const run = w.deps.run;
+    w.deps.run = (cmd, options) => {
+      const result = run(cmd, options);
+      if (cmd.includes("up")) w.dbSchema = 1;
+      return result;
+    };
+    expect(await follow(w.deps, w.folder, { dryRun: false })).toBe(10);
+    expect(w.state().lastChange).toMatchObject({
+      kind: "down",
+      reason: "the database is at schema 1, not the 2 it was at before 0.9.2 was applied",
+    });
+    expect(w.env()).toContain(`WIZARDINGCODE_MEM_VERSION=${NEW.version}@${NEW.digest}`);
+    expect(w.ran(/ up -d /)).toHaveLength(1);
+    expect(w.state().rejected ?? []).toEqual([]);
+    expect(w.out.join("\n")).toContain("Rollback in docs/runbooks/team-server.md");
+  });
 });
 
 describe("the lease", () => {

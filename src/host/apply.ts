@@ -130,8 +130,10 @@ export function failedStartUnattended(
   let reason: string;
   if (schema === "newer") {
     reason = `${intent.version} migrated the database although it reported schema ${intent.schema}`;
-  } else if (schema === "unreadable" || schema.schema !== intent.schema) {
+  } else if (schema === "unreadable") {
     reason = "the database's schema could not be read with the previous image";
+  } else if (schema.schema !== intent.schema) {
+    reason = `the database is at schema ${schema.schema}, not the ${intent.schema} it was at before ${intent.version} was applied`;
   } else {
     const text = readFileSync(envPath(folder), "utf8");
     if (envLineBody(text) !== intent.fromEnvLine)
