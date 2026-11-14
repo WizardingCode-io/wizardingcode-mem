@@ -33,8 +33,8 @@ export const BOUNDS: Bounds = {
   leaseMargin: 5_000,
 };
 
-/** The launcher's own Docker calls: six at 30 s (ps twice, inspect, the removal of an earlier labelled container, create, rm) and the copy at 120 s. */
-export const LAUNCHER_MS = 30_000 * 6 + 120_000;
+/** The launcher's own Docker calls: seven at 30 s (ps for each form of the folder, inspect, the list of earlier labelled containers, the removal of one, create, rm) and the copy at 120 s. */
+export const LAUNCHER_MS = 30_000 * 7 + 120_000;
 /** A conservative floor, not the first release with `up --wait-timeout`. */
 export const MIN_COMPOSE = "2.20.0";
 /**
